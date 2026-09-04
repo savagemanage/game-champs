@@ -1,13 +1,11 @@
 extends CharacterBody3D
 ## The titan: a large enemy that chases the player and exposes a nape kill-zone.
-##
-## Movement is NavigationAgent3D pathfinding with hybrid gene steering layered on
-## top (steering 3.1): the nav agent guarantees the path, the injected genome
-## (spec 3) only re-weights direction terms. With no genome it is pure navigation
-## (gen-1 baseline). Navmesh is baked at RUNTIME behind the loading screen.
-##
-## Damage is CONTINUOUS: receive_slash(damage, threshold) kills at/above the
-## threshold (emits titan_killed), else staggers the titan + bounces the player.
+## Movement is NavigationAgent3D pathfinding with hybrid gene steering on top
+## (steering 3.1): the nav agent guarantees the path, the injected genome (spec
+## 3) only re-weights direction terms; no genome = pure navigation (gen-1). The
+## navmesh is baked at RUNTIME behind the loading screen. Damage is CONTINUOUS:
+## receive_slash(damage, threshold) kills at/above the threshold (emits
+## titan_killed), else staggers the titan + bounces the player.
 
 signal titan_killed
 
@@ -15,15 +13,11 @@ signal titan_killed
 # TUNING CONSTANTS. INVARIANT: every value is FIXED and NEVER scales with the
 # round number - difficulty rises only via evolved genes (spec 3).
 # =====================================================================
-
-## Ground move speed (m/s). Fixed for all rounds.
-const MOVE_SPEED: float = 6.0
-## How quickly the titan turns to face its travel direction (rad/s).
-const TURN_SPEED: float = 3.0
-## Distance (m) at which the nav agent considers itself "arrived".
-const ARRIVAL_DISTANCE: float = 2.5
-## Duration (seconds) the titan is frozen after a sub-threshold slash.
-const STAGGER_DURATION: float = 0.9
+const MOVE_SPEED: float = 6.0  ## ground move speed (m/s), fixed for all rounds
+const TURN_SPEED: float = 3.0  ## turn-to-face rate (rad/s)
+const ARRIVAL_DISTANCE: float = 2.5  ## nav "arrived" distance (m)
+const STAGGER_DURATION: float = 0.9  ## freeze after a sub-threshold slash (s)
+const FOOTSTEP_INTERVAL: float = 0.55  ## seconds between footstep sfx (FEAT-002)
 
 # Project default gravity so the titan stays glued to the ground / falls.
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity", 9.8)
@@ -35,26 +29,25 @@ var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity", 
 var _player: Node3D = null
 var _dead: bool = false
 var _stagger_timer: float = 0.0
-# Injected evolved genome (spec 3). Empty = pure navigation (gen-1 baseline
-# behaviour). The 6 weights parameterise SteeringPolicy; the nav agent still
-# supplies the base path direction so the titan is never dumber than A*.
+# Audio bookkeeping (presentation only): footstep cadence + one-shot aggro cue.
+var _footstep_timer: float = 0.0
+var _aggroed: bool = false
+# Injected evolved genome (spec 3). Empty = pure navigation (gen-1 baseline); the
+# 6 weights parameterise SteeringPolicy on top of the guaranteed nav path.
 var _genes: PackedFloat32Array = PackedFloat32Array()
 # Measured player-preferred entry dir (telemetry); flankBias scales its opposite.
 var _preferred_entry_dir: Vector3 = Vector3.ZERO
-# Sibling titans for separation / encircle terms.
-var _neighbours: Array = []
+var _neighbours: Array = []  # sibling titans for separation / encircle terms
 # Horizontal velocity the agent's avoidance says is safe this frame. Kept so 4
 # titans in a narrow corridor steer around each other instead of jamming.
 var _safe_velocity: Vector3 = Vector3.ZERO
 
 
 func _ready() -> void:
-	# Avoidance feeds a "safe velocity" back via velocity_computed; we submit a
-	# desired velocity and move along the safe result.
+	# Avoidance feeds a "safe velocity" back via velocity_computed.
 	if _nav_agent != null and _nav_agent.avoidance_enabled:
 		_nav_agent.velocity_computed.connect(_on_safe_velocity)
-	# Telemetry (spec 2): register so the recorder samples this titan each tick.
-	if Telemetry != null:
+	if Telemetry != null:  # spec 2: recorder samples this titan each tick
 		Telemetry.register_titan(self)
 
 
@@ -68,22 +61,19 @@ func _on_safe_velocity(safe: Vector3) -> void:
 
 
 ## GameManager hands us the player directly. Otherwise we look it up.
-func set_target(player: Node3D) -> void:
-	_player = player
+func set_target(player: Node3D) -> void: _player = player
 
 
-## Inject the evolved strategy for THIS round (spec 3, steering 3.8): the titan
-## steers with these FIXED weights, it does NOT run evolution. Empty genome =
-## pure navigation (gen-1 baseline). preferred_entry_dir is measured; flankBias
-## scales its opposite.
+## Inject the evolved strategy for THIS round (spec 3, steering 3.8): FIXED
+## weights only, no evolution here. Empty = pure nav (gen-1); preferred_entry_dir
+## is measured and flankBias scales its opposite.
 func set_genes(genes: PackedFloat32Array, preferred_entry_dir: Vector3) -> void:
 	_genes = genes
 	_preferred_entry_dir = preferred_entry_dir
 
 
 ## Sibling titans, for the separation / encircle steering terms.
-func set_neighbours(neighbours: Array) -> void:
-	_neighbours = neighbours
+func set_neighbours(neighbours: Array) -> void: _neighbours = neighbours
 
 
 func _physics_process(delta: float) -> void:
@@ -107,6 +97,11 @@ func _physics_process(delta: float) -> void:
 		_apply_gravity(delta)
 		move_and_slide()
 		return
+
+	# Audio (FEAT-002): aggro cue the first time this titan has a target.
+	if not _aggroed:
+		_aggroed = true
+		TitanSfx.aggro(global_position)
 
 	_chase(delta)
 	_apply_gravity(delta)
@@ -132,6 +127,11 @@ func _chase(delta: float) -> void:
 		var move_dir: Vector3 = _steer(nav_dir)
 		_drive_horizontal(move_dir * MOVE_SPEED)
 		_face_direction(move_dir, delta)
+		# Audio (FEAT-002): footstep cadence while actively chasing (3D thud).
+		_footstep_timer -= delta
+		if _footstep_timer <= 0.0:
+			_footstep_timer = FOOTSTEP_INTERVAL
+			TitanSfx.footstep(global_position)
 	else:
 		_drive_horizontal(Vector3.ZERO)
 		var facing: Vector3 = _facing_toward_player()
@@ -160,7 +160,7 @@ func _neighbour_positions() -> Array:
 	return out
 
 
-## Apply a desired horizontal velocity via avoidance (4 titans steer around each
+## Apply desired horizontal velocity via avoidance (titans steer around each
 ## other) or directly when avoidance is off.
 func _drive_horizontal(desired: Vector3) -> void:
 	if _nav_agent != null and _nav_agent.avoidance_enabled:
@@ -210,13 +210,11 @@ func get_nape_normal() -> Vector3:
 	var approach: Vector3 = _player.global_position - global_position
 	approach.y = 0.0
 	var yaw: float = SteeringPolicy.nape_yaw_amount(_genes, forward, approach)
-	# Rotate the nape normal by the turn-away yaw about +Y.
-	return base.rotated(Vector3.UP, yaw).normalized()
+	return base.rotated(Vector3.UP, yaw).normalized()  # turn-away yaw about +Y
 
 
-## Called by the player's slash sweep. `damage` is the continuous value computed
-## from relative speed and blade-vs-nape-normal angle; `threshold` is the kill
-## cutoff. Returns true if the hit was lethal.
+## Called by the player's slash sweep. `damage` (continuous, from relative speed
+## and blade-vs-nape angle) kills at/above `threshold`. Returns true if lethal.
 func receive_slash(damage: float, threshold: float) -> bool:
 	if _dead:
 		return true
@@ -233,6 +231,8 @@ func die() -> void:
 	if _dead:
 		return
 	_dead = true
+	# Audio (FEAT-002): the titan's death boom (blade impact ting is the slash FX).
+	TitanSfx.death(global_position)
 	titan_killed.emit()
 
 

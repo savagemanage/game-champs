@@ -79,9 +79,16 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not visible:
 		return
 	if event is InputEventKey and (event as InputEventKey).pressed:
-		visible = false
+		_dismiss()
 	elif event is InputEventMouseButton and (event as InputEventMouseButton).pressed:
-		visible = false
+		_dismiss()
+
+
+## Hide the panel and play the UI click sfx (FEAT-002).
+func _dismiss() -> void:
+	visible = false
+	if Sfx != null:
+		Sfx.play(SfxBank.UI_CLICK)
 
 
 # =====================================================================

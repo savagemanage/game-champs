@@ -29,6 +29,10 @@ const AIR_CONTROL_ACCEL: float = 22.0
 # Project default gravity (from ProjectSettings, e.g. 9.8 m/s^2).
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity", 9.8)
 
+## Ground-contact state last physics frame, so a false->true transition (was
+## airborne, now grounded) fires the land sfx exactly once per landing.
+var _was_on_floor: bool = true
+
 # --- Node references. These names MUST match Player.tscn. ---
 @onready var yaw_pivot: Node3D = $YawPivot
 @onready var pitch_pivot: Node3D = $YawPivot/PitchPivot
@@ -79,6 +83,13 @@ func _physics_process(delta: float) -> void:
 
 	move_and_slide()
 
+	# Audio (FEAT-002): a landing is a was-airborne -> now-grounded transition.
+	# Checked AFTER move_and_slide so is_on_floor() reflects this frame's contact.
+	var grounded: bool = is_on_floor()
+	if grounded and not _was_on_floor and Sfx != null:
+		Sfx.play(SfxBank.PLAYER_LAND)
+	_was_on_floor = grounded
+
 
 func _apply_gravity(delta: float) -> void:
 	if not is_on_floor():
@@ -88,6 +99,9 @@ func _apply_gravity(delta: float) -> void:
 func _handle_jump() -> void:
 	if Input.is_action_just_pressed("jump") and is_on_floor():
 		velocity.y = JUMP_VELOCITY
+		# Audio (FEAT-002): jump sfx. Guarded so headless / autoload-less runs.
+		if Sfx != null:
+			Sfx.play(SfxBank.PLAYER_JUMP)
 
 
 func _handle_movement() -> void:

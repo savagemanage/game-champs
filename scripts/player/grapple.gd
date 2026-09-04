@@ -48,6 +48,11 @@ const WIRE_COLOR: Color = Color(0.9, 0.9, 0.95)
 ## Local position on the player where the wire visually starts (the "hand").
 const HAND_OFFSET: Vector3 = Vector3(0.0, 1.2, 0.0)
 
+## Seconds between swing-whoosh one-shots while attached and moving fast enough.
+const WHOOSH_INTERVAL: float = 0.45
+## Minimum player speed (m/s) for the swing whoosh to play (a slow drift is silent).
+const WHOOSH_MIN_SPEED: float = 9.0
+
 # =====================================================================
 # STATE
 # =====================================================================
@@ -58,6 +63,9 @@ var grappling: bool = false
 var anchor_point: Vector3 = Vector3.ZERO
 ## Current rope length (may shrink when reeling in).
 var rope_length: float = 0.0
+
+## Time until the next swing-whoosh one-shot may play (counts down while attached).
+var _whoosh_cooldown: float = 0.0
 
 var _player: CharacterBody3D
 var _camera: Camera3D
@@ -142,6 +150,13 @@ func _try_attach() -> void:
 	anchor_point = hit.position
 	rope_length = _hand_world_position().distance_to(anchor_point)
 	grappling = true
+	_whoosh_cooldown = WHOOSH_INTERVAL
+
+	# Audio (FEAT-002): the wire fires (2D) and then clinks onto the anchor (3D
+	# at the anchor point). Guarded so grapple runs fine without the Sfx autoload.
+	if Sfx != null:
+		Sfx.play(SfxBank.GRAPPLE_FIRE)
+		Sfx.play_at(SfxBank.GRAPPLE_ATTACH, anchor_point)
 
 	# Telemetry (spec 2): report the grapple fire + anchor world position. The
 	# Telemetry autoload receives a plain Vector3 - no scene coupling leaks in.
@@ -194,6 +209,13 @@ func _apply_swing_forces(player: CharacterBody3D, delta: float) -> void:
 	# Gentle swing damping so it eventually settles.
 	if SWING_DAMPING > 0.0:
 		player.velocity -= player.velocity * SWING_DAMPING * delta
+
+	# Audio (FEAT-002): a periodic swing whoosh while moving fast on the wire.
+	_whoosh_cooldown -= delta
+	if _whoosh_cooldown <= 0.0 and player.velocity.length() >= WHOOSH_MIN_SPEED:
+		_whoosh_cooldown = WHOOSH_INTERVAL
+		if Sfx != null:
+			Sfx.play(SfxBank.SWING_WHOOSH)
 
 
 # =====================================================================

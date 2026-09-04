@@ -116,3 +116,64 @@ label_settings = SubResource("LabelSettings_section")
 [node name="LanguageOption" type="OptionButton" parent="Center/VBox/SettingsPanel/Margin/SettingsVBox/LanguageRow"]
 custom_minimum_size = Vector2(180, 40)
 layout_mode = 2
+
+[node name="AudioTitle" type="Label" parent="Center/VBox/SettingsPanel/Margin/SettingsVBox"]
+layout_mode = 2
+text = "Audio"
+label_settings = SubResource("LabelSettings_section")
+
+[node name="MasterRow" type="HBoxContainer" parent="Center/VBox/SettingsPanel/Margin/SettingsVBox"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="MasterLabel" type="Label" parent="Center/VBox/SettingsPanel/Margin/SettingsVBox/MasterRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 1
+text = "Master volume"
+label_settings = SubResource("LabelSettings_section")
+
+[node name="MasterVolume" type="HSlider" parent="Center/VBox/SettingsPanel/Margin/SettingsVBox/MasterRow"]
+custom_minimum_size = Vector2(180, 40)
+layout_mode = 2
+size_flags_vertical = 1
+min_value = 0.0
+max_value = 1.0
+step = 0.05
+value = 1.0
+
+[node name="SFXRow" type="HBoxContainer" parent="Center/VBox/SettingsPanel/Margin/SettingsVBox"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="SFXLabel" type="Label" parent="Center/VBox/SettingsPanel/Margin/SettingsVBox/SFXRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 1
+text = "SFX volume"
+label_settings = SubResource("LabelSettings_section")
+
+[node name="SFXVolume" type="HSlider" parent="Center/VBox/SettingsPanel/Margin/SettingsVBox/SFXRow"]
+custom_minimum_size = Vector2(180, 40)
+layout_mode = 2
+size_flags_vertical = 1
+min_value = 0.0
+max_value = 1.0
+step = 0.05
+value = 1.0
+
+[node name="MuteRow" type="HBoxContainer" parent="Center/VBox/SettingsPanel/Margin/SettingsVBox"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="MuteLabel" type="Label" parent="Center/VBox/SettingsPanel/Margin/SettingsVBox/MuteRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 1
+text = "Mute"
+label_settings = SubResource("LabelSettings_section")
+
+[node name="MuteCheck" type="CheckButton" parent="Center/VBox/SettingsPanel/Margin/SettingsVBox/MuteRow"]
+custom_minimum_size = Vector2(180, 40)
+layout_mode = 2
+size_flags_vertical = 1

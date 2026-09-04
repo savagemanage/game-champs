@@ -2,7 +2,6 @@ extends CanvasLayer
 ## The evolution "experiment observation" screen (spec 4). Shown BETWEEN rounds
 ## while the TitanEvo background burst runs - reads as an experiment, not a
 ## loading screen.
-##
 ## TIMING: ONCE right after the FIRST kill, then EVERY APPEAR_EVERY_ROUNDS rounds
 ## (game_manager calls request_first_kill_show / request_round_show). Any key
 ## skips; a skip hint shows from the SECOND appearance onward.
@@ -15,11 +14,10 @@ extends CanvasLayer
 ##
 ## All mini-sims are 2D top-down dots via _draw (EvoSimView) fed by the PURE
 ## SimReplay tracer - NOT 3D renders (steering spec-4). Before returning to play
-## it launches the final 2.5s comparison scene, then emits `finished`.
+## it launches the final comparison scene, then emits `finished`.
 
 # --- TUNING CONSTANTS (no magic numbers below this block) ---
-## After the first-kill appearance, show again every this many rounds.
-const APPEAR_EVERY_ROUNDS: int = 3
+const APPEAR_EVERY_ROUNDS: int = 3  ## after first-kill, show again every N rounds
 ## Screen split: left 40% large best sim, right 60% grid (steering spec-4).
 const LEFT_FRAC: float = 0.4
 const RIGHT_FRAC: float = 0.6
@@ -121,6 +119,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	if (event is InputEventKey and (event as InputEventKey).pressed) \
 			or (event is InputEventMouseButton and (event as InputEventMouseButton).pressed):
 		get_viewport().set_input_as_handled()
+		if Sfx != null:  # FEAT-002: UI click on the "press any key to skip"
+			Sfx.play(SfxBank.UI_CLICK)
 		_begin_comparison()
 
 

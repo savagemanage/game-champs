@@ -29,3 +29,7 @@ START_SUBTITLE,Grapple-action prototype against a swarm of titans,거인 무리�
 START_PLAY,Start,시작
 START_SETTINGS,Settings,설정
 START_LANGUAGE,Language,언어
+SETTINGS_AUDIO,Audio,오디오
+SETTINGS_MASTER_VOLUME,Master volume,전체 음량
+SETTINGS_SFX_VOLUME,SFX volume,효과음 음량
+SETTINGS_MUTE,Mute,음소거

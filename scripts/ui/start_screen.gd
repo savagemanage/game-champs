@@ -34,6 +34,11 @@ const KEY_SUBTITLE: String = "START_SUBTITLE"
 const KEY_PLAY: String = "START_PLAY"
 const KEY_SETTINGS: String = "START_SETTINGS"
 const KEY_LANGUAGE: String = "START_LANGUAGE"
+# Audio-settings labels (FEAT-002).
+const KEY_AUDIO: String = "SETTINGS_AUDIO"
+const KEY_MASTER_VOLUME: String = "SETTINGS_MASTER_VOLUME"
+const KEY_SFX_VOLUME: String = "SETTINGS_SFX_VOLUME"
+const KEY_MUTE: String = "SETTINGS_MUTE"
 
 # --- NODE REFS (paths must match scenes/StartScreen.tscn) ---
 @onready var _title: Label = $Center/VBox/Title
@@ -42,6 +47,13 @@ const KEY_LANGUAGE: String = "START_LANGUAGE"
 @onready var _settings_title: Label = $Center/VBox/SettingsPanel/Margin/SettingsVBox/SettingsTitle
 @onready var _language_label: Label = $Center/VBox/SettingsPanel/Margin/SettingsVBox/LanguageRow/LanguageLabel
 @onready var _language_option: OptionButton = $Center/VBox/SettingsPanel/Margin/SettingsVBox/LanguageRow/LanguageOption
+@onready var _audio_title: Label = $Center/VBox/SettingsPanel/Margin/SettingsVBox/AudioTitle
+@onready var _master_label: Label = $Center/VBox/SettingsPanel/Margin/SettingsVBox/MasterRow/MasterLabel
+@onready var _master_slider: HSlider = $Center/VBox/SettingsPanel/Margin/SettingsVBox/MasterRow/MasterVolume
+@onready var _sfx_label: Label = $Center/VBox/SettingsPanel/Margin/SettingsVBox/SFXRow/SFXLabel
+@onready var _sfx_slider: HSlider = $Center/VBox/SettingsPanel/Margin/SettingsVBox/SFXRow/SFXVolume
+@onready var _mute_label: Label = $Center/VBox/SettingsPanel/Margin/SettingsVBox/MuteRow/MuteLabel
+@onready var _mute_check: CheckButton = $Center/VBox/SettingsPanel/Margin/SettingsVBox/MuteRow/MuteCheck
 
 
 func _ready() -> void:
@@ -52,6 +64,14 @@ func _ready() -> void:
 	_populate_language_option()
 	_language_option.item_selected.connect(_on_language_selected)
 	_start_button.pressed.connect(_on_start)
+
+	# Audio controls (FEAT-002): seed from the persisted Settings, then wire.
+	_master_slider.value = Settings.get_master_volume()
+	_sfx_slider.value = Settings.get_sfx_volume()
+	_mute_check.button_pressed = Settings.is_muted()
+	_master_slider.value_changed.connect(_on_master_changed)
+	_sfx_slider.value_changed.connect(_on_sfx_changed)
+	_mute_check.toggled.connect(_on_mute_toggled)
 
 	# Re-render this screen's text whenever the locale changes so switching the
 	# selector updates the labels immediately.
@@ -95,9 +115,31 @@ func _apply_translations() -> void:
 	_start_button.text = tr(KEY_PLAY)
 	_settings_title.text = tr(KEY_SETTINGS)
 	_language_label.text = tr(KEY_LANGUAGE)
+	_audio_title.text = tr(KEY_AUDIO)
+	_master_label.text = tr(KEY_MASTER_VOLUME)
+	_sfx_label.text = tr(KEY_SFX_VOLUME)
+	_mute_label.text = tr(KEY_MUTE)
+
+
+# --- Audio controls -> Settings autoload (apply + persist + emit). ---
+func _on_master_changed(value: float) -> void:
+	Settings.set_master_volume(value)
+
+
+func _on_sfx_changed(value: float) -> void:
+	Settings.set_sfx_volume(value)
+	# Play a click so the SFX slider gives immediate audible feedback.
+	if Sfx != null:
+		Sfx.play(SfxBank.UI_CLICK)
+
+
+func _on_mute_toggled(pressed: bool) -> void:
+	Settings.set_muted(pressed)
 
 
 ## Start pressed: hand off to the existing Main scene, which runs its normal
 ## runtime-bake + round loop. No gameplay logic is touched here.
 func _on_start() -> void:
+	if Sfx != null:
+		Sfx.play(SfxBank.UI_CLICK)
 	get_tree().change_scene_to_file(MAIN_SCENE_PATH)

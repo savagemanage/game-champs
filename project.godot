@@ -31,6 +31,12 @@ Telemetry="*res://scripts/telemetry/telemetry.gd"
 ; evolution BETWEEN rounds (never during live play, steering 3.8). It is the
 ; only place scripts/evo/ touches the scene (it reads plain data from Telemetry).
 TitanEvo="*res://scripts/titan/titan_evo_bridge.gd"
+; Sfx (FEAT-002): the single entry point for sound-effect playback. Owns a pool
+; of non-positional players and spawns short-lived 3D players for world sounds,
+; all routed to the dedicated "SFX" audio bus (created at runtime if the bus
+; layout lacks it). Volume/mute are controlled via the Settings autoload, which
+; applies master + SFX volume + mute to the AudioServer buses.
+Sfx="*res://scripts/audio/sfx.gd"
 
 [internationalization]
 

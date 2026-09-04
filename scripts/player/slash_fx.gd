@@ -125,6 +125,10 @@ func _process(delta: float) -> void:
 
 ## Play a brief blade swing on the visible weapon.
 func play_swing() -> void:
+	# Audio (FEAT-002): the swing whoosh. Routed through this FX helper because
+	# slash.gd is at the 250-line cap and must not grow. Guarded for headless.
+	if Sfx != null:
+		Sfx.play(SfxBank.SLASH_SWING)
 	if _blade_pivot == null:
 		return
 	if _swing_tween != null and _swing_tween.is_valid():
@@ -143,6 +147,11 @@ func play_swing() -> void:
 ## Play the on-hit feedback: burst at world_pos, crosshair flash, and (kill
 ## only) a camera shake.
 func play_hit(world_pos: Vector3, killed: bool) -> void:
+	# Audio (FEAT-002): distinct sub-threshold vs kill hit sfx at the nape (3D).
+	# Routed here so slash.gd stays under its line cap. The titan also plays its
+	# own death boom (titan.gd); this is the blade-impact "ting"/chime.
+	if Sfx != null:
+		Sfx.play_at(SfxBank.SLASH_KILL if killed else SfxBank.SLASH_SUB, world_pos)
 	_spawn_burst(world_pos, killed)
 	_flash_crosshair(killed)
 	if killed:
