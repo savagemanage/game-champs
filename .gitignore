@@ -3,6 +3,21 @@
 # Import cache and generated metadata (regenerated on editor open).
 .godot/
 
+# Godot 4.x script UID sidecars (regenerated on import).
+*.uid
+
+# Compiled translations (generated from locale/*.csv on import).
+*.translation
+
+# GLB-embedded textures extracted on scene import.
+assets/models/*_texture-*.png
+
+# Downloaded Godot binary (spec 0 harness). Never commit the binary.
+.godot-bin/
+
+# Generated report/CSV artifacts (spec 0 harness).
+reports/
+
 # Imported asset metadata.
 *.import
 
