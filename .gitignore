@@ -11,6 +11,7 @@
 
 # GLB-embedded textures extracted on scene import.
 assets/models/*_texture-*.png
+assets/models/*_colormap.png
 
 # Downloaded Godot binary (spec 0 harness). Never commit the binary.
 .godot-bin/

@@ -23,7 +23,7 @@ surface_material_override/0 = SubResource("StandardMaterial3D_citizen")
 [node name="CharacterModel" type="Node3D" parent="."]
 script = ExtResource("2_charvis")
 model_path = "res://assets/models/citizen_character.glb"
-model_scale = 1.15
+model_scale = 2.2
 model_y_offset = 0.0
 model_yaw_deg = 180.0
 fallback_mesh_path = NodePath("../MeshInstance3D")

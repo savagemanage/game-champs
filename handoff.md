@@ -144,7 +144,7 @@ placeholders below are updated by their owning feature:_
 - **Wall-Maria concentric-wall map + citizen area - DONE (FEAT-003).**
 - **Titan fixed HP + per-part damage + wall-assault/breach/eat behaviour - DONE (FEAT-004).**
 - **GA fitness / gene redefinition toward infiltration (citizens-eaten + breach) - DONE (FEAT-005).**
-- Character models (soldiers + giant humanoids) via the guarded GLB loader.
+- **Realistic low-poly character models (soldier / giant / citizen) via the guarded GLB loader - DONE (FEAT-006).**
 
 ### First-person aim alignment (FEAT-002)
 
@@ -444,6 +444,52 @@ Deterministic pure test cases live in `tests/cases/evo_fitness.gd` (6-gene set,
 non-random baseline, citizens-eaten dominance, the sim breaching + eating, a
 player-avoider out-scoring the baseline against a defender, and Population
 seeding). `tests/report.gd`'s stub CSV header uses the new gene-variance columns.
+
+### Realistic low-poly character models (FEAT-006)
+
+The blocky FEAT-005 "Blocky Characters" models were replaced with MORE REALISTIC
+low-poly generic humanoids, all **CC0** (full ledger in `assets/CREDITS.md`, the
+append-only `## Character models (FEAT-006 - realistic low-poly)` section). No
+IP-encumbered / Attack-on-Titan assets or proper nouns — generic soldiers and a
+generic giant humanoid only.
+
+| Slot | File | Source (CC0) | Scale | Notes |
+|---|---|---|---|---|
+| Player | `assets/models/soldier_character.glb` | Kenney "Mini Characters", `character-male-a` | `model_scale` 2.7 (→ ~1.8 m) | true first-person, so `CharacterModel` stays `visible=false` in `Player.tscn` |
+| Titan | `assets/models/giant_character.glb` | Kenney "Mini Dungeon", `character-orc` (generic brute) | `model_scale` 6.4 (posed head top ≈ world-local y=5.0) | fills the FEAT-002 5 m capsule |
+| Citizen | `assets/models/citizen_character.glb` | Kenney "Mini Characters", `character-female-a` | `model_scale` 2.2 (→ ~1.7 m) | distinct from the soldier so the plaza reads as civilians |
+
+- **Wiring.** All three ride the EXISTING guarded loader
+  `scripts/player/character_visual.gd` (`model_path` + `model_scale` +
+  `model_y_offset` 0 + `model_yaw_deg` 180 + a primitive-capsule fallback kept
+  visible until the resource imports). `Player.tscn` / `Titan.tscn` `model_path`
+  were repointed; `Citizen.tscn` already pointed at `citizen_character.glb`
+  (FEAT-003 slot). All are **VISUAL-ONLY**: no new colliders, and the titan's
+  CharacterBody3D capsule, NavigationAgent3D and **Nape `Area3D`
+  (collision_layer 8, local `(0, 4.3, -1.5)`) are UNCHANGED** — the orc's posed
+  neck sits at ≈ y=4.24 at scale 6.4, so the existing nape/marker still lands on
+  the back of the neck (no reposition needed). The models import as
+  Node3D/MeshInstance3D + Skeleton3D + AnimationPlayer (skinned, playing the
+  bundled `idle` clip) with NO physics bodies.
+- **Self-contained GLBs.** Each source model originally referenced a shared
+  external `Textures/colormap.png` via a glTF `uri`; that palette PNG was inlined
+  into each GLB's binary chunk (image → `bufferView`, no `uri`) so every
+  committed `.glb` is a single self-contained file verified with `file` as a real
+  `glTF` binary (255 KB / 210 KB / 281 KB — not HTML error pages).
+- **What is committed.** Only the three source `.glb` files. `*.import`,
+  `.godot/imported/`, and the re-extracted `assets/models/*_colormap.png` are
+  gitignored (a `*_colormap.png` rule was added next to the existing
+  `*_texture-*.png` rule). The old `player_character.glb` / `titan_character.glb`
+  were `git rm`'d (no scene references them). Their FEAT-005 CREDITS entries stay
+  intact; a replacement note was appended.
+- **Guarded-load + one-time-import caveat (reaffirmed).** Because `*.import` is
+  gitignored, a fresh clone has the `.glb` but not its import sidecar, so
+  `ResourceLoader.exists()` is false and the loader keeps the primitive capsule
+  visible — scenes never render empty or crash and still text-parse in a
+  headless/first-open run. A one-time `.godot-bin/godot --headless --path .
+  --import` (or opening the editor once) makes the real models load; then
+  `xvfb-run -a ./tools/screenshot.sh` shows the humanoid citizens standing inside
+  the wall and (out of the default first-person frame) the giant titans outside.
 
 ## Workflow
 

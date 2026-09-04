@@ -125,3 +125,53 @@ import, `ResourceLoader.exists("res://assets/models/…glb")` is false, so
 visible as the fallback and never crashes or renders empty — the models are
 loaded at runtime (guarded), NOT as baked `ext_resource`s, so the scenes still
 text-parse in a headless/first-open run.
+
+## Character models (FEAT-006 - realistic low-poly)
+
+FEAT-006 replaced the blocky FEAT-005 characters with MORE REALISTIC low-poly
+generic humanoids: a generic soldier/human (player), a generic large humanoid
+(titans), and a generic civilian human (citizens). All are CC0. No IP-encumbered
+/ Attack-on-Titan assets or proper nouns — generic soldiers and generic giant
+humanoids only.
+
+### Downloaded (license-verified, CC0 / public domain)
+
+| File | Source URL | Author | License | Notes |
+|---|---|---|---|---|
+| `assets/models/soldier_character.glb` | https://kenney.nl/assets/mini-characters (pack "Mini Characters" 1.0 via https://kenney.nl/media/pages/assets/mini-characters/bfc7e272b4-1774770718/kenney_mini-characters.zip, model `Models/GLB format/character-male-a.glb`) | Kenney (www.kenney.nl) | CC0 1.0 — https://creativecommons.org/publicdomain/zero/1.0/ | Player soldier/human visual. Source GLB verified real binary (magic bytes `glTF`, glTF v2). Its shared external `Textures/colormap.png` (512×512 CC0 palette from the same pack) was inlined into the GLB's BIN chunk so the committed `.glb` is self-contained (`images[0]` now has a `bufferView`, no `uri`); final file `file`=glTF binary, 255,212 bytes (not an HTML error page). Skinned rig (Skeleton3D + AnimationPlayer, `idle`/`walk`/`sprint`/… clips). Instanced VISUAL-ONLY under `scenes/Player.tscn` → `CharacterModel` (`scripts/player/character_visual.gd`, `model_scale` 2.7 → ~1.8 m); no colliders added, the CharacterBody3D capsule is unchanged. |
+| `assets/models/citizen_character.glb` | https://kenney.nl/assets/mini-characters (same pack/zip, model `Models/GLB format/character-female-a.glb`) | Kenney (www.kenney.nl) | CC0 1.0 — https://creativecommons.org/publicdomain/zero/1.0/ | Citizen civilian human visual (distinct from the soldier so the plaza reads as non-combatants). Source GLB verified `glTF` binary; the same `colormap.png` inlined; final `.glb` self-contained, 281,740 bytes (verified, not HTML). Skinned rig + AnimationPlayer. Instanced VISUAL-ONLY under `scenes/Citizen.tscn` → `CharacterModel` (`model_scale` 2.2 → ~1.7 m) over the primitive-capsule fallback; citizens still carry NO collision shape. |
+| `assets/models/giant_character.glb` | https://kenney.nl/assets/mini-dungeon (pack "Mini Dungeon" 1.0 via https://kenney.nl/media/pages/assets/mini-dungeon/6cd72dc849-1785314274/kenney_mini-dungeon.zip, model `Models/GLB format/character-orc.glb`) | Kenney (www.kenney.nl) | CC0 1.0 — https://creativecommons.org/publicdomain/zero/1.0/ | Titan "generic large humanoid" visual — a bulky generic humanoid (Kenney's generic dungeon brute), NOT any IP character. Source GLB verified `glTF` binary; its `Textures/colormap.png` (512×512 CC0 palette from Mini Dungeon) inlined into the BIN chunk; final self-contained `.glb`, 210,048 bytes (verified real binary, not HTML). Skinned rig + AnimationPlayer (`idle`). Instanced VISUAL-ONLY under `scenes/Titan.tscn` → `CharacterModel` at `model_scale` 6.4, which puts the posed head top at world-local y≈5.0 to fill the FEAT-002 5 m CapsuleShape3D; the CharacterBody3D collider, NavigationAgent3D and the Nape `Area3D` (collision_layer 8, local `(0, 4.3, -1.5)`) are UNCHANGED — the model's neck sits at ~y=4.24 so the existing nape/marker still lands on the back of the neck (no reposition needed). |
+
+Kenney releases both "Mini Characters" and "Mini Dungeon" under CC0 1.0 (each
+pack's bundled `License.txt` states `License: (Creative Commons Zero, CC0)`).
+
+**Texture note.** These three source models originally referenced a shared
+external `Textures/colormap.png` via a glTF `uri`. To keep each committed model a
+single self-contained file (and avoid shipping a loose texture that would collide
+with the `.gitignore` texture rules), the palette PNG was inlined into each GLB's
+binary chunk as a `bufferView`-backed image. On editor/headless import Godot
+re-extracts it as `assets/models/<name>_colormap.png` (+ `.import`), which is now
+gitignored (see the `.gitignore` `assets/models/*_colormap.png` rule added
+alongside the existing `*_texture-*.png` rule) so only the source `.glb` is
+committed.
+
+### Replaced (FEAT-005 entries superseded — prior entries left intact above)
+
+FEAT-006 removed the FEAT-005 "Blocky Characters" source models
+`assets/models/player_character.glb` and `assets/models/titan_character.glb`
+(and their gitignored `*_texture-p/-b.png` extractions) from the repo; they are
+no longer referenced by any scene. Their CREDITS entries under
+`## Character models (FEAT-005)` above are retained unchanged for provenance per
+the append-only policy.
+
+### One-time editor import (same caveat as textures / sky / OGG / FEAT-005)
+
+All three `.glb` files ship WITHOUT their `.import` sidecars (repo `.gitignore`
+excludes `*.import`). Godot generates the `.import` files, the imported mesh, and
+the re-extracted `*_colormap.png` under `.godot/imported/` on the first editor
+open (or any `--import` pass). Until that import,
+`ResourceLoader.exists("res://assets/models/…glb")` is false, so
+`scripts/player/character_visual.gd` keeps the primitive **capsule** fallback
+visible and never crashes or renders empty — the models are loaded at runtime
+(guarded), NOT as baked `ext_resource`s, so the scenes still text-parse in a
+headless/first-open run.

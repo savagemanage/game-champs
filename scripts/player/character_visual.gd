@@ -1,6 +1,8 @@
 extends Node3D
-## Guarded runtime loader for a CC0 low-poly humanoid GLB (Kenney "Blocky
-## Characters" 2.0, CC0 - see assets/CREDITS.md). Attached to a "CharacterModel"
+## Guarded runtime loader for a CC0 realistic low-poly humanoid GLB (Kenney
+## "Mini Characters" / "Mini Dungeon", CC0 - see assets/CREDITS.md). The former
+## "Blocky Characters" models were replaced in FEAT-006 by more realistic
+## generic humanoids (soldier, giant, citizen). Attached to a "CharacterModel"
 ## Node3D that is a VISUAL-ONLY sibling of the owning body's CollisionShape3D:
 ## it never adds a physics body or collision shape, so movement / navigation /
 ## the nape Area3D are driven entirely by the existing capsule collider.
@@ -15,8 +17,9 @@ extends Node3D
 ##
 ## Web-safe: no Thread/Mutex/Semaphore/WorkerThreadPool, no SubViewport. Godot
 ## imports a .glb as a PackedScene of plain Node3D / MeshInstance3D nodes plus
-## an AnimationPlayer (these Kenney rigs are node-transform animated, 0 skins),
-## none of which are physics bodies, so no collider is ever introduced.
+## a Skeleton3D and an AnimationPlayer (these Mini rigs are skinned with an
+## `idle` clip); none of which are physics bodies, so no collider is ever
+## introduced - the model stays purely VISUAL.
 
 # --- TUNING CONSTANTS (no magic numbers below this block) ---
 

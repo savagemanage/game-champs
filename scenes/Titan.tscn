@@ -59,8 +59,8 @@ shape = SubResource("CapsuleShape3D_bodyhit")
 
 [node name="CharacterModel" type="Node3D" parent="."]
 script = ExtResource("2_charvis")
-model_path = "res://assets/models/titan_character.glb"
-model_scale = 3.4
+model_path = "res://assets/models/giant_character.glb"
+model_scale = 6.4
 model_y_offset = 0.0
 model_yaw_deg = 180.0
 fallback_mesh_path = NodePath("../MeshInstance3D")
