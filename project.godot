@@ -10,6 +10,13 @@ config/name="Titan Prototype"
 run/main_scene="res://scenes/Main.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 
+[autoload]
+
+; PlayerStats is a global singleton (autoload). It collects per-round player
+; behaviour, persists it to user://player_stats.json, and exposes the
+; behavior_weights the titan reads each round. Reachable at /root/PlayerStats.
+PlayerStats="*res://scripts/player_stats.gd"
+
 [input]
 
 ; --- Movement (WASD) ---

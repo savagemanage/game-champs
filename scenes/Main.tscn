@@ -1,7 +1,15 @@
-[gd_scene load_steps=3 format=3 uid="uid://d1main0scene1"]
+[gd_scene load_steps=6 format=3 uid="uid://d1main0scene1"]
 
 [ext_resource type="PackedScene" uid="uid://c1testmap0scene1" path="res://scenes/TestMap.tscn" id="1_testmap"]
 [ext_resource type="PackedScene" uid="uid://b1player0scene1" path="res://scenes/Player.tscn" id="2_player"]
+[ext_resource type="Script" path="res://scripts/game_manager.gd" id="3_gamemgr"]
+[ext_resource type="PackedScene" uid="uid://a1titan0scene1" path="res://scenes/Titan.tscn" id="4_titan"]
+
+[sub_resource type="LabelSettings" id="LabelSettings_ui"]
+font_size = 24
+font_color = Color(1, 1, 1, 0.95)
+outline_size = 4
+outline_color = Color(0, 0, 0, 0.8)
 
 [node name="Main" type="Node3D"]
 
@@ -9,3 +17,25 @@
 
 [node name="Player" parent="." instance=ExtResource("2_player")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
+
+[node name="GameManager" type="Node" parent="."]
+script = ExtResource("3_gamemgr")
+titan_scene = ExtResource("4_titan")
+
+[node name="UI" type="CanvasLayer" parent="GameManager"]
+
+[node name="RoundLabel" type="Label" parent="GameManager/UI"]
+offset_left = 16.0
+offset_top = 12.0
+offset_right = 300.0
+offset_bottom = 44.0
+text = "Round 1"
+label_settings = SubResource("LabelSettings_ui")
+
+[node name="StatusLabel" type="Label" parent="GameManager/UI"]
+offset_left = 16.0
+offset_top = 46.0
+offset_right = 500.0
+offset_bottom = 78.0
+text = "Nape exposed - slash it!"
+label_settings = SubResource("LabelSettings_ui")

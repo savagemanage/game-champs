@@ -1,0 +1,58 @@
+[gd_scene load_steps=8 format=3 uid="uid://a1titan0scene1"]
+
+[ext_resource type="Script" path="res://scripts/titan.gd" id="1_titan"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
+radius = 2.0
+height = 12.0
+
+[sub_resource type="CapsuleMesh" id="CapsuleMesh_body"]
+radius = 2.0
+height = 12.0
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_body"]
+albedo_color = Color(0.75, 0.55, 0.5, 1)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_nape"]
+size = Vector3(2.5, 2.0, 1.0)
+
+[sub_resource type="BoxMesh" id="BoxMesh_nape"]
+size = Vector3(2.5, 2.0, 1.0)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_nape"]
+albedo_color = Color(0.9, 0.2, 0.2, 1)
+emission_enabled = true
+emission = Color(0.9, 0.1, 0.1, 1)
+
+[node name="Titan" type="CharacterBody3D"]
+collision_layer = 4
+collision_mask = 3
+script = ExtResource("1_titan")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 6, 0)
+shape = SubResource("CapsuleShape3D_body")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 6, 0)
+mesh = SubResource("CapsuleMesh_body")
+surface_material_override/0 = SubResource("StandardMaterial3D_body")
+
+[node name="NavigationAgent3D" type="NavigationAgent3D" parent="."]
+radius = 2.0
+height = 12.0
+path_desired_distance = 1.5
+target_desired_distance = 2.0
+avoidance_enabled = false
+
+[node name="Nape" type="Area3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 10, -2)
+collision_layer = 8
+collision_mask = 16
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Nape"]
+shape = SubResource("BoxShape3D_nape")
+
+[node name="NapeMarker" type="MeshInstance3D" parent="Nape"]
+mesh = SubResource("BoxMesh_nape")
+surface_material_override/0 = SubResource("StandardMaterial3D_nape")

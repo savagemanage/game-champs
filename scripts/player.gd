@@ -20,6 +20,11 @@ extends CharacterBody3D
 ## swing without killing the momentum the grapple built up.
 @export var air_control_accel: float = 22.0
 
+## How long (seconds) the slash hitbox stays active after a slash input. The
+## hitbox is an Area3D in front of the player; while it overlaps a titan's nape
+## the titan dies. Kept short so it reads as a quick swipe.
+@export var slash_active_time: float = 0.15
+
 # Project default gravity (from ProjectSettings, e.g. 9.8 m/s^2).
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity", 9.8)
 
@@ -28,11 +33,24 @@ var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity", 
 @onready var yaw_pivot: Node3D = $YawPivot
 @onready var pitch_pivot: Node3D = $YawPivot/PitchPivot
 @onready var camera: Camera3D = $YawPivot/PitchPivot/Camera3D
+## Slash kill zone - an Area3D in front of the player, disabled except during a
+## slash. Its collision mask includes the nape layer so it can strike a titan.
+@onready var slash_hitbox: Area3D = $YawPivot/SlashHitbox
+
+# Countdown while the slash hitbox is active; <= 0 means the slash is off.
+var _slash_timer: float = 0.0
 
 
 func _ready() -> void:
 	# Capture the mouse for first/third-person style mouse-look.
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	# The player is discoverable by the titan via this group.
+	add_to_group("player")
+	# Slash starts disabled; enabled in short bursts by _handle_slash().
+	if slash_hitbox != null:
+		slash_hitbox.monitoring = false
+		slash_hitbox.visible = false
+		slash_hitbox.area_entered.connect(_on_slash_area_entered)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -69,6 +87,8 @@ func _physics_process(delta: float) -> void:
 	# guarded by `if has_node("Grapple"):`.
 	# ==========================================================
 	_process_grapple(delta)
+
+	_handle_slash(delta)
 
 	move_and_slide()
 
@@ -119,6 +139,49 @@ func _handle_movement() -> void:
 ## even if the Grapple node is absent.
 func _is_swinging() -> bool:
 	return has_node("Grapple") and $Grapple.grappling
+
+
+## Slash attack. On the `slash` input the front hitbox is switched on for a
+## brief window; while it overlaps a titan's nape the titan dies. The hitbox is
+## an Area3D on the slash layer (5) masking the nape layer (4). We also record
+## the swing direction into PlayerStats so the titan can learn which side the
+## player attacks from.
+func _handle_slash(delta: float) -> void:
+	if slash_hitbox == null:
+		return
+
+	if Input.is_action_just_pressed("slash") and _slash_timer <= 0.0:
+		_slash_timer = slash_active_time
+		slash_hitbox.monitoring = true
+		slash_hitbox.visible = true
+		_record_slash_side()
+
+	if _slash_timer > 0.0:
+		_slash_timer -= delta
+		if _slash_timer <= 0.0:
+			slash_hitbox.monitoring = false
+			slash_hitbox.visible = false
+
+
+## When the slash hitbox overlaps a titan's nape Area3D, kill the titan. The
+## nape's own script also watches for this, but calling die() here makes the
+## kill immediate and order-independent.
+func _on_slash_area_entered(area: Area3D) -> void:
+	var titan := area.get_parent()
+	if titan != null and titan.has_method("die"):
+		titan.die()
+
+
+## Log which way the player was swinging (relative to camera yaw) so PlayerStats
+## can bias the next titan toward guarding that side. Uses current strafe input
+## as a cheap proxy for the attack side.
+func _record_slash_side() -> void:
+	var stats := get_node_or_null("/root/PlayerStats")
+	if stats == null or not stats.has_method("record_dodge"):
+		return
+	var strafe: float = Input.get_axis("move_left", "move_right")
+	if not is_zero_approx(strafe):
+		stats.record_dodge(strafe)
 
 
 ## Grapple extension point. FEAT-002 attaches a dedicated `Grapple` child
