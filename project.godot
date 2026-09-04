@@ -12,6 +12,11 @@ config/features=PackedStringArray("4.7", "GL Compatibility")
 
 [autoload]
 
+; Settings (FEAT-001): owns the current UI locale (Korean/English), persists it
+; to user://wirework_settings.json as JSON, applies it via TranslationServer on
+; startup, and emits locale_changed so visible labels re-render live. It has no
+; dependency on the other autoloads, so load order does not matter.
+Settings="*res://scripts/settings/settings.gd"
 ; Telemetry (spec 2): the only telemetry piece that touches game scenes. It
 ; samples the player + titans each physics tick, feeds the pure RoundRecorder,
 ; owns the 24-bin PlayerModel + 3-round window ring buffer, and persists to
@@ -23,6 +28,16 @@ Telemetry="*res://scripts/telemetry/telemetry.gd"
 ; evolution BETWEEN rounds (never during live play, steering 3.8). It is the
 ; only place scripts/evo/ touches the scene (it reads plain data from Telemetry).
 TitanEvo="*res://scripts/titan/titan_evo_bridge.gd"
+
+[internationalization]
+
+; UI localization (FEAT-001). The editor imports locale/ui.csv and GENERATES the
+; per-locale .translation resources listed below (ui.en.translation /
+; ui.ko.translation). This sandbox has no editor, so those files are produced on
+; first editor import; the CSV (locale/ui.csv) is the source of truth. The
+; runtime locale is driven by the Settings autoload, NOT hardcoded here.
+locale/translations=PackedStringArray("res://locale/ui.en.translation", "res://locale/ui.ko.translation")
+locale/fallback="en"
 
 [input]
 

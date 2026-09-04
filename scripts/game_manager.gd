@@ -1,15 +1,22 @@
 extends Node
 ## GameManager - owns the round lifecycle for wirework (spec 1). Bakes the arena
-## navmesh at RUNTIME behind a loading screen, spawns EXACTLY 4 titans per round
-## and respawns 4 IDENTICAL titans on clear, and drives the spec-4 evolution
-## screen between rounds (see _on_titan_killed).
-## INVARIANT (steering section 1): titan count and every titan stat are FIXED;
-## nothing scales with _round_number. Difficulty rises only via evolved genes.
+## navmesh at RUNTIME behind a loading screen, spawns EXACTLY 4 titans per round,
+## respawns 4 IDENTICAL titans on clear, and drives the spec-4 evolution screen
+## between rounds (see _on_titan_killed).
+## INVARIANT (steering 1): titan count and stats are FIXED; nothing scales with
+## _round_number. Difficulty rises only via evolved genes.
 
 # --- TUNING CONSTANTS (no magic numbers below this block) ---
 const TITAN_COUNT: int = 4  ## FIXED per round; NEVER scaled by round number.
 const RESPAWN_DELAY: float = 2.0  ## seconds between last kill and next spawn
 const BAKE_POLL_INTERVAL: float = 0.1  ## navmesh bake_finished poll fallback
+
+# --- Translation KEYS for user-facing text (resolved via tr() at display time) ---
+const KEY_LOADING_BAKING: String = "LOADING_BAKING"
+const KEY_ROUND_N: String = "ROUND_N"
+const KEY_STATUS_TITANS_STRIKE: String = "STATUS_TITANS_STRIKE"
+const KEY_STATUS_TITANS_LEFT: String = "STATUS_TITANS_LEFT"
+const KEY_STATUS_ROUND_CLEARED: String = "STATUS_ROUND_CLEARED"
 
 # --- Scene wiring (set in Main.tscn) ---
 @export var titan_scene: PackedScene
@@ -31,8 +38,7 @@ var _titans: Array[CharacterBody3D] = []
 var _alive: int = 0
 var _round_number: int = 0
 var _gameplay_started: bool = false
-## Evolution screen (spec 4): shown once after the FIRST kill, then every 3 rounds.
-var _evolution_screen: CanvasLayer
+var _evolution_screen: CanvasLayer  ## shown after 1st kill, then every 3 rounds
 var _first_kill_screen_shown: bool = false
 
 
@@ -47,16 +53,26 @@ func _ready() -> void:
 		_evolution_screen.finished.connect(_on_evolution_screen_finished)
 	if titan_scene == null:
 		push_warning("GameManager: titan_scene is not assigned; no titans will spawn.")
+	_refresh_hud_locale()  # localize HUD text now + on live locale switch
+	if typeof(Settings) != TYPE_NIL and Settings != null and Settings.has_signal("locale_changed"):
+		Settings.locale_changed.connect(func(_l): _refresh_hud_locale())
 	_begin_runtime_bake()
+
+
+## Re-apply localized text to the HUD labels (startup + live locale switch).
+func _refresh_hud_locale() -> void:
+	if _round_label != null:
+		_round_label.text = tr(KEY_ROUND_N) % maxi(_round_number, 1)
+	if _status_label != null and not _gameplay_started:
+		_status_label.text = tr(KEY_LOADING_BAKING)
 
 
 # --- RUNTIME NAVMESH BAKE (behind the loading screen) ---
 func _begin_runtime_bake() -> void:
 	if _loading_screen != null and _loading_screen.has_method("show_screen"):
-		_loading_screen.call("show_screen", "Baking navigation...")
+		_loading_screen.call("show_screen", tr(KEY_LOADING_BAKING))
 	_nav_region = _find_nav_region()
 	if _nav_region == null:
-		# No region to bake: proceed to gameplay (pathing degraded) but warn.
 		push_warning("GameManager: no NavigationRegion3D found; skipping bake.")
 		_on_bake_finished()
 		return
@@ -67,8 +83,7 @@ func _begin_runtime_bake() -> void:
 
 
 func _run_bake() -> void:
-	# Runtime bake (stalls one frame, hidden by the loading screen; NOT baked in
-	# the editor). Poll as a fallback if bake_finished is not delivered.
+	# Runtime bake (hidden by the loading screen; NOT editor-baked).
 	_nav_region.bake_navigation_mesh()
 	if not _nav_region.has_signal("bake_finished"):
 		get_tree().create_timer(BAKE_POLL_INTERVAL).timeout.connect(_on_bake_finished)
@@ -88,14 +103,13 @@ func _start_round() -> void:
 	_round_number += 1
 	_reset_player()
 	_spawn_titans()
-	_set_status("%d titans - strike the nape!" % TITAN_COUNT)
-	_update_round_label()
+	_set_status(tr(KEY_STATUS_TITANS_STRIKE) % TITAN_COUNT)
+	_refresh_hud_locale()
 	if Telemetry != null:
 		Telemetry.start_round()  # spec 2: begin recording this round
 
 
-## Drive the telemetry recorder once per physics tick (spec 2). game_manager
-## owns this loop so scripts/telemetry/ never touches the scene tree itself.
+## Drive the telemetry recorder once per physics tick (spec 2).
 func _physics_process(delta: float) -> void:
 	if _gameplay_started and Telemetry != null:
 		Telemetry.sample_tick(delta)
@@ -123,8 +137,7 @@ func _spawn_titans() -> void:
 	_inject_evolved_genes()
 
 
-## Inject the latest evolved best genome + sibling list into every titan for THIS
-## round (spec 3, steering 3.8). Evolution does NOT run during the round.
+## Inject the latest best genome + siblings into every titan (spec 3, steering 3.8).
 func _inject_evolved_genes() -> void:
 	if typeof(TitanEvo) == TYPE_NIL or TitanEvo == null:
 		return
@@ -142,29 +155,23 @@ func _inject_evolved_genes() -> void:
 func _on_titan_killed() -> void:
 	_alive -= 1
 	if _alive > 0:
-		_set_status("%d titans left" % _alive)
-		# Evolution screen (spec 4): appear ONCE right after the FIRST kill.
+		_set_status(tr(KEY_STATUS_TITANS_LEFT) % _alive)
+		# Evolution screen (spec 4): appear ONCE after the FIRST kill.
 		if not _first_kill_screen_shown:
 			_first_kill_screen_shown = true
 			_try_show_evo_screen("request_first_kill_show")
 		return
-	_set_status("Round %d cleared!" % _round_number)
-	# spec 2: close the round; spec 3 (steering 3.8): background burst BETWEEN
-	# rounds. Neither runs during live play.
+	_set_status(tr(KEY_STATUS_ROUND_CLEARED) % _round_number)
 	if Telemetry != null:
 		Telemetry.end_round()
 	if typeof(TitanEvo) != TYPE_NIL and TitanEvo != null:
 		TitanEvo.start_evolution_burst()
-	# spec 4: after the first-kill appearance, show every APPEAR_EVERY_ROUNDS
-	# rounds. If it takes over, the next round starts on its `finished` signal.
 	if _try_show_evo_screen("request_round_show", _round_number):
 		return
 	get_tree().create_timer(RESPAWN_DELAY).timeout.connect(_start_round)
 
 
-## Delegate to the spec-4 evolution screen. Ensures a background burst is running
-## so the screen has generations to observe, pauses gameplay, and returns true
-## when the screen took over the flow (gameplay resumes on its `finished` signal).
+## Delegate to the spec-4 evolution screen; return true when it took over.
 func _try_show_evo_screen(method: String, arg = null) -> bool:
 	if _evolution_screen == null or not _evolution_screen.has_method(method):
 		return false
@@ -177,8 +184,7 @@ func _try_show_evo_screen(method: String, arg = null) -> bool:
 	return true
 
 
-## Resume gameplay once the evolution screen (incl. its final comparison scene)
-## finished. A cleared round spawns the next; a mid-round appearance resumes it.
+## Resume gameplay once the evolution screen finished.
 func _on_evolution_screen_finished() -> void:
 	get_tree().paused = false
 	if _alive <= 0:
@@ -223,8 +229,7 @@ func _player_spawn_transform() -> Transform3D:
 	return Transform3D(Basis.IDENTITY, Vector3(0.0, 2.0, 0.0))
 
 
-## Collect the 4 titan-spawn markers (on the connected base floor, NOT the tall
-## plateau tops which agent_max_climb won't bridge); ring fallback if missing.
+## Collect the 4 titan-spawn markers on the connected base floor (ring fallback).
 func _titan_spawn_transforms() -> Array[Transform3D]:
 	var result: Array[Transform3D] = []
 	if _arena != null:
@@ -238,11 +243,6 @@ func _titan_spawn_transforms() -> Array[Transform3D]:
 			result.append(Transform3D(Basis.IDENTITY,
 				Vector3(cos(angle) * 30.0, 2.0, sin(angle) * 30.0)))
 	return result
-
-
-func _update_round_label() -> void:
-	if _round_label != null:
-		_round_label.text = "Round %d" % _round_number
 
 
 func _set_status(text: String) -> void:

@@ -30,8 +30,8 @@ const GRID_ROWS: int = 7
 const TOP_HIGHLIGHT: int = 5
 ## Small-view scale factor for grid cells.
 const GRID_SCALE: float = 0.5
-## Skip hint text (shown from the 2nd appearance onward).
-const SKIP_HINT: String = "Press any key to skip"
+const KEY_SKIP_HINT: String = "EVO_SKIP_HINT"  ## skip hint (from 2nd appearance)
+const KEY_TITLE_GEN: String = "EVO_TITLE_GEN"  ## title "EVOLVING - Generation %d"
 ## Max seconds the screen stays up if evolution finishes fast / stalls.
 const MAX_VISIBLE_TIME: float = 8.0
 ## Layout paddings (px) and the grid/indicators vertical split fraction.
@@ -99,7 +99,7 @@ func _show() -> void:
 	visible = true
 	_visible_time = 0.0
 	set_process(true)
-	_hint_label.text = SKIP_HINT if _appearances >= 2 else ""
+	_hint_label.text = tr(KEY_SKIP_HINT) if _appearances >= 2 else ""
 	_hint_label.visible = _appearances >= 2
 	_layout()
 	_refresh()
@@ -135,7 +135,7 @@ func _refresh() -> void:
 		return
 	var gen: int = TitanEvo.current_generation()
 	_gen_label.text = str(gen)
-	_title_label.text = "EVOLVING  -  Generation %d" % gen
+	_title_label.text = tr(KEY_TITLE_GEN) % gen
 	var window: Dictionary = TitanEvo.sample_window()
 	var preferred: Vector3 = TitanEvo.preferred_entry_dir()
 	var genes_list: Array = TitanEvo.all_candidate_genes()

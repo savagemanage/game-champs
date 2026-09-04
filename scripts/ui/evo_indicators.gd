@@ -44,6 +44,11 @@ const RADAR_RADIUS_FRAC: float = 0.38
 const FONT_SIZE: int = 12
 const LABEL_OFFSET: Vector2 = Vector2(2.0, 12.0)
 
+# --- Translation KEYS (user-facing indicator labels) ---
+const KEY_FITNESS: String = "EVO_IND_FITNESS"
+const KEY_VARIANCE: String = "EVO_IND_VARIANCE"
+const KEY_RADAR: String = "EVO_IND_RADAR"
+
 # =====================================================================
 # STATE (all plain data)
 # =====================================================================
@@ -82,7 +87,7 @@ func _draw() -> void:
 # =====================================================================
 
 func _draw_curve(r: Rect2) -> void:
-	_label(r.position, "Fitness (best / mean, last %d gen)" % HISTORY_WINDOW)
+	_label(r.position, tr(KEY_FITNESS) % HISTORY_WINDOW)
 	var recent: Array = _tail(_history, HISTORY_WINDOW)
 	var plot: Rect2 = Rect2(r.position + Vector2(0.0, HEADER_H), Vector2(r.size.x, r.size.y - HEADER_H))
 	draw_rect(plot, BAR_BG_COLOR, true)
@@ -112,7 +117,7 @@ func _draw_series(recent: Array, plot: Rect2, hi: float, key: String, color: Col
 # =====================================================================
 
 func _draw_bars(r: Rect2) -> void:
-	_label(r.position, "Gene variance (shrinking = converging)")
+	_label(r.position, tr(KEY_VARIANCE))
 	var variance: Array = _latest_variance()
 	var plot: Rect2 = Rect2(r.position + Vector2(0.0, HEADER_H), Vector2(r.size.x, r.size.y - HEADER_H))
 	var count: int = Genome.GENE_COUNT
@@ -135,7 +140,7 @@ func _draw_bars(r: Rect2) -> void:
 # =====================================================================
 
 func _draw_radar(r: Rect2) -> void:
-	_label(r.position, "Best genome (faint = previous gen)")
+	_label(r.position, tr(KEY_RADAR))
 	var center: Vector2 = r.position + Vector2(r.size.x * 0.5, r.size.y * 0.5 + HEADER_H * 0.5)
 	var radius: float = minf(r.size.x, r.size.y) * RADAR_RADIUS_FRAC
 	var n: int = Genome.GENE_COUNT

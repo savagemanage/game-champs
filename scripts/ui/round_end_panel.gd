@@ -23,24 +23,55 @@ const RAMP: String = " .:-=+*#%@"
 const COLD_COLOR: Color = Color(0.2, 0.3, 0.5)
 const HOT_COLOR: Color = Color(1.0, 0.4, 0.15)
 
+# --- Translation KEYS (user-facing text; BBCode wrapping stays in code) ---
+const KEY_ROUND_COMPLETE: String = "RE_ROUND_COMPLETE"
+const KEY_LEFT_APPROACH: String = "RE_LEFT_APPROACH"
+const KEY_AVG_DISTANCE: String = "RE_AVG_DISTANCE"
+const KEY_AVG_ENTRY_SPEED: String = "RE_AVG_ENTRY_SPEED"
+const KEY_AVG_EXPOSURE: String = "RE_AVG_EXPOSURE"
+const KEY_TITAN_EXPOSURE: String = "RE_TITAN_EXPOSURE"
+const KEY_SLASH: String = "RE_SLASH"
+const KEY_WINDOW_COUNT: String = "RE_WINDOW_COUNT"
+const KEY_MODEL_TITLE: String = "RE_PLAYER_MODEL_TITLE"
+const KEY_MODEL_AXES: String = "RE_PLAYER_MODEL_AXES"
+const KEY_MODEL_EMPTY: String = "RE_PLAYER_MODEL_EMPTY"
+const KEY_HINT_CONTINUE: String = "RE_HINT_CONTINUE"
+
 # --- Node references (names MUST match Main.tscn) ---
 @onready var _root: Control = $Root
 @onready var _summary_label: RichTextLabel = $Root/Panel/Margin/VBox/Summary
 @onready var _heatmap_label: RichTextLabel = $Root/Panel/Margin/VBox/Heatmap
 @onready var _hint_label: Label = $Root/Panel/Margin/VBox/Hint
 
+## Last summary shown, kept so the panel can re-render live on a locale switch.
+var _last_summary: Dictionary = {}
+
 
 func _ready() -> void:
 	visible = false
 	if Telemetry != null:
 		Telemetry.round_summary_ready.connect(_on_summary_ready)
+	if typeof(Settings) != TYPE_NIL and Settings != null and Settings.has_signal("locale_changed"):
+		Settings.locale_changed.connect(_on_locale_changed)
+
+
+## Re-render the currently-visible panel in the new locale (transient panel, so
+## only refresh when it is on screen).
+func _on_locale_changed(_locale: String) -> void:
+	if not visible:
+		return
+	_summary_label.text = _format_summary(_last_summary)
+	_heatmap_label.text = _format_heatmap(_last_summary.get("player_model_bins", []))
+	if _hint_label != null:
+		_hint_label.text = tr(KEY_HINT_CONTINUE)
 
 
 func _on_summary_ready(summary: Dictionary) -> void:
 	_summary_label.text = _format_summary(summary)
 	_heatmap_label.text = _format_heatmap(summary.get("player_model_bins", []))
 	if _hint_label != null:
-		_hint_label.text = "Press any key to continue"
+		_hint_label.text = tr(KEY_HINT_CONTINUE)
+	_last_summary = summary
 	visible = true
 
 
@@ -59,24 +90,24 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _format_summary(s: Dictionary) -> String:
 	var lines: Array[String] = []
-	lines.append("[b]Round %d complete[/b]" % int(s.get("round", 0)))
-	lines.append("Left approach ratio: %.0f%%" % (float(s.get("left_approach_ratio", 0.0)) * 100.0))
-	lines.append("Avg engagement distance: %.1f m" % float(s.get("avg_engagement_distance", 0.0)))
-	lines.append("Avg entry speed: %.1f m/s" % float(s.get("avg_entry_speed", 0.0)))
-	lines.append("Avg nape exposure: %.0f%%" % (float(s.get("avg_exposure_ratio", 0.0)) * 100.0))
+	lines.append("[b]%s[/b]" % (tr(KEY_ROUND_COMPLETE) % int(s.get("round", 0))))
+	lines.append(tr(KEY_LEFT_APPROACH) % (float(s.get("left_approach_ratio", 0.0)) * 100.0))
+	lines.append(tr(KEY_AVG_DISTANCE) % float(s.get("avg_engagement_distance", 0.0)))
+	lines.append(tr(KEY_AVG_ENTRY_SPEED) % float(s.get("avg_entry_speed", 0.0)))
+	lines.append(tr(KEY_AVG_EXPOSURE) % (float(s.get("avg_exposure_ratio", 0.0)) * 100.0))
 
 	var per_titan: Dictionary = s.get("exposure_per_titan", {})
 	if not per_titan.is_empty():
 		var idx: int = 1
 		for id in per_titan:
-			lines.append("  titan %d exposure: %.0f%%" % [idx, float(per_titan[id]) * 100.0])
+			lines.append(tr(KEY_TITAN_EXPOSURE) % [idx, float(per_titan[id]) * 100.0])
 			idx += 1
 
 	var attempts: int = int(s.get("slash_attempts", 0))
 	var successes: int = int(s.get("slash_successes", 0))
-	lines.append("Slash: %d attempts, %d kills (%.0f%%)"
+	lines.append(tr(KEY_SLASH)
 		% [attempts, successes, float(s.get("slash_success_rate", 0.0)) * 100.0])
-	lines.append("Engagement windows this round: %d" % int(s.get("window_count", 0)))
+	lines.append(tr(KEY_WINDOW_COUNT) % int(s.get("window_count", 0)))
 	return "\n".join(lines)
 
 
@@ -84,7 +115,7 @@ func _format_summary(s: Dictionary) -> String:
 ## quadrants; columns = distance-band x timing-band.
 func _format_heatmap(bins: Array) -> String:
 	if bins.is_empty():
-		return "[i]player model: (no data yet)[/i]"
+		return "[i]%s[/i]" % tr(KEY_MODEL_EMPTY)
 
 	var max_val: float = 0.0
 	for v in bins:
@@ -93,8 +124,8 @@ func _format_heatmap(bins: Array) -> String:
 		max_val = 1.0
 
 	var out: Array[String] = []
-	out.append("[b]Player model (24 bins)[/b]")
-	out.append("rows=approach quadrant, cols=distance x timing")
+	out.append("[b]%s[/b]" % tr(KEY_MODEL_TITLE))
+	out.append(tr(KEY_MODEL_AXES))
 	var quadrant_names: Array[String] = ["N", "E", "S", "W"]
 	for q in PlayerModel.QUADRANTS:
 		var row: String = "%s " % quadrant_names[q]

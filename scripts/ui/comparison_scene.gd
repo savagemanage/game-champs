@@ -29,12 +29,12 @@ const PANEL_INSET: float = 12.0
 ## Side-label band (px): top offset and height.
 const LABEL_TOP: float = 10.0
 const LABEL_HEIGHT: float = 28.0
-## Label text for each side (Gen N is filled in at play() time).
-const LEFT_LABEL: String = "Gen 1 (pure nav)"
-const RIGHT_LABEL_FMT: String = "Gen %d (best)"
+## Translation KEYS for each side's label (Gen N filled in at play() time).
+const KEY_LEFT_LABEL: String = "CMP_GEN1_PURE_NAV"
+const KEY_RIGHT_LABEL: String = "CMP_GEN_BEST"
 ## Shown on BOTH sides when no evolution has happened yet (generation <= 1), so
 ## the identical halves are not mislabeled as an evolved-vs-baseline contrast.
-const UNEVOLVED_LABEL: String = "Gen 1 (pure nav) - no evolution yet"
+const KEY_UNEVOLVED_LABEL: String = "CMP_UNEVOLVED"
 
 const BACKDROP_COLOR: Color = Color(0.02, 0.02, 0.04, 1.0)
 
@@ -90,11 +90,11 @@ func play(window: Dictionary, preferred_entry_dir: Vector3) -> void:
 	_left_view.highlighted = false
 	_right_view.highlighted = evolved
 	if evolved:
-		_left_label.text = LEFT_LABEL
-		_right_label.text = RIGHT_LABEL_FMT % gen
+		_left_label.text = tr(KEY_LEFT_LABEL)
+		_right_label.text = tr(KEY_RIGHT_LABEL) % gen
 	else:
-		_left_label.text = UNEVOLVED_LABEL
-		_right_label.text = UNEVOLVED_LABEL
+		_left_label.text = tr(KEY_UNEVOLVED_LABEL)
+		_right_label.text = tr(KEY_UNEVOLVED_LABEL)
 
 	visible = true
 	_timer.start()
