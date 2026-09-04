@@ -15,6 +15,10 @@ extends CharacterBody3D
 ## Min/max camera pitch in degrees (looking down / looking up).
 @export var min_pitch_deg: float = -80.0
 @export var max_pitch_deg: float = 70.0
+## How strongly WASD steers the player while airborne / grappling. This is an
+## additive nudge (m/s^2) rather than an overwrite, so it can be used to steer a
+## swing without killing the momentum the grapple built up.
+@export var air_control_accel: float = 22.0
 
 # Project default gravity (from ProjectSettings, e.g. 9.8 m/s^2).
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity", 9.8)
@@ -95,7 +99,14 @@ func _handle_movement() -> void:
 	direction.y = 0.0
 	direction = direction.normalized()
 
-	if direction != Vector3.ZERO:
+	if _is_swinging():
+		# While grappling, DO NOT overwrite horizontal velocity - that would
+		# destroy the swing momentum the grapple built up. Instead apply a
+		# gentle additive nudge so the player can still steer the swing.
+		if direction != Vector3.ZERO:
+			velocity.x += direction.x * air_control_accel * get_physics_process_delta_time()
+			velocity.z += direction.z * air_control_accel * get_physics_process_delta_time()
+	elif direction != Vector3.ZERO:
 		velocity.x = direction.x * move_speed
 		velocity.z = direction.z * move_speed
 	else:
@@ -104,8 +115,16 @@ func _handle_movement() -> void:
 		velocity.z = move_toward(velocity.z, 0.0, move_speed)
 
 
-## Grapple extension point. Empty for FEAT-001; FEAT-002 fills this in
-## (or replaces it with a dedicated Grapple child node). Kept as a real
-## method so the call site in _physics_process stays stable.
-func _process_grapple(_delta: float) -> void:
-	pass
+## True while the grapple wire is attached. Guarded so the player runs fine
+## even if the Grapple node is absent.
+func _is_swinging() -> bool:
+	return has_node("Grapple") and $Grapple.grappling
+
+
+## Grapple extension point. FEAT-002 attaches a dedicated `Grapple` child
+## node (scripts/grapple.gd) that owns the whole wire mechanic. We simply
+## forward the physics tick to it, guarded so the player still runs fine if
+## the node is ever removed.
+func _process_grapple(delta: float) -> void:
+	if has_node("Grapple"):
+		$Grapple.apply(self, delta)
