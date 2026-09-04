@@ -1,22 +1,17 @@
 extends Node3D
 ## Slash attack via a ShapeCast3D SWEEP between the previous and current physics
-## frame.
-##
-## Attached as a child node named "Slash" under the Player. The player's
+## frame. Attached as child node "Slash" under the Player; the player's
 ## _physics_process forwards each physics tick via tick(player, delta).
 ##
-## WHY A SWEEP, NOT A TIMED Area3D:
-## Enabling an Area3D for a few frames misses fast swings - at high swing speed
-## the blade teleports across the nape between physics frames and overlap is
-## never registered (tunneling). Instead we track the blade tip's world position
-## every physics frame and, on a slash, cast a shape from LAST frame's blade
-## position toward THIS frame's blade position. The cast covers the whole gap,
-## so a 30 m/s swing across the nape still registers.
+## WHY A SWEEP, NOT A TIMED Area3D: enabling an Area3D for a few frames misses
+## fast swings (the blade tunnels across the nape between physics frames). We
+## track the blade tip's world position each frame and, on a slash, cast a shape
+## from LAST frame's tip toward THIS frame's tip, covering the whole gap.
 ##
 ## DAMAGE IS CONTINUOUS (steering section 2, spec 1):
 ##   damage = f(relative speed, angle between blade travel dir and nape normal)
-## At/above KILL_THRESHOLD the titan dies; below it the titan is staggered and
-## the player is bounced off. See titan.gd for how the titan consumes this.
+## At/above KILL_THRESHOLD the titan dies; below it it is staggered and the
+## player is bounced off. See titan.gd for how the titan consumes this.
 
 # =====================================================================
 # TUNING CONSTANTS (no magic numbers below this block)
@@ -26,9 +21,10 @@ extends Node3D
 const NAPE_COLLISION_MASK: int = 8
 ## Cooldown between slashes (seconds) so it reads as a deliberate swing.
 const SLASH_COOLDOWN: float = 0.3
-## Local offset of the blade tip from the Slash node (in player space), i.e.
-## roughly in front of the player at chest height.
-const BLADE_TIP_OFFSET: Vector3 = Vector3(0.0, 1.4, -2.5)
+## Local offset of the blade tip from the CAMERA (in camera/aim space): slightly
+## down and to the right of screen centre, reaching forward (-Z) so the tip sits
+## in front of where the crosshair points at a sensible melee reach.
+const BLADE_TIP_OFFSET: Vector3 = Vector3(0.35, -0.35, -2.8)
 
 ## Damage model. damage = speed_term + angle_term, both normalised roughly to
 ## [0..1]-ish scales, then compared to KILL_THRESHOLD.
@@ -58,6 +54,15 @@ const RESULT_KILL: int = 3
 var _player: CharacterBody3D
 @onready var _sweep: ShapeCast3D = $Sweep
 
+# Aim source: the mouse-look camera. The blade tip is derived from this so the
+# sweep travels toward the crosshair (grapple.gd raycasts from the same camera).
+var _camera: Camera3D
+
+# Optional presentation helper (particles / camera shake / crosshair / blade
+# swing). Wired as a sibling "SlashFX" node in Player.tscn; guarded so slash
+# logic runs fine without it.
+var _fx: Node
+
 # Blade tip world position on the previous physics frame, used as the sweep
 # origin so the cast covers the full inter-frame gap.
 var _last_tip: Vector3 = Vector3.ZERO
@@ -78,6 +83,16 @@ func _ready() -> void:
 		_sweep.collide_with_areas = true
 		_sweep.collide_with_bodies = true
 
+	# Cache the mouse-look camera as the aim source (same camera grapple.gd uses).
+	if _player != null and _player.has_node("YawPivot/PitchPivot/Camera3D"):
+		_camera = _player.get_node("YawPivot/PitchPivot/Camera3D") as Camera3D
+	else:
+		_camera = get_viewport().get_camera_3d()
+
+	# Optional feedback helper (sibling node).
+	if _player != null and _player.has_node("SlashFX"):
+		_fx = _player.get_node("SlashFX")
+
 
 ## Called by the player every physics frame.
 func tick(player: CharacterBody3D, delta: float) -> void:
@@ -91,6 +106,8 @@ func tick(player: CharacterBody3D, delta: float) -> void:
 
 	if Input.is_action_just_pressed("slash") and _cooldown <= 0.0:
 		_cooldown = SLASH_COOLDOWN
+		if _fx != null and _fx.has_method("play_swing"):
+			_fx.call("play_swing")
 		_do_sweep(tip)
 
 	_last_tip = tip
@@ -109,12 +126,9 @@ func _do_sweep(current_tip: Vector3) -> void:
 		return
 	var origin: Vector3 = _last_tip if _have_last else current_tip
 	# Position the cast at last frame's tip with an IDENTITY basis, then sweep
-	# toward the current tip. The Sweep node is parented under the Player and
-	# would otherwise inherit the player's yaw/pitch, which would (a) rotate the
-	# swept box shape and (b) skew target_position (a local-space vector) off the
-	# true world tip-to-tip gap. Forcing an identity basis makes target_position
-	# equal the raw world delta, so the sweep spans the real inter-frame segment
-	# regardless of where the player is facing.
+	# toward the current tip. Forcing identity avoids inheriting the player's
+	# transform, so target_position (a local vector) equals the raw world delta
+	# and the sweep spans the true inter-frame segment regardless of facing.
 	_sweep.global_transform = Transform3D(Basis.IDENTITY, origin)
 	_sweep.target_position = current_tip - origin
 	_sweep.enabled = true
@@ -128,7 +142,8 @@ func _do_sweep(current_tip: Vector3) -> void:
 		var count: int = _sweep.get_collision_count()
 		for i in count:
 			var collider: Object = _sweep.get_collider(i)
-			result = _resolve_hit(collider, _sweep.get_collision_normal(i))
+			var hit_point: Vector3 = _sweep.get_collision_point(i)
+			result = _resolve_hit(collider, _sweep.get_collision_normal(i), hit_point)
 			if result != RESULT_WHIFF:
 				break
 	_sweep.enabled = false
@@ -145,7 +160,7 @@ func _do_sweep(current_tip: Vector3) -> void:
 
 ## Resolve a sweep hit against a nape collider: compute continuous damage and
 ## either kill or stagger+bounce. Returns the telemetry result code.
-func _resolve_hit(collider: Object, surface_normal: Vector3) -> int:
+func _resolve_hit(collider: Object, surface_normal: Vector3, hit_point: Vector3) -> int:
 	if collider == null:
 		return RESULT_WHIFF
 	var titan := _find_titan(collider as Node)
@@ -165,7 +180,11 @@ func _resolve_hit(collider: Object, surface_normal: Vector3) -> int:
 		var killed: bool = bool(titan.call("receive_slash", damage, KILL_THRESHOLD))
 		if not killed:
 			_bounce_player(nape_normal)
+			if _fx != null and _fx.has_method("play_hit"):
+				_fx.call("play_hit", hit_point, false)
 			return RESULT_SUB
+		if _fx != null and _fx.has_method("play_hit"):
+			_fx.call("play_hit", hit_point, true)
 		return RESULT_KILL
 	return RESULT_WHIFF
 
@@ -210,9 +229,15 @@ func _bounce_player(nape_normal: Vector3) -> void:
 # =====================================================================
 
 func _blade_tip_world() -> Vector3:
-	if _player == null:
-		return global_position
-	return _player.global_transform * BLADE_TIP_OFFSET
+	# Derive the tip from the camera/aim orientation, NOT the player body (which
+	# never rotates with mouse-look), so the sweep travels toward the crosshair.
+	if _camera == null:
+		_camera = get_viewport().get_camera_3d()
+	if _camera != null:
+		return _camera.global_transform * BLADE_TIP_OFFSET
+	if _player != null:
+		return _player.global_transform * BLADE_TIP_OFFSET
+	return global_position
 
 
 ## Walk up from the struck collider to the titan node (has receive_slash).

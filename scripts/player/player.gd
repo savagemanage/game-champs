@@ -100,7 +100,11 @@ func _handle_movement() -> void:
 	var basis: Basis = yaw_pivot.global_transform.basis
 	var forward: Vector3 = -basis.z
 	var right: Vector3 = basis.x
-	var direction: Vector3 = (right * input_dir.x + forward * input_dir.y)
+	# Input.get_vector returns input_dir.y = -1 for "move_forward" (W) and +1 for
+	# "move_back" (S). Negating the forward component makes W drive along -basis.z
+	# (forward) and S along +basis.z (back). Strafe (right * input_dir.x) is left
+	# untouched so A/D remain correct.
+	var direction: Vector3 = (right * input_dir.x + forward * -input_dir.y)
 	direction.y = 0.0
 	direction = direction.normalized()
 
