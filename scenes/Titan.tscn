@@ -4,12 +4,12 @@
 [ext_resource type="Script" path="res://scripts/player/character_visual.gd" id="2_charvis"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
-radius = 2.0
-height = 12.0
+radius = 1.6
+height = 5.0
 
 [sub_resource type="CapsuleMesh" id="CapsuleMesh_body"]
-radius = 2.0
-height = 12.0
+radius = 1.6
+height = 5.0
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_body"]
 albedo_color = Color(0.72, 0.53, 0.48, 1)
@@ -21,10 +21,10 @@ rim = 0.4
 rim_tint = 0.3
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_nape"]
-size = Vector3(3.0, 2.5, 1.5)
+size = Vector3(1.8, 1.4, 1.0)
 
 [sub_resource type="BoxMesh" id="BoxMesh_nape"]
-size = Vector3(3.0, 2.5, 1.5)
+size = Vector3(1.8, 1.4, 1.0)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_nape"]
 albedo_color = Color(0.9, 0.2, 0.2, 1)
@@ -37,26 +37,26 @@ collision_mask = 3
 script = ExtResource("1_titan")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 6, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 0)
 shape = SubResource("CapsuleShape3D_body")
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 6, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 0)
 mesh = SubResource("CapsuleMesh_body")
 surface_material_override/0 = SubResource("StandardMaterial3D_body")
 
 [node name="CharacterModel" type="Node3D" parent="."]
 script = ExtResource("2_charvis")
 model_path = "res://assets/models/titan_character.glb"
-model_scale = 8.0
+model_scale = 3.4
 model_y_offset = 0.0
 model_yaw_deg = 180.0
 fallback_mesh_path = NodePath("../MeshInstance3D")
 play_idle = true
 
 [node name="NavigationAgent3D" type="NavigationAgent3D" parent="."]
-radius = 2.5
-height = 12.0
+radius = 1.8
+height = 5.0
 path_desired_distance = 1.5
 target_desired_distance = 2.0
 avoidance_enabled = true
@@ -65,7 +65,7 @@ max_neighbors = 8
 max_speed = 6.0
 
 [node name="Nape" type="Area3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 10.5, -2.3)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4.3, -1.5)
 collision_layer = 8
 collision_mask = 0
 

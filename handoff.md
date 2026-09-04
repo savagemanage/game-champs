@@ -137,15 +137,55 @@ godot --headless --path . --script res://scripts/evo/harness/ga_harness.gd
 
 ## Design (action tower-defense)
 
-_Placeholder. This section is intentionally empty at the housekeeping baseline
-and will be filled in by the following features (FEAT-002..FEAT-006). Expect it
-to be updated in place by those features:_
+_Filled in incrementally by FEAT-002..FEAT-006, overwrite-in-place. Remaining
+placeholders below are updated by their owning feature:_
 
-- Aim fix (first-person crosshair/slash alignment).
+- **Aim fix (first-person crosshair/slash alignment) - DONE (FEAT-002).**
 - Wall-Maria concentric-wall map + citizen area.
 - Titan HP + per-part damage + citizen-eating + wall-breach behaviour.
 - GA fitness / gene redefinition toward infiltration (citizens-eaten + breach).
 - Character models (soldiers + giant humanoids) via the guarded GLB loader.
+
+### First-person aim alignment (FEAT-002)
+
+**Problem.** The old titan was a 12 m capsule centred at local y=6 (spanning
+world y≈2..14 when spawned on the y=2 base), with the nape at local y=10.5. The
+player eye sat at `YawPivot y=1.65`. A level-aimed centred crosshair therefore
+raked the titan's feet/waist far below any hittable mass, and the nape sat far
+overhead - aiming straight ahead hit ground or shins, not the titan.
+
+**Fix (geometry + a modest eye lift, no round-scaling).** All values are FIXED
+constants; nothing scales with the round number.
+
+- `scenes/Titan.tscn` - titan shrunk to a compact-but-clearly-giant humanoid:
+  - `CapsuleShape3D` / `CapsuleMesh` body: **height 5.0, radius 1.6** (was
+    12.0 / 2.0).
+  - Body `CollisionShape3D` + `MeshInstance3D` y-offset: **2.5** (was 6.0), so
+    the capsule spans local y≈0..5 (world ≈2..7 on the base) and its torso sits
+    near the player's sightline at engagement range.
+  - `CharacterModel model_scale`: **3.4** (was 8.0), proportional to the smaller
+    capsule so the GLB (when imported) still fills the body.
+  - `NavigationAgent3D`: **radius 1.8, height 5.0** (was 2.5 / 12.0) to match the
+    new footprint for avoidance/pathing.
+  - `Nape` `Area3D` (weak point, **collision_layer 8** preserved): moved to local
+    **(0, 4.3, -1.5)** (was (0, 10.5, -2.3)) - the back of the neck near the top
+    of the resized body. Nape `BoxShape3D`/`BoxMesh` shrunk to **1.8 x 1.4 x 1.0**
+    (was 3.0 x 2.5 x 1.5).
+- `scenes/Player.tscn` - `YawPivot` eye height raised **1.65 -> 2.2** m (a
+  soldier-plausible stance, kept near human height per the "don't move the eye
+  far from ~1.65 m" rule). This lifts the level sightline onto the titan's upper
+  torso / neck line so the centred crosshair overlaps the hittable body just
+  below the nape.
+- `scripts/player/slash.gd` - `BLADE_REACH` **unchanged at 2.8 m**. The blade
+  tip still rides the camera centre ray (`_blade_tip_world` via
+  `project_ray_origin`/`project_ray_normal` at screen centre), so the sweep
+  endpoint lands under the crosshair, and 2.8 m still reaches the resized titan's
+  nape when the player closes to melee (`ARRIVAL_DISTANCE 2.5`) and tilts up.
+
+**Result.** In a freshly rendered `reports/shot.png` the centred crosshair (+)
+overlaps the nearest titan's torso/neck region (just under the nape indicator),
+not the ground or the titan's feet. `./tools/check.sh` and `./tools/test.sh`
+both exit 0.
 
 ## Workflow
 
