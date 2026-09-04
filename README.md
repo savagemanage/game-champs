@@ -30,17 +30,21 @@ evolution-screen) are all implemented and merged.
 3. Press **F5** (or the play button, top-right) to run.
 
 > **First open imports the bundled assets.** The CC0 ground/rock textures under
-> `assets/textures/` and the spark sprite under `assets/particles/` ship without
-> their generated `.import` sidecars (this repo's `.gitignore` excludes
+> `assets/textures/`, the sky HDRI under `assets/sky/`, the spark sprite under
+> `assets/particles/`, and the one CC0 sound `assets/audio/ui_click.ogg` ship
+> without their generated `.import` sidecars (this repo's `.gitignore` excludes
 > `*.import` and `.godot/`, same as the localized `.translation` files). The
 > editor generates them automatically on that first **Import/Open**; until then
-> Godot shows a placeholder for an un-imported texture and the slash spark falls
-> back to its procedural look, so nothing crashes. See `assets/CREDITS.md` for
-> full source/license details.
+> Godot shows a placeholder for an un-imported texture/sky and the slash spark
+> falls back to its procedural look, so nothing crashes. The ten procedurally
+> generated `.tres` sound effects need no import and always play. See
+> `assets/CREDITS.md` for full source/license details.
 
 The game opens on a **Start screen** (title + **Settings**). On this screen you
-choose the language (**Korean / English**) and press **Start / Play** to enter
-the game; your language choice is remembered between sessions. After you start, a
+choose the language (**Korean / English**) and adjust **audio** - master volume,
+SFX volume and a mute toggle - then press **Start / Play** to enter the game.
+Your language and audio settings are remembered between sessions (saved to
+`user://wirework_settings.json`). After you start, a
 brief **"Baking navigation..."** screen appears while the navigation mesh is
 built at runtime, then the round begins. The navmesh is baked at runtime - no
 editor baking step is required.
@@ -68,6 +72,22 @@ Click back in the window after pressing `Esc` to re-capture the mouse.
    badly-angled hit only staggers the giant and bounces you off.
 4. When all four are down, the round counter advances and four identical giants
    respawn.
+
+### Sound & visuals
+
+The prototype ships sound effects for the grapple (fire / attach / swing
+whoosh), the slash swing and a **distinct hit cue for a kill vs a sub-threshold
+stagger**, titan footsteps / aggro / death, jump / land, and a UI click. A kill
+also triggers a heavier particle burst, a brief camera shake and a green
+crosshair flash, so a lethal hit reads differently from a mere stagger. Audio
+plays on a dedicated **SFX** bus; the Start-screen master/SFX volume sliders and
+mute toggle drive the `AudioServer` buses live and persist across restarts.
+
+Visually the arena uses tiling CC0 ground/rock textures (albedo + normal +
+roughness), a CC0 HDRI panorama sky, and distance fog with an ACES tonemap for
+readable depth. All of this stays on the `gl_compatibility` renderer with no
+web-incompatible post effects (no SSAO/SSR/SDFGI/volumetric fog). Every bundled
+third-party asset is CC0 / public-domain and credited in `assets/CREDITS.md`.
 
 ### Headless GA evolution harness
 
@@ -130,7 +150,8 @@ Files written there:
 
 - `wirework_telemetry.json` - recorded telemetry (spec 2).
 - `wirework_evo.json` - evolution snapshot (spec 3).
-- `wirework_settings.json` - saved settings, including the chosen language.
+- `wirework_settings.json` - saved settings: the chosen language plus the audio
+  settings (master volume, SFX volume, mute).
 
 Save failures are treated as non-fatal (e.g. `user://` may be wiped in incognito
 mode), so the game keeps running with clean defaults.
@@ -193,12 +214,24 @@ All four specs are implemented and merged:
 2. **Import** 를 클릭하고 이 폴더로 이동해 `project.godot` 을 선택한 뒤 **Open**.
 3. **F5** (또는 우측 상단 재생 버튼)를 눌러 실행한다.
 
+> **첫 실행 시 번들 에셋이 임포트된다.** `assets/textures/` 의 CC0 지면/바위
+> 텍스처, `assets/sky/` 의 하늘 HDRI, `assets/particles/` 의 스파크 스프라이트,
+> 그리고 CC0 사운드 하나 `assets/audio/ui_click.ogg` 는 생성되는 `.import`
+> 사이드카 없이 배포된다(이 저장소의 `.gitignore` 가 현지화 `.translation`
+> 파일과 마찬가지로 `*.import` 와 `.godot/` 를 제외한다). 에디터는 첫
+> **Import/Open** 때 이 파일들을 자동으로 생성한다. 그 전까지 Godot 은
+> 아직 임포트되지 않은 텍스처/하늘에 플레이스홀더를 표시하고 슬래시 스파크는
+> 절차적 형태로 폴백하므로 크래시는 없다. 절차적으로 생성된 10개의 `.tres`
+> 효과음은 임포트가 필요 없으며 항상 재생된다. 출처/라이선스 전체는
+> `assets/CREDITS.md` 를 참조한다.
+
 게임은 **시작 화면**(타이틀 + **설정**)으로 열린다. 이 화면에서 언어
-(**한국어 / 영어**)를 고르고 **Start / Play** 를 눌러 게임에 진입한다. 선택한
-언어는 세션 간에 기억된다. 시작하면 잠깐 **"Baking navigation..."**(내비게이션
-베이크) 화면이 나타나며 이때 내비게이션 메시가 **런타임에** 생성되고, 이어서
-라운드가 시작된다. 내비메시는 런타임 베이크이므로 **에디터에서 수동으로
-베이크할 필요가 없다**.
+(**한국어 / 영어**)를 고르고 **오디오**(전체 음량, 효과음 음량, 음소거 토글)를
+조정한 뒤 **Start / Play** 를 눌러 게임에 진입한다. 선택한 언어와 오디오
+설정은 세션 간에 기억된다(`user://wirework_settings.json` 에 저장). 시작하면
+잠깐 **"Baking navigation..."**(내비게이션 베이크) 화면이 나타나며 이때
+내비게이션 메시가 **런타임에** 생성되고, 이어서 라운드가 시작된다. 내비메시는
+런타임 베이크이므로 **에디터에서 수동으로 베이크할 필요가 없다**.
 
 ### 조작
 
@@ -223,6 +256,23 @@ All four specs are implemented and merged:
    각도가 나쁜 타격은 거인을 경직시키기만 하고 플레이어를 튕겨낸다.
 4. 4마리를 모두 쓰러뜨리면 라운드 카운터가 올라가고 동일한 거인 4마리가
    다시 스폰된다.
+
+### 소리와 비주얼
+
+프로토타입에는 그래플(발사 / 부착 / 스윙 훅 소리), 슬래시 스윙, 그리고
+**처치 대 임계값 미달(경직)을 구분하는 타격음**, 거인 발소리 / 어그로 / 사망,
+점프 / 착지, UI 클릭 효과음이 들어 있다. 처치 시에는 더 강한 파티클 버스트,
+짧은 카메라 흔들림, 초록색 크로스헤어 플래시도 함께 발생하여 치명타가 단순
+경직과 다르게 읽힌다. 오디오는 전용 **SFX** 버스에서 재생되며, 시작 화면의
+전체/효과음 음량 슬라이더와 음소거 토글이 `AudioServer` 버스를 실시간으로
+제어하고 재시작 후에도 유지된다.
+
+비주얼 측면에서 아레나는 타일링되는 CC0 지면/바위 텍스처(알베도 + 노멀 +
+러프니스), CC0 HDRI 파노라마 하늘, 그리고 가독성 있는 깊이감을 위한 거리
+포그 + ACES 톤맵을 사용한다. 이 모든 것은 웹 비호환 후처리 효과 없이
+(`SSAO/SSR/SDFGI/볼류메트릭 포그` 없음) `gl_compatibility` 렌더러에서 돈다.
+번들된 모든 서드파티 에셋은 CC0 / 퍼블릭 도메인이며 `assets/CREDITS.md` 에
+크레딧이 기록되어 있다.
 
 ### 헤드리스 GA 진화 하네스
 
@@ -284,7 +334,8 @@ UI 는 **한국어** 와 **영어** 로 제공된다. 언어는 시작 화면에
 
 - `wirework_telemetry.json` - 기록된 텔레메트리(스펙 2).
 - `wirework_evo.json` - 진화 스냅샷(스펙 3).
-- `wirework_settings.json` - 선택한 언어를 포함한 설정.
+- `wirework_settings.json` - 저장된 설정: 선택한 언어와 오디오 설정
+  (전체 음량, 효과음 음량, 음소거).
 
 저장 실패는 치명적이지 않은 것으로 처리하므로(예: 시크릿 모드에서 `user://` 가
 날아갈 수 있음), 게임은 초기 기본값으로 계속 진행된다.

@@ -1,5 +1,6 @@
-[gd_scene load_steps=27 format=3 uid="uid://c1arena00scene1"]
+[gd_scene load_steps=28 format=3 uid="uid://c1arena00scene1"]
 
+[ext_resource type="Texture2D" path="res://assets/sky/kloofendal_sky_1k.hdr" id="tex_sky_panorama"]
 [ext_resource type="Texture2D" path="res://assets/textures/ground_color.jpg" id="tex_ground_color"]
 [ext_resource type="Texture2D" path="res://assets/textures/ground_normal.jpg" id="tex_ground_normal"]
 [ext_resource type="Texture2D" path="res://assets/textures/ground_roughness.jpg" id="tex_ground_rough"]
@@ -10,18 +11,12 @@
 [ext_resource type="Texture2D" path="res://assets/textures/ridge_normal.jpg" id="tex_ridge_normal"]
 [ext_resource type="Texture2D" path="res://assets/textures/ridge_roughness.jpg" id="tex_ridge_rough"]
 
-[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_1"]
-sky_top_color = Color(0.38, 0.52, 0.74, 1)
-sky_horizon_color = Color(0.72, 0.74, 0.72, 1)
-sky_curve = 0.12
-ground_bottom_color = Color(0.24, 0.22, 0.19, 1)
-ground_horizon_color = Color(0.62, 0.6, 0.55, 1)
-ground_curve = 0.08
-sun_angle_max = 45.0
-sun_curve = 0.08
+[sub_resource type="PanoramaSkyMaterial" id="PanoramaSkyMaterial_1"]
+panorama = ExtResource("tex_sky_panorama")
+energy_multiplier = 1.0
 
 [sub_resource type="Sky" id="Sky_1"]
-sky_material = SubResource("ProceduralSkyMaterial_1")
+sky_material = SubResource("PanoramaSkyMaterial_1")
 
 [sub_resource type="Environment" id="Environment_1"]
 background_mode = 2

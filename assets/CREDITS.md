@@ -65,6 +65,18 @@ ambientCG confirms every asset is released under CC0 1.0 / Public Domain (see
 the "Public Domain (CC0)" statement on each asset page linked above). Kenney's
 Particle Pack is likewise CC0 (per kenney.nl/assets/particle-pack).
 
+## Sky / HDRI (FEAT-004)
+
+### Downloaded (license-verified, CC0 / public domain)
+
+| File | Source URL | Author | License | Notes |
+|---|---|---|---|---|
+| `assets/sky/kloofendal_sky_1k.hdr` | https://polyhaven.com/a/kloofendal_43d_clear_puresky (file `kloofendal_43d_clear_puresky_1k.hdr` via the Poly Haven API `https://api.polyhaven.com/files/kloofendal_43d_clear_puresky`) | Greg Zaal / Poly Haven | CC0 1.0 — https://creativecommons.org/publicdomain/zero/1.0/ | Real Radiance HDR verified with `file` (`Radiance HDR image data`, 1,184,531 bytes — matches the API's declared size and md5 `ebc2045f4fa29ba75cd3834089ad8d14`, not an HTML error page). Wired as the equirectangular `panorama` of a `PanoramaSkyMaterial` on `scenes/Arena.tscn`'s `WorldEnvironment` sky (replacing the earlier procedural sky). 1k chosen for web weight. Poly Haven publishes all assets under CC0 (see polyhaven.com/license). |
+
+Poly Haven licenses all of its HDRIs, textures and models under CC0 1.0
+(https://polyhaven.com/license). The `.hdr` was verified authentic by matching
+both the byte size and md5 the Poly Haven API reported for the file.
+
 ### One-time editor import (REQUIRED — read this)
 
 This repo's `.gitignore` excludes `*.import` and `.godot/` (the same policy that
@@ -75,12 +87,17 @@ on first editor open. Therefore:
 1. Open the project once in the Godot 4.7.2 editor (or run any headless import
    pass). Godot creates `assets/**/*.import` and the imported textures under
    `.godot/imported/`, and the `res://assets/...` paths referenced by
-   `scenes/Arena.tscn` and `scripts/player/slash_fx.gd` resolve.
+   `scenes/Arena.tscn` (ground/rock/ridge textures **and the sky HDRI**) and
+   `scripts/player/slash_fx.gd` resolve. The `assets/sky/kloofendal_sky_1k.hdr`
+   panorama is imported as a `Texture2D` and drives the `PanoramaSkyMaterial`.
 2. Until that first import, Godot shows a placeholder for a not-yet-imported
-   texture rather than crashing — the scenes still parse as valid `format=3`
-   text. The slash spark loads through `ResourceLoader.exists()` guarding
-   `load()`, so an unimported/headless run silently falls back to the FEAT-001
-   procedural additive quad and never errors.
+   texture (and a default sky for the not-yet-imported panorama) rather than
+   crashing — the scenes still parse as valid `format=3` text. The slash spark
+   loads through `ResourceLoader.exists()` guarding `load()`, so an
+   unimported/headless run silently falls back to the FEAT-001 procedural
+   additive quad and never errors.
+   The single downloaded OGG (`assets/audio/ui_click.ogg`, FEAT-002) also needs
+   this same one-time import before it will load.
 
 We deliberately did NOT hand-author `.import` files: they would be immediately
 re-ignored by `.gitignore` and could drift from what the editor generates.
