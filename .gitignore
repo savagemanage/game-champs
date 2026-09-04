@@ -1,0 +1,24 @@
+# Godot 4.x .gitignore
+
+# Import cache and generated metadata (regenerated on editor open).
+.godot/
+
+# Imported asset metadata.
+*.import
+
+# Mono/.NET (unused here, but safe to ignore).
+.mono/
+data_*/
+
+# Export artifacts.
+export.cfg
+export_presets.cfg
+*.pck
+*.zip
+build/
+exports/
+
+# OS / editor cruft.
+.DS_Store
+Thumbs.db
+*~
