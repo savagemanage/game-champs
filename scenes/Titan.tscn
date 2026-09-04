@@ -1,6 +1,6 @@
 [gd_scene load_steps=8 format=3 uid="uid://a1titan0scene1"]
 
-[ext_resource type="Script" path="res://scripts/titan.gd" id="1_titan"]
+[ext_resource type="Script" path="res://scripts/titan/titan.gd" id="1_titan"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_body"]
 radius = 2.0
@@ -39,16 +39,19 @@ mesh = SubResource("CapsuleMesh_body")
 surface_material_override/0 = SubResource("StandardMaterial3D_body")
 
 [node name="NavigationAgent3D" type="NavigationAgent3D" parent="."]
-radius = 2.0
+radius = 2.5
 height = 12.0
 path_desired_distance = 1.5
 target_desired_distance = 2.0
-avoidance_enabled = false
+avoidance_enabled = true
+neighbor_distance = 12.0
+max_neighbors = 8
+max_speed = 6.0
 
 [node name="Nape" type="Area3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 10, -2)
 collision_layer = 8
-collision_mask = 16
+collision_mask = 0
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="Nape"]
 shape = SubResource("BoxShape3D_nape")

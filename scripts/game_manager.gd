@@ -1,147 +1,243 @@
 extends Node
-## GameManager - owns the round lifecycle.
-##
-## Responsibilities:
-##   * Spawn a titan at the map's TitanSpawn marker at the start of each round.
-##   * Hand the titan the player reference and let it read the current adaptive
-##     weights (which PlayerStats recomputes between rounds).
-##   * Listen for the titan's `titan_killed` signal.
-##   * On a kill: tell PlayerStats to end the round (persist stats + recompute
-##     the behaviour weights), then start the next round so the new titan
-##     visibly uses the updated weights.
-##   * Drive a minimal on-screen UI (round number + status text).
-##
-## This node lives in Main.tscn alongside the instanced TestMap and Player.
+## GameManager - owns the round lifecycle for wirework (spec 1). Bakes the arena
+## navmesh at RUNTIME behind a loading screen, spawns EXACTLY 4 titans per round
+## and respawns 4 IDENTICAL titans on clear, and drives the spec-4 evolution
+## screen between rounds (see _on_titan_killed).
+## INVARIANT (steering section 1): titan count and every titan stat are FIXED;
+## nothing scales with _round_number. Difficulty rises only via evolved genes.
 
-# =====================================================================
-# CONFIG
-# =====================================================================
+# --- TUNING CONSTANTS (no magic numbers below this block) ---
+const TITAN_COUNT: int = 4  ## FIXED per round; NEVER scaled by round number.
+const RESPAWN_DELAY: float = 2.0  ## seconds between last kill and next spawn
+const BAKE_POLL_INTERVAL: float = 0.1  ## navmesh bake_finished poll fallback
 
-## The titan scene to spawn. Set in the Inspector (Main.tscn wires it up).
+# --- Scene wiring (set in Main.tscn) ---
 @export var titan_scene: PackedScene
-
-## Node paths within Main.tscn. Exposed so the scene wiring is visible/tweakable.
-@export var map_path: NodePath = ^"../TestMap"
+@export var arena_path: NodePath = ^"../Arena"
 @export var player_path: NodePath = ^"../Player"
 @export var round_label_path: NodePath = ^"UI/RoundLabel"
 @export var status_label_path: NodePath = ^"UI/StatusLabel"
+@export var loading_screen_path: NodePath = ^"LoadingScreen"
+@export var evolution_screen_path: NodePath = ^"../EvolutionScreen"
 
-## Short pause (seconds) between a titan dying and the next one spawning, so the
-## "Titan down" message is readable.
-@export var respawn_delay: float = 2.0
-
-# =====================================================================
-# STATE
-# =====================================================================
-
-var _map: Node3D
+# --- STATE ---
+var _arena: Node3D
 var _player: Node3D
 var _round_label: Label
 var _status_label: Label
-
-var _titan: CharacterBody3D = null
+var _loading_screen: CanvasLayer
+var _nav_region: NavigationRegion3D
+var _titans: Array[CharacterBody3D] = []
+var _alive: int = 0
 var _round_number: int = 0
+var _gameplay_started: bool = false
+## Evolution screen (spec 4): shown once after the FIRST kill, then every 3 rounds.
+var _evolution_screen: CanvasLayer
+var _first_kill_screen_shown: bool = false
 
 
 func _ready() -> void:
-	_map = get_node_or_null(map_path) as Node3D
+	_arena = get_node_or_null(arena_path) as Node3D
 	_player = get_node_or_null(player_path) as Node3D
 	_round_label = get_node_or_null(round_label_path) as Label
 	_status_label = get_node_or_null(status_label_path) as Label
-
+	_loading_screen = get_node_or_null(loading_screen_path) as CanvasLayer
+	_evolution_screen = get_node_or_null(evolution_screen_path) as CanvasLayer
+	if _evolution_screen != null and _evolution_screen.has_signal("finished"):
+		_evolution_screen.finished.connect(_on_evolution_screen_finished)
 	if titan_scene == null:
-		push_warning("GameManager: titan_scene is not assigned; no titan will spawn.")
+		push_warning("GameManager: titan_scene is not assigned; no titans will spawn.")
+	_begin_runtime_bake()
 
+
+# --- RUNTIME NAVMESH BAKE (behind the loading screen) ---
+func _begin_runtime_bake() -> void:
+	if _loading_screen != null and _loading_screen.has_method("show_screen"):
+		_loading_screen.call("show_screen", "Baking navigation...")
+	_nav_region = _find_nav_region()
+	if _nav_region == null:
+		# No region to bake: proceed to gameplay (pathing degraded) but warn.
+		push_warning("GameManager: no NavigationRegion3D found; skipping bake.")
+		_on_bake_finished()
+		return
+	# Bake next frame so the loading screen has painted first (bake stalls).
+	if _nav_region.has_signal("bake_finished"):
+		_nav_region.bake_finished.connect(_on_bake_finished, CONNECT_ONE_SHOT)
+	call_deferred("_run_bake")
+
+
+func _run_bake() -> void:
+	# Runtime bake (stalls one frame, hidden by the loading screen; NOT baked in
+	# the editor). Poll as a fallback if bake_finished is not delivered.
+	_nav_region.bake_navigation_mesh()
+	if not _nav_region.has_signal("bake_finished"):
+		get_tree().create_timer(BAKE_POLL_INTERVAL).timeout.connect(_on_bake_finished)
+
+
+func _on_bake_finished() -> void:
+	if _gameplay_started:
+		return
+	_gameplay_started = true
+	if _loading_screen != null and _loading_screen.has_method("hide_screen"):
+		_loading_screen.call("hide_screen")
 	_start_round()
 
 
-# =====================================================================
-# ROUND LIFECYCLE
-# =====================================================================
-
+# --- ROUND LIFECYCLE ---
 func _start_round() -> void:
 	_round_number += 1
-
-	# Reset the player to the spawn marker so each round starts clean.
 	_reset_player()
-
-	# Let PlayerStats arm its per-round accumulators / timer for this round.
-	var stats := get_node_or_null("/root/PlayerStats")
-	if stats != null and stats.has_method("begin_round"):
-		stats.begin_round()
-
-	_spawn_titan()
-
-	_set_status("Nape exposed - slash it!")
+	_spawn_titans()
+	_set_status("%d titans - strike the nape!" % TITAN_COUNT)
 	_update_round_label()
+	if Telemetry != null:
+		Telemetry.start_round()  # spec 2: begin recording this round
 
 
-func _spawn_titan() -> void:
+## Drive the telemetry recorder once per physics tick (spec 2). game_manager
+## owns this loop so scripts/telemetry/ never touches the scene tree itself.
+func _physics_process(delta: float) -> void:
+	if _gameplay_started and Telemetry != null:
+		Telemetry.sample_tick(delta)
+
+
+func _spawn_titans() -> void:
 	if titan_scene == null:
 		return
+	_clear_titans()
+	_alive = 0
+	var spawns: Array[Transform3D] = _titan_spawn_transforms()
+	for i in TITAN_COUNT:
+		var titan := titan_scene.instantiate() as CharacterBody3D
+		if titan == null:
+			push_warning("GameManager: titan_scene did not instantiate a CharacterBody3D.")
+			continue
+		add_child(titan)
+		titan.global_transform = spawns[i % spawns.size()]
+		if titan.has_method("set_target") and _player != null:
+			titan.set_target(_player)
+		if titan.has_signal("titan_killed"):
+			titan.titan_killed.connect(_on_titan_killed)
+		_titans.append(titan)
+		_alive += 1
+	_inject_evolved_genes()
 
-	var titan := titan_scene.instantiate() as CharacterBody3D
-	if titan == null:
-		push_warning("GameManager: titan_scene did not instantiate a CharacterBody3D.")
+
+## Inject the latest evolved best genome + sibling list into every titan for THIS
+## round (spec 3, steering 3.8). Evolution does NOT run during the round.
+func _inject_evolved_genes() -> void:
+	if typeof(TitanEvo) == TYPE_NIL or TitanEvo == null:
 		return
-
-	# Place it at the TitanSpawn marker on the map.
-	var spawn := _titan_spawn_transform()
-	# Add to the tree first so global_transform is valid, then position it.
-	add_child(titan)
-	titan.global_transform = spawn
-
-	# Wire up the titan: give it the player and listen for its death.
-	if titan.has_method("set_target") and _player != null:
-		titan.set_target(_player)
-	if titan.has_signal("titan_killed"):
-		titan.titan_killed.connect(_on_titan_killed)
-
-	_titan = titan
+	var genes: PackedFloat32Array = TitanEvo.current_best_genes()
+	var preferred: Vector3 = TitanEvo.preferred_entry_dir()
+	for titan in _titans:
+		if titan == null or not is_instance_valid(titan):
+			continue
+		if titan.has_method("set_genes"):
+			titan.set_genes(genes, preferred)
+		if titan.has_method("set_neighbours"):
+			titan.set_neighbours(_titans)
 
 
 func _on_titan_killed() -> void:
-	_set_status("Titan down - round %d cleared!" % _round_number)
+	_alive -= 1
+	if _alive > 0:
+		_set_status("%d titans left" % _alive)
+		# Evolution screen (spec 4): appear ONCE right after the FIRST kill.
+		if not _first_kill_screen_shown:
+			_first_kill_screen_shown = true
+			_try_show_evo_screen("request_first_kill_show")
+		return
+	_set_status("Round %d cleared!" % _round_number)
+	# spec 2: close the round; spec 3 (steering 3.8): background burst BETWEEN
+	# rounds. Neither runs during live play.
+	if Telemetry != null:
+		Telemetry.end_round()
+	if typeof(TitanEvo) != TYPE_NIL and TitanEvo != null:
+		TitanEvo.start_evolution_burst()
+	# spec 4: after the first-kill appearance, show every APPEAR_EVERY_ROUNDS
+	# rounds. If it takes over, the next round starts on its `finished` signal.
+	if _try_show_evo_screen("request_round_show", _round_number):
+		return
+	get_tree().create_timer(RESPAWN_DELAY).timeout.connect(_start_round)
 
-	# End the round: persist stats + recompute the adaptive weights. The NEXT
-	# titan we spawn will read these updated weights in its _ready().
-	var stats := get_node_or_null("/root/PlayerStats")
-	if stats != null and stats.has_method("end_round"):
-		stats.end_round()
 
-	# Clean up the dead titan after a short beat, then start the next round.
-	if _titan != null and is_instance_valid(_titan):
-		_titan.queue_free()
-		_titan = null
+## Delegate to the spec-4 evolution screen. Ensures a background burst is running
+## so the screen has generations to observe, pauses gameplay, and returns true
+## when the screen took over the flow (gameplay resumes on its `finished` signal).
+func _try_show_evo_screen(method: String, arg = null) -> bool:
+	if _evolution_screen == null or not _evolution_screen.has_method(method):
+		return false
+	var took_over: bool = _evolution_screen.call(method, arg) if arg != null else _evolution_screen.call(method)
+	if not took_over:
+		return false
+	if typeof(TitanEvo) != TYPE_NIL and TitanEvo != null and not TitanEvo.is_evolving():
+		TitanEvo.start_evolution_burst()
+	get_tree().paused = true
+	return true
 
-	get_tree().create_timer(respawn_delay).timeout.connect(_start_round)
+
+## Resume gameplay once the evolution screen (incl. its final comparison scene)
+## finished. A cleared round spawns the next; a mid-round appearance resumes it.
+func _on_evolution_screen_finished() -> void:
+	get_tree().paused = false
+	if _alive <= 0:
+		get_tree().create_timer(RESPAWN_DELAY).timeout.connect(_start_round)
 
 
-# =====================================================================
-# HELPERS
-# =====================================================================
+# --- HELPERS ---
+func _clear_titans() -> void:
+	for titan in _titans:
+		if titan != null and is_instance_valid(titan):
+			titan.queue_free()
+	_titans.clear()
+
 
 func _reset_player() -> void:
 	if _player == null:
 		return
-	var spawn := _player_spawn_transform()
-	_player.global_transform = spawn
-	# Zero out any leftover momentum from the previous round.
+	_player.global_transform = _player_spawn_transform()
 	if _player is CharacterBody3D:
 		(_player as CharacterBody3D).velocity = Vector3.ZERO
 
 
-func _titan_spawn_transform() -> Transform3D:
-	if _map != null and _map.has_node("TitanSpawn"):
-		return (_map.get_node("TitanSpawn") as Node3D).global_transform
-	# Fallback spawn if the marker is missing.
-	return Transform3D(Basis.IDENTITY, Vector3(0.0, 0.0, -30.0))
+func _find_nav_region() -> NavigationRegion3D:
+	if _arena == null:
+		return null
+	return _first_nav_region(_arena)
+
+
+func _first_nav_region(node: Node) -> NavigationRegion3D:
+	if node is NavigationRegion3D:
+		return node as NavigationRegion3D
+	for child in node.get_children():
+		var found := _first_nav_region(child)
+		if found != null:
+			return found
+	return null
 
 
 func _player_spawn_transform() -> Transform3D:
-	if _map != null and _map.has_node("PlayerSpawn"):
-		return (_map.get_node("PlayerSpawn") as Node3D).global_transform
-	return Transform3D(Basis.IDENTITY, Vector3(0.0, 1.0, 0.0))
+	if _arena != null and _arena.has_node("PlayerSpawn"):
+		return (_arena.get_node("PlayerSpawn") as Node3D).global_transform
+	return Transform3D(Basis.IDENTITY, Vector3(0.0, 2.0, 0.0))
+
+
+## Collect the 4 titan-spawn markers (on the connected base floor, NOT the tall
+## plateau tops which agent_max_climb won't bridge); ring fallback if missing.
+func _titan_spawn_transforms() -> Array[Transform3D]:
+	var result: Array[Transform3D] = []
+	if _arena != null:
+		for i in range(1, TITAN_COUNT + 1):
+			var marker_name := "TitanSpawn%d" % i
+			if _arena.has_node(marker_name):
+				result.append((_arena.get_node(marker_name) as Node3D).global_transform)
+	if result.is_empty():
+		for i in TITAN_COUNT:
+			var angle: float = TAU * float(i) / float(TITAN_COUNT)
+			result.append(Transform3D(Basis.IDENTITY,
+				Vector3(cos(angle) * 30.0, 2.0, sin(angle) * 30.0)))
+	return result
 
 
 func _update_round_label() -> void:
