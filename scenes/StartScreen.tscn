@@ -1,0 +1,118 @@
+[gd_scene load_steps=6 format=3 uid="uid://d1start0scene1"]
+
+[ext_resource type="Script" path="res://scripts/ui/start_screen.gd" id="1_start"]
+
+[sub_resource type="LabelSettings" id="LabelSettings_title"]
+font_size = 96
+font_color = Color(1, 0.92, 0.4, 1)
+outline_size = 8
+outline_color = Color(0, 0, 0, 0.9)
+
+[sub_resource type="LabelSettings" id="LabelSettings_subtitle"]
+font_size = 24
+font_color = Color(1, 1, 1, 0.95)
+outline_size = 4
+outline_color = Color(0, 0, 0, 0.8)
+
+[sub_resource type="LabelSettings" id="LabelSettings_section"]
+font_size = 22
+font_color = Color(1, 1, 1, 0.95)
+outline_size = 4
+outline_color = Color(0, 0, 0, 0.85)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_panel"]
+bg_color = Color(0.05, 0.06, 0.09, 0.92)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.4, 0.5, 0.7, 0.9)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[node name="StartScreen" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_start")
+
+[node name="Backdrop" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.03, 0.035, 0.05, 1)
+
+[node name="Center" type="CenterContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="VBox" type="VBoxContainer" parent="Center"]
+layout_mode = 2
+theme_override_constants/separation = 20
+
+[node name="Title" type="Label" parent="Center/VBox"]
+layout_mode = 2
+text = "wirework"
+label_settings = SubResource("LabelSettings_title")
+horizontal_alignment = 1
+
+[node name="Subtitle" type="Label" parent="Center/VBox"]
+layout_mode = 2
+text = "Grapple-action prototype against a swarm of titans"
+label_settings = SubResource("LabelSettings_subtitle")
+horizontal_alignment = 1
+
+[node name="StartButton" type="Button" parent="Center/VBox"]
+custom_minimum_size = Vector2(240, 52)
+layout_mode = 2
+size_flags_horizontal = 4
+text = "Start"
+
+[node name="SettingsPanel" type="PanelContainer" parent="Center/VBox"]
+custom_minimum_size = Vector2(420, 0)
+layout_mode = 2
+size_flags_horizontal = 4
+theme_override_styles/panel = SubResource("StyleBoxFlat_panel")
+
+[node name="Margin" type="MarginContainer" parent="Center/VBox/SettingsPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 16
+
+[node name="SettingsVBox" type="VBoxContainer" parent="Center/VBox/SettingsPanel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="SettingsTitle" type="Label" parent="Center/VBox/SettingsPanel/Margin/SettingsVBox"]
+layout_mode = 2
+text = "Settings"
+label_settings = SubResource("LabelSettings_section")
+
+[node name="LanguageRow" type="HBoxContainer" parent="Center/VBox/SettingsPanel/Margin/SettingsVBox"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="LanguageLabel" type="Label" parent="Center/VBox/SettingsPanel/Margin/SettingsVBox/LanguageRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 1
+text = "Language"
+label_settings = SubResource("LabelSettings_section")
+
+[node name="LanguageOption" type="OptionButton" parent="Center/VBox/SettingsPanel/Margin/SettingsVBox/LanguageRow"]
+custom_minimum_size = Vector2(180, 40)
+layout_mode = 2

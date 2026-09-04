@@ -25,3 +25,7 @@ CMP_UNEVOLVED,Gen 1 (pure nav) - no evolution yet,1세대 (순수 내비) - 아�
 EVO_IND_FITNESS,"Fitness (best / mean, last %d gen)","적합도 (최고 / 평균, 최근 %d세대)"
 EVO_IND_VARIANCE,Gene variance (shrinking = converging),유전자 분산 (줄어들수록 수렴)
 EVO_IND_RADAR,Best genome (faint = previous gen),최고 유전자 (흐린 선 = 직전 세대)
+START_SUBTITLE,Grapple-action prototype against a swarm of titans,거인 무리를 상대하는 그래플 액션 프로토타입
+START_PLAY,Start,시작
+START_SETTINGS,Settings,설정
+START_LANGUAGE,Language,언어

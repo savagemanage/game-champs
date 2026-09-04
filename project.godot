@@ -7,7 +7,10 @@ config_version=5
 [application]
 
 config/name="wirework"
-run/main_scene="res://scenes/Main.tscn"
+; StartScreen (FEAT-002) is the initial scene: it shows the title + a language
+; setting, then loads res://scenes/Main.tscn from its Start button. Main's
+; GameManager flow (runtime navmesh bake -> round loop) is unchanged.
+run/main_scene="res://scenes/StartScreen.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 
 [autoload]
