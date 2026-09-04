@@ -10,7 +10,7 @@ extends Node3D
 ##
 ## PARTICLES: CPUParticles3D (not GPUParticles3D) - the reliable choice on
 ## gl_compatibility (GLES3/WebGL2); GPU compute passes are flaky on web drivers
-## and this is a tiny one-shot burst (steering: no premature optimization).
+## and this is a tiny one-shot burst (design: no premature optimization).
 ## Web-safe: no Thread/Mutex/Semaphore/WorkerThreadPool, no SubViewport.
 ##
 ## PARTICLE TEXTURE (FEAT-003): a CC0 spark sprite (Kenney, assets/particles/

@@ -1,6 +1,6 @@
 extends TestCase
 ## Sample PASSING case (spec 0). Exercises check() and near(), and demonstrates
-## that the INJECTED seeded RNG (steering 8.2) is deterministic: two RNGs made
+## that the INJECTED seeded RNG (see handoff.md) is deterministic: two RNGs made
 ## from the same seed produce bit-identical draws.
 
 

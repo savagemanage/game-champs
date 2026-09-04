@@ -26,7 +26,8 @@ consume, and persists to `user://` as JSON. No evolution logic lives here.
   `entry_speed`, `slash_result`). Plain data, replayable by spec-3 evo.
 - **`player_model.gd`** - 24-bin opponent model (4 approach quadrants x 3
   distance bands x 2 timing bands) with exponential-decay counts (decay 0.9),
-  per steering 3.4. SEPARATE from evolution: spec 3 reads `bins` / `to_array()`,
+  (spec-3 design point 3.4). SEPARATE from evolution: spec 3 reads `bins` /
+  `to_array()`,
   never mutates it.
 - **`telemetry_store.gd`** - `user://` + `FileAccess` + `JSON` persistence.
   Save failures `push_warning` and continue; missing/corrupt files load clean.

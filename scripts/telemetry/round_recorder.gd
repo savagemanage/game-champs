@@ -6,7 +6,7 @@ class_name RoundRecorder
 ## Telemetry autoload (which is the only thing that talks to game scenes). The
 ## recorder never reads the scene tree, so spec 3 can reuse its outputs.
 ##
-## Records (steering spec 2 / FEAT-002):
+## Records (spec 2 - telemetry / FEAT-002):
 ##   * player trajectory: position, velocity, look dir - every SAMPLE_INTERVAL
 ##     physics ticks (NOT every tick).
 ##   * grapple events: fire time + anchor world pos, release time.
@@ -21,7 +21,7 @@ class_name RoundRecorder
 # TUNING CONSTANTS (no magic numbers below this block)
 # =====================================================================
 
-## Sample the player trajectory every N physics ticks (steering: 30).
+## Sample the player trajectory every N physics ticks (design: 30).
 const SAMPLE_INTERVAL: int = 30
 ## Half-angle (degrees) of the player view cone used to decide "nape in view".
 ## SYNC: must equal BackgroundSim.VIEW_HALF_ANGLE (deg_to_rad(40°)); duplicated

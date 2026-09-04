@@ -1,8 +1,9 @@
 extends CharacterBody3D
 ## The titan: a large enemy that chases the player and exposes a nape kill-zone.
-## Movement is NavigationAgent3D pathfinding with hybrid gene steering on top
-## (steering 3.1): the nav agent guarantees the path, the injected genome (spec
-## 3) only re-weights direction terms; no genome = pure navigation (gen-1). The
+## Movement is NavigationAgent3D pathfinding with the hybrid gene steering policy
+## on top (spec-3 point 3.1): the nav agent guarantees the path, the injected
+## genome (spec 3) only re-weights direction terms; no genome = pure navigation
+## (gen-1). The
 ## navmesh bakes at RUNTIME behind the loading screen. Damage is CONTINUOUS:
 ## receive_slash(damage, threshold) kills at/above threshold (emits
 ## titan_killed), else staggers the titan + bounces the player.
@@ -61,7 +62,7 @@ func _on_safe_velocity(safe: Vector3) -> void: _safe_velocity = safe
 func set_target(player: Node3D) -> void: _player = player
 
 
-## Inject the evolved strategy for THIS round (spec 3, steering 3.8): FIXED
+## Inject the evolved strategy for THIS round (spec-3 point 3.8): FIXED
 ## weights only, no evolution here. Empty = pure nav (gen-1); preferred_entry_dir
 ## is measured and flankBias scales its opposite.
 func set_genes(genes: PackedFloat32Array, preferred_entry_dir: Vector3) -> void:
@@ -195,7 +196,7 @@ func _facing_toward_player() -> Vector3:
 # =====================================================================
 
 ## World-space outward nape normal (back of the neck = local -Z), with the
-## evolved napeYaw upper-body turn-away applied (steering 3.2).
+## evolved napeYaw upper-body turn-away applied (spec-3 point 3.2).
 func get_nape_normal() -> Vector3:
 	var base: Vector3 = (global_transform.basis * Vector3(0.0, 0.0, -1.0)).normalized()
 	if _genes.size() < Genome.GENE_COUNT or _player == null:

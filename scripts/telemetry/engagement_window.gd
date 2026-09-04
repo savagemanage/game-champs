@@ -1,6 +1,6 @@
 extends RefCounted
 class_name EngagementWindow
-## One engagement window (steering 3.5): the ~2s slice
+## One engagement window (spec-3 point 3.5): the ~2s slice
 ##   grapple-fire -> swing -> slash attempt -> post-slash disengage.
 ##
 ## PURE DATA. Holds plain Vector3 / float snapshots only, no scene references,
@@ -12,7 +12,7 @@ class_name EngagementWindow
 ## The recorder opens a window on grapple fire, marks the slash attempt, and
 ## closes it a fixed time after the slash (the "disengage"). Windows that never
 ## reach a slash before the timeout are still closed so the round yields plenty
-## of samples (steering aims for 5+ per round).
+## of samples (design aims for 5+ per round).
 
 # =====================================================================
 # CONSTANTS

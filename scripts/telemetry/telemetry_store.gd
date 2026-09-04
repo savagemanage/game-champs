@@ -1,6 +1,6 @@
 extends RefCounted
 class_name TelemetryStore
-## Persistence for the Telemetry autoload (steering section 2).
+## Persistence for the Telemetry autoload (see handoff.md).
 ##
 ## user:// + FileAccess + JSON ONLY. A save failure MUST NOT crash: FileAccess
 ## null returns are guarded, we push_warning and continue. A missing file loads

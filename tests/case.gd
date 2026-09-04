@@ -5,10 +5,11 @@ extends RefCounted
 ## methods; the runner (res://tests/cli.gd) instantiates it, injects a freshly
 ## seeded RNG per method, clears `errors`, calls the method, then reports.
 ##
-## Steering 8.1/8.2 apply here too: no Node, no get_tree(), no global randf().
-## Use the INJECTED `rng` for any randomness so runs are deterministic.
+## Web-safe determinism invariants apply here too (see handoff.md): no Node, no
+## get_tree(), no global randf(). Use the INJECTED `rng` for any randomness so
+## runs are deterministic.
 
-## Seeded RNG injected by the runner before each test_ method (steering 8.2).
+## Seeded RNG injected by the runner before each test_ method (deterministic).
 var rng: RandomNumberGenerator
 
 ## Accumulated failure messages for the current method. Emptied per method by

@@ -5,7 +5,7 @@ extends RefCounted
 ## nape_indicator.gd).
 ##
 ## WHY THIS EXISTS: slash.gd sits at the 250-line cap and its damage MUST stay
-## the single source of truth (steering: continuous damage model). Extracting
+## the single source of truth (design: continuous damage model). Extracting
 ## the formula into one static function lets the read-only indicator PREVIEW the
 ## exact same number the live slash would deal WITHOUT duplicating the maths or
 ## touching slash.gd's kill decision. The numeric model and thresholds are

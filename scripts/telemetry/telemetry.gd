@@ -10,7 +10,7 @@ extends Node
 ##
 ## Wired as an autoload named "Telemetry" (see project.godot [autoload]).
 ##
-## PERSISTENCE (steering section 2): user:// + FileAccess + JSON only. A save
+## PERSISTENCE (see handoff.md): user:// + FileAccess + JSON only. A save
 ## failure MUST NOT crash - FileAccess.open null returns are guarded, we
 ## push_warning and continue. A missing / corrupt file loads as a clean state.
 
@@ -18,7 +18,7 @@ extends Node
 # TUNING CONSTANTS (no magic numbers below this block)
 # =====================================================================
 
-## Keep the engagement windows of the last N rounds (steering 3.5: 3 rounds).
+## Keep the engagement windows of the last N rounds (spec-3 point 3.5: 3 rounds).
 ## Persistence path / schema version live in TelemetryStore.
 const ROUND_RING_SIZE: int = 3
 

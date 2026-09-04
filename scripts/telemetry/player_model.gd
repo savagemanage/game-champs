@@ -1,11 +1,11 @@
 extends RefCounted
 class_name PlayerModel
-## 24-bin opponent model with exponential-decay counts (steering 3.4).
+## 24-bin opponent model with exponential-decay counts (spec-3 point 3.4).
 ##
 ## PURE DATA. This module holds NO reference to any game scene / node type; it
 ## receives plain floats and Vector3s and exposes plain arrays. Spec 3 evolution
 ## CONSUMES this model (reads bins/decay) but does NOT own it - keeping the two
-## separate lets each be validated independently (steering 3.4).
+## separate lets each be validated independently (spec-3 point 3.4).
 ##
 ## The 24 bins are the cross product:
 ##   approach angle    -> 4 quadrants  (which side the player entered from)
@@ -31,7 +31,7 @@ const TIMING_BANDS: int = 2
 ## Total bins = 4 * 3 * 2.
 const BIN_COUNT: int = QUADRANTS * DISTANCE_BANDS * TIMING_BANDS
 
-## Exponential decay applied to every bin on each update (steering 3.4 / 3.11).
+## Exponential decay applied to every bin on each update (spec-3 points 3.4 / 3.11).
 const DECAY: float = 0.9
 
 ## Distance band edges (metres). d < NEAR -> band 0; NEAR..FAR -> band 1;

@@ -1,5 +1,6 @@
 #!/bin/sh
-# check.sh - parse/import gate (steering 8.4). Imports the project (which
+# check.sh - parse/import gate (see handoff.md "How to run the harness").
+# Imports the project (which
 # registers class_name across the codebase) then does a headless quit, and
 # fails if any SCRIPT ERROR / Parse Error / Failed to load appears.
 #

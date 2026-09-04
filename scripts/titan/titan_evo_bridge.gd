@@ -2,10 +2,10 @@ extends Node
 ## Game-side bridge between the PURE evo core (scripts/evo/) and live gameplay.
 ## This node is the ONLY place that couples the two: it reads plain data out of
 ## the Telemetry autoload, feeds it to EvoManager (pure), runs the background
-## evolution across frames (single-thread budget, steering 3.8), persists the
+## evolution across frames (single-thread budget; see handoff.md), persists the
 ## snapshot, and exposes the latest best genome for the titans to consume.
 ##
-## Evolution NEVER runs during live play (steering 3.8): _process only budgets
+## Evolution NEVER runs during live play (see handoff.md): _process only budgets
 ## generations while `_evolving` is true, which the game turns on BETWEEN rounds
 ## (e.g. from the evolution screen in spec 4). During a round the titans simply
 ## read best_genes(), which is a fixed genome for that round.
@@ -19,7 +19,7 @@ extends Node
 # =====================================================================
 
 ## Candidate-eval budget granted to the background evolution each idle frame
-## (single-thread web export, steering section 2). Small so frames stay smooth.
+## (single-thread web export; see handoff.md). Small so frames stay smooth.
 const FRAME_BUDGET: int = 3
 ## How many generations to advance per between-rounds evolution burst before the
 ## bridge auto-stops (the evolution screen can restart it).
@@ -57,7 +57,7 @@ func _ready() -> void:
 	set_process(false)
 
 
-## The fixed genome the live titans steer with THIS round (steering 3.8: only the
+## The fixed genome the live titans steer with THIS round (spec-3 point 3.8: only the
 ## latest best genome is injected; evolution does not run during the round).
 func current_best_genes() -> PackedFloat32Array:
 	return _best_genes
@@ -101,12 +101,12 @@ func sample_window() -> Dictionary:
 
 
 ## The generation history (Array of {gen,best,mean,variance:[6]}) for the fitness
-## curve + variance bars indicators (steering 3.11 history shape).
+## curve + variance bars indicators (spec-3 point 3.11 history shape).
 func history() -> Array:
 	return _evo.history if _evo != null else []
 
 
-## Gen-1 baseline genes (pure navigation, steering 3.7) - the LEFT side of the
+## Gen-1 baseline genes (pure navigation, spec-3 point 3.7) - the LEFT side of the
 ## final comparison scene.
 func baseline_genes() -> PackedFloat32Array:
 	return Genome.make_baseline()

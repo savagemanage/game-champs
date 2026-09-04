@@ -2,8 +2,8 @@ extends Node
 ## GameManager - owns the round lifecycle for wirework (spec 1). Bakes the arena
 ## navmesh at RUNTIME behind a loading screen, spawns EXACTLY 4 titans per round,
 ## respawns 4 IDENTICAL titans on clear, and drives the spec-4 evolution screen
-## between rounds (see _on_titan_killed). INVARIANT (steering 1): titan count and
-## stats are FIXED; nothing scales with _round_number - only evolved genes do.
+## between rounds (see _on_titan_killed). INVARIANT (see handoff.md): titan count
+## and stats are FIXED; nothing scales with _round_number - only evolved genes do.
 
 const TITAN_COUNT: int = 4  ## FIXED per round; NEVER scaled by round number.
 const RESPAWN_DELAY: float = 2.0  ## seconds between last kill and next spawn
@@ -132,7 +132,7 @@ func _spawn_titans() -> void:
 	_inject_evolved_genes()
 
 
-## Inject the latest best genome + siblings into every titan (spec 3, steering 3.8).
+## Inject the latest best genome + siblings into every titan (spec-3 point 3.8).
 func _inject_evolved_genes() -> void:
 	if typeof(TitanEvo) == TYPE_NIL or TitanEvo == null:
 		return

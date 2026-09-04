@@ -1,6 +1,6 @@
 extends CanvasLayer
-## THE FINAL COMPARISON SCENE - the project's COMPLETION CRITERION (steering
-## section 7 and spec-4 seed: "이 한 장면이 프로젝트가 증명하려는 것 전부다").
+## THE FINAL COMPARISON SCENE - the project's COMPLETION CRITERION (spec-4 seed:
+## "이 한 장면이 프로젝트가 증명하려는 것 전부다").
 ##
 ## Right before returning to gameplay, for DURATION seconds, the screen is split
 ## left/right and the SAME telemetry engagement window is replayed SIMULTANEOUSLY
@@ -13,14 +13,14 @@ extends CanvasLayer
 ## emits `finished` and gameplay resumes.
 ##
 ## Both halves are 2D top-down dots drawn via _draw (EvoSimView) - NOT 3D
-## renders (steering spec-4). Both are fed from the SAME window Dictionary so the
+## renders (spec-4). Both are fed from the SAME window Dictionary so the
 ## comparison is apples-to-apples.
 
 # =====================================================================
 # TUNING CONSTANTS (no magic numbers below this block)
 # =====================================================================
 
-## Seconds the comparison is shown before returning to gameplay (steering spec-4).
+## Seconds the comparison is shown before returning to gameplay (spec-4).
 const DURATION: float = 2.5
 ## Left/right split fraction (each half gets 50%).
 const HALF_FRAC: float = 0.5

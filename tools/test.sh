@@ -1,5 +1,6 @@
 #!/bin/sh
-# test.sh - headless test runner (steering 8.4). Runs the from-scratch
+# test.sh - headless test runner (see handoff.md "How to run the harness").
+# Runs the from-scratch
 # SceneTree test runner (tests/cli.gd) over res://tests/cases/*.gd.
 #
 # Extra args pass through to the runner, e.g.:

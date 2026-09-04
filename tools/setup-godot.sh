@@ -2,8 +2,8 @@
 # setup-godot.sh - idempotent auto-download of Godot 4.7.2-stable STANDARD
 # (NON-mono) linux x86_64 into .godot-bin/godot.
 #
-# Steering section 8 (spec 0 harness): the project must be able to validate
-# itself headlessly in a cloud session or locally. Godot 4 has no separate
+# Rationale (see handoff.md): the project must be able to validate itself
+# headlessly in a cloud session or locally. Godot 4 has no separate
 # "server" build; the standard binary supports --headless.
 #
 #   GODOT_VERSION   override the version (default 4.7.2-stable)

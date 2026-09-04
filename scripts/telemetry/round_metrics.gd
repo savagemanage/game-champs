@@ -1,6 +1,6 @@
 extends RefCounted
 class_name RoundMetrics
-## Derived-metric extractors for one round (steering spec 2).
+## Derived-metric extractors for one round (spec 2 - telemetry).
 ##
 ## PURE, STATELESS helpers that read a finished RoundRecorder's public data
 ## (windows / slashes / per-titan tallies) and compute the numbers evolution and

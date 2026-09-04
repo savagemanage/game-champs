@@ -1,7 +1,8 @@
 # scripts/evo/
 
-Evolution core (spec 3 - evolution-core). Implements the fixed design in
-steering `wirework.md` section 3 (3.1 - 3.11).
+Evolution core (spec 3 - evolution-core). Implements the fixed evolution design
+(the "3.x" tags below are the spec-3 design points). Project-wide invariants
+live in the repo-root `handoff.md`.
 
 **Invariant: everything here is PURE.** It exchanges only plain data (gene
 arrays, trajectory / window arrays, Vector3s, floats) and references NO game
@@ -24,7 +25,7 @@ titans) lives in `scripts/titan/titan_evo_bridge.gd`, not here.
 | `snapshot.gd` | `user://wirework_evo.json` per schema 3.11 (version, gene_names, baseline, best, history[{gen,best,mean,variance[6]}], player_model, rounds_played) + migration hook. Save failure never crashes. |
 | `harness/ga_harness.gd` | Headless verification (NOT unit tests). 200 gens vs always-left / random / mixed scripted players -> per-gene CSV + baseline-vs-evolved kill-time CSV. |
 
-## Verification (steering section 1: numbers, not unit tests)
+## Verification (numbers, not unit tests)
 
 There is no Godot binary in the build sandbox, so run this yourself:
 

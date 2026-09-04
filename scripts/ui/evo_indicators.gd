@@ -1,13 +1,13 @@
 extends Control
 class_name EvoIndicators
 ## Three of the four evolution-screen indicators, drawn on a SINGLE CanvasItem
-## via _draw (steering spec-4). The generation counter (indicator 1, the biggest
+## via _draw (spec-4). The generation counter (indicator 1, the biggest
 ## number on screen) is a Label owned by the parent screen; this Control draws:
 ##
 ##   2. Fitness curve  - best (bright) + mean (dim) lines over the last
 ##      HISTORY_WINDOW generations, read from snapshot / EvoManager history.
 ##   3. Variance bars  - 6 per-gene normalised-variance bars; shrinking = the
-##      population is converging (steering 3.9 / 3.11 variance[6]).
+##      population is converging (spec-3 points 3.9 / 3.11 variance[6]).
 ##   4. Radar chart    - the best genome on 6 axes, with the PREVIOUS generation
 ##      overlaid as a faint line.
 ##
@@ -18,8 +18,8 @@ class_name EvoIndicators
 # TUNING CONSTANTS (no magic numbers below this block)
 # =====================================================================
 
-## How many recent generations the fitness curve + variance read (steering
-## spec-4: last 40 generations).
+## How many recent generations the fitness curve + variance read (spec-4: last
+## 40 generations).
 const HISTORY_WINDOW: int = 40
 ## Fraction of the height each of the 3 stacked sub-panels gets.
 const CURVE_FRAC: float = 0.42

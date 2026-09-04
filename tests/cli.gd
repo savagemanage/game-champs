@@ -6,7 +6,7 @@ extends SceneTree
 ## Usage (via tools/test.sh):
 ##   godot --headless -s res://tests/cli.gd -- --seed=42 [--filter=<substr>]
 ##
-## Determinism (steering 8.2/8.3): files and methods are sorted so ordering is
+## Determinism (see handoff.md): files and methods are sorted so ordering is
 ## stable, and each method gets its own RNG seeded with the same seed. Two runs
 ## with the same --seed produce byte-identical output.
 
@@ -52,7 +52,7 @@ func _initialize() -> void:
 			if filter != "" and not label.contains(filter):
 				continue
 
-			# Fresh seeded RNG per method (steering 8.2).
+			# Fresh seeded RNG per method (deterministic; see handoff.md).
 			var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 			rng.seed = seed_value
 			instance.rng = rng

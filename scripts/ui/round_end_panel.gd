@@ -1,5 +1,5 @@
 extends CanvasLayer
-## Round-end telemetry panel (spec 2). Text is sufficient (steering).
+## Round-end telemetry panel (spec 2). Text is sufficient (design).
 ##
 ## Reads the derived metrics from the Telemetry autoload (which produced them
 ## FIRST - this panel only DISPLAYS data that already exists) and shows:

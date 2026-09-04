@@ -25,7 +25,7 @@ const LOCALES: Array[String] = ["en", "ko"]
 ## intentionally NOT translated (a language menu names languages natively).
 const LOCALE_LABELS: Array[String] = ["English", "한국어"]
 
-# The game name is a proper noun kept as-is (see steering: no IP, but the
+# The game name is a proper noun kept as-is (no IP per handoff.md, but the
 # project's own title "wirework" is not localized).
 const TITLE_TEXT: String = "wirework"
 

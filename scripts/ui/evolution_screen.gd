@@ -13,12 +13,12 @@ extends CanvasLayer
 ## (biggest number) + EvoIndicators (fitness curve, variance bars, radar 2-4).
 ##
 ## All mini-sims are 2D top-down dots via _draw (EvoSimView) fed by the PURE
-## SimReplay tracer - NOT 3D renders (steering spec-4). Before returning to play
+## SimReplay tracer - NOT 3D renders (spec-4). Before returning to play
 ## it launches the final comparison scene, then emits `finished`.
 
 # --- TUNING CONSTANTS (no magic numbers below this block) ---
 const APPEAR_EVERY_ROUNDS: int = 3  ## after first-kill, show again every N rounds
-## Screen split: left 40% large best sim, right 60% grid (steering spec-4).
+## Screen split: left 40% large best sim, right 60% grid (spec-4).
 const LEFT_FRAC: float = 0.4
 const RIGHT_FRAC: float = 0.6
 ## Grid dimensions for the "other 49" candidates (7x7 = 49 small cells).

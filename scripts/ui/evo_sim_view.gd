@@ -1,7 +1,7 @@
 extends Control
 class_name EvoSimView
-## ONE 2D top-down mini-sim drawn on a SINGLE CanvasItem via _draw (steering
-## spec-4: NOT a 3D render - a reduced 3D render is too heavy for single-thread
+## ONE 2D top-down mini-sim drawn on a SINGLE CanvasItem via _draw (spec-4: NOT
+## a 3D render - a reduced 3D render is too heavy for single-thread
 ## web export). It renders titan dots, one player dot, and ONE nape-direction
 ## line segment per titan, driven by a SimReplay trace of an engagement window.
 ##

@@ -7,7 +7,7 @@ extends Node3D
 ## fast swings (the blade tunnels across the nape). We track the blade tip each
 ## frame and, on a slash, cast a shape from LAST tip to THIS tip over the gap.
 ##
-## DAMAGE IS CONTINUOUS (steering section 2, spec 1): damage = f(relative speed,
+## DAMAGE IS CONTINUOUS (see handoff.md, spec 1): damage = f(relative speed,
 ## angle between blade travel dir and nape normal). At/above KILL_THRESHOLD the
 ## titan dies; below it it staggers and the player is bounced. See titan.gd.
 
