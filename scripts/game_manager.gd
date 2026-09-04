@@ -1,20 +1,19 @@
 extends Node
-## GameManager - owns the round lifecycle for wirework (spec 1). Bakes the arena
-## navmesh at RUNTIME behind a loading screen, spawns EXACTLY 4 titans per round,
-## respawns 4 IDENTICAL titans on clear, and drives the spec-4 evolution screen
-## between rounds (see _on_titan_killed). INVARIANT (see handoff.md): titan count
-## and stats are FIXED; nothing scales with _round_number - only evolved genes do.
+## GameManager - owns the round lifecycle. Runtime-bakes the navmesh (via
+## NavBaker) behind a loading screen, spawns EXACTLY 4 titans + the FIXED citizen
+## set per round, drives the evolution screen, and resolves the round: WIN = all
+## titans down, LOSE = all citizens eaten (FEAT-003). INVARIANT (handoff.md):
+## counts/stats FIXED; no scaling by round number.
 
 const TITAN_COUNT: int = 4  ## FIXED per round; NEVER scaled by round number.
 const RESPAWN_DELAY: float = 2.0  ## seconds between last kill and next spawn
-const BAKE_POLL_INTERVAL: float = 0.1  ## navmesh bake_finished poll fallback
-
-# --- Translation KEYS for user-facing text (resolved via tr() at display time) ---
+# Translation KEYS for user-facing text (resolved via tr() at display time).
 const KEY_LOADING_BAKING: String = "LOADING_BAKING"
 const KEY_ROUND_N: String = "ROUND_N"
 const KEY_STATUS_TITANS_STRIKE: String = "STATUS_TITANS_STRIKE"
 const KEY_STATUS_TITANS_LEFT: String = "STATUS_TITANS_LEFT"
 const KEY_STATUS_ROUND_CLEARED: String = "STATUS_ROUND_CLEARED"
+const KEY_STATUS_ROUND_LOST: String = "STATUS_ROUND_LOST"  # FEAT-003 fail path
 
 @export var titan_scene: PackedScene  # scene wiring set in Main.tscn
 @export var arena_path: NodePath = ^"../Arena"
@@ -23,6 +22,7 @@ const KEY_STATUS_ROUND_CLEARED: String = "STATUS_ROUND_CLEARED"
 @export var status_label_path: NodePath = ^"UI/StatusLabel"
 @export var loading_screen_path: NodePath = ^"LoadingScreen"
 @export var evolution_screen_path: NodePath = ^"../EvolutionScreen"
+@export var citizen_manager_path: NodePath = ^"CitizenManager"  # FEAT-003
 
 var _arena: Node3D
 var _player: Node3D
@@ -36,6 +36,8 @@ var _round_number: int = 0
 var _gameplay_started: bool = false
 var _evolution_screen: CanvasLayer  ## shown after 1st kill, then every 3 rounds
 var _first_kill_screen_shown: bool = false
+var _citizen_manager: Node  ## FEAT-003: spawns/tracks the eatable plaza citizens
+var _round_over: bool = false  ## FEAT-003: guards win/lose so both fire once
 
 
 func _ready() -> void:
@@ -47,6 +49,9 @@ func _ready() -> void:
 	_evolution_screen = get_node_or_null(evolution_screen_path) as CanvasLayer
 	if _evolution_screen != null and _evolution_screen.has_signal("finished"):
 		_evolution_screen.finished.connect(_on_evolution_screen_finished)
+	_citizen_manager = get_node_or_null(citizen_manager_path)
+	if _citizen_manager != null and _citizen_manager.has_signal("all_eaten"):
+		_citizen_manager.all_eaten.connect(_on_all_citizens_eaten)
 	if titan_scene == null:
 		push_warning("GameManager: titan_scene unassigned; no titans will spawn.")
 	_refresh_hud_locale()  # localize HUD now + on live locale switch
@@ -55,33 +60,21 @@ func _ready() -> void:
 	_begin_runtime_bake()
 
 
-## Re-apply localized text to the HUD labels (startup + live locale switch).
-func _refresh_hud_locale() -> void:
+func _refresh_hud_locale() -> void:  # startup + live locale switch
 	if _round_label != null:
 		_round_label.text = tr(KEY_ROUND_N) % maxi(_round_number, 1)
 	if _status_label != null and not _gameplay_started:
 		_status_label.text = tr(KEY_LOADING_BAKING)
 
 
-# --- RUNTIME NAVMESH BAKE (behind the loading screen) ---
 func _begin_runtime_bake() -> void:
 	if _loading_screen != null and _loading_screen.has_method("show_screen"):
 		_loading_screen.call("show_screen", tr(KEY_LOADING_BAKING))
-	_nav_region = _find_nav_region()
-	if _nav_region == null:
-		push_warning("GameManager: no NavigationRegion3D found; skipping bake.")
-		_on_bake_finished()
-		return
-	# Bake next frame so the loading screen has painted first (bake stalls).
-	if _nav_region.has_signal("bake_finished"):
-		_nav_region.bake_finished.connect(_on_bake_finished, CONNECT_ONE_SHOT)
-	call_deferred("_run_bake")
-
-
-func _run_bake() -> void:  # runtime bake, hidden by the loading screen
-	_nav_region.bake_navigation_mesh()
-	if not _nav_region.has_signal("bake_finished"):
-		get_tree().create_timer(BAKE_POLL_INTERVAL).timeout.connect(_on_bake_finished)
+	_nav_region = _first_nav_region(_arena) if _arena != null else null
+	var baker: Node = NavBaker.new()
+	add_child(baker)
+	baker.finished.connect(_on_bake_finished)
+	baker.call("bake", _nav_region)
 
 
 func _on_bake_finished() -> void:
@@ -93,10 +86,11 @@ func _on_bake_finished() -> void:
 	_start_round()
 
 
-# --- ROUND LIFECYCLE ---
 func _start_round() -> void:
 	_round_number += 1
+	_round_over = false
 	_reset_player()
+	_spawn_citizens()  # FEAT-003: repopulate the plaza before titans arrive
 	_spawn_titans()
 	_set_status(tr(KEY_STATUS_TITANS_STRIKE) % TITAN_COUNT)
 	_refresh_hud_locale()
@@ -104,10 +98,18 @@ func _start_round() -> void:
 		Telemetry.start_round()  # spec 2: begin recording this round
 
 
-## Drive the telemetry recorder once per physics tick (spec 2).
 func _physics_process(delta: float) -> void:
 	if _gameplay_started and Telemetry != null:
 		Telemetry.sample_tick(delta)
+
+
+func _spawn_citizens() -> void:  # FEAT-003: repopulate the plaza citizen set
+	if _citizen_manager == null or not _citizen_manager.has_method("spawn_citizens"):
+		return
+	var area: Node = null
+	if _arena != null and _arena.has_node("CitizenArea"):
+		area = _arena.get_node("CitizenArea")
+	_citizen_manager.call("spawn_citizens", area)
 
 
 func _spawn_titans() -> void:
@@ -132,8 +134,7 @@ func _spawn_titans() -> void:
 	_inject_evolved_genes()
 
 
-## Inject the latest best genome + siblings into every titan (spec-3 point 3.8).
-func _inject_evolved_genes() -> void:
+func _inject_evolved_genes() -> void:  # latest best genome + siblings per titan
 	if typeof(TitanEvo) == TYPE_NIL or TitanEvo == null:
 		return
 	var genes: PackedFloat32Array = TitanEvo.current_best_genes()
@@ -149,6 +150,8 @@ func _inject_evolved_genes() -> void:
 
 func _on_titan_killed() -> void:
 	_alive -= 1
+	if _round_over:
+		return  # round already resolved (e.g. citizens lost); ignore late kills
 	if _alive > 0:
 		_set_status(tr(KEY_STATUS_TITANS_LEFT) % _alive)
 		# Evolution screen (spec 4): appear ONCE after the FIRST kill.
@@ -156,6 +159,7 @@ func _on_titan_killed() -> void:
 			_first_kill_screen_shown = true
 			_try_show_evo_screen("request_first_kill_show")
 		return
+	_round_over = true  # WIN: all titans down
 	_set_status(tr(KEY_STATUS_ROUND_CLEARED) % _round_number)
 	if Telemetry != null:
 		Telemetry.end_round()
@@ -166,8 +170,7 @@ func _on_titan_killed() -> void:
 	get_tree().create_timer(RESPAWN_DELAY).timeout.connect(_start_round)
 
 
-## Delegate to the spec-4 evolution screen; return true when it took over.
-func _try_show_evo_screen(method: String, arg = null) -> bool:
+func _try_show_evo_screen(method: String, arg = null) -> bool:  # returns took-over
 	if _evolution_screen == null or not _evolution_screen.has_method(method):
 		return false
 	var took_over: bool = _evolution_screen.call(method, arg) if arg != null else _evolution_screen.call(method)
@@ -179,18 +182,27 @@ func _try_show_evo_screen(method: String, arg = null) -> bool:
 	return true
 
 
-## Resume gameplay once the evolution screen finished.
-func _on_evolution_screen_finished() -> void:
+func _on_evolution_screen_finished() -> void:  # resume gameplay post-evo screen
 	get_tree().paused = false
 	if _alive <= 0:
 		get_tree().create_timer(RESPAWN_DELAY).timeout.connect(_start_round)
 
 
-# --- HELPERS ---
+## FEAT-003 FAIL PATH: plaza citizens wiped out. Round LOST: stop titans + restart.
+func _on_all_citizens_eaten() -> void:
+	if _round_over:
+		return
+	_round_over = true
+	if Telemetry != null:
+		Telemetry.end_round()
+	_clear_titans()
+	_alive = 0
+	_set_status(tr(KEY_STATUS_ROUND_LOST) % _round_number)
+	get_tree().create_timer(RESPAWN_DELAY).timeout.connect(_start_round)
 
-## Read-only (FEAT-002): live titans for the nape indicator to enumerate. Do not mutate.
-func get_titans() -> Array: return _titans
 
+func get_titans() -> Array: return _titans  # read-only: nape indicator enumerates
+func get_citizen_manager() -> Node: return _citizen_manager  # FEAT-004/005 hook
 
 func _clear_titans() -> void:
 	for titan in _titans:
@@ -198,20 +210,12 @@ func _clear_titans() -> void:
 			titan.queue_free()
 	_titans.clear()
 
-
 func _reset_player() -> void:
 	if _player == null:
 		return
 	_player.global_transform = _player_spawn_transform()
 	if _player is CharacterBody3D:
 		(_player as CharacterBody3D).velocity = Vector3.ZERO
-
-
-func _find_nav_region() -> NavigationRegion3D:
-	if _arena == null:
-		return null
-	return _first_nav_region(_arena)
-
 
 func _first_nav_region(node: Node) -> NavigationRegion3D:
 	if node is NavigationRegion3D:
@@ -222,26 +226,22 @@ func _first_nav_region(node: Node) -> NavigationRegion3D:
 			return found
 	return null
 
-
 func _player_spawn_transform() -> Transform3D:
 	if _arena != null and _arena.has_node("PlayerSpawn"):
 		return (_arena.get_node("PlayerSpawn") as Node3D).global_transform
 	return Transform3D(Basis.IDENTITY, Vector3(0.0, 2.0, 0.0))
 
 
-## Collect the 4 titan-spawn markers on the connected base floor (ring fallback).
-func _titan_spawn_transforms() -> Array[Transform3D]:
+func _titan_spawn_transforms() -> Array[Transform3D]:  # 4 outside-wall markers
 	var result: Array[Transform3D] = []
 	if _arena != null:
 		for i in range(1, TITAN_COUNT + 1):
-			var marker_name := "TitanSpawn%d" % i
-			if _arena.has_node(marker_name):
-				result.append((_arena.get_node(marker_name) as Node3D).global_transform)
+			if _arena.has_node("TitanSpawn%d" % i):
+				result.append((_arena.get_node("TitanSpawn%d" % i) as Node3D).global_transform)
 	if result.is_empty():
 		for i in TITAN_COUNT:
-			var angle: float = TAU * float(i) / float(TITAN_COUNT)
-			result.append(Transform3D(Basis.IDENTITY,
-				Vector3(cos(angle) * 30.0, 2.0, sin(angle) * 30.0)))
+			var a: float = TAU * float(i) / float(TITAN_COUNT)
+			result.append(Transform3D(Basis.IDENTITY, Vector3(sin(a) * 50.0, 2.0, cos(a) * 50.0)))
 	return result
 
 

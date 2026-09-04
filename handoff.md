@@ -141,7 +141,7 @@ _Filled in incrementally by FEAT-002..FEAT-006, overwrite-in-place. Remaining
 placeholders below are updated by their owning feature:_
 
 - **Aim fix (first-person crosshair/slash alignment) - DONE (FEAT-002).**
-- Wall-Maria concentric-wall map + citizen area.
+- **Wall-Maria concentric-wall map + citizen area - DONE (FEAT-003).**
 - Titan HP + per-part damage + citizen-eating + wall-breach behaviour.
 - GA fitness / gene redefinition toward infiltration (citizens-eaten + breach).
 - Character models (soldiers + giant humanoids) via the guarded GLB loader.
@@ -186,6 +186,72 @@ constants; nothing scales with the round number.
 overlaps the nearest titan's torso/neck region (just under the nape indicator),
 not the ground or the titan's feet. `./tools/check.sh` and `./tools/test.sh`
 both exit 0.
+
+### Wall-Maria concentric map + eatable citizens (FEAT-003)
+
+**Map layout (`scenes/Arena.tscn`).** A `140 x 140` flat ground `Base` (top at
+world y=1) carries a single CONCENTRIC circular wall centred on the origin:
+
+- **Wall ring:** 16 `BoxMesh`/`BoxShape3D` `StaticBody3D` segments (`Mat_ridge`,
+  size `15 x 16 x 4`) on a radius-`34` circle, each yawed tangent so they overlap
+  into a solid ring. Two segments are OMITTED (indices 0 at +Z and 8 at -Z),
+  leaving two **gate/weak-point gaps** the titans can be funnelled toward once
+  breaching lands (FEAT-004). Wall top sits ~world y=15.
+- **Verticality kept:** two `GateTowerS/N` towers (`8 x 30 x 8`) flank the +Z / -Z
+  gates and a low `Perch` walkway sits just inside the +Z gate, so the player can
+  grapple up and fight titans at the wall (the swinging traversal spirit).
+- **CitizenArea:** a plain `Node3D` holding `C1..C8` `Marker3D`s on a radius-`14`
+  inner ring (well inside the wall) - the citizen plaza.
+- **Spawns:** `PlayerSpawn` INSIDE at `(0, 2, 20)` (just behind the +Z gate, so the
+  player defends). `TitanSpawn1..4` are OUTSIDE the wall at radius `50`
+  (`+Z / -Z / +X / -X`). `TITAN_COUNT` stays **4**.
+- All materials reuse the existing CC0 `Mat_ground` / `Mat_rock` / `Mat_ridge` -
+  no new textures. Segment/poly count is web-light.
+
+**Citizens.** FIXED count **8** (`CitizenManager.CITIZEN_COUNT`; never scales with
+the round). `scenes/Citizen.tscn` is a visual-only `Node3D` (`scripts/citizens/
+citizen.gd`) with a small primitive capsule and a `CharacterModel` child running
+the guarded GLB loader (`character_visual.gd`, `model_path` `citizen_character.glb`)
+so the FEAT-006 model swap is a drop-in. Citizens carry **NO collision shape**, so
+they never seed the runtime navmesh. `eat()` is idempotent and emits `eaten`.
+
+**CitizenManager (`scripts/citizens/citizen_manager.gd`, scene-side Node).** Spawns
+the fixed set at the CitizenArea markers, tracks the live count, and exposes
+PLAIN-DATA out for telemetry/fitness (FEAT-005): `get_citizen_positions()` ->
+`Array[Vector3]`, `citizens_alive()` / `citizens_total()` -> `int`,
+`report_citizen_eaten(citizen)` and `eat_nearest(pos, radius)` -> `bool` (the
+FEAT-004 reach hook), and signals `citizen_eaten(alive)` + `all_eaten`. It is a
+`Node` (NOT in `scripts/evo` or `scripts/telemetry`, which stay pure). Wired in
+`Main.tscn` under `GameManager/CitizenManager` with `citizen_scene` set.
+
+**Fail condition (`scripts/game_manager.gd`).** Threshold
+`CITIZEN_LOSS_THRESHOLD = 0`: when the last citizen is eaten the manager emits
+`all_eaten`, GameManager runs the **round-LOST** path (`_on_all_citizens_eaten`:
+end telemetry, clear titans, show localized `STATUS_ROUND_LOST`, restart after
+`RESPAWN_DELAY`). Round **WIN** is unchanged (all titans down). A `_round_over`
+guard makes win/lose fire exactly once. `_start_round()` now also calls
+`_spawn_citizens()` before spawning titans. Nothing scales with `_round_number`.
+
+**Containment (navmesh + geometry).** The navmesh is still **runtime-baked**
+(extracted into `scripts/nav_baker.gd`, a `class_name NavBaker` node, so
+`game_manager.gd` stays <= 250 lines). `Arena.tscn`'s `NavigationMesh` now sets
+`geometry_parsed_geometry_type = 1` (STATIC_COLLIDERS) so the bake parses the
+`StaticBody3D` COLLISION shapes (not visual meshes - silences the old warning);
+`agent_radius`/`agent_height` are `1.8`/`5.0` to match the FEAT-002 titan. The
+solid wall ring is baked as an obstacle, so the walkable surface does NOT connect
+the outer field to the inner plaza except through the two gate gaps - titans path
+toward the wall/gates but cannot walk into the plaza through solid wall until a
+breach opens (breach behaviour is FEAT-004).
+
+**New localized strings (`locale/ui.csv`, resolved via `tr()`):** `STATUS_ROUND_LOST`
+(EN/KO).
+
+**Verify.** `./tools/check.sh` and `./tools/test.sh` both exit 0 (a deterministic
+`tests/cases/citizen_count.gd` asserts the alive-count decrement + idempotent-eat
++ loss-threshold invariants). `xvfb-run -a ./tools/screenshot.sh` renders the
+first-person view of the plaza: the concentric wall ring, the gate tower, and the
+citizen capsules inside read clearly (titans spawn outside the wall, out of the
+default frame).
 
 ## Workflow
 

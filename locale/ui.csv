@@ -5,6 +5,7 @@ ROUND_N,Round %d,라운드 %d
 STATUS_TITANS_STRIKE,%d titans - strike the nape!,거인 %d마리 - 네이프를 노려라!
 STATUS_TITANS_LEFT,%d titans left,거인 %d마리 남음
 STATUS_ROUND_CLEARED,Round %d cleared!,라운드 %d 클리어!
+STATUS_ROUND_LOST,Round %d lost - the citizens were devoured!,라운드 %d 패배 - 주민들이 잡아먹혔다!
 RE_ROUND_COMPLETE,Round %d complete,라운드 %d 완료
 RE_LEFT_APPROACH,Left approach ratio: %.0f%%,좌측 접근 비율: %.0f%%
 RE_AVG_DISTANCE,Avg engagement distance: %.1f m,평균 교전 거리: %.1f m

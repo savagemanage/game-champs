@@ -1,4 +1,4 @@
-[gd_scene load_steps=17 format=3 uid="uid://d1main0scene1"]
+[gd_scene load_steps=19 format=3 uid="uid://d1main0scene1"]
 
 [ext_resource type="PackedScene" uid="uid://c1arena00scene1" path="res://scenes/Arena.tscn" id="1_arena"]
 [ext_resource type="PackedScene" uid="uid://b1player0scene1" path="res://scenes/Player.tscn" id="2_player"]
@@ -11,6 +11,8 @@
 [ext_resource type="Script" path="res://scripts/ui/evo_sim_view.gd" id="9_simview"]
 [ext_resource type="Script" path="res://scripts/ui/evo_indicators.gd" id="10_indicators"]
 [ext_resource type="Script" path="res://scripts/ui/nape_indicator.gd" id="11_napeind"]
+[ext_resource type="Script" path="res://scripts/citizens/citizen_manager.gd" id="12_citmgr"]
+[ext_resource type="PackedScene" uid="uid://c1citizen0scene1" path="res://scenes/Citizen.tscn" id="13_citizen"]
 
 [sub_resource type="LabelSettings" id="LabelSettings_ui"]
 font_size = 24
@@ -58,6 +60,10 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 30)
 [node name="GameManager" type="Node" parent="."]
 script = ExtResource("3_gamemgr")
 titan_scene = ExtResource("4_titan")
+
+[node name="CitizenManager" type="Node" parent="GameManager"]
+script = ExtResource("12_citmgr")
+citizen_scene = ExtResource("13_citizen")
 
 [node name="UI" type="CanvasLayer" parent="GameManager"]
 
