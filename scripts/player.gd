@@ -172,9 +172,11 @@ func _on_slash_area_entered(area: Area3D) -> void:
 		titan.die()
 
 
-## Log which way the player was swinging (relative to camera yaw) so PlayerStats
-## can bias the next titan toward guarding that side. Uses current strafe input
-## as a cheap proxy for the attack side.
+## Log which way the player was strafing when they slashed, as a cheap dodge
+## sample for PlayerStats. NOTE: dodge history is collected as a stage-2 stub
+## and is not yet folded into the titan's weights (the titan learns the attack
+## side from the player's actual circling motion, sampled by titan.gd). Kept so
+## the data is available when stage-2 wires it in.
 func _record_slash_side() -> void:
 	var stats := get_node_or_null("/root/PlayerStats")
 	if stats == null or not stats.has_method("record_dodge"):

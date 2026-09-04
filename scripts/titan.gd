@@ -38,6 +38,11 @@ signal titan_killed
 @export var intercept_offset: float = 6.0
 ## Distance (metres) at which the nav agent considers itself "arrived".
 @export var arrival_distance: float = 2.5
+## Maximum extra yaw (radians) the titan adds to turn its nape AWAY from the
+## side the player usually attacks from. Scaled by the guard_nape weight, so a
+## player who reliably hits from one side makes the titan angle its back away
+## from that side, keeping the nape harder to reach. ~0.7 rad ≈ 40°.
+@export var guard_nape_max_yaw: float = 0.7
 
 # =====================================================================
 # NODE REFERENCES  (names MUST match Titan.tscn)
@@ -94,8 +99,9 @@ func _physics_process(delta: float) -> void:
 		move_and_slide()
 		return
 
-	# Feed the player-distance sample into PlayerStats for next round's tuning.
+	# Feed the per-round samples into PlayerStats for next round's tuning.
 	_report_distance()
+	_report_approach_side()
 
 	var target: Vector3 = _compute_target_position()
 	var next_point: Vector3 = _next_path_point(target)
@@ -104,16 +110,24 @@ func _physics_process(delta: float) -> void:
 	var to_next: Vector3 = next_point - global_position
 	to_next.y = 0.0
 
+	# Nape-guarding yaw: rotate the body a little so the nape (which sits at the
+	# titan's rear) turns AWAY from the side the player usually attacks from.
+	var guard_yaw: float = _guard_nape_yaw_offset()
+
 	var speed: float = _current_speed()
 	if to_next.length() > arrival_distance:
 		var dir: Vector3 = to_next.normalized()
 		velocity.x = dir.x * speed
 		velocity.z = dir.z * speed
-		_face_direction(dir, delta)
+		_face_direction(dir, delta, guard_yaw)
 	else:
-		# Arrived near the target: ease horizontal motion to a stop.
+		# Arrived near the target: ease horizontal motion to a stop, but keep
+		# angling the nape away from the player's favoured attack side.
 		velocity.x = move_toward(velocity.x, 0.0, speed)
 		velocity.z = move_toward(velocity.z, 0.0, speed)
+		var facing: Vector3 = _facing_toward_player()
+		if facing != Vector3.ZERO:
+			_face_direction(facing, delta, guard_yaw)
 
 	_apply_gravity(delta)
 	move_and_slide()
@@ -131,10 +145,13 @@ func _apply_gravity(delta: float) -> void:
 
 
 ## Turn smoothly to face a horizontal direction (so the nape stays behind it).
-func _face_direction(dir: Vector3, delta: float) -> void:
+## `extra_yaw` is an additional rotation (radians) layered on top of the facing
+## direction - used by the nape-guarding logic to angle the back away from the
+## player's favoured attack side.
+func _face_direction(dir: Vector3, delta: float, extra_yaw: float = 0.0) -> void:
 	if dir.length() < 0.001:
 		return
-	var desired_yaw: float = atan2(dir.x, dir.z)
+	var desired_yaw: float = atan2(dir.x, dir.z) + extra_yaw
 	rotation.y = rotate_toward(rotation.y, desired_yaw, turn_speed * delta)
 
 
@@ -197,8 +214,10 @@ func _nav_map_ready() -> bool:
 func _compute_target_position() -> Vector3:
 	var player_pos: Vector3 = _player.global_position
 
-	# anticipate_side: 0 = player favours their left, 1 = their right, 0.5 = no
-	# preference. Convert to a signed lean in [-1, 1].
+	# anticipate_side: 0 = player circles to the titan's left, 1 = to its right,
+	# 0.5 = no preference. Convert to a signed lean in [-1, 1]. This is the SAME
+	# titan-relative axis that _report_approach_side() samples into PlayerStats,
+	# so the bias below actually leans toward the player's real approach side.
 	var side_bias: float = (_weight("anticipate_side", 0.5) - 0.5) * 2.0
 
 	# Sideways axis is perpendicular to the titan->player vector on the XZ plane.
@@ -207,11 +226,43 @@ func _compute_target_position() -> Vector3:
 	if to_player.length() < 0.001:
 		return player_pos
 	to_player = to_player.normalized()
-	# Right-hand perpendicular on the XZ plane.
+	# Right-hand perpendicular on the XZ plane == the titan's local +X (right).
 	var sideways: Vector3 = Vector3(to_player.z, 0.0, -to_player.x)
 
 	var offset: Vector3 = sideways * side_bias * intercept_offset
 	return player_pos + offset
+
+
+## Horizontal direction from the titan toward the player (XZ plane), or zero if
+## they are stacked. Used to keep facing the player when not moving.
+func _facing_toward_player() -> Vector3:
+	if _player == null:
+		return Vector3.ZERO
+	var to_player: Vector3 = _player.global_position - global_position
+	to_player.y = 0.0
+	if to_player.length() < 0.001:
+		return Vector3.ZERO
+	return to_player.normalized()
+
+
+## Extra yaw (radians) that turns the nape away from the player's favoured
+## attack side. Uses two weights together:
+##   * guard_nape  - HOW MUCH to guard (0 = don't bother, 1 = guard hard).
+##   * anticipate_side - WHICH side the player favours (<0.5 left, >0.5 right).
+## When the player attacks from their preferred side, we rotate the body so the
+## rear (where the nape lives) swings the opposite way, making the nape harder
+## to reach from that side.
+func _guard_nape_yaw_offset() -> float:
+	var guard: float = _weight("guard_nape", 0.0)
+	if guard <= 0.0:
+		return 0.0
+	# side_bias: -1 = player favours the titan's left, +1 = its right.
+	var side_bias: float = (_weight("anticipate_side", 0.5) - 0.5) * 2.0
+	# Rotating the titan by +yaw about Y turns its local -Z (the nape) toward
+	# its own left. If the player attacks from the right (side_bias > 0), a
+	# positive yaw swings the nape left, i.e. away from the attack side. So the
+	# guard yaw follows the sign of side_bias directly.
+	return side_bias * guard * guard_nape_max_yaw
 
 
 # =====================================================================
@@ -269,6 +320,51 @@ func _report_distance() -> void:
 		return
 	if stats.has_method("record_distance"):
 		stats.record_distance(global_position.distance_to(_player.global_position))
+
+
+## Sample which side of the titan the player is circling toward, measured in
+## the SAME titan-relative frame the intercept bias uses (the titan's local
+## +X / right axis). We use the player's horizontal velocity projected onto
+## that axis: a player who keeps peeling to the titan's right builds up a
+## "right" bucket, and next round the titan biases its intercept that way to
+## cut them off. Sampling motion (not just position) is what makes the learned
+## side meaningful - the titan usually faces the player, so raw position would
+## almost always read "dead ahead".
+func _report_approach_side() -> void:
+	var stats := get_node_or_null("/root/PlayerStats")
+	if stats == null or _player == null:
+		return
+	if not stats.has_method("record_approach_side"):
+		return
+
+	var to_player: Vector3 = _player.global_position - global_position
+	to_player.y = 0.0
+	if to_player.length() < 0.001:
+		return
+	to_player = to_player.normalized()
+	# Right-hand perpendicular on the XZ plane == the titan's local +X (right),
+	# identical to the axis used in _compute_target_position().
+	var sideways: Vector3 = Vector3(to_player.z, 0.0, -to_player.x)
+
+	# The player's horizontal velocity. _player is typed Node3D here, so we read
+	# `velocity` dynamically via get() (the real node is a CharacterBody3D that
+	# exposes it) - this avoids a static "unknown property" error and is null-
+	# safe: get() returns null if the property is absent.
+	var vel_variant: Variant = _player.get("velocity")
+	if typeof(vel_variant) != TYPE_VECTOR3:
+		return
+	var player_vel: Vector3 = vel_variant
+	player_vel.y = 0.0
+	if player_vel.length() < 0.001:
+		# Standing still tells us nothing about an approach side this frame.
+		return
+
+	# Signed lateral speed: >0 = moving to the titan's right, <0 = its left.
+	var lateral: float = player_vel.dot(sideways)
+	# strength: how sideways the motion is (0 = purely toward/away, 1 = purely
+	# lateral), so a player running straight in doesn't get bucketed as a side.
+	var strength: float = clampf(absf(lateral) / maxf(player_vel.length(), 0.001), 0.0, 1.0)
+	stats.record_approach_side(lateral, strength)
 
 
 ## Find the player if GameManager did not hand us one. Prefers the "player"

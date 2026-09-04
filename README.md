@@ -79,8 +79,8 @@ titan-game/
   method and a `titan_killed` signal.
 - **`player_stats.gd`** - The adaptive-AI foundation, registered as an **autoload**
   singleton named `PlayerStats`. It collects per-round behaviour (which side you
-  grapple/attack from, how far you keep from the titan, dodge directions, damage
-  taken), and turns it into a `behavior_weights` dictionary.
+  circle toward the titan, how far you keep from it, plus dodge/damage stubs for
+  later), and turns it into a `behavior_weights` dictionary.
 - **`game_manager.gd`** - Runs the round loop: spawn the titan at `TitanSpawn`,
   listen for `titan_killed`, end the round (persist + recompute weights), then
   respawn a fresh titan that reads the updated weights. Drives the on-screen
@@ -92,12 +92,14 @@ titan-game/
   `FileAccess` + `JSON`. `user://` is a per-user writable location (and IndexedDB
   in the browser export), so this is fully local - no network, no server.
 - The file stores `rounds_played` and the smoothed `behavior_weights`:
-  - `anticipate_side` - which side you usually come from; the titan biases its
-    intercept point that way to cut you off.
+  - `anticipate_side` - which side you tend to circle toward (measured in the
+    titan's own frame); the titan biases its intercept point that way to cut you
+    off next round.
   - `aggression` - higher the more you kite from a distance; the titan closes in
     faster.
-  - `guard_nape` - higher the more one-sided your attacks are; the titan turns to
-    keep its nape away from your favoured side.
+  - `guard_nape` - higher the more one-sided your attacks are; the titan adds a
+    small yaw so its nape (rear) turns away from your favoured attack side,
+    making it harder to reach.
 - Each new titan reads these weights in `_ready()`, so it visibly plays a little
   differently as you build up habits. To reset the "learning", delete
   `player_stats.json` from the `user://` folder (in Godot: **Project → Open User

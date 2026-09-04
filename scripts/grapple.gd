@@ -172,8 +172,6 @@ func _try_attach() -> void:
 	if Input.mouse_mode == Input.MOUSE_MODE_VISIBLE:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
-	_record_grapple_use(dir)
-
 
 func _release() -> void:
 	# IMPORTANT: do not touch velocity here. Preserving swing momentum on
@@ -249,15 +247,12 @@ func _hand_world_position() -> Vector3:
 
 
 # =====================================================================
-# ADAPTIVE-AI HOOK (optional; created in FEAT-003)
+# ADAPTIVE-AI HOOK
 # =====================================================================
-
-## Log the grapple aim direction into the PlayerStats autoload so the titan AI
-## can adapt over rounds. Guarded so FEAT-002 never crashes when the singleton
-## does not exist yet.
-func _record_grapple_use(aim_dir: Vector3) -> void:
-	var stats := get_node_or_null("/root/PlayerStats")
-	if stats == null:
-		return
-	if stats.has_method("record_grapple"):
-		stats.record_grapple(aim_dir)
+#
+# The player's approach side is no longer inferred from the grapple aim vector
+# (that lived in world space and did not match the titan's frame). Instead the
+# titan samples which side of ITSELF the player is on each physics frame (see
+# titan.gd _report_approach_side), so the recorded side and the titan's
+# intercept bias share one coordinate frame. This component therefore no longer
+# feeds PlayerStats directly.

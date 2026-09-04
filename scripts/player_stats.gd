@@ -50,9 +50,10 @@ var behavior_weights: Dictionary = {}
 # long-term weights at the end of the round)
 # =====================================================================
 
-## Histogram of which side the player grapples/approaches from, in the titan's
-## frame of reference. Counts of grapples whose horizontal aim leaned left vs
-## right vs roughly centred/forward.
+## Histogram of which side the player approaches the titan from, measured in
+## the TITAN's own frame of reference (see record_approach_side). Counts of
+## samples where the player was to the titan's left vs right vs roughly in
+## front (dead ahead / behind, i.e. no clear side).
 var _approach_hist: Dictionary = {
 	"left": 0,
 	"right": 0,
@@ -115,21 +116,22 @@ func end_round() -> Dictionary:
 # DATA COLLECTION  (called from gameplay code; all cheap + non-crashing)
 # =====================================================================
 
-## Record a grapple aim direction (world space). grapple.gd calls this.
-## We only care about the horizontal lean (x vs z) to bucket it left/right/front
-## relative to the world; the titan later mirrors this into its own frame.
-func record_grapple(aim_dir: Vector3) -> void:
-	# Flatten to the XZ plane and classify the sideways lean. We use the world
-	# X axis as "sideways"; a strong |x| relative to |z| means the player likes
-	# to come at things from the side rather than head-on.
-	var horizontal := Vector2(aim_dir.x, aim_dir.z)
-	if horizontal.length() < 0.001:
+## Record which side the player is circling toward, already measured in the
+## TITAN's own frame. The titan samples this each physics frame (it is the only
+## node that knows both positions and the player's motion) and passes a signed
+## value:
+##   side < 0  -> player is peeling to the titan's LEFT
+##   side > 0  -> player is peeling to the titan's RIGHT
+##   side ~= 0 -> player is moving mostly straight toward/away (no clear side)
+## `strength` is how sideways that motion is (0..1); we only bucket left/right
+## once it is clear enough, otherwise it counts as "front".
+## Because record and consume (titan._compute_target_position) now use the SAME
+## titan-relative axis, the learned side genuinely maps to the player's real
+## approach side - no mirroring needed.
+func record_approach_side(side: float, strength: float) -> void:
+	if strength < 0.4:
 		_approach_hist["front"] += 1
-		return
-	horizontal = horizontal.normalized()
-	if absf(horizontal.x) < 0.4:
-		_approach_hist["front"] += 1
-	elif horizontal.x < 0.0:
+	elif side < 0.0:
 		_approach_hist["left"] += 1
 	else:
 		_approach_hist["right"] += 1
@@ -164,9 +166,10 @@ func record_damage(amount: float) -> void:
 ## means.
 func _default_weights() -> Dictionary:
 	return {
-		# How far to bias the titan's intercept toward the side the player
-		# historically approaches from. 0.5 = no bias (dead centre); <0.5 leans
-		# to the player's left, >0.5 to their right.
+		# Which side (in the TITAN's own frame) the player historically circles
+		# toward, so the titan can bias its intercept there to cut them off.
+		# 0.5 = no preference; <0.5 = player favours the titan's left, >0.5 =
+		# its right. Measured/consumed on the same titan-relative axis.
 		"anticipate_side": 0.5,
 		# How aggressively the titan closes distance vs holding position.
 		# Higher when the player likes to keep their distance (kiting).
@@ -193,8 +196,9 @@ func _recompute_weights() -> void:
 	var right: int = int(_approach_hist.get("right", 0))
 	var total_sides: int = left + right
 	if total_sides > 0:
-		# 0 = strongly left, 1 = strongly right. Titan will bias intercept the
-		# same way to cut the player off.
+		# 0 = player mostly on the titan's left, 1 = mostly on its right. The
+		# titan biases its intercept along the SAME titan-relative axis to cut
+		# the player off (see titan._compute_target_position).
 		var side_target: float = float(right) / float(total_sides)
 		weights["anticipate_side"] = lerpf(
 			weights["anticipate_side"], side_target, adaptation_rate
@@ -272,12 +276,19 @@ func _load() -> void:
 	rounds_played = int(data.get("rounds_played", 0))
 
 	# Merge saved weights over the defaults so a save written by an older build
-	# (missing a key) still yields a complete weight set.
+	# (missing a key) still yields a complete weight set. We only copy values
+	# that are actually numbers: a corrupt or hand-edited JSON could hold a
+	# string / null / array, and letting that flow into lerpf() later would
+	# error. Non-numeric values are skipped so the default for that key stands.
 	var weights := _default_weights()
 	var saved_weights: Variant = data.get("behavior_weights", {})
 	if typeof(saved_weights) == TYPE_DICTIONARY:
 		for key in saved_weights:
-			weights[key] = saved_weights[key]
+			var value: Variant = saved_weights[key]
+			if typeof(value) == TYPE_FLOAT or typeof(value) == TYPE_INT:
+				weights[key] = float(value)
+			else:
+				push_warning("PlayerStats: ignoring non-numeric weight '%s' in save file." % str(key))
 	behavior_weights = weights
 
 
