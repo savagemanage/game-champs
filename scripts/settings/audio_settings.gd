@@ -44,27 +44,28 @@ func ensure_sfx_bus() -> void:
 
 ## Push the current state to the AudioServer. Applies the master volume + global
 ## mute to the Master bus and the SFX volume to the SFX bus.
+##
+## The global mute rides on the Master bus so it silences everything at once,
+## and a per-bus volume of 0 is folded into that bus's mute decision so the
+## slider's zero end reaches true silence even when the global mute is off.
 func apply() -> void:
 	ensure_sfx_bus()
-	_apply_bus(MASTER_BUS, master_volume)
-	_apply_bus(SFX_BUS, sfx_volume)
-	# Global mute rides on the Master bus so it silences everything at once.
-	var master_idx: int = AudioServer.get_bus_index(MASTER_BUS)
-	if master_idx != -1:
-		AudioServer.set_bus_mute(master_idx, muted)
+	# Master: muted if the global mute is on OR its own volume is at the floor.
+	_apply_bus(MASTER_BUS, master_volume, muted or master_volume <= SILENCE_EPSILON)
+	# SFX: muted only when its own volume is at the floor (global mute already
+	# silences it via the Master bus).
+	_apply_bus(SFX_BUS, sfx_volume, sfx_volume <= SILENCE_EPSILON)
 
 
-func _apply_bus(bus_name: String, linear: float) -> void:
+## Apply one bus's volume + mute. volume_db is always written (never skipped by
+## a silence branch) so a bus can never keep a stale/default dB, and mute is set
+## explicitly so it can never carry over from a previous 0-volume state.
+func _apply_bus(bus_name: String, linear: float, mute: bool) -> void:
 	var idx: int = AudioServer.get_bus_index(bus_name)
 	if idx == -1:
 		return
-	if linear <= SILENCE_EPSILON:
-		AudioServer.set_bus_mute(idx, true)
-		return
-	# A non-Master bus should not carry a stale mute from a previous 0 volume.
-	if bus_name != MASTER_BUS:
-		AudioServer.set_bus_mute(idx, false)
-	AudioServer.set_bus_volume_db(idx, linear_to_db(clampf(linear, 0.0, 1.0)))
+	AudioServer.set_bus_mute(idx, mute)
+	AudioServer.set_bus_volume_db(idx, linear_to_db(clampf(linear, SILENCE_EPSILON, 1.0)))
 
 
 # =====================================================================
