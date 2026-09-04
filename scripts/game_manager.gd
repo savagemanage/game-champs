@@ -2,11 +2,9 @@ extends Node
 ## GameManager - owns the round lifecycle for wirework (spec 1). Bakes the arena
 ## navmesh at RUNTIME behind a loading screen, spawns EXACTLY 4 titans per round,
 ## respawns 4 IDENTICAL titans on clear, and drives the spec-4 evolution screen
-## between rounds (see _on_titan_killed).
-## INVARIANT (steering 1): titan count and stats are FIXED; nothing scales with
-## _round_number. Difficulty rises only via evolved genes.
+## between rounds (see _on_titan_killed). INVARIANT (steering 1): titan count and
+## stats are FIXED; nothing scales with _round_number - only evolved genes do.
 
-# --- TUNING CONSTANTS (no magic numbers below this block) ---
 const TITAN_COUNT: int = 4  ## FIXED per round; NEVER scaled by round number.
 const RESPAWN_DELAY: float = 2.0  ## seconds between last kill and next spawn
 const BAKE_POLL_INTERVAL: float = 0.1  ## navmesh bake_finished poll fallback
@@ -18,8 +16,7 @@ const KEY_STATUS_TITANS_STRIKE: String = "STATUS_TITANS_STRIKE"
 const KEY_STATUS_TITANS_LEFT: String = "STATUS_TITANS_LEFT"
 const KEY_STATUS_ROUND_CLEARED: String = "STATUS_ROUND_CLEARED"
 
-# --- Scene wiring (set in Main.tscn) ---
-@export var titan_scene: PackedScene
+@export var titan_scene: PackedScene  # scene wiring set in Main.tscn
 @export var arena_path: NodePath = ^"../Arena"
 @export var player_path: NodePath = ^"../Player"
 @export var round_label_path: NodePath = ^"UI/RoundLabel"
@@ -27,7 +24,6 @@ const KEY_STATUS_ROUND_CLEARED: String = "STATUS_ROUND_CLEARED"
 @export var loading_screen_path: NodePath = ^"LoadingScreen"
 @export var evolution_screen_path: NodePath = ^"../EvolutionScreen"
 
-# --- STATE ---
 var _arena: Node3D
 var _player: Node3D
 var _round_label: Label
@@ -52,8 +48,8 @@ func _ready() -> void:
 	if _evolution_screen != null and _evolution_screen.has_signal("finished"):
 		_evolution_screen.finished.connect(_on_evolution_screen_finished)
 	if titan_scene == null:
-		push_warning("GameManager: titan_scene is not assigned; no titans will spawn.")
-	_refresh_hud_locale()  # localize HUD text now + on live locale switch
+		push_warning("GameManager: titan_scene unassigned; no titans will spawn.")
+	_refresh_hud_locale()  # localize HUD now + on live locale switch
 	if typeof(Settings) != TYPE_NIL and Settings != null and Settings.has_signal("locale_changed"):
 		Settings.locale_changed.connect(func(_l): _refresh_hud_locale())
 	_begin_runtime_bake()
@@ -82,8 +78,7 @@ func _begin_runtime_bake() -> void:
 	call_deferred("_run_bake")
 
 
-func _run_bake() -> void:
-	# Runtime bake (hidden by the loading screen; NOT editor-baked).
+func _run_bake() -> void:  # runtime bake, hidden by the loading screen
 	_nav_region.bake_navigation_mesh()
 	if not _nav_region.has_signal("bake_finished"):
 		get_tree().create_timer(BAKE_POLL_INTERVAL).timeout.connect(_on_bake_finished)
@@ -192,6 +187,11 @@ func _on_evolution_screen_finished() -> void:
 
 
 # --- HELPERS ---
+
+## Read-only (FEAT-002): live titans for the nape indicator to enumerate. Do not mutate.
+func get_titans() -> Array: return _titans
+
+
 func _clear_titans() -> void:
 	for titan in _titans:
 		if titan != null and is_instance_valid(titan):

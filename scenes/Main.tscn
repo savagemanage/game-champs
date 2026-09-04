@@ -1,4 +1,4 @@
-[gd_scene load_steps=16 format=3 uid="uid://d1main0scene1"]
+[gd_scene load_steps=17 format=3 uid="uid://d1main0scene1"]
 
 [ext_resource type="PackedScene" uid="uid://c1arena00scene1" path="res://scenes/Arena.tscn" id="1_arena"]
 [ext_resource type="PackedScene" uid="uid://b1player0scene1" path="res://scenes/Player.tscn" id="2_player"]
@@ -10,6 +10,7 @@
 [ext_resource type="Script" path="res://scripts/ui/comparison_scene.gd" id="8_compare"]
 [ext_resource type="Script" path="res://scripts/ui/evo_sim_view.gd" id="9_simview"]
 [ext_resource type="Script" path="res://scripts/ui/evo_indicators.gd" id="10_indicators"]
+[ext_resource type="Script" path="res://scripts/ui/nape_indicator.gd" id="11_napeind"]
 
 [sub_resource type="LabelSettings" id="LabelSettings_ui"]
 font_size = 24
@@ -75,6 +76,15 @@ offset_right = 500.0
 offset_bottom = 78.0
 text = "Baking navigation..."
 label_settings = SubResource("LabelSettings_ui")
+
+[node name="NapeIndicator" type="Control" parent="GameManager/UI"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("11_napeind")
 
 [node name="LoadingScreen" type="CanvasLayer" parent="GameManager"]
 layer = 10

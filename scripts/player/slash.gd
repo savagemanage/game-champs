@@ -4,14 +4,17 @@ extends Node3D
 ## _physics_process forwards each physics tick via tick(player, delta).
 ##
 ## WHY A SWEEP, NOT A TIMED Area3D: enabling an Area3D for a few frames misses
-## fast swings (the blade tunnels across the nape between physics frames). We
-## track the blade tip's world position each frame and, on a slash, cast a shape
-## from LAST frame's tip toward THIS frame's tip, covering the whole gap.
+## fast swings (the blade tunnels across the nape). We track the blade tip each
+## frame and, on a slash, cast a shape from LAST tip to THIS tip over the gap.
 ##
-## DAMAGE IS CONTINUOUS (steering section 2, spec 1):
-##   damage = f(relative speed, angle between blade travel dir and nape normal)
-## At/above KILL_THRESHOLD the titan dies; below it it is staggered and the
-## player is bounced off. See titan.gd for how the titan consumes this.
+## DAMAGE IS CONTINUOUS (steering section 2, spec 1): damage = f(relative speed,
+## angle between blade travel dir and nape normal). At/above KILL_THRESHOLD the
+## titan dies; below it it staggers and the player is bounced. See titan.gd.
+
+## Presentation-only, ADDITIVE signal (FEAT-002): emitted AFTER receive_slash
+## resolves so a HUD readout can show actual damage vs threshold. It does NOT
+## alter the kill decision, RESULT_* codes, telemetry, or the bounce.
+signal slash_resolved(damage: float, threshold: float, killed: bool, world_pos: Vector3)
 
 # =====================================================================
 # TUNING CONSTANTS (no magic numbers below this block)
@@ -53,17 +56,15 @@ const RESULT_KILL: int = 3
 var _player: CharacterBody3D
 @onready var _sweep: ShapeCast3D = $Sweep
 
-# Aim source: the mouse-look camera. The blade tip is derived from this so the
+# Aim source: the mouse-look camera. The blade tip rides its centre ray so the
 # sweep travels toward the crosshair (grapple.gd raycasts from the same camera).
 var _camera: Camera3D
 
-# Optional presentation helper (particles / camera shake / crosshair / blade
-# swing). Wired as a sibling "SlashFX" node in Player.tscn; guarded so slash
-# logic runs fine without it.
+# Optional presentation helper (particles / shake / crosshair / blade swing),
+# a sibling "SlashFX" node in Player.tscn; guarded so slash runs without it.
 var _fx: Node
 
-# Blade tip world position on the previous physics frame, used as the sweep
-# origin so the cast covers the full inter-frame gap.
+# Blade tip on the previous physics frame: the sweep origin covering the gap.
 var _last_tip: Vector3 = Vector3.ZERO
 var _have_last: bool = false
 
@@ -177,6 +178,8 @@ func _resolve_hit(collider: Object, surface_normal: Vector3, hit_point: Vector3)
 	if titan.has_method("receive_slash"):
 		# receive_slash returns true if the hit was lethal.
 		var killed: bool = bool(titan.call("receive_slash", damage, KILL_THRESHOLD))
+		# Presentation-only readout (FEAT-002); additive, changes nothing above.
+		slash_resolved.emit(damage, KILL_THRESHOLD, killed, hit_point)
 		if not killed:
 			_bounce_player(nape_normal)
 			if _fx != null and _fx.has_method("play_hit"):
@@ -187,24 +190,21 @@ func _resolve_hit(collider: Object, surface_normal: Vector3, hit_point: Vector3)
 		return RESULT_KILL
 	return RESULT_WHIFF
 
-
 ## damage = f(relative speed, angle between blade travel dir and nape normal).
-## Speed term rewards a fast blade; angle term rewards slicing ALONG the nape
-## surface (travel perpendicular to the normal), not stabbing into it.
+## The exact terms live in the shared pure module DamagePreview so the read-only
+## nape indicator can preview the SAME number without duplicating the maths.
 func _compute_damage(nape_normal: Vector3) -> float:
-	var speed: float = _blade_velocity.length()
-	var speed_term: float = clampf(speed / SPEED_REFERENCE, 0.0, 1.0) * SPEED_WEIGHT
+	return DamagePreview.compute(_blade_velocity, nape_normal, SPEED_REFERENCE, SPEED_WEIGHT, ANGLE_WEIGHT)
 
-	var angle_term: float = 0.0
-	if speed > 0.001 and nape_normal.length() > 0.001:
-		var travel_dir: Vector3 = _blade_velocity / speed
-		var n: Vector3 = nape_normal.normalized()
-		# alignment: 1 when travel is parallel to the normal, 0 when tangent.
-		# A clean slice runs tangent to the surface, so the angle term is
-		# strongest when travel is perpendicular to the normal (1 - |dot|).
-		var alignment: float = absf(travel_dir.dot(n))
-		angle_term = (1.0 - alignment) * ANGLE_WEIGHT
-	return speed_term + angle_term
+
+# =====================================================================
+# READ-ONLY ACCESSORS (FEAT-002; presentation only, no state change). Let the
+# nape indicator preview LETHAL vs WEAK from the exact live terms.
+# =====================================================================
+
+func projected_damage(nape_normal: Vector3) -> float: return _compute_damage(nape_normal)
+func kill_threshold() -> float: return KILL_THRESHOLD
+func blade_speed() -> float: return _blade_velocity.length()
 
 
 ## Throw the player off after a weak (sub-threshold) slash: reflect velocity and

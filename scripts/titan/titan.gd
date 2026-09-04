@@ -3,8 +3,8 @@ extends CharacterBody3D
 ## Movement is NavigationAgent3D pathfinding with hybrid gene steering on top
 ## (steering 3.1): the nav agent guarantees the path, the injected genome (spec
 ## 3) only re-weights direction terms; no genome = pure navigation (gen-1). The
-## navmesh is baked at RUNTIME behind the loading screen. Damage is CONTINUOUS:
-## receive_slash(damage, threshold) kills at/above the threshold (emits
+## navmesh bakes at RUNTIME behind the loading screen. Damage is CONTINUOUS:
+## receive_slash(damage, threshold) kills at/above threshold (emits
 ## titan_killed), else staggers the titan + bounces the player.
 
 signal titan_killed
@@ -29,22 +29,20 @@ var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity", 
 var _player: Node3D = null
 var _dead: bool = false
 var _stagger_timer: float = 0.0
-# Audio bookkeeping (presentation only): footstep cadence + one-shot aggro cue.
-var _footstep_timer: float = 0.0
-var _aggroed: bool = false
+var _footstep_timer: float = 0.0  # footstep cadence (presentation only)
+var _aggroed: bool = false  # one-shot aggro cue guard
 # Injected evolved genome (spec 3). Empty = pure navigation (gen-1 baseline); the
 # 6 weights parameterise SteeringPolicy on top of the guaranteed nav path.
 var _genes: PackedFloat32Array = PackedFloat32Array()
 # Measured player-preferred entry dir (telemetry); flankBias scales its opposite.
 var _preferred_entry_dir: Vector3 = Vector3.ZERO
 var _neighbours: Array = []  # sibling titans for separation / encircle terms
-# Horizontal velocity the agent's avoidance says is safe this frame. Kept so 4
-# titans in a narrow corridor steer around each other instead of jamming.
+# Safe horizontal velocity from avoidance so 4 titans don't jam in a corridor.
 var _safe_velocity: Vector3 = Vector3.ZERO
 
 
 func _ready() -> void:
-	# Avoidance feeds a "safe velocity" back via velocity_computed.
+	# Avoidance feeds a "safe velocity" back via velocity_computed (corridors).
 	if _nav_agent != null and _nav_agent.avoidance_enabled:
 		_nav_agent.velocity_computed.connect(_on_safe_velocity)
 	if Telemetry != null:  # spec 2: recorder samples this titan each tick
@@ -56,8 +54,7 @@ func _exit_tree() -> void:
 		Telemetry.unregister_titan(self)
 
 
-func _on_safe_velocity(safe: Vector3) -> void:
-	_safe_velocity = safe
+func _on_safe_velocity(safe: Vector3) -> void: _safe_velocity = safe
 
 
 ## GameManager hands us the player directly. Otherwise we look it up.
@@ -127,8 +124,7 @@ func _chase(delta: float) -> void:
 		var move_dir: Vector3 = _steer(nav_dir)
 		_drive_horizontal(move_dir * MOVE_SPEED)
 		_face_direction(move_dir, delta)
-		# Audio (FEAT-002): footstep cadence while actively chasing (3D thud).
-		_footstep_timer -= delta
+		_footstep_timer -= delta  # footstep cadence while chasing (FEAT-002)
 		if _footstep_timer <= 0.0:
 			_footstep_timer = FOOTSTEP_INTERVAL
 			TitanSfx.footstep(global_position)
@@ -191,9 +187,7 @@ func _facing_toward_player() -> Vector3:
 		return Vector3.ZERO
 	var to_player: Vector3 = _player.global_position - global_position
 	to_player.y = 0.0
-	if to_player.length() < 0.001:
-		return Vector3.ZERO
-	return to_player.normalized()
+	return Vector3.ZERO if to_player.length() < 0.001 else to_player.normalized()
 
 
 # =====================================================================
@@ -213,6 +207,13 @@ func get_nape_normal() -> Vector3:
 	return base.rotated(Vector3.UP, yaw).normalized()  # turn-away yaw about +Y
 
 
+## Read-only (FEAT-002): Nape node world position, for the nape indicator to
+## screen-project; head-height fallback. is_alive() gates dead titans out.
+func get_nape_world_position() -> Vector3:
+	return _nape.global_position if _nape != null else global_position + Vector3.UP * 10.0
+func is_alive() -> bool: return not _dead
+
+
 ## Called by the player's slash sweep. `damage` (continuous, from relative speed
 ## and blade-vs-nape angle) kills at/above `threshold`. Returns true if lethal.
 func receive_slash(damage: float, threshold: float) -> bool:
@@ -221,8 +222,7 @@ func receive_slash(damage: float, threshold: float) -> bool:
 	if damage >= threshold:
 		die()
 		return true
-	# Sub-threshold: brief stagger (the caller bounces the player off).
-	_stagger_timer = STAGGER_DURATION
+	_stagger_timer = STAGGER_DURATION  # sub-threshold: stagger; caller bounces
 	return false
 
 
@@ -231,8 +231,7 @@ func die() -> void:
 	if _dead:
 		return
 	_dead = true
-	# Audio (FEAT-002): the titan's death boom (blade impact ting is the slash FX).
-	TitanSfx.death(global_position)
+	TitanSfx.death(global_position)  # death boom (FEAT-002)
 	titan_killed.emit()
 
 
