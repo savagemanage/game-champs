@@ -22,3 +22,6 @@ exports/
 .DS_Store
 Thumbs.db
 *~
+
+# Agent task state.
+.agents/
