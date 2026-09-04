@@ -21,10 +21,9 @@ extends Node3D
 const NAPE_COLLISION_MASK: int = 8
 ## Cooldown between slashes (seconds) so it reads as a deliberate swing.
 const SLASH_COOLDOWN: float = 0.3
-## Local offset of the blade tip from the CAMERA (in camera/aim space): slightly
-## down and to the right of screen centre, reaching forward (-Z) so the tip sits
-## in front of where the crosshair points at a sensible melee reach.
-const BLADE_TIP_OFFSET: Vector3 = Vector3(0.35, -0.35, -2.8)
+## Melee reach (metres) along the aim ray: the tip rides the camera's
+## centre-screen ray so the sweep endpoint lands under the crosshair.
+const BLADE_REACH: float = 2.8
 
 ## Damage model. damage = speed_term + angle_term, both normalised roughly to
 ## [0..1]-ish scales, then compared to KILL_THRESHOLD.
@@ -229,14 +228,15 @@ func _bounce_player(nape_normal: Vector3) -> void:
 # =====================================================================
 
 func _blade_tip_world() -> Vector3:
-	# Derive the tip from the camera/aim orientation, NOT the player body (which
-	# never rotates with mouse-look), so the sweep travels toward the crosshair.
+	# Ride the camera's centre-screen ray at BLADE_REACH so the sweep endpoint
+	# sits under the crosshair for any FOV/projection (mirrors grapple.gd).
 	if _camera == null:
 		_camera = get_viewport().get_camera_3d()
 	if _camera != null:
-		return _camera.global_transform * BLADE_TIP_OFFSET
+		var centre: Vector2 = get_viewport().get_visible_rect().size * 0.5
+		return _camera.project_ray_origin(centre) + _camera.project_ray_normal(centre) * BLADE_REACH
 	if _player != null:
-		return _player.global_transform * BLADE_TIP_OFFSET
+		return _player.global_transform * Vector3(0.0, 0.0, -BLADE_REACH)
 	return global_position
 
 
