@@ -101,3 +101,27 @@ on first editor open. Therefore:
 
 We deliberately did NOT hand-author `.import` files: they would be immediately
 re-ignored by `.gitignore` and could drift from what the editor generates.
+
+## Character models (FEAT-005)
+
+### Downloaded (license-verified, CC0 / public domain)
+
+| File | Source URL | Author | License | Notes |
+|---|---|---|---|---|
+| `assets/models/player_character.glb` | https://kenney.nl/assets/blocky-characters (pack "Blocky Characters" 2.0 via https://kenney.nl/media/pages/assets/blocky-characters/8369c0cf30-1749547469/kenney_blocky-characters_20.zip, model `character-p`) | Kenney (www.kenney.nl) | CC0 1.0 — https://creativecommons.org/publicdomain/zero/1.0/ | Player humanoid visual. Real binary GLB verified (magic bytes `glTF`, glTF v2, ~128 KB), single texture atlas embedded into the GLB as a bufferView (self-contained, `images[0]` has no `uri`), 0 skins (node-transform rig with an `AnimationPlayer`, 27 clips incl. `idle`/`walk`/`sprint`/`die`). Instanced VISUAL-ONLY under `scenes/Player.tscn` → `CharacterModel` (`scripts/player/character_visual.gd`); the CharacterBody3D CapsuleShape3D collider is unchanged. |
+| `assets/models/titan_character.glb` | https://kenney.nl/assets/blocky-characters (same pack/zip as above, model `character-b`) | Kenney (www.kenney.nl) | CC0 1.0 — https://creativecommons.org/publicdomain/zero/1.0/ | Titan humanoid visual, scaled ~8× to fill the 12-unit capsule. Real binary GLB verified (magic bytes `glTF`, glTF v2, ~126 KB), texture atlas embedded as a bufferView (no external PNG), 0 skins (node-transform rig + `AnimationPlayer`). Instanced VISUAL-ONLY under `scenes/Titan.tscn` → `CharacterModel`; the CapsuleShape3D collider and NavigationAgent3D are unchanged, and the nape Area3D (collision_layer 8) + red NapeMarker were repositioned to the back of the scaled model's neck. |
+
+Kenney releases all of "Blocky Characters" 2.0 under CC0 1.0 (the pack's bundled
+`License.txt` states "License: (Creative Commons Zero, CC0)").
+
+### One-time editor import (same caveat as textures / sky / OGG)
+
+Both `.glb` files ship WITHOUT their `.import` sidecars because this repo's
+`.gitignore` excludes `*.import` (identical policy to the textures, sky HDRI and
+`ui_click.ogg` above). Godot generates the `.import` files (and the imported
+mesh/texture under `.godot/imported/`) on the first editor open. Until that
+import, `ResourceLoader.exists("res://assets/models/…glb")` is false, so
+`scripts/player/character_visual.gd` leaves the primitive **capsule mesh**
+visible as the fallback and never crashes or renders empty — the models are
+loaded at runtime (guarded), NOT as baked `ext_resource`s, so the scenes still
+text-parse in a headless/first-open run.

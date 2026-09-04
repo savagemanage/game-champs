@@ -1,9 +1,10 @@
-[gd_scene load_steps=11 format=3 uid="uid://b1player0scene1"]
+[gd_scene load_steps=12 format=3 uid="uid://b1player0scene1"]
 
 [ext_resource type="Script" path="res://scripts/player/player.gd" id="1_player"]
 [ext_resource type="Script" path="res://scripts/player/grapple.gd" id="2_grapple"]
 [ext_resource type="Script" path="res://scripts/player/slash.gd" id="3_slash"]
 [ext_resource type="Script" path="res://scripts/player/slash_fx.gd" id="4_slashfx"]
+[ext_resource type="Script" path="res://scripts/player/character_visual.gd" id="5_charvis"]
 
 [sub_resource type="LabelSettings" id="LabelSettings_crosshair"]
 font_size = 28
@@ -42,6 +43,15 @@ shape = SubResource("CapsuleShape3D_1")
 [node name="MeshInstance3D" type="MeshInstance3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
 mesh = SubResource("CapsuleMesh_1")
+
+[node name="CharacterModel" type="Node3D" parent="."]
+script = ExtResource("5_charvis")
+model_path = "res://assets/models/player_character.glb"
+model_scale = 1.35
+model_y_offset = 0.0
+model_yaw_deg = 180.0
+fallback_mesh_path = NodePath("../MeshInstance3D")
+play_idle = true
 
 [node name="YawPivot" type="Node3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, 0)
