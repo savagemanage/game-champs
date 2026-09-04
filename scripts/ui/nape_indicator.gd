@@ -3,19 +3,18 @@ class_name NapeIndicator
 ## Per-titan, screen-projected NAPE LEGIBILITY overlay (FEAT-002). This game has
 ## NO health pool by design: a kill is gated on SLASH QUALITY, not HP, so this
 ## overlay teaches the quality model instead of drawing a health bar.
-##
 ## For each alive titan it screen-projects the nape (Camera3D.unproject_position,
-## NO SubViewport) and draws a state word - GUARDED (grey, nape turned away),
-## else LETHAL (green) if the player's CURRENT aim would deal projected_damage
-## >= kill_threshold, else WEAK (amber) - plus a meter = damage / threshold. Both
-## read the EXACT live terms via slash.gd's read-only accessors; no maths here.
+## NO SubViewport) and draws a state word - GUARDED (turned away), else EXPOSED
+## (facing, no live swing), else LETHAL if the player's CURRENT aim would deal
+## projected_damage >= kill_threshold, else WEAK - plus a meter = damage /
+## threshold. Both read the EXACT live terms via slash.gd; no maths here.
 ##
-## On a real slash it shows a brief floating readout of ACTUAL damage vs
-## threshold ("1.4 / 1.2  KILL" / "0.7 / 1.2  WEAK"), driven by the ADDITIVE
-## slash.gd `slash_resolved` signal. Presentation only: mutates nothing and
-## touches no damage / telemetry / evolution state. Web-safe (gl_compatibility):
-## pure _draw + _process, no SubViewport, no threading; every lookup is guarded
-## so a missing player / Slash node / camera draws nothing instead of crashing.
+## On a real slash it shows a brief floating readout of ACTUAL damage vs threshold
+## ("1.4 / 1.2  KILL" / "0.7 / 1.2  WEAK"), driven by the ADDITIVE slash.gd
+## `slash_resolved` signal. Presentation only: mutates nothing and touches no
+## damage / telemetry / evolution state. Web-safe (gl_compatibility): pure _draw +
+## _process, no SubViewport, no threading; every lookup guarded so a missing
+## player / Slash node / camera draws nothing instead of crashing.
 
 # =====================================================================
 # TUNING CONSTANTS (no magic numbers below this block)
@@ -50,6 +49,7 @@ const POPUP_FONT_SIZE: int = 20
 const KEY_LETHAL: String = "NAPE_LETHAL"
 const KEY_WEAK: String = "NAPE_WEAK"
 const KEY_GUARDED: String = "NAPE_GUARDED"
+const KEY_EXPOSED: String = "NAPE_EXPOSED"
 const KEY_DMG_KILL: String = "DMG_READOUT_KILL"
 const KEY_DMG_WEAK: String = "DMG_READOUT_WEAK"
 
@@ -178,6 +178,7 @@ func _draw_one(cam: Camera3D, titan: Node, nape_pos: Vector3, player_pos: Vector
 	var threshold: float = 1.2
 	var ratio: float = 0.0
 	var lethal: bool = false
+	var aiming: bool = false  # true once the live swing lands real damage
 	if _slash != null and is_instance_valid(_slash) and _slash.has_method("projected_damage"):
 		if _slash.has_method("kill_threshold"):
 			threshold = _slash.kill_threshold()
@@ -185,13 +186,14 @@ func _draw_one(cam: Camera3D, titan: Node, nape_pos: Vector3, player_pos: Vector
 		if threshold > 0.0:
 			ratio = clampf(dmg / threshold, 0.0, 1.0)
 		lethal = dmg >= threshold
+		aiming = dmg > 0.0
 
-	var state_text: String = tr(KEY_GUARDED) if not exposed else (tr(KEY_LETHAL) if lethal else tr(KEY_WEAK))
+	# GUARDED (turned away) -> EXPOSED (facing, no live swing) -> WEAK / LETHAL.
+	var state_key: String = KEY_GUARDED if not exposed else (KEY_EXPOSED if not aiming else (KEY_LETHAL if lethal else KEY_WEAK))
 	var color: Color = GUARDED_COLOR if not exposed else (LETHAL_COLOR if lethal else WEAK_COLOR)
-
 	var screen: Vector2 = cam.unproject_position(nape_pos + Vector3.UP * WORLD_Y_OFFSET)
 	_draw_meter(screen, color, ratio, not exposed)
-	_draw_text(screen - Vector2(0.0, METER_HEIGHT + METER_LABEL_GAP), state_text, color, LABEL_FONT_SIZE)
+	_draw_text(screen - Vector2(0.0, METER_HEIGHT + METER_LABEL_GAP), tr(state_key), color, LABEL_FONT_SIZE)
 
 
 func _draw_meter(centre: Vector2, color: Color, ratio: float, guarded: bool) -> void:
