@@ -71,7 +71,7 @@ const CROSSHAIR_SUB_SIZE: int = 38
 
 ## Node paths on the Player (set in Player.tscn) so this helper can find the
 ## blade pivot, the pitch pivot (for shake) and the crosshair label.
-@export var blade_pivot_path: NodePath = NodePath("../YawPivot/PitchPivot/BladePivot")
+@export var blade_pivot_path: NodePath = NodePath("../YawPivot/PitchPivot/Camera3D/BladePivot")
 @export var shake_pivot_path: NodePath = NodePath("../YawPivot/PitchPivot")
 @export var crosshair_path: NodePath = NodePath("../Grapple/CrosshairLayer/Crosshair")
 
