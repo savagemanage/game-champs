@@ -127,6 +127,8 @@ func _spawn_titans() -> void:
 		titan.global_transform = spawns[i % spawns.size()]
 		if titan.has_method("set_target") and _player != null:
 			titan.set_target(_player)
+		if titan.has_method("set_citizen_manager") and _citizen_manager != null:
+			titan.set_citizen_manager(_citizen_manager)  # FEAT-004 eat hook
 		if titan.has_signal("titan_killed"):
 			titan.titan_killed.connect(_on_titan_killed)
 		_titans.append(titan)
@@ -203,7 +205,6 @@ func _on_all_citizens_eaten() -> void:
 
 func get_titans() -> Array: return _titans  # read-only: nape indicator enumerates
 func get_citizen_manager() -> Node: return _citizen_manager  # FEAT-004/005 hook
-
 func _clear_titans() -> void:
 	for titan in _titans:
 		if titan != null and is_instance_valid(titan):
@@ -211,8 +212,7 @@ func _clear_titans() -> void:
 	_titans.clear()
 
 func _reset_player() -> void:
-	if _player == null:
-		return
+	if _player == null: return
 	_player.global_transform = _player_spawn_transform()
 	if _player is CharacterBody3D:
 		(_player as CharacterBody3D).velocity = Vector3.ZERO

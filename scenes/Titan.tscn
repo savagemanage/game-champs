@@ -1,4 +1,4 @@
-[gd_scene load_steps=9 format=3 uid="uid://a1titan0scene1"]
+[gd_scene load_steps=10 format=3 uid="uid://a1titan0scene1"]
 
 [ext_resource type="Script" path="res://scripts/titan/titan.gd" id="1_titan"]
 [ext_resource type="Script" path="res://scripts/player/character_visual.gd" id="2_charvis"]
@@ -19,6 +19,10 @@ metallic_specular = 0.35
 rim_enabled = true
 rim = 0.4
 rim_tint = 0.3
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_bodyhit"]
+radius = 1.7
+height = 5.0
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_nape"]
 size = Vector3(1.8, 1.4, 1.0)
@@ -44,6 +48,14 @@ shape = SubResource("CapsuleShape3D_body")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 0)
 mesh = SubResource("CapsuleMesh_body")
 surface_material_override/0 = SubResource("StandardMaterial3D_body")
+
+[node name="BodyHit" type="Area3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 0)
+collision_layer = 16
+collision_mask = 0
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="BodyHit"]
+shape = SubResource("CapsuleShape3D_bodyhit")
 
 [node name="CharacterModel" type="Node3D" parent="."]
 script = ExtResource("2_charvis")

@@ -1,50 +1,47 @@
 extends Node3D
 ## Slash attack via a ShapeCast3D SWEEP between the previous and current physics
-## frame. Attached as child node "Slash" under the Player; the player's
-## _physics_process forwards each physics tick via tick(player, delta).
+## frame. Child node "Slash" under the Player; player.gd forwards each physics
+## tick via tick(player, delta). WHY A SWEEP not a timed Area3D: a briefly-enabled
+## Area3D misses fast swings (the blade tunnels across the nape); we track the
+## blade tip each frame and cast the shape from LAST tip to THIS tip over the gap.
 ##
-## WHY A SWEEP, NOT A TIMED Area3D: enabling an Area3D for a few frames misses
-## fast swings (the blade tunnels across the nape). We track the blade tip each
-## frame and, on a slash, cast a shape from LAST tip to THIS tip over the gap.
-##
-## DAMAGE IS CONTINUOUS (see handoff.md, spec 1): damage = f(relative speed,
-## angle between blade travel dir and nape normal). At/above KILL_THRESHOLD the
-## titan dies; below it it staggers and the player is bounced. See titan.gd.
+## DAMAGE IS CONTINUOUS: base damage = f(relative speed, blade-vs-surface angle).
+## The titan owns a FIXED HP pool (FEAT-004): the sweep can strike the NAPE (weak
+## point, big crit multiplier) or the BODY (a fraction), so it takes MULTIPLE hits
+## unless a clean nape crit lands. receive_hit(base_damage, is_nape) subtracts HP
+## and returns whether the titan died; sub-lethal hits still stagger + bounce.
 
-## Presentation-only, ADDITIVE signal (FEAT-002): emitted AFTER receive_slash
-## resolves so a HUD readout can show actual damage vs threshold. It does NOT
-## alter the kill decision, RESULT_* codes, telemetry, or the bounce.
-signal slash_resolved(damage: float, threshold: float, killed: bool, world_pos: Vector3)
+## Presentation-only, ADDITIVE signal emitted AFTER receive_hit resolves so a HUD
+## readout can show HP removed / remaining. Alters nothing above. `applied` is the
+## per-part HP subtracted; `hp_ratio` is the survivor's HP fraction (0 on kill).
+signal slash_resolved(applied: float, hp_ratio: float, killed: bool, is_nape: bool, world_pos: Vector3)
 
 # =====================================================================
 # TUNING CONSTANTS (no magic numbers below this block)
 # =====================================================================
 
-## Physics layer the slash sweep collides with. Layer 4 = nape_hitbox.
-const NAPE_COLLISION_MASK: int = 8
+## Physics layers the sweep collides with. Bit 8 = titan NAPE (weak point), bit
+## 16 = titan BODY; the mask (24) registers both so a hit anywhere hittable deals
+## damage and the nape only adds a crit multiplier (titan-side), not a kill gate.
+const NAPE_LAYER_BIT: int = 8
+const BODY_LAYER_BIT: int = 16
+const HITTABLE_COLLISION_MASK: int = NAPE_LAYER_BIT | BODY_LAYER_BIT
 ## Cooldown between slashes (seconds) so it reads as a deliberate swing.
 const SLASH_COOLDOWN: float = 0.3
 ## Melee reach (metres) along the aim ray: the tip rides the camera's
 ## centre-screen ray so the sweep endpoint lands under the crosshair.
 const BLADE_REACH: float = 2.8
 
-## Damage model. damage = speed_term + angle_term, both normalised roughly to
-## [0..1]-ish scales, then compared to KILL_THRESHOLD.
-## Relative speed (m/s) that on its own maps to a "full" speed term.
-const SPEED_REFERENCE: float = 30.0
-## Weight of the speed term in the damage sum.
+## Damage model: base_damage = speed_term + angle_term, each ~[0..1] (so base
+## rides in ~[0..2]); the titan converts it to HP loss with a per-part multiplier.
+const SPEED_REFERENCE: float = 30.0  ## rel speed (m/s) mapping to a full term
 const SPEED_WEIGHT: float = 1.0
-## Weight of the angle term (blade travel aligned against the nape normal).
 const ANGLE_WEIGHT: float = 1.0
-## Combined damage at/above which the titan dies.
-const KILL_THRESHOLD: float = 1.2
 
-## Bounce impulse (m/s) applied to the player away from the nape on a
-## sub-threshold hit, so a weak slash throws the player off.
+## Bounce impulse (m/s) pushing the player away from the nape on a sub-lethal hit.
 const BOUNCE_IMPULSE: float = 18.0
 
-## Slash result codes reported to telemetry. These MUST match
-## EngagementWindow.RESULT_* so the recorder classifies windows consistently.
+## Slash result codes reported to telemetry (MUST match EngagementWindow.RESULT_*).
 const RESULT_WHIFF: int = 1
 const RESULT_SUB: int = 2
 const RESULT_KILL: int = 3
@@ -55,22 +52,15 @@ const RESULT_KILL: int = 3
 
 var _player: CharacterBody3D
 @onready var _sweep: ShapeCast3D = $Sweep
-
-# Aim source: the mouse-look camera. The blade tip rides its centre ray so the
-# sweep travels toward the crosshair (grapple.gd raycasts from the same camera).
+# Aim source: mouse-look camera; the blade tip rides its centre ray toward the
+# crosshair (grapple.gd raycasts from the same camera).
 var _camera: Camera3D
-
-# Optional presentation helper (particles / shake / crosshair / blade swing),
-# a sibling "SlashFX" node in Player.tscn; guarded so slash runs without it.
+# Optional sibling "SlashFX" helper (particles / shake); guarded so slash runs
+# without it.
 var _fx: Node
-
-# Blade tip on the previous physics frame: the sweep origin covering the gap.
-var _last_tip: Vector3 = Vector3.ZERO
+var _last_tip: Vector3 = Vector3.ZERO  # blade tip last physics frame (sweep origin)
 var _have_last: bool = false
-
-# Blade travel velocity (m/s) across the last physics step, for the damage calc.
-var _blade_velocity: Vector3 = Vector3.ZERO
-
+var _blade_velocity: Vector3 = Vector3.ZERO  # blade travel (m/s) last step, for damage
 var _cooldown: float = 0.0
 
 
@@ -79,7 +69,7 @@ func _ready() -> void:
 	if _sweep != null:
 		# We drive the cast manually each slash; keep it off between frames.
 		_sweep.enabled = false
-		_sweep.collision_mask = NAPE_COLLISION_MASK
+		_sweep.collision_mask = HITTABLE_COLLISION_MASK
 		_sweep.collide_with_areas = true
 		_sweep.collide_with_bodies = true
 
@@ -132,10 +122,9 @@ func _do_sweep(current_tip: Vector3) -> void:
 	_sweep.global_transform = Transform3D(Basis.IDENTITY, origin)
 	_sweep.target_position = current_tip - origin
 	_sweep.enabled = true
-	# force_shapecast_update runs the sweep immediately this frame.
-	_sweep.force_shapecast_update()
+	_sweep.force_shapecast_update()  # run the sweep immediately this frame
 
-	# Result classification for telemetry: whiff (no hit) / sub-threshold / kill.
+	# Result classification for telemetry: whiff (no hit) / sub-lethal / kill.
 	var result: int = RESULT_WHIFF
 	var rel_speed: float = _blade_velocity.length()
 	if _sweep.is_colliding():
@@ -158,8 +147,9 @@ func _do_sweep(current_tip: Vector3) -> void:
 		Telemetry.report_slash(current_tip, travel_dir, rel_speed, result)
 
 
-## Resolve a sweep hit against a nape collider: compute continuous damage and
-## either kill or stagger+bounce. Returns the telemetry result code.
+## Resolve a sweep hit against a titan hitbox: compute base damage, flag NAPE
+## (weak point) vs BODY, and let the titan subtract HP with the right multiplier.
+## A sub-lethal hit still staggers + bounces. Returns the telemetry result code.
 func _resolve_hit(collider: Object, surface_normal: Vector3, hit_point: Vector3) -> int:
 	if collider == null:
 		return RESULT_WHIFF
@@ -167,21 +157,27 @@ func _resolve_hit(collider: Object, surface_normal: Vector3, hit_point: Vector3)
 	if titan == null:
 		return RESULT_WHIFF
 
-	# Nape normal: prefer the titan's reported nape normal, else the sweep's
-	# surface normal.
-	var nape_normal: Vector3 = surface_normal
-	if titan.has_method("get_nape_normal"):
-		nape_normal = titan.call("get_nape_normal")
+	var is_nape: bool = _is_nape_collider(collider as Node)
+	# Nape hit uses the titan's reported nape normal (weak point); a body hit
+	# uses the sweep's surface normal, for the damage angle term and the bounce.
+	var normal: Vector3 = surface_normal
+	if is_nape and titan.has_method("get_nape_normal"):
+		normal = titan.call("get_nape_normal")
 
-	var damage: float = _compute_damage(nape_normal)
+	var base_damage: float = _compute_damage(normal)
 
-	if titan.has_method("receive_slash"):
-		# receive_slash returns true if the hit was lethal.
-		var killed: bool = bool(titan.call("receive_slash", damage, KILL_THRESHOLD))
-		# Presentation-only readout (FEAT-002); additive, changes nothing above.
-		slash_resolved.emit(damage, KILL_THRESHOLD, killed, hit_point)
+	if titan.has_method("receive_hit"):
+		var killed: bool = bool(titan.call("receive_hit", base_damage, is_nape))
+		var hp_ratio: float = 0.0
+		if not killed and titan.has_method("hp_ratio"):
+			hp_ratio = float(titan.call("hp_ratio"))
+		# Presentation-only readout; additive, changes nothing above.
+		var applied: float = base_damage
+		if titan.has_method("last_applied_damage"):
+			applied = float(titan.call("last_applied_damage"))
+		slash_resolved.emit(applied, hp_ratio, killed, is_nape, hit_point)
 		if not killed:
-			_bounce_player(nape_normal)
+			_bounce_player(normal)
 			if _fx != null and _fx.has_method("play_hit"):
 				_fx.call("play_hit", hit_point, false)
 			return RESULT_SUB
@@ -190,25 +186,29 @@ func _resolve_hit(collider: Object, surface_normal: Vector3, hit_point: Vector3)
 		return RESULT_KILL
 	return RESULT_WHIFF
 
-## damage = f(relative speed, angle between blade travel dir and nape normal).
-## The exact terms live in the shared pure module DamagePreview so the read-only
-## nape indicator can preview the SAME number without duplicating the maths.
-func _compute_damage(nape_normal: Vector3) -> float:
-	return DamagePreview.compute(_blade_velocity, nape_normal, SPEED_REFERENCE, SPEED_WEIGHT, ANGLE_WEIGHT)
+
+## True when the struck collider is the NAPE weak point (layer bit 8), false for
+## the body (bit 16). Reads the collider's own layer so a rename still classifies.
+func _is_nape_collider(node: Node) -> bool:
+	var cur: Node = node
+	while cur != null and not (cur is CollisionObject3D):
+		cur = cur.get_parent()
+	if cur is CollisionObject3D:
+		return ((cur as CollisionObject3D).collision_layer & NAPE_LAYER_BIT) != 0
+	return false
 
 
-# =====================================================================
-# READ-ONLY ACCESSORS (FEAT-002; presentation only, no state change). Let the
-# nape indicator preview LETHAL vs WEAK from the exact live terms.
-# =====================================================================
+## base_damage = f(rel speed, blade-vs-surface angle) via shared pure DamagePreview.
+func _compute_damage(surface_normal: Vector3) -> float:
+	return DamagePreview.compute(_blade_velocity, surface_normal, SPEED_REFERENCE, SPEED_WEIGHT, ANGLE_WEIGHT)
 
-func projected_damage(nape_normal: Vector3) -> float: return _compute_damage(nape_normal)
-func kill_threshold() -> float: return KILL_THRESHOLD
+
+# Read-only accessors (presentation only) for the indicator preview.
+func projected_damage(surface_normal: Vector3) -> float: return _compute_damage(surface_normal)
 func blade_speed() -> float: return _blade_velocity.length()
 
-
-## Throw the player off after a weak (sub-threshold) slash: reflect velocity and
-## add an impulse along the nape normal.
+## Throw the player off after a sub-lethal slash: cancel inward velocity and add
+## an outward impulse along the nape normal.
 func _bounce_player(nape_normal: Vector3) -> void:
 	if _player == null:
 		return
@@ -216,7 +216,6 @@ func _bounce_player(nape_normal: Vector3) -> void:
 	if n.length() < 0.001:
 		n = Vector3.UP
 	n = n.normalized()
-	# Cancel inward velocity and add an outward impulse.
 	var into: float = _player.velocity.dot(-n)
 	if into > 0.0:
 		_player.velocity += n * into
@@ -240,11 +239,11 @@ func _blade_tip_world() -> Vector3:
 	return global_position
 
 
-## Walk up from the struck collider to the titan node (has receive_slash).
+## Walk up from the struck collider to the titan node (has receive_hit).
 func _find_titan(node: Node) -> Node:
 	var cur: Node = node
 	while cur != null:
-		if cur.has_method("receive_slash"):
+		if cur.has_method("receive_hit"):
 			return cur
 		cur = cur.get_parent()
 	return null

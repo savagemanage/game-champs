@@ -1,20 +1,16 @@
 extends Control
 class_name NapeIndicator
-## Per-titan, screen-projected NAPE LEGIBILITY overlay (FEAT-002). This game has
-## NO health pool by design: a kill is gated on SLASH QUALITY, not HP, so this
-## overlay teaches the quality model instead of drawing a health bar.
-## For each alive titan it screen-projects the nape (Camera3D.unproject_position,
-## NO SubViewport) and draws a state word - GUARDED (turned away), else EXPOSED
-## (facing, no live swing), else LETHAL if the player's CURRENT aim would deal
-## projected_damage >= kill_threshold, else WEAK - plus a meter = damage /
-## threshold. Both read the EXACT live terms via slash.gd; no maths here.
-##
-## On a real slash it shows a brief floating readout of ACTUAL damage vs threshold
-## ("1.4 / 1.2  KILL" / "0.7 / 1.2  WEAK"), driven by the ADDITIVE slash.gd
-## `slash_resolved` signal. Presentation only: mutates nothing and touches no
-## damage / telemetry / evolution state. Web-safe (gl_compatibility): pure _draw +
-## _process, no SubViewport, no threading; every lookup guarded so a missing
-## player / Slash node / camera draws nothing instead of crashing.
+## Per-titan, screen-projected NAPE weak-point overlay. Titans own a FIXED HP pool
+## (FEAT-004) with the nape as a WEAK POINT, so this teaches the part-damage model
+## on top of an HP meter. For each alive TITAN (never a citizen) it screen-projects
+## the nape (Camera3D.unproject_position, NO SubViewport) and draws a state word -
+## GUARDED (nape turned away), else EXPOSED (facing, no live swing), else LETHAL if
+## the CURRENT aim would remove >= the titan's remaining HP as a NAPE crit, else
+## WEAK - plus a meter = titan HP remaining. Projected part damage is read from the
+## live slash terms + the titan's own multiplier; no maths here. On a real slash it
+## floats a readout of HP removed + survivor HP ("-18 HP (32% left)" / "KILL") via
+## the ADDITIVE slash.gd `slash_resolved` signal. Presentation only; web-safe (pure
+## _draw + _process, no SubViewport/threads; every lookup guarded).
 
 # =====================================================================
 # TUNING CONSTANTS (no magic numbers below this block)
@@ -51,7 +47,7 @@ const KEY_WEAK: String = "NAPE_WEAK"
 const KEY_GUARDED: String = "NAPE_GUARDED"
 const KEY_EXPOSED: String = "NAPE_EXPOSED"
 const KEY_DMG_KILL: String = "DMG_READOUT_KILL"
-const KEY_DMG_WEAK: String = "DMG_READOUT_WEAK"
+const KEY_DMG_HP: String = "DMG_READOUT_HP"
 
 ## Where to find the GameManager (owns get_titans()) and the player.
 @export var game_manager_path: NodePath = ^"../.."
@@ -123,11 +119,17 @@ func _process(delta: float) -> void:
 		queue_redraw()
 
 
-## Additive readout hook: remember a floating popup at the hit position.
-func _on_slash_resolved(damage: float, threshold: float, killed: bool, world_pos: Vector3) -> void:
-	var key: String = KEY_DMG_KILL if killed else KEY_DMG_WEAK
-	var text: String = tr(key) % [damage, threshold]
-	var color: Color = LETHAL_COLOR if killed else WEAK_COLOR
+## Additive readout hook (FEAT-004): remember a floating popup of the HP removed
+## and the survivor's remaining HP fraction (or KILL) at the hit position.
+func _on_slash_resolved(applied: float, hp_ratio: float, killed: bool, is_nape: bool, world_pos: Vector3) -> void:
+	var text: String
+	var color: Color
+	if killed:
+		text = tr(KEY_DMG_KILL)
+		color = LETHAL_COLOR
+	else:
+		text = tr(KEY_DMG_HP) % [applied, hp_ratio * 100.0]
+		color = WEAK_COLOR
 	_popups.append({"pos": world_pos, "text": text, "color": color, "age": 0.0})
 	queue_redraw()
 
@@ -174,25 +176,26 @@ func _draw_one(cam: Camera3D, titan: Node, nape_pos: Vector3, player_pos: Vector
 	if nape_normal.length() > 0.001 and to_player.length() > 0.001:
 		exposed = nape_normal.normalized().dot(to_player.normalized()) > EXPOSE_DOT_THRESHOLD
 
-	# Projected damage from the SAME live terms (read-only), if the aim is known.
-	var threshold: float = 1.2
-	var ratio: float = 0.0
+	# HP meter (FEAT-004): the bar now tracks the titan's remaining HP fraction.
+	var hp_ratio: float = 1.0
+	if titan.has_method("hp_ratio"):
+		hp_ratio = clampf(titan.hp_ratio(), 0.0, 1.0)
+
+	# Would the CURRENT aim, landing as a NAPE crit, fell the titan? (live terms)
 	var lethal: bool = false
-	var aiming: bool = false  # true once the live swing lands real damage
+	var aiming: bool = false  # true once the live swing would deal real damage
 	if _slash != null and is_instance_valid(_slash) and _slash.has_method("projected_damage"):
-		if _slash.has_method("kill_threshold"):
-			threshold = _slash.kill_threshold()
-		var dmg: float = _slash.projected_damage(nape_normal)
-		if threshold > 0.0:
-			ratio = clampf(dmg / threshold, 0.0, 1.0)
-		lethal = dmg >= threshold
-		aiming = dmg > 0.0
+		var base: float = _slash.projected_damage(nape_normal)
+		aiming = base > 0.0
+		if titan.has_method("part_damage") and titan.has_method("remaining_hp"):
+			var remaining_hp: float = titan.remaining_hp()
+			lethal = titan.part_damage(base, true) >= remaining_hp and remaining_hp > 0.0
 
 	# GUARDED (turned away) -> EXPOSED (facing, no live swing) -> WEAK / LETHAL.
 	var state_key: String = KEY_GUARDED if not exposed else (KEY_EXPOSED if not aiming else (KEY_LETHAL if lethal else KEY_WEAK))
 	var color: Color = GUARDED_COLOR if not exposed else (LETHAL_COLOR if lethal else WEAK_COLOR)
 	var screen: Vector2 = cam.unproject_position(nape_pos + Vector3.UP * WORLD_Y_OFFSET)
-	_draw_meter(screen, color, ratio, not exposed)
+	_draw_meter(screen, color, hp_ratio, not exposed)
 	_draw_text(screen - Vector2(0.0, METER_HEIGHT + METER_LABEL_GAP), tr(state_key), color, LABEL_FONT_SIZE)
 
 
@@ -233,15 +236,12 @@ func _draw_text(centre: Vector2, text: String, color: Color, size: int) -> void:
 	draw_string(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, size, color)
 
 
-# =====================================================================
-# HELPERS (read-only)
-# =====================================================================
-
+# --- HELPERS (read-only). _titans() only enumerates GameManager titans, never
+# citizens, so a citizen can never receive a nape/GUARDED tag. ---
 func _titans() -> Array:
 	if _game_manager != null and is_instance_valid(_game_manager) and _game_manager.has_method("get_titans"):
 		return _game_manager.get_titans()
 	return []
-
 
 func _player_position() -> Vector3:
 	var player: Node = _find_player()

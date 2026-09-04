@@ -142,7 +142,7 @@ placeholders below are updated by their owning feature:_
 
 - **Aim fix (first-person crosshair/slash alignment) - DONE (FEAT-002).**
 - **Wall-Maria concentric-wall map + citizen area - DONE (FEAT-003).**
-- Titan HP + per-part damage + citizen-eating + wall-breach behaviour.
+- **Titan fixed HP + per-part damage + wall-assault/breach/eat behaviour - DONE (FEAT-004).**
 - GA fitness / gene redefinition toward infiltration (citizens-eaten + breach).
 - Character models (soldiers + giant humanoids) via the guarded GLB loader.
 
@@ -251,6 +251,87 @@ breach opens (breach behaviour is FEAT-004).
 + loss-threshold invariants). `xvfb-run -a ./tools/screenshot.sh` renders the
 first-person view of the plaza: the concentric wall ring, the gate tower, and the
 citizen capsules inside read clearly (titans spawn outside the wall, out of the
+default frame).
+
+### Titan fixed HP + per-part damage + wall-assault/breach/eat (FEAT-004)
+
+**Fixed HP + nape-as-weak-point (retires the old one-shot kill-threshold).** The
+titan now owns a FIXED HP pool and takes MULTIPLE hits; the nape is a WEAK POINT
+(critical multiplier), NOT the sole kill gate. All values are FIXED consts at the
+top of `scripts/titan/titan.gd`; NOTHING scales with the round number.
+
+- `TITAN_MAX_HP = 100.0`.
+- Slash `base_damage = f(relative speed, blade-vs-surface angle)` is unchanged
+  (shared pure `scripts/player/damage_preview.gd`), riding in ~`[0..2]`.
+- **BODY hit:** HP loss `= base_damage * BODY_DAMAGE_MULT (22.0)`. A clean body
+  hit removes ~44 HP, so it takes ~3 solid body hits to fell (glancing hits far
+  less).
+- **NAPE crit:** HP loss `= base_damage * NAPE_DAMAGE_MULT (90.0)` (~4x the
+  body). A clean nape crit removes ~180 HP and one-shots; a moderate nape hit
+  still takes a big chunk. `receive_hit(base_damage, is_nape) -> bool` applies the
+  per-part multiplier, subtracts HP, and returns whether the hit was lethal;
+  `die()` stays idempotent and emits `titan_killed` once. Sub-lethal hits still
+  set the stagger timer and the caller (`slash.gd`) bounces the player.
+
+**Two hittable parts on distinct layers, one ShapeCast3D SWEEP (never a timed
+Area3D).** `scenes/Titan.tscn` keeps the `Nape` `Area3D` on **collision_layer 8**
+(weak point) and adds a **`BodyHit` `Area3D` on collision_layer 16** (a
+`CapsuleShape3D` r1.7 h5.0 at local y=2.5 wrapping the torso). `scripts/player/
+slash.gd` widens the sweep mask to `NAPE_LAYER_BIT (8) | BODY_LAYER_BIT (16) = 24`
+so a hit ANYWHERE hittable registers; `_is_nape_collider()` reads the struck
+collider's own `collision_layer` to decide the multiplier. The additive,
+presentation-only `slash_resolved` signal was extended to
+`(applied, hp_ratio, killed, is_nape, world_pos)` so the HUD can show HP removed
+and the survivor's remaining HP.
+
+**Nape indicator is now HP-based (`scripts/ui/nape_indicator.gd`).** The meter is
+the titan's remaining HP fraction (`hp_ratio()`); the state word is GUARDED (nape
+turned away) -> EXPOSED (facing, no live swing) -> LETHAL (the current aim, as a
+NAPE crit via `titan.part_damage(base, true)`, would remove >= `remaining_hp()`)
+-> WEAK. The floating popup reads `-%.0f HP (%.0f%% left)` or `KILL`. The overlay
+enumerates ONLY `GameManager.get_titans()` (never citizens), so a citizen can
+never receive a nape/GUARDED tag (a distant titan's nape may still screen-project
+NEAR a citizen; the tag belongs to the titan, not the citizen).
+
+**New/changed localized strings (`locale/ui.csv`, EN+KO, via `tr()`):**
+`DMG_READOUT_KILL` (now just `KILL`), `DMG_READOUT_HP` (`-%.0f HP (%.0f%% left)`),
+replacing the retired `DMG_READOUT_WEAK`. `NAPE_LETHAL/WEAK/GUARDED/EXPOSED` reused.
+
+**Wall-assault -> breach -> seek-citizen -> eat state machine.** The nav TARGET is
+no longer the player; the titan is an INFILTRATOR. Target selection lives in the
+PURE `scripts/titan/titan_objective.gd` (`class_name TitanObjective`, RefCounted,
+plain-data only, headless-verifiable), returning `STATE_APPROACH_WALL ->
+STATE_SEEK_CITIZEN -> STATE_EAT`:
+- **APPROACH_WALL:** outside `WALL_RADIUS (34)`, steer toward the nearest gate gap
+  (`GATE_POSITIONS` = the two omitted wall segments at +Z / -Z, radius 34). The
+  runtime-baked navmesh only connects through the gate gaps, so titans funnel to
+  a gate to breach.
+- **SEEK_CITIZEN:** once inside the ring, nav toward the nearest LIVE citizen.
+- **EAT:** within `EAT_REACH (3.5 m)` horizontally, call
+  `CitizenManager.eat_nearest(pos, EAT_REACH)` (throttled by `EAT_COOLDOWN 1.2 s`),
+  which decrements the citizen count and drives the FEAT-003 round-LOST path.
+
+`titan.gd` reads live citizen positions via the injected `CitizenManager`
+(`set_citizen_manager()`, wired in `game_manager.gd::_spawn_titans`) - only
+plain vectors / a bool cross that boundary, so `scripts/evo` stays pure. The
+hybrid steering + genome flow is intact (`set_genes`/`preferred_entry` still feed
+`SteeringPolicy` on top of the guaranteed nav path); gene MEANINGS are formally
+redefined in FEAT-005. `MOVE_SPEED`, HP, breach geometry, `TITAN_COUNT` are ALL
+fixed consts - **fixed stats, difficulty only from evolution** is reaffirmed.
+
+**File-size note.** Adding HP + the objective states pushed `titan.gd`, `slash.gd`
+and `nape_indicator.gd` over the 250-line cap, so comments were tightened and the
+objective maths was extracted into `titan_objective.gd`; all `.gd` are back at
+<= 250 lines.
+
+**Verify.** `./tools/check.sh` and `./tools/test.sh` both exit 0. A deterministic
+`tests/cases/titan_hp_damage.gd` asserts: a nape crit removes more HP than a body
+hit for equal base damage (crit factor `NAPE/BODY`), a solid body hit is NOT a
+one-shot but N body hits fell, a clean nape crit one-shots, `die()`/HP is
+idempotent + clamps at 0, the base-damage formula still matches DamagePreview, and
+the approach-wall -> seek-citizen -> eat objective transitions. `xvfb-run -a
+./tools/screenshot.sh` renders the first-person plaza; the wall ring, gate towers
+and capsule NPCs read clearly (titans spawn outside the wall, mostly out of the
 default frame).
 
 ## Workflow
