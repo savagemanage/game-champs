@@ -1,25 +1,27 @@
 extends CharacterBody3D
-## The titan (FEAT-004): an INFILTRATOR that assaults the Wall-Maria ring, breaches
-## a gate gap, then hunts and EATS the plaza citizens. NavigationAgent3D pathing +
-## hybrid gene steering on top (3.1): nav guarantees the path, genes only re-weight
-## direction (no genome = pure nav). The nav TARGET is now the wall/breach then a
-## citizen (NOT the player); selection lives in the pure TitanObjective helper.
-## The titan owns a FIXED HP pool. receive_hit(base_damage, is_nape) turns the
-## slash base damage into HP loss with a PER-PART multiplier - the nape is a WEAK
-## POINT (big crit), the body a fraction, so it survives several body hits but a
-## clean nape crit can fell it. die() emits titan_killed once. NO round-scaling.
+## The titan: an INFILTRATOR that assaults the Wall-Maria ring, breaches a gate
+## gap, then hunts and EATS the plaza citizens. NavigationAgent3D pathing + hybrid
+## gene steering on top (see handoff.md): nav guarantees the path, genes only
+## re-weight direction (no genome = pure nav). Nav TARGET is the wall/breach then
+## a citizen (NOT the player); selection lives in the pure TitanObjective helper.
+## The 6 genes are the FEAT-005 action-defense set (wallAssault, citizenSeek,
+## playerAvoid, spreadOut, separation, aggression). The titan owns a FIXED HP
+## pool; receive_hit(base_damage, is_nape) turns slash base damage into HP loss
+## with a PER-PART multiplier (nape = big crit, body = a fraction), so it survives
+## several body hits but a clean nape crit can fell it. die() emits titan_killed
+## once. NO round-scaling.
 
 signal titan_killed
 
-# --- TUNING CONSTANTS. INVARIANT: every value FIXED, NEVER round-scaled (spec 3). ---
+# --- TUNING CONSTANTS. INVARIANT: every value FIXED, NEVER round-scaled. ---
 const MOVE_SPEED: float = 6.0  ## ground move speed (m/s)
 const TURN_SPEED: float = 3.0  ## turn-to-face rate (rad/s)
 const ARRIVAL_DISTANCE: float = 2.5  ## nav "arrived" distance (m)
 const STAGGER_DURATION: float = 0.9  ## freeze after a sub-lethal slash (s)
 const FOOTSTEP_INTERVAL: float = 0.55  ## seconds between footstep sfx
 
-# HP + part damage (base rides ~[0..2]): clean BODY hit ~2.0*22=44 HP (~3 to fell);
-# clean NAPE crit ~2.0*90=180 one-shots (weak point, ~4x body). All round-fixed.
+# HP + part damage (base rides ~[0..2]): clean BODY hit ~44 HP (~3 to fell);
+# clean NAPE crit ~180 one-shots (~4x body). All round-fixed.
 const TITAN_MAX_HP: float = 100.0
 const BODY_DAMAGE_MULT: float = 22.0
 const NAPE_DAMAGE_MULT: float = 90.0
@@ -44,14 +46,13 @@ var _hp: float = TITAN_MAX_HP  # fixed pool; chipped by receive_hit
 var _last_applied: float = 0.0  # HP removed by the most recent hit (HUD readout)
 var _state: int = TitanObjective.STATE_APPROACH_WALL  # approach -> seek -> eat
 var _eat_timer: float = 0.0  # chew cadence between eats
-# Scene-side CitizenManager (plain-data hooks: get_citizen_positions/eat_nearest).
-# Injected by GameManager; titan.gd reads it, scripts/evo never does.
+var _breached: bool = false  # reported to telemetry once, on first wall crossing
+# CitizenManager injected by GameManager (plain-data hooks only; evo never reads).
 var _citizen_manager: Node = null
-# Injected evolved genome (spec 3). Empty = pure nav (gen-1); the 6 weights
-# parameterise SteeringPolicy on top of the guaranteed nav path.
+# Injected evolved genome. Empty = pure nav (gen-1); the 6 weights parameterise
+# SteeringPolicy on top of the guaranteed nav path.
 var _genes: PackedFloat32Array = PackedFloat32Array()
-var _preferred_entry_dir: Vector3 = Vector3.ZERO  # measured; flankBias uses opposite
-var _neighbours: Array = []  # sibling titans for separation / encircle terms
+var _neighbours: Array = []  # sibling titans for separation / spread terms
 var _safe_velocity: Vector3 = Vector3.ZERO  # avoidance-safe horizontal velocity
 
 
@@ -61,22 +62,18 @@ func _ready() -> void:
 	if Telemetry != null:
 		Telemetry.register_titan(self)
 
-
 func _exit_tree() -> void:
 	if Telemetry != null:
 		Telemetry.unregister_titan(self)
 
 func _on_safe_velocity(safe: Vector3) -> void: _safe_velocity = safe
-# Player is NOT the nav target now (wall then citizen); kept for steering/nape-yaw.
+# Player is NOT the nav target (wall then citizen); kept for steering / threat.
 func set_target(player: Node3D) -> void: _player = player
-# CitizenManager injected by GameManager: plain-data reads + eat_nearest() only.
-func set_citizen_manager(manager: Node) -> void: _citizen_manager = manager
-func set_neighbours(neighbours: Array) -> void: _neighbours = neighbours  # sep/encircle
+func set_citizen_manager(manager: Node) -> void: _citizen_manager = manager  # plain-data hooks
+func set_neighbours(neighbours: Array) -> void: _neighbours = neighbours  # sep/spread
+# Inject the FIXED evolved weights for THIS round. Empty = pure nav (gen-1).
+func set_genes(genes: PackedFloat32Array) -> void: _genes = genes
 
-## Inject the FIXED evolved weights for THIS round (spec-3 3.8). Empty = pure nav.
-func set_genes(genes: PackedFloat32Array, preferred_entry_dir: Vector3) -> void:
-	_genes = genes
-	_preferred_entry_dir = preferred_entry_dir
 
 func _physics_process(delta: float) -> void:
 	if _dead:
@@ -105,9 +102,8 @@ func _physics_process(delta: float) -> void:
 	_apply_gravity(delta)
 	move_and_slide()
 
-# --- OBJECTIVE (assault wall -> breach -> seek citizen -> eat) via nav + steer ---
-## Resolve this tick's objective (wall/breach then a citizen), drive the nav
-## agent toward it, and consume the nearest citizen when in reach.
+# Resolve this tick's objective (wall/breach then a citizen), drive the nav agent
+# toward it, and consume the nearest citizen when in reach.
 func _advance(delta: float) -> void:
 	if _nav_agent == null:
 		return
@@ -115,14 +111,20 @@ func _advance(delta: float) -> void:
 	var plan: Dictionary = TitanObjective.resolve(
 		_state, global_position, GATE_POSITIONS, citizens, WALL_RADIUS, EAT_REACH)
 	_state = int(plan["state"])
+	# Report the first wall breach (crossed inside the ring) to telemetry.
+	if not _breached and TitanObjective.is_inside_wall(global_position, WALL_RADIUS):
+		_breached = true
+		if Telemetry != null and Telemetry.has_method("report_breach"):
+			Telemetry.report_breach()
 	if bool(plan["eat"]) and _eat_timer <= 0.0 and _try_eat():
 		_eat_timer = EAT_COOLDOWN
 	_nav_agent.target_position = plan["target"]
 	var to_next: Vector3 = _nav_agent.get_next_path_position() - global_position
 	to_next.y = 0.0
 	if to_next.length() > ARRIVAL_DISTANCE:
-		var move_dir: Vector3 = _steer(to_next.normalized())  # nav path + gene re-weight
-		_drive_horizontal(move_dir * MOVE_SPEED)
+		var move_dir: Vector3 = _steer(to_next.normalized(), citizens)  # nav path + gene re-weight
+		var spd: float = SteeringPolicy.speed_scale(_genes) if _genes.size() >= Genome.GENE_COUNT else 1.0
+		_drive_horizontal(move_dir * MOVE_SPEED * spd)
 		_face_direction(move_dir, delta)
 		_footstep_timer -= delta
 		if _footstep_timer <= 0.0:
@@ -152,15 +154,25 @@ func _try_eat() -> bool:
 
 
 ## Hybrid steering direction; falls back to raw nav dir when no genome injected.
-func _steer(nav_dir: Vector3) -> Vector3:
-	if _genes.size() < Genome.GENE_COUNT or _player == null:
+## Builds the measured directions the genes weight (breach gap, nearest citizen,
+## spread tangent) so the evolved weights re-shape the guaranteed nav path.
+## wallAssault drives the breach only while OUTSIDE; citizenSeek only once INSIDE
+## (conditions in code, weights in genes) - matches BackgroundSim.
+func _steer(nav_dir: Vector3, citizens: Array) -> Vector3:
+	if _genes.size() < Genome.GENE_COUNT:
 		return nav_dir
-	var p_pos: Vector3 = _player.global_position
-	var p_vel: Vector3 = (_player as CharacterBody3D).velocity if _player is CharacterBody3D else Vector3.ZERO
+	var p_pos: Vector3 = _player.global_position if _player != null else global_position + Vector3(0.0, 0.0, 1.0e6)
+	var inside: bool = TitanObjective.is_inside_wall(global_position, WALL_RADIUS)
+	var gate: Vector3 = TitanObjective.nearest_gate(global_position, GATE_POSITIONS)
+	var near: Dictionary = TitanObjective.nearest_citizen(global_position, citizens)
+	var breach_dir: Vector3 = SimGeometry.flat(gate - global_position) if not inside else Vector3.ZERO
+	var seek: bool = inside and bool(near["found"])
+	var citizen_dir: Vector3 = SimGeometry.flat((near["pos"] as Vector3) - global_position) if seek else Vector3.ZERO
+	var group: Array = [global_position]
+	group.append_array(_neighbour_positions())
 	return SteeringPolicy.compute_move_dir(
-		_genes, global_position, nav_dir, p_pos, p_vel,
-		_preferred_entry_dir, _neighbour_positions(), p_pos)
-
+		_genes, global_position, nav_dir, breach_dir, citizen_dir, p_pos,
+		SimGeometry.spread_dir(0, group, global_position), _neighbour_positions())
 
 func _neighbour_positions() -> Array:
 	var out: Array = []
@@ -190,24 +202,14 @@ func _face_direction(dir: Vector3, delta: float) -> void:
 		return
 	rotation.y = rotate_toward(rotation.y, atan2(dir.x, dir.z), TURN_SPEED * delta)
 
-
 # --- NAPE / DAMAGE (continuous, HP + per-part multiplier) ---
 
-## World-space outward nape normal (back of neck = local -Z) with the evolved
-## napeYaw upper-body turn-away applied (spec-3 3.2).
+## World-space outward nape normal (back of neck = local -Z). The nape is now a
+## FIXED weak point (the napeYaw gene was retired), so this is just the facing.
 func get_nape_normal() -> Vector3:
-	var base: Vector3 = (global_transform.basis * Vector3(0.0, 0.0, -1.0)).normalized()
-	if _genes.size() < Genome.GENE_COUNT or _player == null:
-		return base
-	var forward: Vector3 = (global_transform.basis * Vector3(0.0, 0.0, 1.0)).normalized()
-	var approach: Vector3 = _player.global_position - global_position
-	approach.y = 0.0
-	var yaw: float = SteeringPolicy.nape_yaw_amount(_genes, forward, approach)
-	return base.rotated(Vector3.UP, yaw).normalized()
+	return (global_transform.basis * Vector3(0.0, 0.0, -1.0)).normalized()
 
-
-# Nape world position (for the indicator to screen-project) + read-only HP
-# accessors for the HUD (presentation only). is_alive() gates dead titans out.
+# Nape world position (indicator screen-project) + read-only HP accessors (HUD).
 func get_nape_world_position() -> Vector3:
 	return _nape.global_position if _nape != null else global_position + Vector3.UP * 10.0
 func is_alive() -> bool: return not _dead
@@ -245,6 +247,4 @@ func _find_player() -> Node3D:
 	if group_players.size() > 0:
 		return group_players[0] as Node3D
 	var root := get_tree().current_scene
-	if root != null and root.has_node("Player"):
-		return root.get_node("Player") as Node3D
-	return null
+	return root.get_node("Player") as Node3D if root != null and root.has_node("Player") else null

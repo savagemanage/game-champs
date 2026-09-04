@@ -1,24 +1,29 @@
 extends RefCounted
 class_name EvoSnapshot
-## Read / write the evolution snapshot user://wirework_evo.json, EXACTLY per the
-## schema in steering 3.11:
+## Read / write the evolution snapshot user://wirework_evo.json (see handoff.md
+## "Design"). SCHEMA v2 (action-defense genes):
 ##
 ##   {
-##     "version": 1,
+##     "version": 2,
 ##     "generation": 0,
-##     "gene_names": ["navFollow","interceptLead","flankBias","napeYaw","separation","encircle"],
-##     "baseline": [2.0, 0.0, 0.0, 0.0, 1.0, 0.0],
+##     "gene_names": ["wallAssault","citizenSeek","playerAvoid","spreadOut","separation","aggression"],
+##     "baseline": [2.5, 2.5, 0.0, 0.0, 1.0, 1.0],
 ##     "best": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
 ##     "history": [{ "gen": 0, "best": 0.0, "mean": 0.0, "variance": [0,0,0,0,0,0] }],
 ##     "player_model": { "bins": [], "decay": 0.9 },
 ##     "rounds_played": 0
 ##   }
 ##
+## v1 was the retired grapple-era schema with the six nape genes
+## [navFollow, interceptLead, flankBias, napeYaw, separation, encircle] and
+## baseline [2.0,0,0,0,1.0,0]. _migrate() upgrades a v1 file to v2 WITHOUT
+## crashing (the gene meanings changed, so the old best genome is discarded and
+## the best resets to the v2 baseline; history + player_model + rounds are kept).
+##
 ## PURE persistence: this class references no game scene / node beyond FileAccess
-## + JSON (steering section 2). A SAVE FAILURE MUST NOT CRASH - FileAccess.open
-## null returns are guarded (push_warning + continue). A missing / corrupt file
-## loads as a clean default. gene_names is written so the format can be reused in
-## another project; a version bump routes through _migrate() (hook stub below).
+## + JSON. A SAVE FAILURE MUST NOT CRASH - FileAccess.open null returns are
+## guarded (push_warning + continue). A missing / corrupt file loads as a clean
+## default. gene_names is written so the format can be reused / inspected.
 
 # =====================================================================
 # CONSTANTS
@@ -26,7 +31,8 @@ class_name EvoSnapshot
 
 const SAVE_PATH: String = "user://wirework_evo.json"
 ## Current schema version. Bump this AND extend _migrate() when the shape changes.
-const SCHEMA_VERSION: int = 1
+## v1 = grapple-era nape genes; v2 = action-defense infiltration genes (FEAT-005).
+const SCHEMA_VERSION: int = 2
 ## Player-model decay recorded in the snapshot (mirrors PlayerModel.DECAY).
 const PLAYER_MODEL_DECAY: float = 0.9
 
@@ -51,7 +57,7 @@ static func build(generation: int, best_genes: PackedFloat32Array, history: Arra
 	}
 
 
-## Append one generation record to a history array (steering 3.11 history shape).
+## Append one generation record to a history array (history entry shape).
 static func make_history_entry(gen: int, best: float, mean: float, variance: Array) -> Dictionary:
 	return {"gen": gen, "best": best, "mean": mean, "variance": variance.duplicate()}
 
@@ -113,12 +119,14 @@ static func best_genes_from(snapshot: Dictionary) -> PackedFloat32Array:
 
 
 # =====================================================================
-# MIGRATION HOOK (steering 3.11: bump version + migrate on schema change)
+# MIGRATION (bump version + migrate on schema change; never crashes)
 # =====================================================================
 
-## Migrate an older snapshot up to SCHEMA_VERSION. Currently version 1 is the
-## only shape, so this fills any missing keys from the default and stamps the
-## current version. Extend with per-version steps when the schema evolves.
+## Migrate an older snapshot up to SCHEMA_VERSION. A v1 (grapple-era) file has an
+## incompatible gene set, so v1->v2 DISCARDS the old best genome and resets it to
+## the v2 baseline (mapping the old 6 floats forward would be meaningless: the
+## gene MEANINGS changed). History / player_model / rounds are preserved. Any
+## missing keys are filled from the default. Never raises on an old file.
 static func _migrate(snapshot: Dictionary) -> Dictionary:
 	var version: int = int(snapshot.get("version", 0))
 	if version > SCHEMA_VERSION:
@@ -127,14 +135,28 @@ static func _migrate(snapshot: Dictionary) -> Dictionary:
 			% [version, SCHEMA_VERSION])
 		return snapshot
 
-	# --- future per-version migration steps go here ---
-	# if version < 2: snapshot = _v1_to_v2(snapshot)
+	if version < 2:
+		snapshot = _v1_to_v2(snapshot)
 
 	var base: Dictionary = default_snapshot()
 	for key in base.keys():
 		if not snapshot.has(key):
 			snapshot[key] = base[key]
 	snapshot["version"] = SCHEMA_VERSION
-	# gene_names are always canonical (format-reuse contract).
+	# gene_names + baseline are always canonical (they define the current schema).
 	snapshot["gene_names"] = Genome.GENE_NAMES.duplicate()
+	snapshot["baseline"] = Genome.BASELINE.duplicate()
+	return snapshot
+
+
+## v1 (grapple-era nape genes) -> v2 (action-defense genes). The gene set is
+## incompatible, so drop the old best (reset to the v2 baseline) and reset the
+## generation to 0 - the old fitness curve measured a different objective. Keep
+## the player_model + rounds_played so telemetry continuity survives.
+static func _v1_to_v2(snapshot: Dictionary) -> Dictionary:
+	snapshot["best"] = Genome.BASELINE.duplicate()
+	snapshot["generation"] = 0
+	# The old history recorded nape-era fitness/variance for a 6-gene set that no
+	# longer means the same thing; clear it so the new objective starts clean.
+	snapshot["history"] = []
 	return snapshot

@@ -1,14 +1,14 @@
 extends SceneTree
-## STUB report dumper (spec 0). For now it writes ONLY the CSV header to --out
-## and quits 0. Spec 3 (evolution-core) fills the body by running the GA and
-## appending one row per generation. The INTERFACE (args + columns) is fixed
-## now so spec 3 does not have to change tools/report.sh.
+## STUB report dumper. For now it writes ONLY the CSV header to --out and quits
+## 0. The GA harness (scripts/evo/harness/ga_harness.gd) is the real numeric
+## verification; this stub keeps the tools/report.sh interface (args + columns)
+## stable. The columns are the action-defense gene variances (FEAT-005).
 ##
 ## Usage (via tools/report.sh):
 ##   godot --headless -s res://tests/report.gd -- --seed=42 --generations=200 --out=reports/evo.csv
 
-## EXACT CSV columns (fixed contract for spec 3). Do not reorder or rename.
-const CSV_HEADER: String = "gen,best,mean,var_navFollow,var_interceptLead,var_flankBias,var_napeYaw,var_separation,var_encircle"
+## EXACT CSV columns (action-defense gene set, FEAT-005). Do not reorder/rename.
+const CSV_HEADER: String = "gen,best,mean,var_wallAssault,var_citizenSeek,var_playerAvoid,var_spreadOut,var_separation,var_aggression"
 
 const DEFAULT_SEED: int = 42
 const DEFAULT_GENERATIONS: int = 200
@@ -45,7 +45,7 @@ func _initialize() -> void:
 	file.store_line(CSV_HEADER)
 	file.close()
 
-	# seed_value / generations are accepted now; spec 3 uses them for the body.
-	print("[report] wrote CSV header to %s (seed=%d generations=%d) - STUB, body added in spec 3."
+	# seed_value / generations are accepted for interface stability.
+	print("[report] wrote CSV header to %s (seed=%d generations=%d) - STUB; run the GA harness for the body."
 		% [out_path, seed_value, generations])
 	quit(0)

@@ -4,21 +4,17 @@ extends Node
 ## It samples the player + titans each physics tick, forwards plain data to the
 ## RoundRecorder (pure), keeps the last 3 rounds' engagement windows in a RING
 ## BUFFER, owns the shared 24-bin PlayerModel, and persists everything to
-## user:// as JSON. Gameplay code (grapple/slash/titan/game_manager) reports
-## events here via the register_*/report_* API so that scripts/telemetry/ stays
-## free of game-scene TYPES (it receives Vector3s / floats only).
-##
-## Wired as an autoload named "Telemetry" (see project.godot [autoload]).
-##
-## PERSISTENCE (see handoff.md): user:// + FileAccess + JSON only. A save
-## failure MUST NOT crash - FileAccess.open null returns are guarded, we
-## push_warning and continue. A missing / corrupt file loads as a clean state.
+## user:// as JSON. Gameplay code reports events here via the register_*/report_*
+## API so scripts/telemetry/ stays free of game-scene TYPES (Vector3s / floats).
+## Wired as autoload "Telemetry". PERSISTENCE (see handoff.md): user:// +
+## FileAccess + JSON only, save-failure-non-fatal (guarded null, push_warning),
+## missing/corrupt loads clean.
 
 # =====================================================================
 # TUNING CONSTANTS (no magic numbers below this block)
 # =====================================================================
 
-## Keep the engagement windows of the last N rounds (spec-3 point 3.5: 3 rounds).
+## Keep the engagement windows of the last N rounds (3 rounds).
 ## Persistence path / schema version live in TelemetryStore.
 const ROUND_RING_SIZE: int = 3
 
@@ -37,6 +33,12 @@ var player_model: PlayerModel = PlayerModel.new()
 
 var _rounds_played: int = 0
 var _recording: bool = false
+
+## Action-defense per-round counters (FEAT-005), reported by gameplay: citizens
+## eaten, titans that breached the wall, titans the player felled.
+var _citizens_eaten: int = 0
+var _breaches: int = 0
+var _titans_killed_by_player: int = 0
 
 ## Registered live game references, used only to SAMPLE (read) each tick. Stored
 ## as plain Node refs; we extract Vector3/float before handing to the recorder.
@@ -77,6 +79,9 @@ func unregister_titan(titan: Node3D) -> void:
 func start_round() -> void:
 	_recorder = RoundRecorder.new()
 	_recording = true
+	_citizens_eaten = 0
+	_breaches = 0
+	_titans_killed_by_player = 0
 
 
 func end_round() -> void:
@@ -134,6 +139,20 @@ func report_slash(pos: Vector3, dir: Vector3, rel_speed: float, result: int) -> 
 	_recorder.record_slash(pos, dir, rel_speed, result)
 
 
+# --- Action-defense objective events (FEAT-005). Plain ints only. ---
+func report_citizen_eaten() -> void:  # a titan ate a citizen this round
+	if _recording:
+		_citizens_eaten += 1
+
+func report_breach() -> void:  # a titan crossed inside a gate this round
+	if _recording:
+		_breaches += 1
+
+func report_titan_killed() -> void:  # the player felled a titan this round
+	if _recording:
+		_titans_killed_by_player += 1
+
+
 # =====================================================================
 # SNAPSHOT HELPERS (Node -> plain data; the boundary of scene coupling)
 # =====================================================================
@@ -182,6 +201,11 @@ func _titan_snapshots() -> Array:
 func _build_summary(rec: RoundRecorder) -> Dictionary:
 	return {
 		"round": _rounds_played,
+		# Action-defense objective metrics (FEAT-005) - the primary readout;
+		# the grapple-era engagement aggregates below are secondary now.
+		"citizens_eaten": _citizens_eaten,
+		"breaches": _breaches,
+		"titans_killed_by_player": _titans_killed_by_player,
 		"left_approach_ratio": rec.left_approach_ratio(),
 		"avg_engagement_distance": rec.average_engagement_distance(),
 		"avg_entry_speed": rec.average_entry_speed(),

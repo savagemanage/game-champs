@@ -1,9 +1,10 @@
 extends Control
 class_name EvoSimView
-## ONE 2D top-down mini-sim drawn on a SINGLE CanvasItem via _draw (spec-4: NOT
-## a 3D render - a reduced 3D render is too heavy for single-thread
-## web export). It renders titan dots, one player dot, and ONE nape-direction
-## line segment per titan, driven by a SimReplay trace of an engagement window.
+## ONE 2D top-down mini-sim drawn on a SINGLE CanvasItem via _draw (NOT a 3D
+## render - a reduced 3D render is too heavy for single-thread web export). It
+## renders titan dots, one player dot, the (static) citizen dots, and ONE heading
+## line segment per titan, driven by a SimReplay trace of a scenario window (the
+## titans assault the wall then hunt the citizens).
 ##
 ## The trace comes from the PURE evo module (SimReplay.trace_window / the same
 ## fixed-step integration BackgroundSim scores with); this Control only maps the
@@ -22,9 +23,11 @@ const PADDING: float = 6.0
 ## Dot radii (px) in the LARGE view; scaled down for the small grid via `scale_`.
 const PLAYER_RADIUS: float = 7.0
 const TITAN_RADIUS: float = 5.0
-## Nape segment length (px) at scale 1.0.
+## Heading segment length (px) at scale 1.0.
 const NAPE_LEN: float = 16.0
 const NAPE_WIDTH: float = 2.0
+## Citizen dot radius (px) at scale 1.0.
+const CITIZEN_RADIUS: float = 3.5
 
 const BG_COLOR: Color = Color(0.07, 0.08, 0.12, 1.0)
 const BG_DIM_COLOR: Color = Color(0.04, 0.04, 0.06, 1.0)
@@ -32,7 +35,8 @@ const BORDER_COLOR: Color = Color(0.28, 0.34, 0.5, 0.9)
 const TOP_BORDER_COLOR: Color = Color(1.0, 0.82, 0.25, 1.0)
 const PLAYER_COLOR: Color = Color(0.35, 0.85, 1.0, 1.0)
 const TITAN_COLOR: Color = Color(0.95, 0.45, 0.3, 1.0)
-const NAPE_COLOR: Color = Color(1.0, 0.9, 0.4, 0.9)
+const NAPE_COLOR: Color = Color(1.0, 0.9, 0.4, 0.9)  ## titan heading segment
+const CITIZEN_COLOR: Color = Color(0.5, 1.0, 0.6, 0.95)
 
 # =====================================================================
 # STATE
@@ -85,7 +89,11 @@ func _draw() -> void:
 	var lo: Vector2 = _trace.get("bounds_min", Vector2(-1, -1))
 	var hi: Vector2 = _trace.get("bounds_max", Vector2(1, 1))
 
-	# Titan dots + nape direction segments.
+	# Static citizen dots (the objective) drawn under the moving actors.
+	for cz in _trace.get("citizens", []):
+		draw_circle(_to_view(cz, lo, hi), CITIZEN_RADIUS * scale_, CITIZEN_COLOR)
+
+	# Titan dots + heading direction segments.
 	var titans: Array = frame.get("titans", [])
 	var napes: Array = frame.get("napes", [])
 	for i in titans.size():
@@ -94,6 +102,7 @@ func _draw() -> void:
 		if i < napes.size():
 			var dir: Vector2 = (napes[i] as Vector2)
 			if dir.length() > 0.001:
+				# napes[] carries the titan HEADING now (drawn as a short line).
 				draw_line(c, c + dir.normalized() * NAPE_LEN * scale_, NAPE_COLOR, NAPE_WIDTH * scale_)
 
 	# One player dot on top.

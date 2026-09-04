@@ -1,27 +1,26 @@
 extends SceneTree
-## Headless GA verification harness (steering spec-3 / section 1: verification is
-## TELEMETRY NUMBERS, not unit tests). Run it OUTSIDE this sandbox (there is no
-## Godot binary here):
+## Headless GA verification harness for the action-defense objective (see
+## handoff.md: verification here is TELEMETRY NUMBERS, not unit tests). Run it:
 ##
 ##   godot --headless --path titan-game --script res://scripts/evo/harness/ga_harness.gd
 ##
-## It evolves against three SCRIPTED players and dumps results to user://:
-##   * always-left : player always enters from the same side (should let the
-##                   titans converge to a stable flank/guard weighting).
-##   * random      : player enters from a uniformly random side each window.
-##   * mixed       : player alternates / mixes sides (the hard case). If the
-##                   per-gene weights DIVERGE or OSCILLATE against the mixed
-##                   player, the mutation width / learning rate is wrong.
+## It evolves against three SCRIPTED defense scenarios and dumps CSVs to user://:
+##   * passive   : the player sits far off / never attacks. Titans should learn
+##                 to pour straight through a gate and eat everyone (high proxy).
+##   * defender  : the player patrols near the +Z gate and attacks, killing
+##                 titans that funnel into it. Titans should learn playerAvoid /
+##                 spreadOut to reach citizens via the OTHER gate.
+##   * two_gate  : the player guards one gate; two gates are open. Spreading /
+##                 avoiding should let the titans breach the undefended gate.
 ##
-## For each player it runs GENERATIONS generations and writes a per-gene
+## For each scenario it runs GENERATIONS generations and writes a per-gene
 ## trajectory CSV (one row per generation: gen + 6 gene values of the best
 ## genome + best/mean fitness). Every BASELINE_INTERVAL generations it also
-## measures a proxy "kill time" for BOTH the current best genome AND the
-## weights-off baseline genome and appends them to a comparison CSV: if the two
-## distributions never separate, learning is NOT working.
+## measures a proxy = mean CITIZENS EATEN for BOTH the current best genome AND
+## the gen-1 baseline genome and appends them to a comparison CSV: if the two
+## never separate, learning is NOT working.
 ##
-## This file is PURE-adjacent: it only uses the pure evo modules + FileAccess. It
-## touches no game scene.
+## PURE-adjacent: it only uses the pure evo modules + FileAccess; no game scene.
 
 # =====================================================================
 # TUNING CONSTANTS
@@ -29,137 +28,122 @@ extends SceneTree
 
 const GENERATIONS: int = 200
 const BASELINE_INTERVAL: int = 10
-## Synthetic windows generated per generation (the sim averages over a subset).
-const WINDOWS_PER_GEN: int = 8
+## Synthetic scenario windows generated per generation (matches the EvoManager
+## per-candidate sampling cap so none are wasted).
+const WINDOWS_PER_GEN: int = 4
 const TITANS_PER_WINDOW: int = 4
-## Fixed RNG seed so harness runs are reproducible across machines.
-const SEED_ALWAYS_LEFT: int = 1001
-const SEED_RANDOM: int = 2002
-const SEED_MIXED: int = 3003
-## Synthetic window geometry.
-const WINDOW_STEPS: int = 120
-const WINDOW_DT: float = 1.0 / 60.0
-const ARENA_RADIUS: float = 25.0
-const PLAYER_SPEED: float = 18.0
+## Fixed RNG seeds so harness runs are reproducible across machines.
+const SEED_PASSIVE: int = 1001
+const SEED_DEFENDER: int = 2002
+const SEED_TWO_GATE: int = 3003
+## Scenario geometry (mirrors the Wall-Maria map: wall r34, plaza r14).
+const WALL_RADIUS: float = 34.0
+const CITIZEN_RADIUS: float = 14.0
+const CITIZEN_COUNT: int = 8
+const TITAN_SPAWN_RADIUS: float = 40.0
+## Player-path samples per window (the sim steps over these; the titans need
+## time to breach the ring AND cross the plaza to the citizens).
+const WINDOW_STEPS: int = 420
 
 var _rng: RandomNumberGenerator = RandomNumberGenerator.new()
 
 
 func _initialize() -> void:
-	print("[ga_harness] starting: %d generations x 3 scripted players" % GENERATIONS)
-	_run_player("always_left", SEED_ALWAYS_LEFT)
-	_run_player("random", SEED_RANDOM)
-	_run_player("mixed", SEED_MIXED)
+	print("[ga_harness] starting: %d generations x 3 defense scenarios" % GENERATIONS)
+	_run_scenario("passive", SEED_PASSIVE)
+	_run_scenario("defender", SEED_DEFENDER)
+	_run_scenario("two_gate", SEED_TWO_GATE)
 	print("[ga_harness] done. CSVs written under user:// (see paths above).")
 	quit()
 
 
-func _run_player(player_kind: String, seed_value: int) -> void:
+func _run_scenario(kind: String, seed_value: int) -> void:
 	_rng.seed = seed_value
 	var evo: EvoManager = EvoManager.new(seed_value)
 
-	var gene_csv: String = "gen,navFollow,interceptLead,flankBias,napeYaw,separation,encircle,best,mean\n"
-	var kill_csv: String = "gen,evolved_kill_proxy,baseline_kill_proxy\n"
+	var gene_csv: String = "gen,wallAssault,citizenSeek,playerAvoid,spreadOut,separation,aggression,best,mean\n"
+	var eaten_csv: String = "gen,evolved_citizens_eaten,baseline_citizens_eaten\n"
 
 	for gen in range(GENERATIONS):
-		var windows: Array = _make_windows(player_kind)
-		var preferred: Vector3 = _preferred_dir(player_kind, gen)
-		evo.set_evaluation_data(windows, preferred, [], gen)
+		var windows: Array = _make_windows(kind)
+		evo.set_evaluation_data(windows, [], gen)
 		evo.run_generation()
 
 		var best: PackedFloat32Array = evo.best_genes()
 		gene_csv += _gene_row(gen, best, evo)
 
 		if gen % BASELINE_INTERVAL == 0:
-			var evolved_kt: float = _kill_proxy(windows, best, preferred)
-			var baseline_kt: float = _kill_proxy(windows, Genome.make_baseline(), preferred)
-			kill_csv += "%d,%.5f,%.5f\n" % [gen, evolved_kt, baseline_kt]
+			var evolved_eaten: float = _eaten_proxy(windows, best)
+			var baseline_eaten: float = _eaten_proxy(windows, Genome.make_baseline())
+			eaten_csv += "%d,%.5f,%.5f\n" % [gen, evolved_eaten, baseline_eaten]
 
-	_write("user://ga_genes_%s.csv" % player_kind, gene_csv)
-	_write("user://ga_killtime_%s.csv" % player_kind, kill_csv)
-	print("[ga_harness] %s: wrote ga_genes_%s.csv + ga_killtime_%s.csv"
-		% [player_kind, player_kind, player_kind])
+	_write("user://ga_genes_%s.csv" % kind, gene_csv)
+	_write("user://ga_eaten_%s.csv" % kind, eaten_csv)
+	print("[ga_harness] %s: wrote ga_genes_%s.csv + ga_eaten_%s.csv" % [kind, kind, kind])
 
 
 # =====================================================================
-# SYNTHETIC WINDOW GENERATION (scripted players)
+# SYNTHETIC SCENARIO WINDOW GENERATION
 # =====================================================================
 
-func _make_windows(player_kind: String) -> Array:
+func _make_windows(kind: String) -> Array:
 	var windows: Array = []
 	for w in WINDOWS_PER_GEN:
-		windows.append(_make_window(player_kind, w))
+		windows.append(_make_window(kind, w))
 	return windows
 
 
-## Build one synthetic engagement-window Dictionary in the EngagementWindow
-## to_dict() shape the sim consumes.
-func _make_window(player_kind: String, index: int) -> Dictionary:
-	var side: float = _approach_side(player_kind, index)
-	var entry_x: float = side * ARENA_RADIUS
-	var start_pos: Vector3 = Vector3(entry_x, 0.0, -ARENA_RADIUS)
-	var target: Vector3 = Vector3.ZERO
-	var dir: Vector3 = (target - start_pos).normalized()
-
-	var trajectory: Array = []
-	var pos: Vector3 = start_pos
-	for step in WINDOW_STEPS:
-		var vel: Vector3 = dir * PLAYER_SPEED
-		trajectory.append({
-			"t": float(step) * WINDOW_DT,
-			"pos": [pos.x, pos.y, pos.z],
-			"vel": [vel.x, vel.y, vel.z],
-			"look": [dir.x, dir.y, dir.z],
-		})
-		pos += vel * WINDOW_DT
+## Build one scenario window in the BackgroundSim window shape.
+func _make_window(kind: String, index: int) -> Dictionary:
+	var gates: Array = _gates(kind)
+	var citizens: Array = []
+	for i in CITIZEN_COUNT:
+		var a: float = TAU * float(i) / float(CITIZEN_COUNT)
+		citizens.append([cos(a) * CITIZEN_RADIUS, 0.0, sin(a) * CITIZEN_RADIUS])
 
 	var start_titans: Array = []
 	for i in TITANS_PER_WINDOW:
-		var angle: float = TAU * float(i) / float(TITANS_PER_WINDOW)
-		var tp: Vector3 = Vector3(cos(angle) * 8.0, 0.0, sin(angle) * 8.0)
-		# Nape normal points outward from the titan's back (toward arena edge).
-		start_titans.append({
-			"pos": [tp.x, tp.y, tp.z],
-			"vel": [0.0, 0.0, 0.0],
-			"nape_normal": [-cos(angle), 0.0, -sin(angle)],
-		})
+		# Titans spawn OUTSIDE the wall, spread across the +Z side (toward gates).
+		var a: float = PI * 0.5 + (float(i) - float(TITANS_PER_WINDOW - 1) * 0.5) * 0.5
+		var tp: Vector3 = Vector3(cos(a) * TITAN_SPAWN_RADIUS, 0.0, sin(a) * TITAN_SPAWN_RADIUS)
+		start_titans.append({"pos": [tp.x, tp.y, tp.z]})
 
 	return {
-		"slashed": true,
-		"slash_result": EngagementWindow.RESULT_SUB,
-		"start_player_pos": [start_pos.x, start_pos.y, start_pos.z],
-		"start_player_vel": [dir.x * PLAYER_SPEED, 0.0, dir.z * PLAYER_SPEED],
-		"anchor_pos": [target.x, target.y, target.z],
-		"engagement_distance": start_pos.length(),
-		"entry_speed": PLAYER_SPEED,
-		"approach_dir_xz": [-dir.x, 0.0, -dir.z],
+		"wall_radius": WALL_RADIUS,
+		"gates": gates,
+		"citizens": citizens,
 		"start_titans": start_titans,
-		"trajectory": trajectory,
+		"trajectory": _player_trajectory(kind, index),
 	}
 
 
-## Which side (+1 right / -1 left) the scripted player enters from.
-func _approach_side(player_kind: String, index: int) -> float:
-	match player_kind:
-		"always_left":
-			return -1.0
-		"random":
-			return -1.0 if _rng.randf() < 0.5 else 1.0
-		"mixed":
-			return -1.0 if index % 2 == 0 else 1.0
+## Gate gaps per scenario. passive/defender share the two +Z/-Z gates; two_gate
+## keeps both explicit. All mirror the FEAT-003 omitted wall segments.
+func _gates(kind: String) -> Array:
+	match kind:
+		"two_gate":
+			return [[0.0, 0.0, WALL_RADIUS], [0.0, 0.0, -WALL_RADIUS]]
 		_:
-			return -1.0
+			return [[0.0, 0.0, WALL_RADIUS], [0.0, 0.0, -WALL_RADIUS]]
 
 
-## The preferred-entry direction the "player model" would report for this kind.
-func _preferred_dir(player_kind: String, gen: int) -> Vector3:
-	match player_kind:
-		"always_left":
-			return Vector3(-1.0, 0.0, 0.0)
-		"mixed":
-			return Vector3(-1.0 if gen % 2 == 0 else 1.0, 0.0, 0.0)
-		_:
-			return Vector3(-1.0 if _rng.randf() < 0.5 else 1.0, 0.0, 0.0)
+## Player path (the threat). passive = parked far off, not attacking; defender =
+## camps just inside the +Z gate and attacks; two_gate = guards the +Z gate.
+func _player_trajectory(kind: String, index: int) -> Array:
+	var traj: Array = []
+	var guard: Vector3 = Vector3(0.0, 0.0, WALL_RADIUS - 4.0)  # inside +Z gate
+	for step in WINDOW_STEPS:
+		match kind:
+			"passive":
+				traj.append({"pos": [0.0, 0.0, 1.0e6], "attacking": false})
+			"defender":
+				var jx: float = sin(float(step) * 0.05 + float(index)) * 4.0
+				traj.append({"pos": [guard.x + jx, 0.0, guard.z], "attacking": true})
+			"two_gate":
+				traj.append({"pos": [guard.x, 0.0, guard.z], "attacking": true})
+			_:
+				traj.append({"pos": [0.0, 0.0, 1.0e6], "attacking": false})
+	return traj
 
 
 # =====================================================================
@@ -167,7 +151,6 @@ func _preferred_dir(player_kind: String, gen: int) -> Vector3:
 # =====================================================================
 
 func _gene_row(gen: int, genes: PackedFloat32Array, evo: EvoManager) -> String:
-	# Read the just-completed generation's history tail for best/mean.
 	var best: float = 0.0
 	var mean: float = 0.0
 	if not evo.history.is_empty():
@@ -178,16 +161,14 @@ func _gene_row(gen: int, genes: PackedFloat32Array, evo: EvoManager) -> String:
 		gen, genes[0], genes[1], genes[2], genes[3], genes[4], genes[5], best, mean]
 
 
-## A proxy "kill time": lower = the player broke through faster (nape exposed).
-## We reuse the sim's nape-non-exposure as an inverse proxy - higher
-## non-exposure => the titans held longer => a longer effective kill time.
-func _kill_proxy(windows: Array, genes: PackedFloat32Array, preferred: Vector3) -> float:
+## Proxy = mean citizens eaten across the windows (higher = the titans reached
+## and ate more of the plaza). The evolved column should climb above baseline.
+func _eaten_proxy(windows: Array, genes: PackedFloat32Array) -> float:
 	var sum: float = 0.0
-	var n: int = mini(windows.size(), WINDOWS_PER_GEN)
+	var n: int = windows.size()
 	for i in n:
-		var m: Dictionary = BackgroundSim.evaluate_window(windows[i], genes, preferred)
-		var tc: int = int(m.get("titan_count", 1))
-		sum += float(m.get("nape_non_exposure_sum", 0.0)) / float(maxi(tc, 1))
+		var m: Dictionary = BackgroundSim.evaluate_window(windows[i], genes)
+		sum += float(int(m.get("citizens_eaten", 0)))
 	return (sum / float(n)) if n > 0 else 0.0
 
 

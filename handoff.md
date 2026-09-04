@@ -143,7 +143,7 @@ placeholders below are updated by their owning feature:_
 - **Aim fix (first-person crosshair/slash alignment) - DONE (FEAT-002).**
 - **Wall-Maria concentric-wall map + citizen area - DONE (FEAT-003).**
 - **Titan fixed HP + per-part damage + wall-assault/breach/eat behaviour - DONE (FEAT-004).**
-- GA fitness / gene redefinition toward infiltration (citizens-eaten + breach).
+- **GA fitness / gene redefinition toward infiltration (citizens-eaten + breach) - DONE (FEAT-005).**
 - Character models (soldiers + giant humanoids) via the guarded GLB loader.
 
 ### First-person aim alignment (FEAT-002)
@@ -333,6 +333,117 @@ the approach-wall -> seek-citizen -> eat objective transitions. `xvfb-run -a
 ./tools/screenshot.sh` renders the first-person plaza; the wall ring, gate towers
 and capsule NPCs read clearly (titans spawn outside the wall, mostly out of the
 default frame).
+
+### Evolution core: genes + fitness around citizens-eaten (FEAT-005)
+
+The evolution core was pivoted from the retired grapple-era "hide the nape /
+avoid the player" objective to the action-defense objective, KEEPING the
+evolution machinery. `scripts/evo/` and `scripts/telemetry/` stay
+**RefCounted-only, scene-free, plain-data in/out, injected-RNG** (headless-
+verifiable). Every `.gd` is still <= 250 lines. See `scripts/evo/README.md`.
+
+**The 6 FIXED genes (GENE_COUNT stays 6).** `genome.gd` now defines an
+infiltration/wall-assault/attack-spreading set (weights on measured directions;
+conditions in code):
+
+| idx | gene | range | meaning (weight on a measured direction) |
+|---|---|---|---|
+| 0 | `wallAssault` | 0..2.5 | drive toward the wall / nearest breach gap (only while OUTSIDE the ring) |
+| 1 | `citizenSeek` | 0..2.5 | path to the nearest live citizen (only once INSIDE / breached) |
+| 2 | `playerAvoid` | 0..2.0 | steer away from the player threat (proximity-ramped, condition in code) |
+| 3 | `spreadOut` | 0..2.0 | dispersal tangent off the group centroid (fan across breach points / targets) |
+| 4 | `separation` | 0..2.0 | neighbour separation (kept; avoids stacking) |
+| 5 | `aggression` | 0..2.0 | forward speed/commitment scalar via `SteeringPolicy.speed_scale()` (does NOT rotate the move dir) |
+
+`GENE_NAMES = [wallAssault, citizenSeek, playerAvoid, spreadOut, separation,
+aggression]`. `wallAssault`/`citizenSeek` are the primary drives (both amplify
+the guaranteed nav path, which still targets the wall then the nearest citizen,
+so a titan is **never dumber than pure nav**). The `napeYaw` gene was retired:
+the nape is now a FIXED weak point, so `titan.gd::get_nape_normal()` is just the
+titan's facing (no gene-driven hiding), and `SteeringPolicy.nape_yaw_amount()`
+was replaced by `speed_scale()`.
+
+**Non-random gen-1 baseline** (analogous to the old pure-nav baseline, now
+"straight at the wall/citizens"): `BASELINE = [2.5, 2.5, 0, 0, 1.0, 1.0]` - full
+wallAssault + citizenSeek, mid separation + aggression, no player-avoidance /
+spreading. Improvement is always measured against this committed-but-naive rush.
+
+**Fitness (`fitness.gd`, pure, consumes a plain measurement Dict).** PRIMARY =
+`citizens_eaten` (weight `EATEN_W = 10`, so one extra citizen outweighs any
+shaping term). Plus `breach_progress` (mean fraction of titans that breached,
+`BREACH_W = 3`) and a continuous `wall_contact_ratio` early gradient
+(`CONTACT_W = 1`), minus a small `titans_killed` penalty (`KILLED_PEN = 0.5`) so
+feeding straight into the defender is selected against.
+- **REMOVED:** the nape-non-exposure primary; and (explicitly allowed for the
+  defense framing) the old "NO survival-time term" and "NO distance penalty"
+  invariants - the continuous contact gradient IS a distance-style shaping term.
+- **KEPT:** generation-mean normalisation done in `population.gd` (NOT here),
+  averaging over multiple windows (`Fitness.average`).
+
+**Background sim (`background_sim.gd`, pure fixed-step integrator).** Titans
+spawn outside a circular wall, steer by `SteeringPolicy` (new genes) toward the
+nearest breach gap, cross INSIDE through a gate (a breach model: crossing the
+ring within `GATE_HALF_WIDTH` of a gate breaches; elsewhere the wall bounces
+them back), then reach citizen positions and EAT them (`EAT_REACH 3.5`). The
+player follows an OPEN-LOOP threat trajectory; a titan lingering in
+`PLAYER_KILL_RANGE` while the player is `attacking` is felled. Wall geometry +
+gate gaps + citizen positions + the player path all arrive as PLAIN data in the
+window Dict. Guards: `MAX_STEPS = 420`, a settled-window early-out
+(`STALL_STEPS = 180`, only counted once fully breached, reset on each eat), and
+deterministic behaviour (no global RNG). Measurement Dict returns
+`{titan_count, citizens_eaten, breach_progress, wall_contact_ratio,
+titans_killed}`. `sim_replay.gd` mirrors it and outputs a drawable trace
+(titan dots, player dot, citizen dots, per-titan heading) for the evo screen.
+
+**Population (`population.gd`).** UNCHANGED except it seeds the new baseline:
+POP_SIZE 50, ELITISM 1, generation-mean-normalised selection, tournament +
+uniform crossover, variance-based mutation-width boost, per-gene variance for
+the snapshot. It is gene-agnostic.
+
+**Snapshot (`snapshot.gd`) - SCHEMA v2.** `SCHEMA_VERSION = 2`; writes the new
+`gene_names` + `baseline`. A real `_v1_to_v2()` migration upgrades an old
+nape-era (v1) snapshot WITHOUT crashing: the gene meanings changed, so the old
+best genome is discarded (reset to the v2 baseline) and the generation/history
+reset (the old fitness measured a different objective); `player_model` +
+`rounds_played` are preserved. Still `user://wirework_evo.json`,
+FileAccess+JSON, save-failure-non-fatal, missing/corrupt loads clean.
+
+**Bridge (`titan_evo_bridge.gd`) - the sole evo<->scene coupling.** Builds the
+scenario windows as plain data: each telemetry engagement window supplies the
+recorded titan spawns + player path; the bridge attaches the FIXED wall geometry
+(`WALL_RADIUS 34`, the two +Z/-Z gate gaps) and the live citizen positions
+(injected `CitizenManager`, else a fixed plaza ring). `set_evaluation_data()`
+dropped the old preferred-entry-direction arg. `best_genes()` injection into
+live titans still works; `game_manager.gd::_inject_evolved_genes()` calls
+`titan.set_genes(genes)` (no preferred dir) and hands the CitizenManager to the
+bridge.
+
+**Telemetry.** Kept meaningful for the new objective: `telemetry.gd` records
+per-round `citizens_eaten` / `breaches` / `titans_killed_by_player`
+(reported by `game_manager.gd` + `titan.gd`) and surfaces them in the round
+summary; the grapple-era engagement aggregates are still recorded but secondary.
+The round-end panel leads with the new numbers (new localized strings
+`RE_CITIZENS_EATEN` / `RE_BREACHES` / `RE_TITANS_FELLED`, EN+KO). The comparison
+labels changed from "pure nav" to "straight rush" (EN+KO). The evolution screen
+mini-sims + final gen-1-vs-latest comparison still render (2D canvas dots) on
+the new 6 genes (the radar/variance UI is gene-agnostic; it reads
+`Genome.GENE_COUNT` / ranges).
+
+**Harness (`scripts/evo/harness/ga_harness.gd`).** Evolves 200 generations
+against three scripted defense scenarios (`passive`, `defender`, `two_gate`) and
+dumps per-scenario CSVs under `user://` (paths printed):
+`ga_genes_<kind>.csv` (header = the 6 new gene names + best/mean) and
+`ga_eaten_<kind>.csv` (evolved vs gen-1-baseline mean citizens eaten - the two
+columns should SEPARATE over generations). Run:
+
+```
+.godot-bin/godot --headless --path . --script res://scripts/evo/harness/ga_harness.gd
+```
+
+Deterministic pure test cases live in `tests/cases/evo_fitness.gd` (6-gene set,
+non-random baseline, citizens-eaten dominance, the sim breaching + eating, a
+player-avoider out-scoring the baseline against a defender, and Population
+seeding). `tests/report.gd`'s stub CSV header uses the new gene-variance columns.
 
 ## Workflow
 

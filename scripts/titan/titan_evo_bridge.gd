@@ -6,13 +6,10 @@ extends Node
 ## snapshot, and exposes the latest best genome for the titans to consume.
 ##
 ## Evolution NEVER runs during live play (see handoff.md): _process only budgets
-## generations while `_evolving` is true, which the game turns on BETWEEN rounds
-## (e.g. from the evolution screen in spec 4). During a round the titans simply
-## read best_genes(), which is a fixed genome for that round.
-##
-## Register this as an autoload (e.g. "TitanEvo") OR let game_manager own one.
-## It keeps scripts/evo/ scene-free: all scene coupling (reading Telemetry) is
-## here, and only plain Vector3 / arrays cross into the evo core.
+## generations while `_evolving` is true, turned on BETWEEN rounds (the evolution
+## screen). During a round the titans just read best_genes() (fixed that round).
+## Registered as autoload "TitanEvo". It keeps scripts/evo/ scene-free: all scene
+## coupling is here; only plain Vector3 / arrays cross into the evo core.
 
 # =====================================================================
 # TUNING CONSTANTS
@@ -21,16 +18,22 @@ extends Node
 ## Candidate-eval budget granted to the background evolution each idle frame
 ## (single-thread web export; see handoff.md). Small so frames stay smooth.
 const FRAME_BUDGET: int = 3
-## How many generations to advance per between-rounds evolution burst before the
-## bridge auto-stops (the evolution screen can restart it).
-## Spec 4 wants the generation counter to VISIBLY climb during the observation
-## screen (which stays up to EvolutionScreen.MAX_VISIBLE_TIME = 8s). Three was
-## too slow to read as "learning is happening fast"; 12 makes the counter tick
-## up several times per appearance while still respecting the per-frame
-## FRAME_BUDGET (evolution is spread across idle frames, never blocking one).
+## Generations advanced per between-rounds burst before the bridge auto-stops
+## (the evolution screen restarts it). 12 makes the on-screen generation counter
+## visibly climb several times per appearance while respecting FRAME_BUDGET.
 const GENERATIONS_PER_BURST: int = 12
 ## Persist the snapshot at most this often (generations) to limit disk churn.
 const SAVE_EVERY_GENERATIONS: int = 1
+
+# --- FIXED map geometry the scenario windows carry (mirrors the Wall-Maria map
+# in Arena.tscn / Titan.gd; duplicated here because scripts/evo stays scene-free
+# and consumes plain data). ---
+const WALL_RADIUS: float = 34.0
+const GATE_POSITIONS: Array = [Vector3(0.0, 0.0, 34.0), Vector3(0.0, 0.0, -34.0)]
+## Fallback citizen plaza ring (radius 14, 8 citizens) used when no live
+## CitizenManager was injected (mirrors CitizenArea in Arena.tscn / FEAT-003).
+const FALLBACK_CITIZEN_RADIUS: float = 14.0
+const FALLBACK_CITIZEN_COUNT: int = 8
 
 # =====================================================================
 # STATE
@@ -40,6 +43,9 @@ var _evo: EvoManager = null
 var _best_genes: PackedFloat32Array = PackedFloat32Array()
 var _evolving: bool = false
 var _generations_this_burst: int = 0
+## Scene-side CitizenManager (plain-data reads only) injected by GameManager so
+## the scenario windows carry the real live citizen positions. Optional.
+var _citizen_manager: Node = null
 
 signal generation_completed(generation: int, best_fitness: float)
 signal evolution_burst_finished(generation: int)
@@ -57,10 +63,17 @@ func _ready() -> void:
 	set_process(false)
 
 
-## The fixed genome the live titans steer with THIS round (spec-3 point 3.8: only the
-## latest best genome is injected; evolution does not run during the round).
+## The fixed genome the live titans steer with THIS round (only the latest best
+## genome is injected; evolution does not run during the round - see handoff.md).
 func current_best_genes() -> PackedFloat32Array:
 	return _best_genes
+
+
+## GameManager injects the scene-side CitizenManager so scenario windows carry
+## the real live citizen positions (plain Vector3 array only). Optional: without
+## it the bridge falls back to the fixed plaza ring geometry.
+func set_citizen_manager(manager: Node) -> void:
+	_citizen_manager = manager
 
 
 func current_generation() -> int:
@@ -88,9 +101,8 @@ func ranked_candidate_indices() -> Array:
 	return _evo.ranked_indices() if _evo != null else []
 
 
-## A representative engagement window (plain Dictionary) the mini-sims and the
-## final comparison scene replay. Falls back to the telemetry ring if the burst
-## has not fed the manager yet, then to an empty Dictionary.
+## A representative scenario window (plain Dictionary) the mini-sims + final
+## comparison replay. Falls back to the telemetry ring, then an empty Dictionary.
 func sample_window() -> Dictionary:
 	if _evo != null:
 		var w: Dictionary = _evo.sample_window()
@@ -101,27 +113,21 @@ func sample_window() -> Dictionary:
 
 
 ## The generation history (Array of {gen,best,mean,variance:[6]}) for the fitness
-## curve + variance bars indicators (spec-3 point 3.11 history shape).
+## curve + variance bars indicators (history entry shape; see handoff.md).
 func history() -> Array:
 	return _evo.history if _evo != null else []
 
 
-## Gen-1 baseline genes (pure navigation, spec-3 point 3.7) - the LEFT side of the
+## Gen-1 baseline genes (the non-random infiltrator) - the LEFT side of the
 ## final comparison scene.
 func baseline_genes() -> PackedFloat32Array:
 	return Genome.make_baseline()
 
 
-## The measured player-preferred entry direction the live titans' flankBias gene
-## scales the opposite of (read from the telemetry player model).
-func preferred_entry_dir() -> Vector3:
-	return _preferred_entry_dir()
-
-
-## Kick off a background evolution burst BETWEEN rounds. Pulls the latest
-## engagement windows + player-preferred direction out of Telemetry (plain data
-## only) and hands them to the pure EvoManager, then budgets generations across
-## frames until the burst finishes.
+## Kick off a background evolution burst BETWEEN rounds. Builds scenario windows
+## (wall geometry + citizen positions + player-threat trajectory) as PLAIN data
+## from Telemetry + the fixed map geometry and hands them to the pure EvoManager,
+## then budgets generations across frames until the burst finishes.
 func start_evolution_burst() -> void:
 	if _evo == null:
 		return
@@ -130,10 +136,9 @@ func start_evolution_burst() -> void:
 		# Nothing recorded yet - keep the current best, do not spin.
 		evolution_burst_finished.emit(current_generation())
 		return
-	var preferred: Vector3 = _preferred_entry_dir()
 	var bins: Array = _player_bins()
 	var rounds: int = _rounds_played()
-	_evo.set_evaluation_data(windows, preferred, bins, rounds)
+	_evo.set_evaluation_data(windows, bins, rounds)
 	_generations_this_burst = 0
 	_evolving = true
 	set_process(true)
@@ -165,21 +170,62 @@ func _stop_burst() -> void:
 # TELEMETRY READ (scene-coupled here so evo core stays pure)
 # =====================================================================
 
+## Build the scenario windows the pure BackgroundSim replays. Each telemetry
+## engagement window supplies the recorded titan spawn snapshot + the player
+## trajectory (the threat); the bridge attaches the FIXED wall geometry + the
+## live citizen positions so the window carries everything the sim needs as
+## plain data (Vector3 arrays / scalars). Returns an Array of plain Dictionaries.
 func _collect_windows() -> Array:
 	if not _has_telemetry():
 		return []
+	var citizens: Array = _citizen_positions()
 	var out: Array = []
-	# Telemetry keeps the 3-round ring; flatten to plain window Dictionaries.
 	if Telemetry.has_method("get_ring_windows"):
 		for w in Telemetry.get_ring_windows():
-			out.append(w.to_dict() if w.has_method("to_dict") else w)
+			var base: Dictionary = w.to_dict() if w.has_method("to_dict") else w
+			out.append(_to_scenario_window(base, citizens))
 	return out
 
 
-func _preferred_entry_dir() -> Vector3:
-	if not _has_telemetry() or Telemetry.player_model == null:
-		return Vector3.ZERO
-	return _dir_from_dominant_bin(Telemetry.player_model)
+## Convert a telemetry engagement window into a BackgroundSim scenario window:
+## keep the recorded titan spawns + player path, add wall/gate geometry + the
+## citizen positions. The player trajectory doubles as the threat path.
+func _to_scenario_window(base: Dictionary, citizens: Array) -> Dictionary:
+	var traj: Array = []
+	for s in base.get("trajectory", []):
+		traj.append({"pos": (s as Dictionary).get("pos", [0.0, 0.0, 0.0]), "attacking": true})
+	return {
+		"wall_radius": WALL_RADIUS,
+		"gates": _gates_as_arrays(),
+		"citizens": citizens,
+		"start_titans": base.get("start_titans", []),
+		"trajectory": traj,
+	}
+
+
+func _gates_as_arrays() -> Array:
+	var out: Array = []
+	for g in GATE_POSITIONS:
+		var v: Vector3 = g
+		out.append([v.x, v.y, v.z])
+	return out
+
+
+## Live citizen world positions as plain [x,y,z] arrays from the injected
+## CitizenManager, or the fixed plaza ring if none was injected.
+func _citizen_positions() -> Array:
+	var out: Array = []
+	if _citizen_manager != null and is_instance_valid(_citizen_manager) \
+			and _citizen_manager.has_method("get_citizen_positions"):
+		for p in _citizen_manager.call("get_citizen_positions"):
+			var v: Vector3 = p
+			out.append([v.x, v.y, v.z])
+		if not out.is_empty():
+			return out
+	for i in FALLBACK_CITIZEN_COUNT:
+		var a: float = TAU * float(i) / float(FALLBACK_CITIZEN_COUNT)
+		out.append([cos(a) * FALLBACK_CITIZEN_RADIUS, 0.0, sin(a) * FALLBACK_CITIZEN_RADIUS])
+	return out
 
 
 func _player_bins() -> Array:
@@ -192,19 +238,6 @@ func _rounds_played() -> int:
 	if _has_telemetry() and "last_round_summary" in Telemetry:
 		return int(Telemetry.last_round_summary.get("round", 0))
 	return 0
-
-
-## Map the player model's dominant bin's quadrant back to an approach direction
-## (which side the player prefers). This is the MEASUREMENT flankBias scales.
-func _dir_from_dominant_bin(model) -> Vector3:
-	var bin: int = model.dominant_bin()
-	if bin < 0:
-		return Vector3.ZERO
-	# Recover the quadrant (slowest axis in the bin layout).
-	var per_quadrant: int = PlayerModel.DISTANCE_BANDS * PlayerModel.TIMING_BANDS
-	var quadrant: int = bin / per_quadrant
-	var angle: float = TAU * float(quadrant) / float(PlayerModel.QUADRANTS)
-	return Vector3(sin(angle), 0.0, cos(angle))
 
 
 func _save_snapshot() -> void:

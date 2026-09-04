@@ -1,41 +1,44 @@
 extends RefCounted
 class_name Fitness
-## Group fitness for one candidate genome (steering 3.6). PURE: it consumes a
-## plain measurement Dictionary produced by BackgroundSim and returns a float.
+## Group fitness for one candidate genome, action-defense objective (see
+## handoff.md "Design"). PURE: it consumes a plain measurement Dictionary
+## produced by BackgroundSim and returns a float.
 ##
 ##   groupFitness =
-##       Σ(per-titan nape NON-exposure time ratio) / N   # PRIMARY, per-tick
-##     + abortedSlashAttempts * MISS_W
-##     + damageDealtToPlayer  * DMG_W
-##     + (if player died) remainingTimeRatio * KILL_BONUS
+##       citizens_eaten          * EATEN_W    # PRIMARY - dominant pressure
+##     + breach_progress         * BREACH_W   # reward reaching / opening the wall
+##     + wall_contact_ratio      * CONTACT_W  # dense early gradient toward the wall
+##     - titans_killed_by_player * KILLED_PEN # small cost for losing titans
 ##
-## HARD INVARIANTS (steering 3.6 / section 6 - the most dangerous place to get
-## wrong; do NOT add either of the following, they silently breed run-away
-## titans that are near-impossible to diagnose later):
-##   * NO survival-time term. Fitness never rewards how long the titan lived.
-##   * NO continuous distance penalty. Approach is a BINARY "did it touch" count
-##     only (touches feed the damage term, never a distance-scaled penalty).
-##
-## The primary term is per-titan nape NON-exposure ratio because it is measured
-## every tick, so even generation-1 individuals get a non-zero gradient (if the
-## primary term were sparse there would be no selection pressure early on).
+## The defense framing DELIBERATELY replaces the old grapple-era rules:
+##   * The old PRIMARY (per-titan nape NON-exposure ratio) is GONE - selection
+##     now rewards EATING CITIZENS, not hiding a weak point.
+##   * The old "NO survival-time term" and "NO distance penalty" invariants are
+##     RETIRED for this objective. citizens_eaten dominates; breach_progress and
+##     a continuous wall_contact_ratio give early generations a gradient toward
+##     the wall so even the baseline rush gets scored above zero (if the primary
+##     term were the only signal, a gen-1 titan that never quite reaches a
+##     citizen would score flat and there would be no early selection pressure).
 ##
 ## Callers normalise a candidate's fitness by the GENERATION MEAN (see
-## Population) to cancel map / trajectory difficulty variance - that division is
+## Population) to cancel scenario difficulty variance - that division is
 ## deliberately NOT done here so this stays a pure per-window score.
 
 # =====================================================================
 # TUNING CONSTANTS (no magic numbers below this block)
 # =====================================================================
 
-## Reward per aborted / whiffed slash attempt the titans forced (steering 3.6).
-const MISS_W: float = 0.35
-## Reward per unit of damage dealt to the player.
-const DMG_W: float = 0.5
-## Bonus multiplier on the remaining-time ratio when the player is killed. This
-## rewards a FAST kill (more time remaining = bigger bonus) WITHOUT introducing
-## a survival-time term - it is gated on the player dying, not on elapsed time.
-const KILL_BONUS: float = 2.0
+## Weight per citizen eaten - the PRIMARY, dominant term. Large so a single
+## extra citizen outweighs any amount of the shaping terms below.
+const EATEN_W: float = 10.0
+## Weight on mean breach progress in [0,1] (fraction of titans that got inside).
+const BREACH_W: float = 3.0
+## Weight on the continuous mean wall-contact ratio in [0,1] (how much of the
+## window the titans spent pressed against / inside the wall). Small: it is only
+## an early gradient, not a thing to optimise instead of eating.
+const CONTACT_W: float = 1.0
+## Penalty per titan the player killed (discourages feeding into the defender).
+const KILLED_PEN: float = 0.5
 ## Small floor so a normalised fitness never divides toward zero downstream.
 const MIN_SCORE: float = 0.0001
 
@@ -44,33 +47,21 @@ const MIN_SCORE: float = 0.0001
 ## BackgroundSim.evaluate_window():
 ##   {
 ##     "titan_count": int,
-##     "nape_non_exposure_sum": float,   # Σ over titans of NON-exposure ratio
-##     "aborted_slashes": int,           # slashes the sim forced to whiff/abort
-##     "damage_to_player": float,
-##     "player_died": bool,
-##     "remaining_time_ratio": float,    # only meaningful if player_died
+##     "citizens_eaten": int,       # PRIMARY - citizens consumed this window
+##     "breach_progress": float,    # mean fraction of titans that breached [0,1]
+##     "wall_contact_ratio": float, # mean fraction of ticks at/inside wall [0,1]
+##     "titans_killed": int,        # titans the player felled this window
 ##   }
 static func score_window(m: Dictionary) -> float:
-	var n: int = int(m.get("titan_count", 0))
-	var primary: float = 0.0
-	if n > 0:
-		# PRIMARY term: mean per-titan nape NON-exposure ratio (continuous).
-		primary = float(m.get("nape_non_exposure_sum", 0.0)) / float(n)
-
-	var aborted: float = float(int(m.get("aborted_slashes", 0))) * MISS_W
-	var damage: float = float(m.get("damage_to_player", 0.0)) * DMG_W
-
-	var kill: float = 0.0
-	if bool(m.get("player_died", false)):
-		kill = float(m.get("remaining_time_ratio", 0.0)) * KILL_BONUS
-
-	# NOTE: intentionally NO survival-time term and NO distance term here.
-	return maxf(MIN_SCORE, primary + aborted + damage + kill)
+	var eaten: float = float(int(m.get("citizens_eaten", 0))) * EATEN_W
+	var breach: float = float(m.get("breach_progress", 0.0)) * BREACH_W
+	var contact: float = float(m.get("wall_contact_ratio", 0.0)) * CONTACT_W
+	var killed: float = float(int(m.get("titans_killed", 0))) * KILLED_PEN
+	return maxf(MIN_SCORE, eaten + breach + contact - killed)
 
 
 ## Average the per-window scores for one candidate across MULTIPLE windows
-## (steering 3.5: average over windows to guard against single-trajectory
-## overfit). `window_scores` is an Array[float].
+## (guard against single-scenario overfit). `window_scores` is an Array[float].
 static func average(window_scores: Array) -> float:
 	if window_scores.is_empty():
 		return MIN_SCORE

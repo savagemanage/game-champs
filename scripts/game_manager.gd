@@ -39,7 +39,6 @@ var _first_kill_screen_shown: bool = false
 var _citizen_manager: Node  ## FEAT-003: spawns/tracks the eatable plaza citizens
 var _round_over: bool = false  ## FEAT-003: guards win/lose so both fire once
 
-
 func _ready() -> void:
 	_arena = get_node_or_null(arena_path) as Node3D
 	_player = get_node_or_null(player_path) as Node3D
@@ -52,6 +51,8 @@ func _ready() -> void:
 	_citizen_manager = get_node_or_null(citizen_manager_path)
 	if _citizen_manager != null and _citizen_manager.has_signal("all_eaten"):
 		_citizen_manager.all_eaten.connect(_on_all_citizens_eaten)
+	if _citizen_manager != null and _citizen_manager.has_signal("citizen_eaten"):
+		_citizen_manager.citizen_eaten.connect(_on_citizen_eaten)  # FEAT-005 telemetry
 	if titan_scene == null:
 		push_warning("GameManager: titan_scene unassigned; no titans will spawn.")
 	_refresh_hud_locale()  # localize HUD now + on live locale switch
@@ -111,7 +112,6 @@ func _spawn_citizens() -> void:  # FEAT-003: repopulate the plaza citizen set
 		area = _arena.get_node("CitizenArea")
 	_citizen_manager.call("spawn_citizens", area)
 
-
 func _spawn_titans() -> void:
 	if titan_scene == null:
 		return
@@ -135,29 +135,34 @@ func _spawn_titans() -> void:
 		_alive += 1
 	_inject_evolved_genes()
 
-
 func _inject_evolved_genes() -> void:  # latest best genome + siblings per titan
 	if typeof(TitanEvo) == TYPE_NIL or TitanEvo == null:
 		return
 	var genes: PackedFloat32Array = TitanEvo.current_best_genes()
-	var preferred: Vector3 = TitanEvo.preferred_entry_dir()
+	if TitanEvo.has_method("set_citizen_manager") and _citizen_manager != null:
+		TitanEvo.set_citizen_manager(_citizen_manager)  # citizen positions -> sim
 	for titan in _titans:
 		if titan == null or not is_instance_valid(titan):
 			continue
 		if titan.has_method("set_genes"):
-			titan.set_genes(genes, preferred)
+			titan.set_genes(genes)
 		if titan.has_method("set_neighbours"):
 			titan.set_neighbours(_titans)
+
+func _on_citizen_eaten(_alive_citizens: int) -> void:  # FEAT-005 telemetry
+	if Telemetry != null and Telemetry.has_method("report_citizen_eaten"):
+		Telemetry.report_citizen_eaten()
 
 
 func _on_titan_killed() -> void:
 	_alive -= 1
+	if Telemetry != null and Telemetry.has_method("report_titan_killed"):
+		Telemetry.report_titan_killed()  # titans only die to the player's slash
 	if _round_over:
 		return  # round already resolved (e.g. citizens lost); ignore late kills
 	if _alive > 0:
 		_set_status(tr(KEY_STATUS_TITANS_LEFT) % _alive)
-		# Evolution screen (spec 4): appear ONCE after the FIRST kill.
-		if not _first_kill_screen_shown:
+		if not _first_kill_screen_shown:  # evolution screen: once after 1st kill
 			_first_kill_screen_shown = true
 			_try_show_evo_screen("request_first_kill_show")
 		return
@@ -171,7 +176,6 @@ func _on_titan_killed() -> void:
 		return
 	get_tree().create_timer(RESPAWN_DELAY).timeout.connect(_start_round)
 
-
 func _try_show_evo_screen(method: String, arg = null) -> bool:  # returns took-over
 	if _evolution_screen == null or not _evolution_screen.has_method(method):
 		return false
@@ -183,12 +187,10 @@ func _try_show_evo_screen(method: String, arg = null) -> bool:  # returns took-o
 	get_tree().paused = true
 	return true
 
-
 func _on_evolution_screen_finished() -> void:  # resume gameplay post-evo screen
 	get_tree().paused = false
 	if _alive <= 0:
 		get_tree().create_timer(RESPAWN_DELAY).timeout.connect(_start_round)
-
 
 ## FEAT-003 FAIL PATH: plaza citizens wiped out. Round LOST: stop titans + restart.
 func _on_all_citizens_eaten() -> void:
@@ -231,7 +233,6 @@ func _player_spawn_transform() -> Transform3D:
 		return (_arena.get_node("PlayerSpawn") as Node3D).global_transform
 	return Transform3D(Basis.IDENTITY, Vector3(0.0, 2.0, 0.0))
 
-
 func _titan_spawn_transforms() -> Array[Transform3D]:  # 4 outside-wall markers
 	var result: Array[Transform3D] = []
 	if _arena != null:
@@ -243,7 +244,6 @@ func _titan_spawn_transforms() -> Array[Transform3D]:  # 4 outside-wall markers
 			var a: float = TAU * float(i) / float(TITAN_COUNT)
 			result.append(Transform3D(Basis.IDENTITY, Vector3(sin(a) * 50.0, 2.0, cos(a) * 50.0)))
 	return result
-
 
 func _set_status(text: String) -> void:
 	if _status_label != null:

@@ -1,25 +1,24 @@
 extends RefCounted
 class_name Population
-## The evolving population (steering 3.7 / 3.8 / 3.9). PURE: it holds gene arrays
-## and per-candidate fitness floats and produces the next generation. It never
-## touches a scene, node, or physics - EvoManager feeds it evaluated fitnesses.
-##
-## Invariants encoded here:
-##   * POP_SIZE = 50, ELITISM = 1 (steering 3.8: more elites kills diversity).
-##   * Generation 1 is NOT random - all 50 individuals are the pure-navigation
-##     baseline [2.0,0,0,0,1.0,0] (steering 3.7).
-##   * Candidate fitness is normalised by the GENERATION MEAN before selection
-##     (steering 3.6) so map/trajectory difficulty variance is cancelled.
-##   * VARIANCE-BASED mutation width control (steering 3.9): if the mean
-##     normalised variance drops below VARIANCE_THRESHOLD the width DOUBLES and
-##     restores on recovery. Per-gene variance is exposed for the snapshot.
+## The evolving population (see handoff.md "Design"). PURE: holds gene arrays +
+## per-candidate fitness floats and produces the next generation; never touches a
+## scene / node / physics (EvoManager feeds it evaluated fitnesses). Gene-agnostic
+## (indexes only Genome.GENE_COUNT / ranges), so the FEAT-005 gene redefinition
+## needed no change here beyond the baseline seed. Invariants:
+##   * POP_SIZE = 50, ELITISM = 1 (more elites kills diversity).
+##   * Generation 1 is NOT random - all 50 are the non-random Genome.BASELINE
+##     (the straight-at-the-wall infiltrator).
+##   * Fitness is normalised by the GENERATION MEAN before selection (cancels
+##     scenario difficulty variance).
+##   * VARIANCE-BASED mutation width control: if the mean normalised variance
+##     drops below VARIANCE_THRESHOLD the width DOUBLES and restores on recovery.
 
 # =====================================================================
 # TUNING CONSTANTS (no magic numbers below this block)
 # =====================================================================
 
 const POP_SIZE: int = 50
-const ELITISM: int = 1
+const ELITISM: int = 1  ## carry the single best genome forward unchanged
 
 ## Base mutation width as a FRACTION of each gene's range (per-gene scaled).
 const MUTATION_WIDTH: float = 0.12
@@ -30,7 +29,7 @@ const TOURNAMENT_SIZE: int = 3
 ## Per-gene uniform-crossover probability of taking the gene from parent A.
 const CROSSOVER_BIAS: float = 0.5
 
-## Mean-normalised-variance floor (steering 3.9). Below this the width doubles.
+## Mean-normalised-variance floor. Below this the mutation width doubles.
 const VARIANCE_THRESHOLD: float = 0.05
 ## Multiplier applied to the mutation width while variance is collapsed.
 const WIDTH_BOOST: float = 2.0
@@ -47,7 +46,7 @@ var fitness_raw: Array = []
 var generation: int = 0
 ## Per-gene normalised variance from the LAST evaluated generation (length 6).
 var last_variance: Array = []
-var width_boosted: bool = false  ## anti-convergence width boost active (3.9)
+var width_boosted: bool = false  ## anti-convergence width boost active
 
 var _rng: RandomNumberGenerator = RandomNumberGenerator.new()
 
@@ -60,7 +59,7 @@ func _init(seed_value: int = 0) -> void:
 	seed_baseline()
 
 
-## Generation 1: every individual is the pure-navigation baseline (steering 3.7).
+## Generation 1: every individual is the non-random Genome.BASELINE infiltrator.
 func seed_baseline() -> void:
 	individuals.clear()
 	fitness_raw.clear()
@@ -134,8 +133,8 @@ func indices_by_fitness() -> Array:
 # =====================================================================
 
 ## Build the next generation from the current fitnesses. Selection uses
-## GENERATION-MEAN-normalised fitness (steering 3.6). Returns the new generation
-## number. Also updates last_variance / width_boosted (steering 3.9).
+## GENERATION-MEAN-normalised fitness. Returns the new generation number. Also
+## updates last_variance / width_boosted (variance-based width control).
 func advance() -> int:
 	last_variance = current_variance()
 	var mean_var: float = _mean(last_variance)
@@ -168,7 +167,7 @@ func advance() -> int:
 # =====================================================================
 
 func _normalise_fitness() -> Array:
-	# Divide each candidate's fitness by the generation mean (steering 3.6).
+	# Divide each candidate's fitness by the generation mean.
 	var mean: float = mean_fitness()
 	var out: Array = []
 	if mean <= 0.0:
@@ -200,18 +199,18 @@ func _crossover(a: PackedFloat32Array, b: PackedFloat32Array) -> PackedFloat32Ar
 func _mutate(genes: PackedFloat32Array, width: float) -> void:
 	for i in Genome.GENE_COUNT:
 		if _rng.randf() < MUTATION_RATE:
-			# Gaussian nudge scaled by the gene's own range (steering 3.9 width).
+			# Gaussian nudge scaled by the gene's own range (mutation width).
 			var delta: float = _rng.randfn(0.0, width * Genome.gene_range(i))
 			genes[i] = genes[i] + delta
 
 
 # =====================================================================
-# VARIANCE (steering 3.9 - normalised so ranges are comparable)
+# VARIANCE (normalised so per-gene ranges are comparable)
 # =====================================================================
 
 ## Per-gene normalised variance of the CURRENT individuals (length 6). Exposed
 ## so the snapshot history can record the variance of the generation that was
-## just evaluated (steering 3.9 / 3.11).
+## just evaluated (recorded in the snapshot history).
 func current_variance() -> Array:
 	return _compute_gene_variance()
 

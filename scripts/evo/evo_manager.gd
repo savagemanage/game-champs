@@ -1,18 +1,18 @@
 extends RefCounted
 class_name EvoManager
-## Drives evolution generations in the BACKGROUND only (steering 3.8). PURE: it
-## holds a Population, evaluates candidates against plain engagement-window
-## Dictionaries, and produces snapshot data. It references NO game scene / node /
-## physics - the game-side bridge (scripts/titan/) feeds it plain windows + the
-## measured preferred-entry direction, and reads best_genes() back out to inject
-## into the live titans. Evolution NEVER runs during live play; the game injects
-## only the latest generation's best genome (steering 3.8).
+## Drives evolution generations in the BACKGROUND only (see handoff.md). PURE: it
+## holds a Population, evaluates candidates against plain scenario-window
+## Dictionaries (wall geometry + citizen positions + player-threat trajectory),
+## and produces snapshot data. It references NO game scene / node / physics - the
+## game-side bridge (scripts/titan/) feeds it plain windows and reads best_genes()
+## back out to inject into the live titans. Evolution NEVER runs during live play;
+## the game injects only the latest generation's best genome.
 ##
-## SINGLE-THREAD BUDGET (steering section 2 / 3.8): a generation's POP_SIZE
-## evaluations are split across frames. The bridge calls process_budget(...)
-## each idle frame with a per-frame candidate budget; when the whole population
-## has been evaluated the manager advances a generation and appends a history
-## entry. No Thread / Mutex / Semaphore / WorkerThreadPool.
+## SINGLE-THREAD BUDGET (see handoff.md): a generation's POP_SIZE evaluations are
+## split across frames. The bridge calls process_budget(...) each idle frame with
+## a per-frame candidate budget; when the whole population has been evaluated the
+## manager advances a generation and appends a history entry. No Thread / Mutex /
+## Semaphore / WorkerThreadPool.
 
 # =====================================================================
 # TUNING CONSTANTS (no magic numbers below this block)
@@ -21,9 +21,10 @@ class_name EvoManager
 ## Candidates evaluated per budgeted frame (keeps a frame cheap on single-thread
 ## web export). The bridge may pass a smaller budget for very slow frames.
 const CANDIDATES_PER_FRAME: int = 4
-## Max engagement windows sampled per candidate (steering 3.5: average over
-## MULTIPLE windows). More windows = steadier fitness, higher per-candidate cost.
-const WINDOWS_PER_CANDIDATE: int = 6
+## Max scenario windows sampled per candidate (average over MULTIPLE windows).
+## More windows = steadier fitness, higher per-candidate cost. Kept modest so a
+## 200-generation harness run and the between-rounds burst stay cheap.
+const WINDOWS_PER_CANDIDATE: int = 4
 ## History ring length kept in memory / snapshot (older gens still on disk if
 ## desired; the evolution screen only needs the recent tail).
 const HISTORY_LIMIT: int = 400
@@ -33,10 +34,9 @@ const HISTORY_LIMIT: int = 400
 # =====================================================================
 
 var population: Population = null
-## Plain engagement-window Dictionaries the sim replays (EngagementWindow shape).
+## Plain scenario-window Dictionaries the sim replays (BackgroundSim shape:
+## wall_radius + gates + citizens + start_titans + player trajectory).
 var _windows: Array = []
-## Measured player-preferred entry direction (from telemetry player model).
-var _preferred_entry_dir: Vector3 = Vector3.ZERO
 ## The 24 player-model bins to persist in the snapshot (read from telemetry).
 var _player_bins: Array = []
 var _rounds_played: int = 0
@@ -44,7 +44,7 @@ var _rounds_played: int = 0
 ## Cursor into the current generation's population (0..POP_SIZE) as we evaluate
 ## across frames.
 var _eval_cursor: int = 0
-## Snapshot history: Array of {gen, best, mean, variance:[6]} (steering 3.11).
+## Snapshot history: Array of {gen, best, mean, variance:[6]} (see handoff.md).
 var history: Array = []
 
 ## Emitted (as a plain Callable list) is avoided to stay signal-free & pure; the
@@ -57,7 +57,7 @@ func _init(seed_value: int = 0) -> void:
 
 ## Seed from a previously saved snapshot so evolution resumes where it left off.
 ## Only the best genome + history + rounds are restored; the population itself
-## restarts from baseline (steering 3.7 keeps the baseline comparison intact),
+## restarts from baseline (keeps the gen-1 baseline comparison intact),
 ## with the loaded best carried as the elite via the first generation's eval.
 func load_from_snapshot(snapshot: Dictionary) -> void:
 	history = (snapshot.get("history", []) as Array).duplicate(true)
@@ -66,13 +66,12 @@ func load_from_snapshot(snapshot: Dictionary) -> void:
 	_player_bins = (pm.get("bins", []) as Array).duplicate()
 
 
-## Feed the latest telemetry data the background sim will replay. Called by the
+## Feed the latest scenario data the background sim will replay. Called by the
 ## bridge between rounds (evolution is background-only). `windows` is an Array of
-## plain window Dictionaries; `preferred_entry_dir` is measured from the player
-## model; `player_bins` is the 24-bin array for the snapshot.
-func set_evaluation_data(windows: Array, preferred_entry_dir: Vector3, player_bins: Array, rounds_played: int) -> void:
+## plain scenario-window Dictionaries; `player_bins` is the 24-bin array kept for
+## the snapshot's player-model record.
+func set_evaluation_data(windows: Array, player_bins: Array, rounds_played: int) -> void:
 	_windows = windows
-	_preferred_entry_dir = preferred_entry_dir
 	_player_bins = player_bins
 	_rounds_played = rounds_played
 
@@ -134,12 +133,7 @@ func sample_window() -> Dictionary:
 	return _windows[0] if not _windows.is_empty() else {}
 
 
-## The measured player-preferred entry direction the sim replays with.
-func preferred_dir() -> Vector3:
-	return _preferred_entry_dir
-
-
-## Build the current snapshot Dictionary (steering 3.11) for persistence.
+## Build the current snapshot Dictionary for persistence.
 func build_snapshot() -> Dictionary:
 	return EvoSnapshot.build(population.generation, population.best_genes(),
 		history, _player_bins, _rounds_played)
@@ -150,13 +144,12 @@ func build_snapshot() -> Dictionary:
 # =====================================================================
 
 ## Average a candidate's fitness over up to WINDOWS_PER_CANDIDATE windows
-## (steering 3.5: guard against single-trajectory overfit).
+## (guard against single-scenario overfit; see handoff.md).
 func _evaluate_candidate(genes: PackedFloat32Array) -> float:
 	var scores: Array = []
 	var n: int = mini(_windows.size(), WINDOWS_PER_CANDIDATE)
 	for i in n:
-		var measurement: Dictionary = BackgroundSim.evaluate_window(
-			_windows[i], genes, _preferred_entry_dir)
+		var measurement: Dictionary = BackgroundSim.evaluate_window(_windows[i], genes)
 		scores.append(Fitness.score_window(measurement))
 	return Fitness.average(scores)
 

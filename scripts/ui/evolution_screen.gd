@@ -137,15 +137,14 @@ func _refresh() -> void:
 	_gen_label.text = str(gen)
 	_title_label.text = tr(KEY_TITLE_GEN) % gen
 	var window: Dictionary = TitanEvo.sample_window()
-	var preferred: Vector3 = TitanEvo.preferred_entry_dir()
 	var genes_list: Array = TitanEvo.all_candidate_genes()
 	var ranked: Array = TitanEvo.ranked_candidate_indices()
 	# Large slot = current best candidate (swaps automatically as best changes).
 	var best_genes: PackedFloat32Array = TitanEvo.current_best_genes()
 	if not window.is_empty():
-		_large_view.set_trace(SimReplay.trace_window(window, best_genes, preferred))
+		_large_view.set_trace(SimReplay.trace_window(window, best_genes))
 	_large_view.highlighted = true
-	_refresh_grid(window, preferred, genes_list, ranked)
+	_refresh_grid(window, genes_list, ranked)
 	# Indicators 2-4 from history; radar overlays the previous generation.
 	_indicators.set_data(TitanEvo.history(), best_genes, _prev_best_genes)
 	_prev_best_genes = Genome.duplicate_genes(best_genes)
@@ -153,7 +152,7 @@ func _refresh() -> void:
 
 ## Fill the grid with the OTHER candidates (best excluded). Dim the bottom-half
 ## by fitness and border-highlight the top TOP_HIGHLIGHT (generation transition).
-func _refresh_grid(window: Dictionary, preferred: Vector3, genes_list: Array, ranked: Array) -> void:
+func _refresh_grid(window: Dictionary, genes_list: Array, ranked: Array) -> void:
 	var best_index: int = ranked[0] if not ranked.is_empty() else -1
 	var others: Array = []
 	for idx in ranked:
@@ -173,7 +172,7 @@ func _refresh_grid(window: Dictionary, preferred: Vector3, genes_list: Array, ra
 		view.highlighted = cell < (TOP_HIGHLIGHT - 1)
 		view.dimmed = cell >= (others.size() - half)
 		if not window.is_empty() and cand < genes_list.size():
-			view.set_trace(SimReplay.trace_window(window, genes_list[cand], preferred))
+			view.set_trace(SimReplay.trace_window(window, genes_list[cand]))
 
 
 # --- LAYOUT ---
@@ -230,12 +229,10 @@ func _begin_comparison() -> void:
 func _start_comparison() -> void:
 	if _comparison != null and _comparison.has_method("play"):
 		var window: Dictionary = {}
-		var preferred: Vector3 = Vector3.ZERO
 		if typeof(TitanEvo) != TYPE_NIL and TitanEvo != null:
 			window = TitanEvo.sample_window()
-			preferred = TitanEvo.preferred_entry_dir()
 		_root.visible = false
-		_comparison.call("play", window, preferred)
+		_comparison.call("play", window)
 	else:
 		_finish()
 

@@ -25,6 +25,9 @@ const HOT_COLOR: Color = Color(1.0, 0.4, 0.15)
 
 # --- Translation KEYS (user-facing text; BBCode wrapping stays in code) ---
 const KEY_ROUND_COMPLETE: String = "RE_ROUND_COMPLETE"
+const KEY_CITIZENS_EATEN: String = "RE_CITIZENS_EATEN"
+const KEY_BREACHES: String = "RE_BREACHES"
+const KEY_TITANS_FELLED: String = "RE_TITANS_FELLED"
 const KEY_LEFT_APPROACH: String = "RE_LEFT_APPROACH"
 const KEY_AVG_DISTANCE: String = "RE_AVG_DISTANCE"
 const KEY_AVG_ENTRY_SPEED: String = "RE_AVG_ENTRY_SPEED"
@@ -98,6 +101,10 @@ func _dismiss() -> void:
 func _format_summary(s: Dictionary) -> String:
 	var lines: Array[String] = []
 	lines.append("[b]%s[/b]" % (tr(KEY_ROUND_COMPLETE) % int(s.get("round", 0))))
+	# Action-defense objective readout first (FEAT-005): the primary numbers.
+	lines.append(tr(KEY_CITIZENS_EATEN) % int(s.get("citizens_eaten", 0)))
+	lines.append(tr(KEY_BREACHES) % int(s.get("breaches", 0)))
+	lines.append(tr(KEY_TITANS_FELLED) % int(s.get("titans_killed_by_player", 0)))
 	lines.append(tr(KEY_LEFT_APPROACH) % (float(s.get("left_approach_ratio", 0.0)) * 100.0))
 	lines.append(tr(KEY_AVG_DISTANCE) % float(s.get("avg_engagement_distance", 0.0)))
 	lines.append(tr(KEY_AVG_ENTRY_SPEED) % float(s.get("avg_entry_speed", 0.0)))

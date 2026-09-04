@@ -1,17 +1,19 @@
 extends RefCounted
 class_name Genome
-## The exactly-SIX genes that parameterise a titan's hybrid steering policy
-## (steering 3.2). PURE DATA: a fixed-order float array plus named index / range
-## constants. No 7th gene, no dynamic gene set - the gene set is closed.
+## The exactly-SIX genes that parameterise a titan's action-defense steering
+## (see handoff.md "Design"). PURE DATA: a fixed-order float array plus named
+## index / range constants. No 7th gene, no dynamic gene set - the gene set is
+## closed.
 ##
-## Genes are WEIGHTS on directions the caller supplies (steering 3.1 / 3.3); a
-## gene never encodes an absolute learned direction. Conditions (e.g. "which
-## side does the player prefer") live in code as measurements; the genome only
-## says how strongly to use each measured direction.
+## Genes are WEIGHTS on directions the caller supplies (weights in genes,
+## conditions in code); a gene never encodes an absolute learned direction.
+## The measured directions (toward the breach, toward the nearest citizen, away
+## from the player, spread across targets, neighbour separation) live in
+## SteeringPolicy / the sim; the genome only says how strongly to use each.
 ##
 ## Nothing here references a game scene / node / physics. It exchanges plain
-## PackedFloat32Array so the whole evo module can be lifted into another
-## project unchanged (steering file-layout invariant).
+## PackedFloat32Array so the whole evo module can be lifted into another project
+## unchanged (the pure-module invariant in handoff.md).
 
 # =====================================================================
 # GENE LAYOUT (FIXED ORDER - do not reorder; the snapshot schema and the
@@ -20,30 +22,34 @@ class_name Genome
 
 const GENE_COUNT: int = 6
 
-const NAV_FOLLOW: int = 0      ## strength of nav-path following
-const INTERCEPT_LEAD: int = 1  ## lead-interception amount (player velocity)
-const FLANK_BIAS: int = 2      ## how strongly to trust the player model
-const NAPE_YAW: int = 3        ## upper-body turn-away amount (nape hiding)
-const SEPARATION: int = 4      ## neighbour separation
-const ENCIRCLE: int = 5        ## tangential encircle component
+const WALL_ASSAULT: int = 0   ## drive toward the wall / nearest breach gap
+const CITIZEN_SEEK: int = 1   ## path to the nearest citizen once breached
+const PLAYER_AVOID: int = 2   ## steer away from the player's threat
+const SPREAD_OUT: int = 3     ## disperse across breach points / target citizens
+const SEPARATION: int = 4     ## neighbour separation (keep, avoids stacking)
+const AGGRESSION: int = 5     ## commitment / speed of pushing straight in
 
 ## Human-readable names in gene order (written verbatim into the snapshot's
-## gene_names array, steering 3.11).
+## gene_names array so the format can be reused / inspected).
 const GENE_NAMES: Array = [
-	"navFollow", "interceptLead", "flankBias", "napeYaw", "separation", "encircle",
+	"wallAssault", "citizenSeek", "playerAvoid", "spreadOut", "separation", "aggression",
 ]
 
-## Per-gene inclusive ranges [min, max] in gene order (steering 3.2 table).
+## Per-gene inclusive ranges [min, max] in gene order. wallAssault + citizenSeek
+## are the primary "get to the objective" drives (widest); playerAvoid/spreadOut
+## are tactical modifiers; aggression scales the forward commitment.
 const GENE_MIN: Array = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-const GENE_MAX: Array = [2.0, 2.0, 2.5, 1.0, 2.0, 2.0]
+const GENE_MAX: Array = [2.5, 2.5, 2.0, 2.0, 2.0, 2.0]
 
-## Generation-1 baseline = pure-navigation chase (steering 3.7 / 3.11):
-## navFollow max, separation mid, everything else zero. NOT random.
-const BASELINE: Array = [2.0, 0.0, 0.0, 0.0, 1.0, 0.0]
+## Generation-1 baseline = a NON-random "straight at the wall then the citizens"
+## infiltrator (analogous to the old pure-nav baseline): full wallAssault +
+## citizenSeek, mid separation + aggression, no player-avoidance / spreading.
+## Improvement is always measured against this committed-but-naive rush.
+const BASELINE: Array = [2.5, 2.5, 0.0, 0.0, 1.0, 1.0]
 
 
-## A fresh baseline gene array (steering 3.7). Every gen-1 individual is a copy
-## of this, so improvement is always measured against pure navigation.
+## A fresh baseline gene array. Every gen-1 individual is a copy of this, so
+## improvement is always measured against the straight-in infiltrator.
 static func make_baseline() -> PackedFloat32Array:
 	return _to_packed(BASELINE)
 
@@ -57,7 +63,7 @@ static func clamp_genes(genes: PackedFloat32Array) -> PackedFloat32Array:
 
 
 ## Width (max - min) of a gene's range. Used to scale mutation so a gene with a
-## wider range mutates proportionally (steering 3.9 mutation width control).
+## wider range mutates proportionally (mutation width control in Population).
 static func gene_range(index: int) -> float:
 	return float(GENE_MAX[index]) - float(GENE_MIN[index])
 

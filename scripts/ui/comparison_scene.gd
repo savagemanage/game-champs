@@ -6,8 +6,8 @@ extends CanvasLayer
 ## left/right and the SAME telemetry engagement window is replayed SIMULTANEOUSLY
 ## on both sides via the PURE evo tracer (SimReplay, the same fixed-step
 ## integrator BackgroundSim scores with):
-##   * LEFT  = generation-1 genes  = pure-navigation baseline [2.0,0,0,0,1.0,0]
-##             (Genome.make_baseline()).
+##   * LEFT  = generation-1 genes  = the non-random infiltrator baseline
+##             (Genome.make_baseline(): straight at the wall then the citizens).
 ##   * RIGHT = the latest generation's best genome (TitanEvo.current_best_genes()).
 ## Each side is labeled ("Gen 1 (pure nav)" vs "Gen N (best)"). After DURATION it
 ## emits `finished` and gameplay resumes.
@@ -60,11 +60,10 @@ func _ready() -> void:
 	_timer.timeout.connect(_on_timeout)
 
 
-## Play the comparison. `window` is the SAME engagement window both sides replay;
-## `preferred_entry_dir` is the measured player-preferred approach used by the
-## flankBias steering term. If no window is available it finishes immediately so
-## gameplay is never blocked.
-func play(window: Dictionary, preferred_entry_dir: Vector3) -> void:
+## Play the comparison. `window` is the SAME scenario window both sides replay
+## (wall geometry + citizen positions + player-threat trajectory). If no window
+## is available it finishes immediately so gameplay is never blocked.
+func play(window: Dictionary) -> void:
 	if window.is_empty():
 		finished.emit()
 		return
@@ -78,8 +77,8 @@ func play(window: Dictionary, preferred_entry_dir: Vector3) -> void:
 
 	_layout()
 	# SAME window, two genomes: left = gen-1 baseline, right = latest best.
-	_left_view.set_trace(SimReplay.trace_window(window, baseline, preferred_entry_dir))
-	_right_view.set_trace(SimReplay.trace_window(window, best, preferred_entry_dir))
+	_left_view.set_trace(SimReplay.trace_window(window, baseline))
+	_right_view.set_trace(SimReplay.trace_window(window, best))
 
 	# Guard the degenerate case: before any evolution (generation <= 1) the best
 	# genome IS the baseline, so both halves are identical. Rather than imply a

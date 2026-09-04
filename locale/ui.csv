@@ -7,6 +7,9 @@ STATUS_TITANS_LEFT,%d titans left,거인 %d마리 남음
 STATUS_ROUND_CLEARED,Round %d cleared!,라운드 %d 클리어!
 STATUS_ROUND_LOST,Round %d lost - the citizens were devoured!,라운드 %d 패배 - 주민들이 잡아먹혔다!
 RE_ROUND_COMPLETE,Round %d complete,라운드 %d 완료
+RE_CITIZENS_EATEN,Citizens devoured: %d,잡아먹힌 주민: %d명
+RE_BREACHES,Wall breaches: %d,성벽 돌파: %d회
+RE_TITANS_FELLED,Titans felled by you: %d,처치한 거인: %d마리
 RE_LEFT_APPROACH,Left approach ratio: %.0f%%,좌측 접근 비율: %.0f%%
 RE_AVG_DISTANCE,Avg engagement distance: %.1f m,평균 교전 거리: %.1f m
 RE_AVG_ENTRY_SPEED,Avg entry speed: %.1f m/s,평균 진입 속도: %.1f m/s
@@ -20,9 +23,9 @@ RE_PLAYER_MODEL_EMPTY,player model: (no data yet),플레이어 모델: (아직 �
 RE_HINT_CONTINUE,Press any key to continue,아무 키나 누르면 계속
 EVO_TITLE_GEN,EVOLVING  -  Generation %d,진화 중  -  세대 %d
 EVO_SKIP_HINT,Press any key to skip,아무 키나 누르면 건너뛰기
-CMP_GEN1_PURE_NAV,Gen 1 (pure nav),1세대 (순수 내비)
+CMP_GEN1_PURE_NAV,Gen 1 (straight rush),1세대 (직진 돌격)
 CMP_GEN_BEST,Gen %d (best),%d세대 (최고)
-CMP_UNEVOLVED,Gen 1 (pure nav) - no evolution yet,1세대 (순수 내비) - 아직 진화 없음
+CMP_UNEVOLVED,Gen 1 (straight rush) - no evolution yet,1세대 (직진 돌격) - 아직 진화 없음
 EVO_IND_FITNESS,"Fitness (best / mean, last %d gen)","적합도 (최고 / 평균, 최근 %d세대)"
 EVO_IND_VARIANCE,Gene variance (shrinking = converging),유전자 분산 (줄어들수록 수렴)
 EVO_IND_RADAR,Best genome (faint = previous gen),최고 유전자 (흐린 선 = 직전 세대)
