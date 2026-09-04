@@ -1,6 +1,24 @@
-[gd_scene load_steps=18 format=3 uid="uid://c1arena00scene1"]
+[gd_scene load_steps=27 format=3 uid="uid://c1arena00scene1"]
+
+[ext_resource type="Texture2D" path="res://assets/textures/ground_color.jpg" id="tex_ground_color"]
+[ext_resource type="Texture2D" path="res://assets/textures/ground_normal.jpg" id="tex_ground_normal"]
+[ext_resource type="Texture2D" path="res://assets/textures/ground_roughness.jpg" id="tex_ground_rough"]
+[ext_resource type="Texture2D" path="res://assets/textures/rock_color.jpg" id="tex_rock_color"]
+[ext_resource type="Texture2D" path="res://assets/textures/rock_normal.jpg" id="tex_rock_normal"]
+[ext_resource type="Texture2D" path="res://assets/textures/rock_roughness.jpg" id="tex_rock_rough"]
+[ext_resource type="Texture2D" path="res://assets/textures/ridge_color.jpg" id="tex_ridge_color"]
+[ext_resource type="Texture2D" path="res://assets/textures/ridge_normal.jpg" id="tex_ridge_normal"]
+[ext_resource type="Texture2D" path="res://assets/textures/ridge_roughness.jpg" id="tex_ridge_rough"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_1"]
+sky_top_color = Color(0.38, 0.52, 0.74, 1)
+sky_horizon_color = Color(0.72, 0.74, 0.72, 1)
+sky_curve = 0.12
+ground_bottom_color = Color(0.24, 0.22, 0.19, 1)
+ground_horizon_color = Color(0.62, 0.6, 0.55, 1)
+ground_curve = 0.08
+sun_angle_max = 45.0
+sun_curve = 0.08
 
 [sub_resource type="Sky" id="Sky_1"]
 sky_material = SubResource("ProceduralSkyMaterial_1")
@@ -9,8 +27,16 @@ sky_material = SubResource("ProceduralSkyMaterial_1")
 background_mode = 2
 sky = SubResource("Sky_1")
 ambient_light_source = 3
-ambient_light_color = Color(0.7, 0.75, 0.85, 1)
-ambient_light_energy = 0.5
+ambient_light_color = Color(0.6, 0.66, 0.78, 1)
+ambient_light_energy = 0.45
+tonemap_mode = 3
+tonemap_exposure = 1.05
+tonemap_white = 6.0
+fog_enabled = true
+fog_light_color = Color(0.68, 0.72, 0.78, 1)
+fog_density = 0.0035
+fog_sky_affect = 0.35
+fog_aerial_perspective = 0.2
 
 [sub_resource type="NavigationMesh" id="NavigationMesh_1"]
 geometry_parsed_geometry_type = 0
@@ -23,13 +49,31 @@ cell_size = 0.5
 cell_height = 0.5
 
 [sub_resource type="StandardMaterial3D" id="Mat_ground"]
-albedo_color = Color(0.34, 0.4, 0.32, 1)
+albedo_color = Color(0.85, 0.86, 0.82, 1)
+albedo_texture = ExtResource("tex_ground_color")
+normal_enabled = true
+normal_texture = ExtResource("tex_ground_normal")
+roughness_texture = ExtResource("tex_ground_rough")
+texture_repeat = true
+uv1_scale = Vector3(16, 16, 1)
 
 [sub_resource type="StandardMaterial3D" id="Mat_rock"]
-albedo_color = Color(0.45, 0.43, 0.4, 1)
+albedo_color = Color(0.85, 0.83, 0.8, 1)
+albedo_texture = ExtResource("tex_rock_color")
+normal_enabled = true
+normal_texture = ExtResource("tex_rock_normal")
+roughness_texture = ExtResource("tex_rock_rough")
+texture_repeat = true
+uv1_scale = Vector3(4, 4, 1)
 
 [sub_resource type="StandardMaterial3D" id="Mat_ridge"]
-albedo_color = Color(0.5, 0.46, 0.38, 1)
+albedo_color = Color(0.85, 0.82, 0.76, 1)
+albedo_texture = ExtResource("tex_ridge_color")
+normal_enabled = true
+normal_texture = ExtResource("tex_ridge_normal")
+roughness_texture = ExtResource("tex_ridge_rough")
+texture_repeat = true
+uv1_scale = Vector3(4, 4, 1)
 
 [sub_resource type="BoxMesh" id="BoxMesh_base"]
 size = Vector3(120, 2, 120)
@@ -68,7 +112,12 @@ environment = SubResource("Environment_1")
 
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
 transform = Transform3D(0.707107, -0.5, 0.5, 0, 0.707107, 0.707107, -0.707107, -0.5, 0.5, 0, 60, 0)
+light_color = Color(1, 0.96, 0.87, 1)
+light_energy = 1.15
 shadow_enabled = true
+shadow_bias = 0.04
+shadow_normal_bias = 1.5
+directional_shadow_max_distance = 160.0
 
 [node name="NavigationRegion3D" type="NavigationRegion3D" parent="."]
 navigation_mesh = SubResource("NavigationMesh_1")

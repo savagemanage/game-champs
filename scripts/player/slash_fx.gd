@@ -8,16 +8,20 @@ extends Node3D
 ##   * play_hit(world_pos, killed): a one-shot particle burst at the nape, a
 ##     crosshair flash, and (kill only) a brief decaying camera shake.
 ##
-## PARTICLES: CPUParticles3D is used (not GPUParticles3D). On the gl_compatibility
-## (GLES3/WebGL2) renderer CPU particles are the reliable choice - GPU particle
-## compute passes are flaky across web GPU drivers, and this is a tiny one-shot
-## burst so there is no perf concern (steering: no premature optimization).
-##
+## PARTICLES: CPUParticles3D (not GPUParticles3D) - the reliable choice on
+## gl_compatibility (GLES3/WebGL2); GPU compute passes are flaky on web drivers
+## and this is a tiny one-shot burst (steering: no premature optimization).
 ## Web-safe: no Thread/Mutex/Semaphore/WorkerThreadPool, no SubViewport.
+##
+## PARTICLE TEXTURE (FEAT-003): a CC0 spark sprite (Kenney, assets/particles/
+## spark.png) becomes the burst quad's additive billboard albedo when imported;
+## loaded defensively so an unimported run keeps the plain FEAT-001 procedural
+## quad. See assets/CREDITS.md.
 
-# =====================================================================
-# TUNING CONSTANTS (no magic numbers below this block)
-# =====================================================================
+# --- TUNING CONSTANTS (no magic numbers below this block) ---
+
+## CC0 spark particle sprite (Kenney Particle Pack, credited in CREDITS.md).
+const SPARK_TEXTURE_PATH: String = "res://assets/particles/spark.png"
 
 # --- Blade swing tween ---
 ## Duration of a single slash swing animation (seconds).
@@ -28,16 +32,12 @@ const SWING_END_DEG: Vector3 = Vector3(-10.0, -40.0, -40.0)
 ## Neutral resting rotation the blade returns to between swings (radians source).
 const SWING_REST_DEG: Vector3 = Vector3(0.0, 0.0, 15.0)
 
-# --- Hit particle burst ---
-## Particle counts for the two hit tiers.
+# --- Hit particle burst (counts, burst speed m/s, lifetime s, quad size m) ---
 const KILL_PARTICLES: int = 48
 const SUB_PARTICLES: int = 18
-## Initial velocity magnitude of the burst (m/s) for each tier.
 const KILL_BURST_SPEED: float = 14.0
 const SUB_BURST_SPEED: float = 7.0
-## How long emitted particles live (seconds).
 const BURST_LIFETIME: float = 0.6
-## Particle draw-quad size (metres).
 const KILL_PARTICLE_SIZE: float = 0.7
 const SUB_PARTICLE_SIZE: float = 0.35
 ## Burst colours.
@@ -67,9 +67,7 @@ const CROSSHAIR_BASE_SIZE: int = 28
 const CROSSHAIR_KILL_SIZE: int = 52
 const CROSSHAIR_SUB_SIZE: int = 38
 
-# =====================================================================
-# STATE
-# =====================================================================
+# --- STATE ---
 
 ## Node paths on the Player (set in Player.tscn) so this helper can find the
 ## blade pivot, the pitch pivot (for shake) and the crosshair label.
@@ -83,6 +81,9 @@ var _crosshair: Label
 
 var _swing_tween: Tween
 var _crosshair_tween: Tween
+
+## Cached CC0 spark sprite (null if not imported yet; burst then stays plain).
+var _spark_texture: Texture2D
 
 # Camera shake bookkeeping. The shake offsets _shake_pivot.position around its
 # neutral rest position and always restores it, so mouse-look (which only
@@ -102,6 +103,11 @@ func _ready() -> void:
 	if _shake_pivot != null:
 		_shake_rest = _shake_pivot.position
 
+	# Load the CC0 spark sprite defensively: unimported (no editor open) means
+	# exists() is false and we keep the plain procedural quad, never erroring.
+	if ResourceLoader.exists(SPARK_TEXTURE_PATH):
+		_spark_texture = load(SPARK_TEXTURE_PATH) as Texture2D
+
 
 func _process(delta: float) -> void:
 	if not _shaking or _shake_pivot == null:
@@ -119,9 +125,7 @@ func _process(delta: float) -> void:
 	_shake_pivot.position = _shake_rest + offset
 
 
-# =====================================================================
-# PUBLIC API (called by slash.gd)
-# =====================================================================
+# --- PUBLIC API (called by slash.gd) ---
 
 ## Play a brief blade swing on the visible weapon.
 func play_swing() -> void:
@@ -158,9 +162,7 @@ func play_hit(world_pos: Vector3, killed: bool) -> void:
 		_start_shake()
 
 
-# =====================================================================
-# INTERNAL
-# =====================================================================
+# --- INTERNAL ---
 
 func _spawn_burst(world_pos: Vector3, killed: bool) -> void:
 	var burst := CPUParticles3D.new()
@@ -190,6 +192,10 @@ func _spawn_burst(world_pos: Vector3, killed: bool) -> void:
 	mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
 	mat.vertex_color_use_as_albedo = true
 	mat.albedo_color = KILL_COLOR if killed else SUB_COLOR
+	# Wire the CC0 spark sprite when available; else stay a plain additive quad
+	# (FEAT-001 look). Tint still comes from the per-particle vertex colour.
+	if _spark_texture != null:
+		mat.albedo_texture = _spark_texture
 	quad.material = mat
 	burst.mesh = quad
 

@@ -11,7 +11,13 @@ radius = 2.0
 height = 12.0
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_body"]
-albedo_color = Color(0.75, 0.55, 0.5, 1)
+albedo_color = Color(0.72, 0.53, 0.48, 1)
+roughness = 0.85
+metallic = 0.0
+metallic_specular = 0.35
+rim_enabled = true
+rim = 0.4
+rim_tint = 0.3
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_nape"]
 size = Vector3(2.5, 2.0, 1.0)

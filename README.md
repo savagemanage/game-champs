@@ -29,6 +29,15 @@ evolution-screen) are all implemented and merged.
 2. Click **Import**, browse to this folder, select `project.godot`, then **Open**.
 3. Press **F5** (or the play button, top-right) to run.
 
+> **First open imports the bundled assets.** The CC0 ground/rock textures under
+> `assets/textures/` and the spark sprite under `assets/particles/` ship without
+> their generated `.import` sidecars (this repo's `.gitignore` excludes
+> `*.import` and `.godot/`, same as the localized `.translation` files). The
+> editor generates them automatically on that first **Import/Open**; until then
+> Godot shows a placeholder for an un-imported texture and the slash spark falls
+> back to its procedural look, so nothing crashes. See `assets/CREDITS.md` for
+> full source/license details.
+
 The game opens on a **Start screen** (title + **Settings**). On this screen you
 choose the language (**Korean / English**) and press **Start / Play** to enter
 the game; your language choice is remembered between sessions. After you start, a
