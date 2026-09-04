@@ -1,7 +1,8 @@
-[gd_scene load_steps=9 format=3 uid="uid://b1player0scene1"]
+[gd_scene load_steps=8 format=3 uid="uid://b1player0scene1"]
 
-[ext_resource type="Script" path="res://scripts/player.gd" id="1_player"]
-[ext_resource type="Script" path="res://scripts/grapple.gd" id="2_grapple"]
+[ext_resource type="Script" path="res://scripts/player/player.gd" id="1_player"]
+[ext_resource type="Script" path="res://scripts/player/grapple.gd" id="2_grapple"]
+[ext_resource type="Script" path="res://scripts/player/slash.gd" id="3_slash"]
 
 [sub_resource type="LabelSettings" id="LabelSettings_crosshair"]
 font_size = 28
@@ -13,20 +14,12 @@ outline_color = Color(0, 0, 0, 0.7)
 radius = 0.5
 height = 2.0
 
-[sub_resource type="BoxShape3D" id="BoxShape3D_slash"]
-size = Vector3(3, 3, 4)
-
-[sub_resource type="BoxMesh" id="BoxMesh_slash"]
-size = Vector3(3, 3, 4)
-
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_slash"]
-transparency = 1
-albedo_color = Color(0.4, 0.8, 1, 0.35)
-shading_mode = 0
-
 [sub_resource type="CapsuleMesh" id="CapsuleMesh_1"]
 radius = 0.5
 height = 2.0
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_blade"]
+size = Vector3(1.6, 1.6, 0.4)
 
 [node name="Player" type="CharacterBody3D"]
 collision_layer = 2
@@ -48,20 +41,6 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, 0)
 
 [node name="Camera3D" type="Camera3D" parent="YawPivot/PitchPivot"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, 5)
-
-[node name="SlashHitbox" type="Area3D" parent="YawPivot"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -3)
-collision_layer = 16
-collision_mask = 8
-monitoring = false
-visible = false
-
-[node name="CollisionShape3D" type="CollisionShape3D" parent="YawPivot/SlashHitbox"]
-shape = SubResource("BoxShape3D_slash")
-
-[node name="MeshInstance3D" type="MeshInstance3D" parent="YawPivot/SlashHitbox"]
-mesh = SubResource("BoxMesh_slash")
-material_override = SubResource("StandardMaterial3D_slash")
 
 [node name="Grapple" type="Node3D" parent="."]
 script = ExtResource("2_grapple")
@@ -87,3 +66,13 @@ text = "+"
 label_settings = SubResource("LabelSettings_crosshair")
 horizontal_alignment = 1
 vertical_alignment = 1
+
+[node name="Slash" type="Node3D" parent="."]
+script = ExtResource("3_slash")
+
+[node name="Sweep" type="ShapeCast3D" parent="Slash"]
+enabled = false
+shape = SubResource("BoxShape3D_blade")
+collision_mask = 8
+collide_with_areas = true
+collide_with_bodies = true

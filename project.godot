@@ -6,16 +6,23 @@ config_version=5
 
 [application]
 
-config/name="Titan Prototype"
+config/name="wirework"
 run/main_scene="res://scenes/Main.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 
 [autoload]
 
-; PlayerStats is a global singleton (autoload). It collects per-round player
-; behaviour, persists it to user://player_stats.json, and exposes the
-; behavior_weights the titan reads each round. Reachable at /root/PlayerStats.
-PlayerStats="*res://scripts/player_stats.gd"
+; Telemetry (spec 2): the only telemetry piece that touches game scenes. It
+; samples the player + titans each physics tick, feeds the pure RoundRecorder,
+; owns the 24-bin PlayerModel + 3-round window ring buffer, and persists to
+; user:// as JSON. Loaded as a global named "Telemetry".
+Telemetry="*res://scripts/telemetry/telemetry.gd"
+; TitanEvo (spec 3): game-side bridge between the PURE evo core (scripts/evo/)
+; and gameplay. Loads the latest best genome from user://wirework_evo.json,
+; exposes it for injection into the live titans, and runs the background
+; evolution BETWEEN rounds (never during live play, steering 3.8). It is the
+; only place scripts/evo/ touches the scene (it reads plain data from Telemetry).
+TitanEvo="*res://scripts/titan/titan_evo_bridge.gd"
 
 [input]
 
