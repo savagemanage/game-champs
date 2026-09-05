@@ -1,7 +1,10 @@
 import Phaser from 'phaser';
 import { SceneKeys, PALETTE, CANVAS } from '../config/GameConfig';
 import { AudioKeys } from '../config/AssetKeys';
-import { AudioManager, type Difficulty, type GameSettings } from '../systems/AudioManager';
+import { AudioManager, type GameSettings } from '../systems/AudioManager';
+import { DIFFICULTY_ORDER, stepDifficulty } from '../config/Difficulty';
+import { LANGUAGES } from '../i18n/strings';
+import { tr } from '../i18n/i18n';
 import { Menu } from '../ui/Menu';
 import { textStyle } from '../ui/UiText';
 
@@ -11,22 +14,25 @@ export interface SettingsData {
   returnTo?: string;
 }
 
-/** The next difficulty in the relaxed -> standard -> brutal -> relaxed cycle. */
-const DIFFICULTY_CYCLE: Difficulty[] = ['relaxed', 'standard', 'brutal'];
-
 /**
- * SettingsScene - master / SFX / music volume sliders + a difficulty selector.
+ * SettingsScene - master / SFX / music volume sliders + bidirectional
+ * difficulty + language selectors.
  *
  * Changes route through the AudioManager singleton, which applies volumes live
  * and PERSISTS every change to localStorage. The scene can be launched two ways:
  *   - As a full screen from the Title (returnTo = Title, the default).
  *   - As an overlay from Pause (returnTo = Pause); on close it wakes that scene.
+ *
+ * Difficulty and language are each a value label flanked by prev (◀) / next (▶)
+ * buttons, so both move in either direction. Switching the language rebuilds
+ * the scene (via scene.restart, preserving returnTo) so every visible label
+ * flips to the new language immediately.
  */
 export class SettingsScene extends Phaser.Scene {
   private audio!: AudioManager;
   private settings!: GameSettings;
   private returnTo: string = SceneKeys.Title;
-  private difficultyBtnLabel: Phaser.GameObjects.Text | null = null;
+  private difficultyValueLabel: Phaser.GameObjects.Text | null = null;
 
   constructor() {
     super({ key: SceneKeys.Settings });
@@ -47,35 +53,40 @@ export class SettingsScene extends Phaser.Scene {
     }
 
     const cx = CANVAS.WIDTH / 2;
-    Menu.title(this, cx, CANVAS.HEIGHT * 0.14, 'SETTINGS', 40);
+    Menu.title(this, cx, CANVAS.HEIGHT * 0.14, tr('settings.title'), 40);
 
-    let y = CANVAS.HEIGHT * 0.3;
-    const step = 68;
-    this.buildSlider('Master', y, this.settings.masterVolume, (v) => {
+    let y = CANVAS.HEIGHT * 0.28;
+    const step = 60;
+    this.buildSlider(tr('settings.master'), y, this.settings.masterVolume, (v) => {
       this.settings.masterVolume = v;
       this.audio.updateSettings({ masterVolume: v });
     });
     y += step;
-    this.buildSlider('SFX', y, this.settings.sfxVolume, (v) => {
+    this.buildSlider(tr('settings.sfx'), y, this.settings.sfxVolume, (v) => {
       this.settings.sfxVolume = v;
       this.audio.updateSettings({ sfxVolume: v });
       this.audio.playSfx(AudioKeys.UiClick, 0.7); // audition the new level
     });
     y += step;
-    this.buildSlider('Music', y, this.settings.musicVolume, (v) => {
+    this.buildSlider(tr('settings.music'), y, this.settings.musicVolume, (v) => {
       this.settings.musicVolume = v;
       this.audio.updateSettings({ musicVolume: v });
     });
     y += step;
 
-    // Difficulty selector (cycles on click).
-    Menu.label(this, cx - 240, y, 'Difficulty', 18, 0.9).setOrigin(0, 0.5);
-    const diffBtn = Menu.button(this, cx + 120, y, this.difficultyText(), () => this.cycleDifficulty(), {
-      width: 220,
-    });
-    this.difficultyBtnLabel = diffBtn.label;
+    // Difficulty selector: ◀ VALUE ▶ (bidirectional).
+    this.difficultyValueLabel = this.buildStepper(
+      tr('settings.difficulty'),
+      y,
+      this.difficultyText(),
+      (dir) => this.stepDifficulty(dir),
+    );
+    y += step;
 
-    Menu.button(this, cx, CANVAS.HEIGHT * 0.88, 'Back', () => this.close(), { width: 200 });
+    // Language selector: ◀ VALUE ▶ (bidirectional). Rebuilds on change.
+    this.buildStepper(tr('settings.language'), y, this.languageText(), (dir) => this.stepLanguage(dir));
+
+    Menu.button(this, cx, CANVAS.HEIGHT * 0.9, tr('settings.back'), () => this.close(), { width: 200 });
 
     this.input.keyboard?.on('keydown-ESC', () => this.close());
   }
@@ -126,16 +137,60 @@ export class SettingsScene extends Phaser.Scene {
     hitZone.on(Phaser.Input.Events.POINTER_DOWN, (p: Phaser.Input.Pointer) => apply(p.worldX));
   }
 
-  private difficultyText(): string {
-    return this.settings.difficulty.toUpperCase();
+  /**
+   * A labelled bidirectional stepper: a left label, then a ◀ prev button, a
+   * centered value, and a ▶ next button. `onStep(dir)` fires with -1 (prev) or
+   * +1 (next). Returns the value Text so callers can relabel it after a step.
+   */
+  private buildStepper(
+    name: string,
+    y: number,
+    initialValue: string,
+    onStep: (dir: -1 | 1) => void,
+  ): Phaser.GameObjects.Text {
+    const cx = CANVAS.WIDTH / 2;
+
+    Menu.label(this, cx - 240, y, name, 18, 0.9).setOrigin(0, 0.5);
+
+    const valueLabel = this.add.text(cx + 120, y, initialValue, textStyle(18)).setOrigin(0.5);
+
+    Menu.button(this, cx + 40, y, '\u25C0', () => onStep(-1), { width: 44, fontSize: 18 });
+    Menu.button(this, cx + 200, y, '\u25B6', () => onStep(1), { width: 44, fontSize: 18 });
+
+    return valueLabel;
   }
 
-  private cycleDifficulty(): void {
-    const idx = DIFFICULTY_CYCLE.indexOf(this.settings.difficulty);
-    const next = DIFFICULTY_CYCLE[(idx + 1) % DIFFICULTY_CYCLE.length];
+  private difficultyText(): string {
+    return tr(`difficulty.${this.settings.difficulty}`);
+  }
+
+  private languageText(): string {
+    return tr(`language.${this.settings.language}`);
+  }
+
+  /** Step difficulty in either direction across relaxed/standard/brutal. */
+  private stepDifficulty(dir: -1 | 1): void {
+    const next = stepDifficulty(this.settings.difficulty, dir);
+    if (next === this.settings.difficulty && DIFFICULTY_ORDER.length > 1) {
+      // Shouldn't happen with wrapping, but guard against no-op relabels.
+      return;
+    }
     this.settings.difficulty = next;
     this.audio.updateSettings({ difficulty: next });
-    this.difficultyBtnLabel?.setText(this.difficultyText());
+    this.difficultyValueLabel?.setText(this.difficultyText());
+  }
+
+  /** Step language and rebuild so every visible label switches immediately. */
+  private stepLanguage(dir: -1 | 1): void {
+    const len = LANGUAGES.length;
+    const idx = LANGUAGES.indexOf(this.settings.language);
+    const next = LANGUAGES[(((idx + dir) % len) + len) % len];
+    if (next === this.settings.language) return;
+    this.settings.language = next;
+    // updateSettings persists AND mirrors into the i18n runtime via setLanguage.
+    this.audio.updateSettings({ language: next });
+    // Rebuild the scene so all tr()-backed labels re-render in the new language.
+    this.scene.restart({ returnTo: this.returnTo } satisfies SettingsData);
   }
 
   private close(): void {

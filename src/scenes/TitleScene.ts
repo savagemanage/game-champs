@@ -3,6 +3,7 @@ import { SceneKeys, PALETTE, CANVAS } from '../config/GameConfig';
 import { TextureKeys, AudioKeys } from '../config/AssetKeys';
 import { AudioManager } from '../systems/AudioManager';
 import { Menu } from '../ui/Menu';
+import { tr } from '../i18n/i18n';
 
 /**
  * TitleScene - the front door. Renders the layered pixel backdrop, the game
@@ -36,15 +37,15 @@ export class TitleScene extends Phaser.Scene {
     this.add.image(cx + 300, CANVAS.HEIGHT * 0.62, TextureKeys.Hero, 0).setScale(4).setFlipX(true);
 
     // Title + tagline.
-    const title = Menu.title(this, cx, CANVAS.HEIGHT * 0.3, 'WIREWORK', 64);
+    const title = Menu.title(this, cx, CANVAS.HEIGHT * 0.3, tr('brand.name'), 64);
     this.tweens.add({ targets: title, y: title.y - 4, duration: 1800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-    Menu.label(this, cx, CANVAS.HEIGHT * 0.44, 'Wall-Defense ODM Action', 20, 0.85);
+    Menu.label(this, cx, CANVAS.HEIGHT * 0.44, tr('title.tagline'), 20, 0.85);
 
     // Menu buttons.
-    Menu.button(this, cx, CANVAS.HEIGHT * 0.62, 'Deploy', () => this.startGame(), { width: 240 });
-    Menu.button(this, cx, CANVAS.HEIGHT * 0.77, 'Settings', () => this.openSettings(), { width: 240 });
+    Menu.button(this, cx, CANVAS.HEIGHT * 0.62, tr('title.deploy'), () => this.startGame(), { width: 240 });
+    Menu.button(this, cx, CANVAS.HEIGHT * 0.77, tr('title.settings'), () => this.openSettings(), { width: 240 });
 
-    Menu.label(this, cx, CANVAS.HEIGHT * 0.92, 'SPACE Deploy    S Settings', 14, 0.5);
+    Menu.label(this, cx, CANVAS.HEIGHT * 0.92, tr('title.hint'), 14, 0.5);
 
     // Keyboard shortcuts mirror the buttons.
     this.input.keyboard?.on('keydown-SPACE', () => this.startGame());

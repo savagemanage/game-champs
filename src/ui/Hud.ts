@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { PALETTE, CANVAS, WALL } from '../config/GameConfig';
 import { textStyle } from './UiText';
+import { tr } from '../i18n/i18n';
 
 /**
  * Snapshot of the state the HUD renders each frame. GameScene assembles this
@@ -87,7 +88,7 @@ export class Hud {
       .setScrollFactor(0)
       .setDepth(Hud.DEPTH + 1);
     scene.add
-      .text(12, 26, 'HP', textStyle(14))
+      .text(12, 26, tr('hud.hp'), textStyle(14))
       .setScrollFactor(0)
       .setDepth(Hud.DEPTH + 1);
 
@@ -103,7 +104,7 @@ export class Hud {
       .setScrollFactor(0)
       .setDepth(Hud.DEPTH + 1);
     scene.add
-      .text(12, 62, 'GAS', textStyle(14))
+      .text(12, 62, tr('hud.gas'), textStyle(14))
       .setScrollFactor(0)
       .setDepth(Hud.DEPTH + 1);
 
@@ -119,7 +120,7 @@ export class Hud {
       .setScrollFactor(0)
       .setDepth(Hud.DEPTH + 1);
     scene.add
-      .text(12, 98, 'OUTER RING', textStyle(14))
+      .text(12, 98, tr('hud.outer'), textStyle(14))
       .setScrollFactor(0)
       .setDepth(Hud.DEPTH + 1);
 
@@ -135,7 +136,7 @@ export class Hud {
       .setScrollFactor(0)
       .setDepth(Hud.DEPTH + 1);
     scene.add
-      .text(12, 134, 'INNER RING', textStyle(14))
+      .text(12, 134, tr('hud.inner'), textStyle(14))
       .setScrollFactor(0)
       .setDepth(Hud.DEPTH + 1);
 
@@ -164,7 +165,7 @@ export class Hud {
       .text(
         CANVAS.WIDTH / 2,
         CANVAS.HEIGHT - 16,
-        'WASD Move   Shift Dash   L-Click Grapple   R-Click Slash   Q/E Reel   P Pause',
+        tr('hud.hint'),
         textStyle(14),
       )
       .setOrigin(0.5, 1)
@@ -192,7 +193,13 @@ export class Hud {
 
     const total = state.citizensTotal || WALL.START_CITIZENS;
     this.statusText.setText(
-      `SCORE ${state.score}\nWAVE ${state.wave}/${state.totalWaves}\nCITIZENS ${state.citizensSaved}/${total}`,
+      tr('hud.status', {
+        score: state.score,
+        wave: state.wave,
+        total: state.totalWaves,
+        saved: state.citizensSaved,
+        citizensTotal: total,
+      }),
     );
   }
 
@@ -228,7 +235,9 @@ export class Hud {
 
   /** Flash the transient wave banner. */
   announceWave(wave: number, totalWaves: number, size: number): void {
-    this.waveBanner.setText(`WAVE ${wave} / ${totalWaves}\n${size} INCOMING`);
+    this.waveBanner.setText(
+      `${tr('hud.wave', { wave, total: totalWaves })}\n${tr('hud.incoming', { count: size })}`,
+    );
     this.waveBanner.setAlpha(1);
     this.scene.tweens.add({ targets: this.waveBanner, alpha: 0, duration: 1600, delay: 900 });
   }

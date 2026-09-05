@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { SceneKeys, PALETTE } from '../config/GameConfig';
 import { AUDIO, IMAGES, SHEETS, assetPath } from '../config/AssetKeys';
 import { textStyle } from '../ui/UiText';
+import { tr } from '../i18n/i18n';
 
 /**
  * PreloadScene loads every runtime asset (spritesheets, backgrounds, UI,
@@ -50,11 +51,11 @@ export class PreloadScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor(PALETTE.BG_SKY_CSS);
 
     this.add
-      .text(cx, barY - 44, 'WIREWORK', textStyle(32, { fontStyle: 'bold' }))
+      .text(cx, barY - 44, tr('brand.name'), textStyle(32, { fontStyle: 'bold' }))
       .setOrigin(0.5);
 
     const label = this.add
-      .text(cx, barY + 32, 'Loading 0%', textStyle(16))
+      .text(cx, barY + 32, tr('preload.loading', { pct: 0 }), textStyle(16))
       .setOrigin(0.5)
       .setAlpha(0.8);
 
@@ -64,7 +65,7 @@ export class PreloadScene extends Phaser.Scene {
 
     this.load.on(Phaser.Loader.Events.PROGRESS, (value: number) => {
       bar.width = Math.max(1, Math.floor(barWidth * value));
-      label.setText(`Loading ${Math.round(value * 100)}%`);
+      label.setText(tr('preload.loading', { pct: Math.round(value * 100) }));
     });
 
     this.load.on(Phaser.Loader.Events.COMPLETE, () => {

@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { SceneKeys, CANVAS } from '../config/GameConfig';
 import { Menu } from '../ui/Menu';
+import { tr } from '../i18n/i18n';
 
 /**
  * PauseScene is a translucent overlay launched ON TOP of a paused GameScene.
@@ -21,13 +22,13 @@ export class PauseScene extends Phaser.Scene {
     // Dim the world behind the overlay.
     this.add.rectangle(0, 0, CANVAS.WIDTH, CANVAS.HEIGHT, 0x000000, 0.55).setOrigin(0, 0);
 
-    Menu.title(this, cx, CANVAS.HEIGHT * 0.24, 'PAUSED', 44);
+    Menu.title(this, cx, CANVAS.HEIGHT * 0.24, tr('pause.title'), 44);
 
-    Menu.button(this, cx, CANVAS.HEIGHT * 0.46, 'Resume', () => this.resume(), { width: 240 });
-    Menu.button(this, cx, CANVAS.HEIGHT * 0.62, 'Settings', () => this.openSettings(), { width: 240 });
-    Menu.button(this, cx, CANVAS.HEIGHT * 0.78, 'Quit to Title', () => this.quit(), { width: 240 });
+    Menu.button(this, cx, CANVAS.HEIGHT * 0.46, tr('pause.resume'), () => this.resume(), { width: 240 });
+    Menu.button(this, cx, CANVAS.HEIGHT * 0.62, tr('pause.settings'), () => this.openSettings(), { width: 240 });
+    Menu.button(this, cx, CANVAS.HEIGHT * 0.78, tr('pause.quit'), () => this.quit(), { width: 240 });
 
-    Menu.label(this, cx, CANVAS.HEIGHT * 0.9, 'P / ESC to resume', 14, 0.5);
+    Menu.label(this, cx, CANVAS.HEIGHT * 0.9, tr('pause.hint'), 14, 0.5);
 
     this.input.keyboard?.on('keydown-P', () => this.resume());
     this.input.keyboard?.on('keydown-ESC', () => this.resume());

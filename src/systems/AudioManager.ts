@@ -1,5 +1,7 @@
 import Phaser from 'phaser';
 import { AudioKeys, type AudioKey } from '../config/AssetKeys';
+import { LANGUAGES, type Language } from '../i18n/strings';
+import { setLanguage } from '../i18n/i18n';
 
 /**
  * Persisted audio/gameplay settings. Master/SFX/music volumes are [0..1]
@@ -13,6 +15,8 @@ export interface GameSettings {
   musicVolume: number;
   /** 'relaxed' | 'standard' | 'brutal' - a coarse difficulty selector. */
   difficulty: Difficulty;
+  /** Active UI language ('en' | 'ko'); mirrored into the i18n runtime. */
+  language: Language;
 }
 
 export type Difficulty = 'relaxed' | 'standard' | 'brutal';
@@ -24,6 +28,7 @@ const DEFAULTS: GameSettings = {
   sfxVolume: 0.9,
   musicVolume: 0.6,
   difficulty: 'standard',
+  language: 'en',
 };
 
 /** Clamp a value into [0..1], falling back to a default if not finite. */
@@ -60,6 +65,8 @@ export class AudioManager {
     this.settings = AudioManager.load();
     // Phaser master mute/volume tracks our master slider directly.
     this.sound.volume = this.settings.masterVolume;
+    // Mirror the persisted language into the i18n runtime at startup.
+    setLanguage(this.settings.language);
   }
 
   /**
@@ -81,11 +88,14 @@ export class AudioManager {
       const parsed = JSON.parse(raw) as Partial<GameSettings>;
       const difficulty: Difficulty =
         parsed.difficulty === 'relaxed' || parsed.difficulty === 'brutal' ? parsed.difficulty : 'standard';
+      const language: Language =
+        parsed.language && LANGUAGES.includes(parsed.language) ? parsed.language : 'en';
       return {
         masterVolume: clamp01(parsed.masterVolume, DEFAULTS.masterVolume),
         sfxVolume: clamp01(parsed.sfxVolume, DEFAULTS.sfxVolume),
         musicVolume: clamp01(parsed.musicVolume, DEFAULTS.musicVolume),
         difficulty,
+        language,
       };
     } catch {
       return { ...DEFAULTS };
@@ -112,6 +122,9 @@ export class AudioManager {
     this.persist();
     this.sound.volume = this.settings.masterVolume;
     this.applyMusicVolume();
+    if (patch.language !== undefined) {
+      setLanguage(this.settings.language);
+    }
   }
 
   private persist(): void {

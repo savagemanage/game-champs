@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { SceneKeys, PALETTE, CANVAS } from '../config/GameConfig';
 import { Menu } from '../ui/Menu';
 import { textStyle } from '../ui/UiText';
+import { tr } from '../i18n/i18n';
 
 export interface GameOverData {
   victory?: boolean;
@@ -32,7 +33,7 @@ export class GameOverScene extends Phaser.Scene {
       .text(
         cx,
         CANVAS.HEIGHT * 0.22,
-        victory ? 'CITY HELD' : 'THE WALL HAS FALLEN',
+        victory ? tr('gameover.victory') : tr('gameover.reason.inner_breached'),
         textStyle(40, {
           color: victory ? PALETTE.TEXT_CSS : PALETTE.DANGER_CSS,
           fontStyle: 'bold',
@@ -48,16 +49,16 @@ export class GameOverScene extends Phaser.Scene {
       .text(
         cx,
         CANVAS.HEIGHT * 0.46,
-        `SCORE   ${score}\nWAVES SURVIVED   ${waves}\nCITIZENS SAVED   ${saved}`,
+        tr('gameover.stats', { score, waves, saved }),
         textStyle(20, { align: 'center', lineSpacing: 8 }),
       )
       .setOrigin(0.5)
       .setAlpha(0.9);
 
-    Menu.button(this, cx - 124, CANVAS.HEIGHT * 0.78, 'Retry', () => this.retry(), { width: 200 });
-    Menu.button(this, cx + 124, CANVAS.HEIGHT * 0.78, 'Title', () => this.toTitle(), { width: 200 });
+    Menu.button(this, cx - 124, CANVAS.HEIGHT * 0.78, tr('gameover.retry'), () => this.retry(), { width: 200 });
+    Menu.button(this, cx + 124, CANVAS.HEIGHT * 0.78, tr('gameover.title'), () => this.toTitle(), { width: 200 });
 
-    Menu.label(this, cx, CANVAS.HEIGHT * 0.92, 'R Retry    SPACE Title', 14, 0.5);
+    Menu.label(this, cx, CANVAS.HEIGHT * 0.92, tr('gameover.keyhint'), 14, 0.5);
 
     this.input.keyboard?.on('keydown-R', () => this.retry());
     this.input.keyboard?.on('keydown-SPACE', () => this.toTitle());
