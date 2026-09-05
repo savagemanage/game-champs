@@ -7,6 +7,8 @@ import { PALETTE, CANVAS, WALL } from '../config/GameConfig';
  * {@link Hud.update} so the HUD stays a pure view with no gameplay coupling.
  */
 export interface HudState {
+  /** Hero health ratio [0..1]. */
+  hpRatio: number;
   /** Gas/stamina ratio [0..1]. */
   gasRatio: number;
   /** Whether gas is fully depleted (drives the danger tint). */
@@ -51,6 +53,7 @@ export interface WeakPointCue {
 export class Hud {
   private readonly scene: Phaser.Scene;
 
+  private readonly hpBar: Phaser.GameObjects.Rectangle;
   private readonly gasBar: Phaser.GameObjects.Rectangle;
   private readonly wallBar: Phaser.GameObjects.Rectangle;
   private readonly statusText: Phaser.GameObjects.Text;
@@ -66,27 +69,39 @@ export class Hud {
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
 
-    // --- Gas gauge ---
+    // --- Health gauge ---
     scene.add.rectangle(6, 8, Hud.BAR_W, 6, PALETTE.WALL_DARK).setOrigin(0, 0.5).setScrollFactor(0).setDepth(Hud.DEPTH);
-    this.gasBar = scene.add
-      .rectangle(6, 8, Hud.BAR_W, 6, PALETTE.PLAYER)
+    this.hpBar = scene.add
+      .rectangle(6, 8, Hud.BAR_W, 6, PALETTE.CITIZEN)
       .setOrigin(0, 0.5)
       .setScrollFactor(0)
       .setDepth(Hud.DEPTH + 1);
     scene.add
-      .text(6, 13, 'GAS', { fontFamily: 'monospace', fontSize: '7px', color: PALETTE.TEXT_CSS })
+      .text(6, 13, 'HP', { fontFamily: 'monospace', fontSize: '7px', color: PALETTE.TEXT_CSS })
+      .setScrollFactor(0)
+      .setDepth(Hud.DEPTH + 1);
+
+    // --- Gas gauge ---
+    scene.add.rectangle(6, 26, Hud.BAR_W, 6, PALETTE.WALL_DARK).setOrigin(0, 0.5).setScrollFactor(0).setDepth(Hud.DEPTH);
+    this.gasBar = scene.add
+      .rectangle(6, 26, Hud.BAR_W, 6, PALETTE.PLAYER)
+      .setOrigin(0, 0.5)
+      .setScrollFactor(0)
+      .setDepth(Hud.DEPTH + 1);
+    scene.add
+      .text(6, 31, 'GAS', { fontFamily: 'monospace', fontSize: '7px', color: PALETTE.TEXT_CSS })
       .setScrollFactor(0)
       .setDepth(Hud.DEPTH + 1);
 
     // --- Wall-integrity gauge ---
-    scene.add.rectangle(6, 26, Hud.BAR_W, 6, PALETTE.WALL_DARK).setOrigin(0, 0.5).setScrollFactor(0).setDepth(Hud.DEPTH);
+    scene.add.rectangle(6, 44, Hud.BAR_W, 6, PALETTE.WALL_DARK).setOrigin(0, 0.5).setScrollFactor(0).setDepth(Hud.DEPTH);
     this.wallBar = scene.add
-      .rectangle(6, 26, Hud.BAR_W, 6, PALETTE.ACCENT)
+      .rectangle(6, 44, Hud.BAR_W, 6, PALETTE.ACCENT)
       .setOrigin(0, 0.5)
       .setScrollFactor(0)
       .setDepth(Hud.DEPTH + 1);
     scene.add
-      .text(6, 31, 'WALL', { fontFamily: 'monospace', fontSize: '7px', color: PALETTE.TEXT_CSS })
+      .text(6, 49, 'WALL', { fontFamily: 'monospace', fontSize: '7px', color: PALETTE.TEXT_CSS })
       .setScrollFactor(0)
       .setDepth(Hud.DEPTH + 1);
 
@@ -134,6 +149,9 @@ export class Hud {
 
   /** Refresh the bars + readout from the current game state. */
   update(state: HudState): void {
+    this.hpBar.width = Math.max(0, Math.floor(Hud.BAR_W * state.hpRatio));
+    this.hpBar.fillColor = state.hpRatio < 0.3 ? PALETTE.ENEMY_WEAKPOINT : PALETTE.CITIZEN;
+
     this.gasBar.width = Math.max(0, Math.floor(Hud.BAR_W * state.gasRatio));
     this.gasBar.fillColor = state.gasEmpty ? PALETTE.ENEMY_WEAKPOINT : PALETTE.PLAYER;
 

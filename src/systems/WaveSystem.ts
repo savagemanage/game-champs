@@ -1,7 +1,17 @@
 import Phaser from 'phaser';
 import { EnemyRole } from '../config/GameConfig';
 import { LEVEL } from '../config/PlayerConfig';
-import { WAVES, WAVE_TUNING, expandWave, waveSize, type WaveDef } from '../config/WaveConfig';
+import {
+  WAVES,
+  WAVE_TUNING,
+  DIFFICULTY_TUNING,
+  expandWave,
+  scaledSpawnIntervalMs,
+  scaledStartDelayMs,
+  type DifficultyTuning,
+  type WaveDef,
+} from '../config/WaveConfig';
+import { AudioManager } from './AudioManager';
 import { createEnemy, type Enemy, type EnemyFactoryDeps } from '../entities/enemies';
 
 /** Callbacks the WaveSystem uses to hand spawned giants back to the scene. */
@@ -45,6 +55,8 @@ export class WaveSystem {
   private spawnQueue: EnemyRole[] = [];
   private nextEventAt = 0;
   private started = false;
+  /** Difficulty pacing/composition scaling, read once at run start. */
+  private difficulty: DifficultyTuning = DIFFICULTY_TUNING.standard;
 
   constructor(scene: Phaser.Scene, hooks: WaveHooks) {
     this.scene = scene;
@@ -66,7 +78,11 @@ export class WaveSystem {
     this.started = true;
     this.phase = Phase.Countdown;
     this.waveIndex = 0;
-    this.nextEventAt = nowMs + WAVE_TUNING.FIRST_WAVE_DELAY_MS;
+    // Read the persisted difficulty ONCE at run start; it only scales pacing
+    // and adds baseline filler - it never mutates any giant's base stats.
+    const difficulty = AudioManager.get(this.scene).getSettings().difficulty;
+    this.difficulty = DIFFICULTY_TUNING[difficulty];
+    this.nextEventAt = nowMs + Math.max(500, Math.round(WAVE_TUNING.FIRST_WAVE_DELAY_MS * this.difficulty.startDelayScale));
   }
 
   /**
@@ -98,10 +114,10 @@ export class WaveSystem {
 
   private beginWave(nowMs: number): void {
     const def = this.currentDef();
-    this.spawnQueue = expandWave(def);
+    this.spawnQueue = expandWave(def, this.difficulty);
     this.phase = Phase.Spawning;
     this.nextEventAt = nowMs; // spawn the first immediately
-    this.hooks.onWaveStart(def.wave, waveSize(def));
+    this.hooks.onWaveStart(def.wave, this.spawnQueue.length);
   }
 
   private spawnNext(nowMs: number): void {
@@ -114,8 +130,9 @@ export class WaveSystem {
     this.spawnOne(role);
 
     const def = this.currentDef();
-    const jitter = def.spawnIntervalMs * WAVE_TUNING.SPAWN_JITTER;
-    this.nextEventAt = nowMs + def.spawnIntervalMs + Phaser.Math.Between(-jitter, jitter);
+    const interval = scaledSpawnIntervalMs(def, this.difficulty);
+    const jitter = interval * WAVE_TUNING.SPAWN_JITTER;
+    this.nextEventAt = nowMs + interval + Phaser.Math.Between(-jitter, jitter);
   }
 
   /** Instantiate one giant at the left approach lane and hand it to the scene. */
@@ -137,6 +154,6 @@ export class WaveSystem {
       return;
     }
     this.phase = Phase.Countdown;
-    this.nextEventAt = nowMs + this.currentDef().startDelayMs;
+    this.nextEventAt = nowMs + scaledStartDelayMs(this.currentDef(), this.difficulty);
   }
 }

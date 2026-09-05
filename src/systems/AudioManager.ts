@@ -3,8 +3,9 @@ import { AudioKeys, type AudioKey } from '../config/AssetKeys';
 
 /**
  * Persisted audio/gameplay settings. Master/SFX/music volumes are [0..1]
- * multipliers; difficulty scales wave pressure (consumed by the wave system in
- * a later balance pass, exposed here so the whole game reads one source).
+ * multipliers; difficulty scales wave pressure - it is read once at run start
+ * by WaveSystem to scale spawn pacing and baseline filler counts (never
+ * per-giant stats), exposed here so the whole game reads one source.
  */
 export interface GameSettings {
   masterVolume: number;

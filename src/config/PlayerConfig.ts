@@ -44,6 +44,21 @@ export const MOVEMENT = {
   MAX_V_SPEED: 900,
 } as const;
 
+/**
+ * Hero survivability tuning. The hero can be hurt by giant melee attacks that
+ * reach them and by direct DebrisProjectile hits; each hit opens a brief
+ * invulnerability window so a single overlap can't chew through the whole bar
+ * in one frame. Hitting zero HP is an additional lose condition.
+ */
+export const HERO_COMBAT = {
+  /** Invulnerability window after taking a hit, ms (i-frames). */
+  INVULN_MS: 800,
+  /** Knockback speed applied away from the damage source on a hit, px/s. */
+  HIT_KNOCKBACK: 220,
+  /** Upward component added to knockback so a hit pops the hero up a little, px/s. */
+  HIT_KNOCKBACK_UP: 140,
+} as const;
+
 /** Air-control tuning (applies while airborne, whether jumping or swinging). */
 export const AIR = {
   /** Horizontal acceleration from input while airborne, px/s^2. */

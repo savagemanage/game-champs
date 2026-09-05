@@ -1,7 +1,8 @@
 import Phaser from 'phaser';
 import { TextureKeys } from '../config/AssetKeys';
 import { PHYSICS } from '../config/GameConfig';
-import { AIR, DASH, HERO_ANIMS, HERO_FRAMES, MOVEMENT } from '../config/PlayerConfig';
+import { AIR, DASH, HERO_ANIMS, HERO_COMBAT, HERO_FRAMES, MOVEMENT } from '../config/PlayerConfig';
+import type { Damageable } from '../types';
 
 /** Horizontal input intent for a frame. */
 export interface MoveInput {
@@ -20,11 +21,19 @@ export interface MoveInput {
  * swing and dash systems drive the same body; this class exposes helpers
  * ({@link body}, {@link setDashState}, {@link applyImpulse}) they use.
  */
-export class Player extends Phaser.Physics.Arcade.Sprite {
+export class Player extends Phaser.Physics.Arcade.Sprite implements Damageable {
   declare public body: Phaser.Physics.Arcade.Body;
 
   /** +1 facing right, -1 facing left. */
   private facing: 1 | -1 = 1;
+
+  /** Health pool (Damageable contract). */
+  public readonly maxHp: number = MOVEMENT.MAX_HP;
+  public hp: number = MOVEMENT.MAX_HP;
+  /** End of the current invulnerability (i-frame) window, ms. */
+  private invulnUntil = 0;
+  /** End of the brief hurt-animation lock, ms. */
+  private hurtUntil = 0;
 
   /** Timestamps for coyote-time / jump-buffer bookkeeping (ms). */
   private lastGroundedAt = -Infinity;
@@ -118,6 +127,68 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.body.velocity.y += vy;
   }
 
+  /** True while the hero is dead (Damageable contract). */
+  get isDead(): boolean {
+    return this.hp <= 0;
+  }
+
+  /** True while the post-hit invulnerability window is active. */
+  isInvulnerable(nowMs: number): boolean {
+    return nowMs < this.invulnUntil;
+  }
+
+  /**
+   * Apply raw damage (Damageable contract). Prefer {@link hurt} from gameplay
+   * so knockback + i-frames + the hurt animation fire together; this bare form
+   * exists to satisfy the contract and clamps HP at zero.
+   */
+  takeDamage(amount: number): void {
+    if (this.isDead) return;
+    this.hp = Math.max(0, this.hp - Math.max(0, Math.round(amount)));
+  }
+
+  /**
+   * Take a hit from a world source at (srcX, srcY): applies damage, opens the
+   * i-frame window, knocks the hero back and up, plays the HURT animation, and
+   * blinks the sprite. No-ops (returns false) while still invulnerable or dead,
+   * so a lingering overlap can't drain HP every frame.
+   *
+   * @returns true if the hit actually landed (damage was applied).
+   */
+  hurt(amount: number, srcX: number, srcY: number, nowMs: number): boolean {
+    if (this.isDead || this.isInvulnerable(nowMs)) return false;
+
+    this.takeDamage(amount);
+    this.invulnUntil = nowMs + HERO_COMBAT.INVULN_MS;
+    this.hurtUntil = nowMs + 260;
+
+    // Knock the hero away from the source horizontally, and always pop up a
+    // little (biased further up when the hit came from below) for readability.
+    const away = Math.sign(this.x - srcX) || -this.facing;
+    const fromBelow = srcY > this.y ? 1.35 : 1;
+    this.body.velocity.x = away * HERO_COMBAT.HIT_KNOCKBACK;
+    this.body.velocity.y = -HERO_COMBAT.HIT_KNOCKBACK_UP * fromBelow;
+
+    // Play the dedicated HURT frame and blink through the i-frame window.
+    this.play(HERO_ANIMS.HURT, true);
+    this.startInvulnBlink();
+    return true;
+  }
+
+  /** Blink the sprite alpha for the duration of the i-frame window. */
+  private startInvulnBlink(): void {
+    this.scene.tweens.killTweensOf(this);
+    this.setAlpha(1);
+    this.scene.tweens.add({
+      targets: this,
+      alpha: 0.35,
+      duration: 90,
+      yoyo: true,
+      repeat: Math.floor(HERO_COMBAT.INVULN_MS / 180),
+      onComplete: () => this.setAlpha(1),
+    });
+  }
+
   private setFacing(dir: number): void {
     this.facing = dir < 0 ? -1 : 1;
     this.setFlipX(this.facing < 0);
@@ -204,6 +275,11 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     const current = this.anims.currentAnim?.key;
     // A one-shot slash keeps playing until finished.
     if (current === HERO_ANIMS.SLASH && this.anims.isPlaying) return;
+    // Hold the HURT pose briefly after a hit so the reaction reads.
+    if (nowMs < this.hurtUntil) {
+      if (current !== HERO_ANIMS.HURT) this.play(HERO_ANIMS.HURT, true);
+      return;
+    }
 
     let next: string;
     if (this.swinging) {

@@ -61,17 +61,22 @@ there will connect.
 ## Gameplay
 
 - **Objective:** defend the wall and the citizens behind it across all waves.
-  Clearing every wave is a **victory**; losing the wall or all citizens ends the
-  run.
+  Clearing every wave is a **victory**; the run ends if the wall is breached,
+  every citizen is devoured, **or the hero's own health runs out**.
+- **Stay alive:** giants that reach you swing at your body, and Throwers lob
+  debris at your head. A hit costs health, knocks you back, and grants brief
+  invulnerability (i-frames). Watch the **HP** gauge — dying loses the run.
 - **Six original giant roles:** Wanderer, Sprinter, Breaker, Aberrant, Armored,
   and Thrower — each with a distinct silhouette, behaviour, and the tell-tale
   nape weak-point.
 - **Gas / stamina:** firing the grapple, reeling, and dashing all spend gas,
-  which regenerates fastest when you are grounded. The HUD shows gas, wall
+  which regenerates fastest when you are grounded. The HUD shows HP, gas, wall
   integrity, wave, score, and citizens remaining.
 - **Settings:** master / SFX / music volume sliders and a difficulty selector.
-  Volumes are applied live and **persisted to `localStorage`**, so they survive
-  reloads.
+  Volumes are applied live and **persisted to `localStorage`**. Difficulty
+  (**relaxed / standard / brutal**) is read at the start of a run and scales
+  wave **pacing** and, at the top setting, adds a few extra baseline giants per
+  wave — it never buffs individual giant stats. All settings survive reloads.
 
 ## Project structure
 

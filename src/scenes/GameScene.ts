@@ -18,8 +18,8 @@ import { DebrisProjectile, type AttackEvent, type Enemy } from '../entities/enem
  * GameScene wires the hero, ODM traversal, and the full wall-defense combat
  * loop: waves of six giant types marching on the settlement, blade combat with
  * nape criticals, a defendable wall, fleeing citizens, and the game-over
- * conditions (all citizens eaten OR the wall breached; clearing every wave is a
- * victory).
+ * conditions (the hero's HP hits zero, all citizens eaten, OR the wall
+ * breached; clearing every wave is a victory).
  *
  * Controls:
  *   - A / D (or arrows): run left/right
@@ -67,6 +67,9 @@ export class GameScene extends Phaser.Scene {
   private wave = 0;
   private citizensSaved = 0;
   private gameEnded = false;
+
+  /** How close a giant's melee swing must land to the hero to hurt them, px. */
+  private static readonly MELEE_HERO_REACH = 52;
 
   constructor() {
     super({ key: SceneKeys.Game });
@@ -332,8 +335,18 @@ export class GameScene extends Phaser.Scene {
     this.enemies = this.enemies.filter((e) => e.active);
   }
 
-  /** Apply a melee giant attack: damage the wall, or eat a citizen past a breach. */
+  /**
+   * Apply a melee giant attack. If the hero is standing within the giant's
+   * swing when it strikes, the hero takes the hit too (their body is a valid
+   * target, not just the wall). Otherwise it damages the wall, or eats the
+   * nearest citizen past a breach.
+   */
   private resolveEnemyAttack(attack: AttackEvent): void {
+    // A melee swing that lands close to the hero hurts the hero.
+    if (Phaser.Math.Distance.Between(attack.x, attack.y, this.player.x, this.player.y) <= GameScene.MELEE_HERO_REACH) {
+      this.damageHero(attack.damage, attack.x, attack.y);
+    }
+
     if (!this.wall.isBreached) {
       const breached = this.wall.damage(attack.damage);
       if (breached) this.onWallBreached();
@@ -341,6 +354,21 @@ export class GameScene extends Phaser.Scene {
       // Past the breach: attack the nearest citizen (eat it).
       this.eatNearestCitizen(attack.x);
     }
+  }
+
+  /**
+   * Route damage into the hero. The Player owns i-frames/knockback/anim, so a
+   * blocked (invulnerable) hit is a no-op; a landed hit plays the hurt SFX and
+   * ends the run if it drops the hero. Screen-shake gives every landed hit
+   * weight.
+   */
+  private damageHero(amount: number, srcX: number, srcY: number): void {
+    if (this.gameEnded) return;
+    const landed = this.player.hurt(amount, srcX, srcY, this.time.now);
+    if (!landed) return;
+    this.audio.playSfx(AudioKeys.Hit, 0.8);
+    this.cameras.main.shake(200, 0.012);
+    if (this.player.isDead) this.endGame(false);
   }
 
   private onWallBreached(): void {
@@ -380,9 +408,9 @@ export class GameScene extends Phaser.Scene {
         proj.onImpact();
         continue;
       }
-      // Direct hit on the hero.
+      // Direct hit on the hero: apply the projectile's hero damage.
       if (Phaser.Math.Distance.Between(proj.x, proj.y, this.player.x, this.player.y) < 16) {
-        this.cameras.main.shake(160, 0.01);
+        this.damageHero(proj.heroDamage, proj.x, proj.y);
         proj.onImpact();
         continue;
       }
@@ -427,6 +455,7 @@ export class GameScene extends Phaser.Scene {
 
   private updateHud(): void {
     this.hud.update({
+      hpRatio: this.player.maxHp > 0 ? this.player.hp / this.player.maxHp : 0,
       gasRatio: this.gas.ratio,
       gasEmpty: this.gas.isEmpty,
       wallRatio: this.wall.ratio,

@@ -263,7 +263,9 @@ export class GrappleSystem {
     if (len < 1) return null;
     const nx = dx / len;
     const ny = dy / len;
-    const reach = Math.min(GRAPPLE.RANGE, len + GRAPPLE.RANGE);
+    // Cast the ray out to the full grapple range; intersections are re-clamped
+    // to GRAPPLE.RANGE below so nothing beyond reach can anchor.
+    const reach = GRAPPLE.RANGE;
 
     // Cast a ray and test each attachable AABB surface for the nearest edge
     // crossing. Simple and robust for a handful of surfaces at this scale.

@@ -14,6 +14,7 @@
  */
 
 import { EnemyRole } from './GameConfig';
+import type { Difficulty } from '../systems/AudioManager';
 
 /** A group of identical giants spawned within a wave. */
 export interface SpawnGroup {
@@ -42,6 +43,36 @@ export const WAVE_TUNING = {
    * wave does not arrive in a metronomic line. [0..1] of spawnIntervalMs.
    */
   SPAWN_JITTER: 0.35,
+} as const;
+
+/**
+ * Per-difficulty PACING/COMPOSITION scaling. The difficulty selector NEVER
+ * touches a giant's base stats (those are fixed in EnemyConfig.ts) - it only
+ * changes how fast a wave arrives and, at the top setting, how many extra
+ * baseline giants pad each wave. This keeps every individual giant identical
+ * across difficulties; only the pressure of the encounter changes.
+ *
+ *  - spawnIntervalScale: multiplies each wave's spawnIntervalMs (< 1 = faster,
+ *    tighter pressure; > 1 = slower, more breathing room).
+ *  - startDelayScale: multiplies the inter-wave delay the same way.
+ *  - extraFillerPerWave: how many additional Wanderer (baseline role) spawns to
+ *    append to each wave's composition - MORE giants, not tougher ones.
+ */
+export interface DifficultyTuning {
+  readonly spawnIntervalScale: number;
+  readonly startDelayScale: number;
+  readonly extraFillerPerWave: number;
+  /** Baseline role used for the extra filler spawns (kept low-tier on purpose). */
+  readonly fillerRole: EnemyRole;
+}
+
+export const DIFFICULTY_TUNING: Record<Difficulty, DifficultyTuning> = {
+  // Relaxed: giants trickle in and waves give a longer breather.
+  relaxed: { spawnIntervalScale: 1.4, startDelayScale: 1.35, extraFillerPerWave: 0, fillerRole: EnemyRole.Wanderer },
+  // Standard: the table as authored.
+  standard: { spawnIntervalScale: 1, startDelayScale: 1, extraFillerPerWave: 0, fillerRole: EnemyRole.Wanderer },
+  // Brutal: relentless pacing plus a couple of extra baseline giants per wave.
+  brutal: { spawnIntervalScale: 0.68, startDelayScale: 0.7, extraFillerPerWave: 2, fillerRole: EnemyRole.Wanderer },
 } as const;
 
 /**
@@ -141,9 +172,17 @@ export function waveSize(def: WaveDef): number {
  * Expand a wave into a flat, shuffle-friendly spawn order (one role per spawn).
  * Interleaves groups round-robin so the composition arrives mixed rather than
  * role-by-role, which makes the encounter read as designed variety.
+ *
+ * When a {@link DifficultyTuning} is supplied, its `extraFillerPerWave` baseline
+ * giants are appended to the wave (MORE giants of a fixed low-tier role, never
+ * tougher stats), so a harder difficulty means a bigger crowd, not buffed foes.
  */
-export function expandWave(def: WaveDef): EnemyRole[] {
-  const queues = def.groups.map((g) => Array<EnemyRole>(g.count).fill(g.role));
+export function expandWave(def: WaveDef, tuning?: DifficultyTuning): EnemyRole[] {
+  const groups: SpawnGroup[] = [...def.groups];
+  if (tuning && tuning.extraFillerPerWave > 0) {
+    groups.push({ role: tuning.fillerRole, count: tuning.extraFillerPerWave });
+  }
+  const queues = groups.map((g) => Array<EnemyRole>(g.count).fill(g.role));
   const order: EnemyRole[] = [];
   let remaining = true;
   while (remaining) {
@@ -157,4 +196,14 @@ export function expandWave(def: WaveDef): EnemyRole[] {
     }
   }
   return order;
+}
+
+/** Difficulty-scaled spawn interval for a wave (rounded ms, floored at 200). */
+export function scaledSpawnIntervalMs(def: WaveDef, tuning: DifficultyTuning): number {
+  return Math.max(200, Math.round(def.spawnIntervalMs * tuning.spawnIntervalScale));
+}
+
+/** Difficulty-scaled inter-wave start delay for a wave (rounded ms, floored at 500). */
+export function scaledStartDelayMs(def: WaveDef, tuning: DifficultyTuning): number {
+  return Math.max(500, Math.round(def.startDelayMs * tuning.startDelayScale));
 }

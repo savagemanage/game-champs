@@ -36,6 +36,13 @@ export class CombatSystem {
 
   private slashReadyAt = 0;
   private hitStopUntil = 0;
+  /**
+   * Monotonic token identifying the CURRENT hit-stop window. Every hitStop()
+   * call bumps this and captures it in its restore timer; a timer only restores
+   * the world if its token is still the latest, so stale (shorter) timers from
+   * an earlier stacked hit can't snap the freeze back before the window ends.
+   */
+  private hitStopToken = 0;
 
   private readonly sparks: Phaser.GameObjects.Particles.ParticleEmitter;
   private readonly steam: Phaser.GameObjects.Particles.ParticleEmitter;
@@ -217,9 +224,19 @@ export class CombatSystem {
    * Arcade's world.timeScale is inverse: larger = slower.
    */
   private hitStop(durationMs: number, nowMs: number): void {
+    // Extend the freeze window to cover the later of the two hits.
     this.hitStopUntil = Math.max(this.hitStopUntil, nowMs + durationMs);
     this.scene.physics.world.timeScale = 5;
-    this.scene.time.delayedCall(durationMs, () => {
+
+    // Tag this restore with a fresh token; only the newest window may restore.
+    // A stacked second hit bumps the token, so the earlier (shorter) timer that
+    // fires first sees a stale token and does nothing, leaving the freeze on
+    // until the extended window truly ends.
+    this.hitStopToken += 1;
+    const token = this.hitStopToken;
+    const restoreDelay = this.hitStopUntil - nowMs;
+    this.scene.time.delayedCall(restoreDelay, () => {
+      if (token !== this.hitStopToken) return;
       this.scene.physics.world.timeScale = 1;
     });
   }
