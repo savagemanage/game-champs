@@ -5,6 +5,8 @@ export interface GameOverData {
   victory?: boolean;
   wavesSurvived?: number;
   citizensSaved?: number;
+  /** Total score accrued from giant kills during the run. */
+  score?: number;
 }
 
 /**
@@ -32,11 +34,13 @@ export class GameOverScene extends Phaser.Scene {
 
     const waves = data.wavesSurvived ?? 0;
     const saved = data.citizensSaved ?? 0;
+    const score = data.score ?? 0;
     this.add
-      .text(cx, CANVAS.HEIGHT * 0.52, `Waves survived: ${waves}    Citizens saved: ${saved}`, {
+      .text(cx, CANVAS.HEIGHT * 0.52, `Score: ${score}\nWaves survived: ${waves}    Citizens saved: ${saved}`, {
         fontFamily: 'monospace',
         fontSize: '10px',
         color: PALETTE.TEXT_CSS,
+        align: 'center',
       })
       .setOrigin(0.5)
       .setAlpha(0.85);

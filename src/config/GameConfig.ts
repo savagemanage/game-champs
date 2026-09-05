@@ -61,99 +61,29 @@ export const WALL = {
 } as const;
 
 /**
- * Enemy archetype roles. These are ORIGINAL, role-based enemy types (no IP
- * names). Each role describes distinct behaviour and stats so waves feel varied.
+ * Enemy giant roles. These are the SIX authoritative, ORIGINAL, role-based
+ * giant types (no IP names). Values are lowercased role strings that key the
+ * FEAT-002 sprite roster (see AssetKeys.ENEMY_TEXTURE_BY_ROLE) and the
+ * per-type fixed base stats in src/config/EnemyConfig.ts.
+ *
+ * Behaviour and tuning live in EnemyConfig.ts + the per-role subclasses under
+ * src/entities/enemies/. Base stats are FIXED at design time; difficulty rises
+ * only through wave composition (see WaveConfig.ts), never by mutating stats.
  */
 export const enum EnemyRole {
-  /** Small, quick swarmer. Rushes the wall in numbers. */
-  Skitterer = 'skitterer',
-  /** Standard mid-size bruiser. Balanced HP and speed. */
-  Bruiser = 'bruiser',
-  /** Tall, slow, high-HP wall-breaker. Heavy nape armor. */
-  Colossus = 'colossus',
-  /** Erratic sprinter with unpredictable movement. */
-  Berserker = 'berserker',
-  /** Lean climber that scales the wall to reach citizens directly. */
-  Climber = 'climber',
+  /** Standard size/speed; basic pathing to the wall/citizens. */
+  Wanderer = 'wanderer',
+  /** Small, fast, quadrupedal charge; reaches the wall quickly. */
+  Sprinter = 'sprinter',
+  /** Huge, slow, high HP; smashes the wall. */
+  Breaker = 'breaker',
+  /** Erratic/unpredictable movement; ignores normal pathing. */
+  Aberrant = 'aberrant',
+  /** Armored front, only weak points exposed; tanky from the front. */
+  Armored = 'armored',
+  /** Ranged; lobs debris at the wall/hero. */
+  Thrower = 'thrower',
 }
-
-/** Per-role tuning. The nape/weak-point is the only reliably lethal target. */
-export interface EnemyArchetype {
-  readonly role: EnemyRole;
-  /** Display name shown in HUD / codex (original naming). */
-  readonly name: string;
-  readonly maxHp: number;
-  readonly moveSpeed: number;
-  /** Body height in logical pixels; drives sprite scale and reach. */
-  readonly height: number;
-  /** Contact damage dealt to the wall per hit. */
-  readonly wallDamage: number;
-  /** Damage multiplier applied when the weak-point (nape) is struck. */
-  readonly weakpointMultiplier: number;
-  /** Relative spawn weight used by the wave composer. */
-  readonly spawnWeight: number;
-}
-
-export const ENEMY_ARCHETYPES: Record<EnemyRole, EnemyArchetype> = {
-  [EnemyRole.Skitterer]: {
-    role: EnemyRole.Skitterer,
-    name: 'Skitterer',
-    maxHp: 40,
-    moveSpeed: 120,
-    height: 22,
-    wallDamage: 4,
-    weakpointMultiplier: 3,
-    spawnWeight: 5,
-  },
-  [EnemyRole.Bruiser]: {
-    role: EnemyRole.Bruiser,
-    name: 'Bruiser',
-    maxHp: 90,
-    moveSpeed: 70,
-    height: 40,
-    wallDamage: 10,
-    weakpointMultiplier: 3,
-    spawnWeight: 4,
-  },
-  [EnemyRole.Colossus]: {
-    role: EnemyRole.Colossus,
-    name: 'Colossus',
-    maxHp: 220,
-    moveSpeed: 34,
-    height: 64,
-    wallDamage: 24,
-    weakpointMultiplier: 2.2,
-    spawnWeight: 1,
-  },
-  [EnemyRole.Berserker]: {
-    role: EnemyRole.Berserker,
-    name: 'Berserker',
-    maxHp: 70,
-    moveSpeed: 150,
-    height: 34,
-    wallDamage: 8,
-    weakpointMultiplier: 3.5,
-    spawnWeight: 2,
-  },
-  [EnemyRole.Climber]: {
-    role: EnemyRole.Climber,
-    name: 'Climber',
-    maxHp: 55,
-    moveSpeed: 95,
-    height: 30,
-    wallDamage: 6,
-    weakpointMultiplier: 3,
-    spawnWeight: 2,
-  },
-};
-
-/** Wave / spawner tuning. */
-export const WAVES = {
-  START_DELAY_MS: 2000,
-  SPAWN_INTERVAL_MS: 1400,
-  BASE_ENEMIES_PER_WAVE: 6,
-  ENEMIES_PER_WAVE_GROWTH: 2,
-} as const;
 
 /** Scene keys used across the game. Centralized to avoid magic strings. */
 export const SceneKeys = {
