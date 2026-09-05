@@ -1,14 +1,16 @@
 import Phaser from 'phaser';
 import { SceneKeys, PALETTE, CANVAS, PHYSICS, WALL } from '../config/GameConfig';
+import { TextureKeys } from '../config/AssetKeys';
 
 /**
- * GameScene is the core play scene. At this scaffold stage it renders a
- * placeholder arena (sky, ground, defended wall, a player marker) so the boot
- * -> title -> game flow is verifiable. Entities, ODM grapple physics, the wave
- * spawner, and combat systems are layered in via later features.
+ * GameScene is the core play scene. At this scaffold stage it renders the
+ * arena using the loaded pixel-art layers (sky, hills, wall) plus the hero
+ * sprite so the boot -> preload -> title -> game flow is verifiable end to end.
+ * Entities, ODM grapple physics, the wave spawner, and combat systems are
+ * layered in via later features.
  */
 export class GameScene extends Phaser.Scene {
-  private player?: Phaser.GameObjects.Rectangle;
+  private player?: Phaser.GameObjects.Sprite;
 
   constructor() {
     super({ key: SceneKeys.Game });
@@ -18,20 +20,18 @@ export class GameScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor(PALETTE.BG_SKY_CSS);
 
     const groundY = CANVAS.HEIGHT - 30;
+    const cx = CANVAS.WIDTH / 2;
 
-    // Parallax-ish background bands.
-    this.add.rectangle(CANVAS.WIDTH / 2, CANVAS.HEIGHT * 0.4, CANVAS.WIDTH, 60, PALETTE.BG_FAR).setAlpha(0.6);
-    this.add.rectangle(CANVAS.WIDTH / 2, CANVAS.HEIGHT * 0.6, CANVAS.WIDTH, 60, PALETTE.BG_NEAR).setAlpha(0.6);
+    // Parallax background layers from the loaded art.
+    this.add.image(cx, CANVAS.HEIGHT / 2, TextureKeys.BgSky);
+    this.add.image(cx, CANVAS.HEIGHT / 2, TextureKeys.BgHills).setAlpha(0.9);
+    this.add.image(cx, CANVAS.HEIGHT / 2, TextureKeys.BgWall);
 
     // Ground.
-    this.add.rectangle(CANVAS.WIDTH / 2, groundY + 15, CANVAS.WIDTH, 30, PALETTE.GROUND);
+    this.add.rectangle(cx, groundY + 15, CANVAS.WIDTH, 30, PALETTE.GROUND);
 
-    // The defended wall on the right, guarding the citizens behind it.
-    this.add.rectangle(CANVAS.WIDTH - 24, groundY - 40, 24, 80, PALETTE.WALL);
-    this.add.rectangle(CANVAS.WIDTH - 24, groundY - 40, 24, 80, PALETTE.WALL_DARK).setAlpha(0.25);
-
-    // Player marker with arcade physics so gravity is exercised at boot.
-    this.player = this.add.rectangle(60, groundY - 40, 8, 16, PALETTE.PLAYER);
+    // Player sprite with arcade physics so gravity is exercised at boot.
+    this.player = this.add.sprite(60, groundY - 16, TextureKeys.Hero, 0);
     this.physics.add.existing(this.player);
     const body = this.player.body as Phaser.Physics.Arcade.Body;
     body.setCollideWorldBounds(true);

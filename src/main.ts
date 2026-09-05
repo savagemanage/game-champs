@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { CANVAS, PHYSICS } from './config/GameConfig';
 import { BootScene } from './scenes/BootScene';
+import { PreloadScene } from './scenes/PreloadScene';
 import { TitleScene } from './scenes/TitleScene';
 import { SettingsScene } from './scenes/SettingsScene';
 import { GameScene } from './scenes/GameScene';
@@ -25,7 +26,7 @@ const config: Phaser.Types.Core.GameConfig = {
       debug: false,
     },
   },
-  scene: [BootScene, TitleScene, SettingsScene, GameScene, GameOverScene],
+  scene: [BootScene, PreloadScene, TitleScene, SettingsScene, GameScene, GameOverScene],
 };
 
 // eslint-disable-next-line no-new

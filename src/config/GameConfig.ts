@@ -158,6 +158,7 @@ export const WAVES = {
 /** Scene keys used across the game. Centralized to avoid magic strings. */
 export const SceneKeys = {
   Boot: 'BootScene',
+  Preload: 'PreloadScene',
   Title: 'TitleScene',
   Settings: 'SettingsScene',
   Game: 'GameScene',

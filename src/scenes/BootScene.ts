@@ -2,9 +2,9 @@ import Phaser from 'phaser';
 import { SceneKeys, PALETTE } from '../config/GameConfig';
 
 /**
- * BootScene doubles as the preload scene. It configures pixel-art defaults and
- * (in later features) loads the texture atlases, audio, and fonts. For now it
- * boots straight into the Title scene once any queued assets are ready.
+ * BootScene is the very first scene. It shows a minimal loading indicator for
+ * any tiny boot-time assets, then hands off to PreloadScene which loads the
+ * full art/audio bundle before the Title screen.
  */
 export class BootScene extends Phaser.Scene {
   constructor() {
@@ -33,6 +33,6 @@ export class BootScene extends Phaser.Scene {
   }
 
   create(): void {
-    this.scene.start(SceneKeys.Title);
+    this.scene.start(SceneKeys.Preload);
   }
 }

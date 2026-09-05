@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { SceneKeys, PALETTE, CANVAS } from '../config/GameConfig';
+import { TextureKeys } from '../config/AssetKeys';
 
 /**
  * TitleScene renders the game title and prompts the player to start. It
@@ -14,6 +15,17 @@ export class TitleScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor(PALETTE.BG_SKY_CSS);
 
     const cx = CANVAS.WIDTH / 2;
+
+    // Parallax backdrop built from the loaded background layers.
+    this.add.image(cx, CANVAS.HEIGHT / 2, TextureKeys.BgSky);
+    this.add.image(cx, CANVAS.HEIGHT / 2, TextureKeys.BgHills).setAlpha(0.9);
+    this.add.image(cx, CANVAS.HEIGHT / 2, TextureKeys.BgWall).setAlpha(0.85);
+
+    // Hero silhouette standing on the wall, scaled up for the splash.
+    this.add
+      .image(cx + 150, CANVAS.HEIGHT * 0.62, TextureKeys.Hero, 0)
+      .setScale(2)
+      .setFlipX(true);
 
     this.add
       .text(cx, CANVAS.HEIGHT * 0.34, 'WIREWORK', {
