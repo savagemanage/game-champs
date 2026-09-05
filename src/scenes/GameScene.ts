@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { SceneKeys, PALETTE, WALL } from '../config/GameConfig';
 import { AudioKeys, TextureKeys } from '../config/AssetKeys';
+import { HERO_THREAT } from '../config/EnemyConfig';
 import { ARENA, CAMERA, GAS } from '../config/PlayerConfig';
 import { Player } from '../entities/Player';
 import { Wall } from '../entities/Wall';
@@ -12,7 +13,13 @@ import { WaveSystem } from '../systems/WaveSystem';
 import { AudioManager } from '../systems/AudioManager';
 import { Hud } from '../ui/Hud';
 import type { GameOverData } from './GameOverScene';
-import { DebrisProjectile, type AttackEvent, type Enemy, type EnemyContext } from '../entities/enemies';
+import {
+  AttackTarget,
+  DebrisProjectile,
+  type AttackEvent,
+  type Enemy,
+  type EnemyContext,
+} from '../entities/enemies';
 
 /**
  * GameScene wires the hero, ODM traversal, and the top-down wall-defense loop:
@@ -62,9 +69,6 @@ export class GameScene extends Phaser.Scene {
   private wave = 0;
   private citizensSaved = 0;
   private gameEnded = false;
-
-  /** How close a giant's melee swing must land to the hero to hurt them, px. */
-  private static readonly MELEE_HERO_REACH = 52;
 
   constructor() {
     super({ key: SceneKeys.Game });
@@ -170,7 +174,6 @@ export class GameScene extends Phaser.Scene {
 
     this.waves = new WaveSystem(this, {
       spawnDebris: (proj) => this.projectiles.push(proj),
-      heroPos: () => new Phaser.Math.Vector2(this.player.x, this.player.y),
       onSpawn: (enemy) => {
         enemy.setDepth(5);
         this.enemies.push(enemy);
@@ -325,15 +328,22 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * Apply a melee giant attack. If the hero is standing within the giant's
-   * swing when it strikes, the hero takes the hit too. Otherwise it damages the
-   * nearest ring segment, or eats the nearest citizen once giants reach the
-   * core past a breach.
+   * Resolve a giant's attack. Hero-aimed swipes (a giant that diverted to hunt
+   * the player) go straight to the hero via damageHero when the swing lands
+   * within melee reach - so standing next to a giant hurts (fix for reported
+   * issue 4). Structure-aimed attacks eat the nearest citizen once past a breach
+   * at the core, otherwise chip the nearest un-breached ring segment.
    */
   private resolveEnemyAttack(attack: AttackEvent): void {
-    // A melee swing that lands close to the hero hurts the hero.
-    if (Phaser.Math.Distance.Between(attack.x, attack.y, this.player.x, this.player.y) <= GameScene.MELEE_HERO_REACH) {
-      this.damageHero(attack.damage, attack.x, attack.y);
+    if (attack.target === AttackTarget.Hero) {
+      // Diverted hero swipe: only lands if the hero is within melee reach.
+      if (
+        Phaser.Math.Distance.Between(attack.x, attack.y, this.player.x, this.player.y) <=
+        HERO_THREAT.MELEE_HERO_RANGE
+      ) {
+        this.damageHero(attack.damage, attack.x, attack.y);
+      }
+      return;
     }
 
     if (this.wall.isInsideInner(attack.x, attack.y)) {

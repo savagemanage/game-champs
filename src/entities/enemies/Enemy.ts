@@ -1,7 +1,13 @@
 import Phaser from 'phaser';
 import { EnemyRole } from '../../config/GameConfig';
 import { ENEMY_TEXTURE_BY_ROLE, type TextureKey } from '../../config/AssetKeys';
-import { ENEMY_COMBAT, ENEMY_STATS, type EnemyStats } from '../../config/EnemyConfig';
+import {
+  ENEMY_COMBAT,
+  ENEMY_STATS,
+  HERO_AGGRESSION,
+  HERO_THREAT,
+  type EnemyStats,
+} from '../../config/EnemyConfig';
 
 /** Result of resolving an incoming blade hit against a giant. */
 export interface HitResult {
@@ -53,12 +59,23 @@ export interface EnemyContext {
   readonly dtMs: number;
 }
 
-/** Emitted when a giant performs an attack (on wall or reaching citizens). */
+/** What a giant's attack is aimed at, so the scene routes damage correctly. */
+export const enum AttackTarget {
+  /** The nearest ring segment / a citizen at the core (the siege objective). */
+  Structure = 0,
+  /** The hero specifically (a diverted swipe/lunge); routed via damageHero. */
+  Hero = 1,
+}
+
+/** Emitted when a giant performs an attack (on ring/citizen or the hero). */
 export interface AttackEvent {
   readonly role: EnemyRole;
   readonly damage: number;
+  /** Origin of the attack (the giant's strike point) in world space. */
   readonly x: number;
   readonly y: number;
+  /** Who the attack is aimed at (drives scene routing). */
+  readonly target: AttackTarget;
 }
 
 /**
@@ -80,13 +97,27 @@ export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
   public readonly stats: EnemyStats;
 
   protected hp: number;
-  /** +1 marching right (toward a right-side wall), used for facing/nape side. */
-  protected marchDir: 1 | -1 = 1;
+  /**
+   * 2D unit heading the giant currently faces (points toward its target). Top
+   * down, facing is a full vector, not a left/right flip: the nape sits on the
+   * BACK of the neck relative to this heading and the frontal-armor test uses
+   * its dot product against an incoming hit. Initialized facing inward.
+   */
+  protected facingX = 0;
+  protected facingY = 1;
 
   private staggerUntil = 0;
   private nextAttackAt = 0;
   private dying = false;
   private dead = false;
+
+  /**
+   * While set in the future, the giant is committed to hunting the hero (bug 4
+   * fix). Prevents per-frame flip-flopping between the wall and the hero.
+   */
+  private heroHuntUntil = 0;
+  /** Last decision timestamp for whether to commit to hunting the hero. */
+  private nextHeroDecisionAt = 0;
 
   /** Vertical nape offset from the neck baseline (unscaled), tuned per role. */
   protected napeLocalY = -6;
@@ -107,8 +138,9 @@ export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
     const walkKey = Enemy.walkAnimKey(role);
     if (scene.anims.exists(walkKey)) this.play(walkKey);
 
-    // Face the march direction (art faces left by default; flip when going right).
-    this.setMarchDir(1);
+    // Face inward toward the arena center by default; steer() updates this to
+    // the live heading each frame.
+    this.faceToward(x, y - 1);
   }
 
   /** The role this giant plays. */
@@ -146,25 +178,40 @@ export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
     return `enemy_walk_${role}`;
   }
 
-  /** Set march/facing direction. Art faces left by default. */
-  protected setMarchDir(dir: 1 | -1): void {
-    this.marchDir = dir;
-    // Default art faces LEFT; when marching right we flip so the front faces right.
-    this.setFlipX(dir > 0);
+  /**
+   * Set the 2D facing to a unit heading (fx, fy). Also flips the sprite so its
+   * silhouette reads the correct way along the horizontal component (the art is
+   * a side profile, so the nape/armor math uses the full vector while the flip
+   * only conveys left/right for the eye).
+   */
+  protected setFacing(fx: number, fy: number): void {
+    const len = Math.hypot(fx, fy);
+    if (len < 1e-4) return;
+    this.facingX = fx / len;
+    this.facingY = fy / len;
+    // Default art faces LEFT; flip when the heading points right.
+    this.setFlipX(this.facingX > 0);
+  }
+
+  /** Convenience: face toward a world point. */
+  protected faceToward(x: number, y: number): void {
+    this.setFacing(x - this.x, y - this.y);
   }
 
   /**
-   * World-space position of the nape/weak-point. The nape sits at the back of
-   * the neck (opposite the direction the giant faces) and high on the body,
-   * just below the head - which is why the player must get behind/above the
-   * giant with the grapple to strike it cleanly.
+   * World-space position of the nape/weak-point. The nape sits at the BACK of
+   * the neck - offset OPPOSITE the 2D facing heading - and high on the body,
+   * just below the head. Because facing is a full vector, the exposed nape
+   * swings around with the giant's heading, so the player must get behind it
+   * (relative to its approach) to strike it cleanly from any angle.
    */
   getNapeWorld(): Phaser.Math.Vector2 {
-    const back = -this.marchDir; // back is opposite the facing/front direction
     const h = this.displayHeight;
-    // Horizontal: a bit toward the back of the neck. Vertical: near the top.
-    const nx = this.x + back * (h * 0.12);
-    const ny = this.y - h * 0.78 + this.napeLocalY * this.stats.scale;
+    // Back of the neck: a step opposite the facing heading in the plane.
+    const backOffset = h * 0.12;
+    const nx = this.x - this.facingX * backOffset;
+    // Keep the nape high on the body (near the head), plus the planar back-step.
+    const ny = this.y - h * 0.78 + this.napeLocalY * this.stats.scale - this.facingY * backOffset;
     return new Phaser.Math.Vector2(nx, ny);
   }
 
@@ -177,9 +224,10 @@ export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
    * Resolve an incoming blade hit.
    * @param baseDamage raw blade damage before crit/armor.
    * @param hitX world x of the strike (to detect frontal vs rear for armor).
+   * @param hitY world y of the strike (2D frontal-armor test).
    * @param onNape whether the strike overlapped the nape hitbox.
    */
-  applyHit(baseDamage: number, hitX: number, onNape: boolean): HitResult {
+  applyHit(baseDamage: number, hitX: number, hitY: number, onNape: boolean): HitResult {
     if (this.dying || this.dead) {
       return { damage: 0, crit: false, blocked: false, killed: false };
     }
@@ -191,11 +239,18 @@ export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
       // Nape/weak-point: big critical bonus; always bypasses frontal armor.
       damage = baseDamage * this.stats.napeCritMultiplier;
     } else if (this.stats.frontalResist > 0) {
-      // Frontal armor: a body hit from the front (side the giant faces) is
-      // heavily reduced. A hit from behind (nape side) bypasses the plate.
-      const frontX = this.marchDir; // giant faces its march direction
-      const strikeFromFront = Math.sign(hitX - this.x) === frontX;
-      if (strikeFromFront) {
+      // Frontal armor: a body hit landing within the frontal cone (the side the
+      // giant faces, tested in 2D via the dot product of the incoming hit
+      // direction against the facing heading) is heavily reduced. A hit from
+      // behind or the flank (outside the cone) bypasses the plate entirely.
+      let hdx = hitX - this.x;
+      let hdy = hitY - this.y;
+      const hlen = Math.hypot(hdx, hdy) || 1;
+      hdx /= hlen;
+      hdy /= hlen;
+      const facingDot = hdx * this.facingX + hdy * this.facingY;
+      const coneCos = Math.cos(Phaser.Math.DegToRad(ENEMY_COMBAT.FRONTAL_CONE_DEG));
+      if (facingDot >= coneCos) {
         damage = baseDamage * (1 - this.stats.frontalResist);
         blocked = true;
       }
@@ -269,10 +324,54 @@ export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
     return Phaser.Math.Distance.Between(this.x, this.y, t.x, t.y) <= this.stats.attackRange;
   }
 
+  /** Planar distance from this giant to the hero. */
+  protected distanceToHero(ctx: EnemyContext): number {
+    return Phaser.Math.Distance.Between(this.x, this.y, ctx.heroX, ctx.heroY);
+  }
+
+  /**
+   * Bug 4 fix: decide whether this giant is currently HUNTING the hero. When
+   * the hero is inside the role's threat radius the giant may commit to the
+   * hero for a sticky window (probability + stickiness are per-role in
+   * HERO_AGGRESSION), so it diverts from the wall to lunge/swipe at the player.
+   * Ranged roles (divertChance 0) never melee-hunt. Returns true while a giant
+   * is committed to the hero.
+   */
+  protected isHuntingHero(ctx: EnemyContext): boolean {
+    const aggression = HERO_AGGRESSION[this.role];
+    if (aggression.divertChance <= 0) return false;
+
+    const heroClose = this.distanceToHero(ctx) <= HERO_THREAT.THREAT_RADIUS;
+
+    // Committed window still active: keep hunting as long as the hero is near.
+    if (ctx.nowMs < this.heroHuntUntil) {
+      return heroClose;
+    }
+
+    // Re-decide on a throttled cadence so we don't roll every frame.
+    if (heroClose && ctx.nowMs >= this.nextHeroDecisionAt) {
+      this.nextHeroDecisionAt = ctx.nowMs + 240;
+      if (Math.random() < aggression.divertChance) {
+        this.heroHuntUntil = ctx.nowMs + aggression.stickinessMs;
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** Whether a hunting giant is close enough to actually strike the hero. */
+  protected inHeroMeleeRange(ctx: EnemyContext): boolean {
+    return this.distanceToHero(ctx) <= HERO_THREAT.MELEE_HERO_RANGE;
+  }
+
   /**
    * Per-frame update. Runs the shared death/stagger gates, then delegates
    * movement to {@link steer} and attacking to {@link performAttack}. Returns an
    * AttackEvent for the scene to apply (ring/citizen/hero damage) or null.
+   *
+   * Hero-threat has priority: a giant committed to hunting the hero and within
+   * melee range swipes the HERO (bug 4). Otherwise it attacks its ring/citizen
+   * target when in range.
    */
   update(ctx: EnemyContext): AttackEvent | null {
     if (this.dying || this.dead) return null;
@@ -284,7 +383,16 @@ export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
 
     this.steer(ctx);
 
-    if (this.inAttackRange(ctx) && ctx.nowMs >= this.nextAttackAt) {
+    if (ctx.nowMs < this.nextAttackAt) return null;
+
+    // Priority 1: if hunting the hero and within reach, swipe the hero.
+    if (this.isHuntingHero(ctx) && this.inHeroMeleeRange(ctx)) {
+      this.nextAttackAt = ctx.nowMs + this.stats.attackCooldownMs;
+      return this.performHeroAttack(ctx);
+    }
+
+    // Priority 2: attack the current siege target (ring segment / citizen).
+    if (this.inAttackRange(ctx)) {
       this.nextAttackAt = ctx.nowMs + this.stats.attackCooldownMs;
       return this.performAttack(ctx);
     }
@@ -292,20 +400,41 @@ export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
   }
 
   /**
-   * Movement AI - overridden per role. Default (top-down): advance radially
-   * toward the nearest un-breached ring segment / the center, stopping at
-   * attack range. FEAT-003 fleshes this into distinct radial-siege behaviours.
+   * Move toward the hero (used by roles that divert to hunt). Faces the hero,
+   * stops at melee range, otherwise closes at base speed.
+   */
+  protected steerTowardHero(ctx: EnemyContext, speedMult = 1): void {
+    this.faceToward(ctx.heroX, ctx.heroY);
+    if (this.inHeroMeleeRange(ctx)) {
+      this.body.setVelocity(0, 0);
+      return;
+    }
+    let dx = ctx.heroX - this.x;
+    let dy = ctx.heroY - this.y;
+    const len = Math.hypot(dx, dy) || 1;
+    dx /= len;
+    dy /= len;
+    const speed = this.stats.moveSpeed * speedMult;
+    this.body.setVelocity(dx * speed, dy * speed);
+  }
+
+  /**
+   * Movement AI - overridden per role. Default (top-down): if hunting the hero,
+   * close on the hero; otherwise advance radially toward the nearest un-breached
+   * ring segment / the center, stopping at attack range.
    */
   protected steer(ctx: EnemyContext): void {
+    if (this.isHuntingHero(ctx)) {
+      this.steerTowardHero(ctx);
+      return;
+    }
     const t = this.currentTarget(ctx);
     let dx = t.x - this.x;
     let dy = t.y - this.y;
     const len = Math.hypot(dx, dy) || 1;
     dx /= len;
     dy /= len;
-    // Facing follows the horizontal component of the heading (2D facing lands
-    // in FEAT-003; a flip is enough to read direction here).
-    this.setMarchDir(dx >= 0 ? 1 : -1);
+    this.setFacing(dx, dy);
     if (this.inAttackRange(ctx)) {
       this.body.setVelocity(0, 0);
     } else {
@@ -314,12 +443,54 @@ export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
   }
 
   /**
-   * Perform an attack when in range. Default: a melee strike carrying the
-   * giant's world position; the scene routes it to the nearest ring segment,
-   * a citizen past a breach, or the hero if adjacent. Thrower overrides this to
+   * Perform an attack on the siege objective when in range. Default: a melee
+   * strike carrying the giant's world position; the scene routes it to the
+   * nearest ring segment or a citizen past a breach. Thrower overrides this to
    * spawn a ranged projectile instead.
    */
   protected performAttack(_ctx: EnemyContext): AttackEvent | null {
-    return { role: this.role, damage: this.stats.attack, x: this.x, y: this.y };
+    return {
+      role: this.role,
+      damage: this.stats.attack,
+      x: this.x,
+      y: this.y,
+      target: AttackTarget.Structure,
+    };
+  }
+
+  /**
+   * Perform a telegraphed swipe/lunge aimed at the HERO (bug 4). A short
+   * out-and-back lunge tween toward the hero gives the strike a readable
+   * wind-up; the returned event is routed to GameScene.damageHero, which owns
+   * proximity + i-frames. Carries the giant's strike point so the scene can
+   * range-check the hit.
+   */
+  protected performHeroAttack(ctx: EnemyContext): AttackEvent | null {
+    this.faceToward(ctx.heroX, ctx.heroY);
+    this.lungeAt(ctx.heroX, ctx.heroY);
+    return {
+      role: this.role,
+      damage: this.stats.attack,
+      x: this.x,
+      y: this.y,
+      target: AttackTarget.Hero,
+    };
+  }
+
+  /** A brief out-and-back lunge toward a world point, for attack telegraphing. */
+  protected lungeAt(x: number, y: number): void {
+    let dx = x - this.x;
+    let dy = y - this.y;
+    const len = Math.hypot(dx, dy) || 1;
+    dx /= len;
+    dy /= len;
+    this.scene.tweens.add({
+      targets: this,
+      x: this.x + dx * HERO_THREAT.LUNGE_DISTANCE,
+      y: this.y + dy * HERO_THREAT.LUNGE_DISTANCE,
+      duration: HERO_THREAT.LUNGE_MS,
+      yoyo: true,
+      ease: 'Quad.easeOut',
+    });
   }
 }

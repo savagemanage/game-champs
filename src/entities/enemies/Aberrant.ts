@@ -20,10 +20,16 @@ export class Aberrant extends Enemy {
   }
 
   protected steer(ctx: EnemyContext): void {
+    // Erratic and twitchy: readily pounces at a nearby hero (high aggression).
+    if (this.isHuntingHero(ctx)) {
+      this.steerTowardHero(ctx);
+      return;
+    }
+
     const target = this.currentTarget(ctx);
     if (this.inAttackRange(ctx)) {
       const hh = this.headingTo(target);
-      this.setMarchDir(hh.x >= 0 ? 1 : -1);
+      this.setFacing(hh.x, hh.y);
       this.body.setVelocity(0, 0);
       return;
     }
@@ -48,6 +54,8 @@ export class Aberrant extends Enemy {
     const vx = (h.x * forward + perpX * wobble * 0.5) * speed * this.twitchDir;
     const vy = (h.y * forward + perpY * wobble * 0.5) * speed * this.twitchDir;
     this.body.setVelocity(vx, vy);
-    this.setMarchDir(vx >= 0 ? 1 : -1);
+    // Facing follows the actual (jittered) velocity, so its exposed nape angle
+    // swings around unpredictably - the intended read for this role.
+    this.setFacing(vx, vy);
   }
 }

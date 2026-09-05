@@ -20,9 +20,17 @@ export class Sprinter extends Enemy {
   }
 
   protected steer(ctx: EnemyContext): void {
+    // Most likely of the roles to break off and CHARGE the hero when near.
+    if (this.isHuntingHero(ctx)) {
+      // The charge multiplier is a movement PATTERN (applied to displacement),
+      // never a mutation of the FIXED base speed stat.
+      this.steerTowardHero(ctx, Sprinter.CHARGE_MULT);
+      return;
+    }
+
     const target = this.currentTarget(ctx);
     const h = this.headingTo(target);
-    this.setMarchDir(h.x >= 0 ? 1 : -1);
+    this.setFacing(h.x, h.y);
     if (this.inAttackRange(ctx)) {
       this.body.setVelocity(0, 0);
       return;

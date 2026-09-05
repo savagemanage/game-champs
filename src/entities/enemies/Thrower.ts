@@ -18,19 +18,11 @@ export class Thrower extends Enemy {
   /** Standoff distance from its target the Thrower prefers to hold, px. */
   private static readonly STANDOFF = 420;
 
-  constructor(
-    scene: Phaser.Scene,
-    x: number,
-    y: number,
-    spawnDebris: SpawnDebris,
-    _heroPos: () => Phaser.Math.Vector2,
-  ) {
+  constructor(scene: Phaser.Scene, x: number, y: number, spawnDebris: SpawnDebris) {
     super(scene, x, y, EnemyRole.Thrower);
     this.napeLocalY = -10;
     this.spawnDebris = spawnDebris;
-    // The hero position now arrives via EnemyContext each frame; the legacy
-    // heroPos accessor is retained in the factory signature for FEAT-003.
-    void _heroPos;
+    // The hero position arrives via EnemyContext each frame (see performAttack).
   }
 
   protected inAttackRange(ctx: EnemyContext): boolean {
@@ -46,7 +38,7 @@ export class Thrower extends Enemy {
     const dist = Math.hypot(dx, dy) || 1;
     dx /= dist;
     dy /= dist;
-    this.setMarchDir(dx >= 0 ? 1 : -1);
+    this.setFacing(dx, dy);
     if (dist > Thrower.STANDOFF) {
       // Advance toward its target until within standoff, then hold to throw.
       this.body.setVelocity(dx * this.stats.moveSpeed, dy * this.stats.moveSpeed);
@@ -67,10 +59,10 @@ export class Thrower extends Enemy {
     const proj = new DebrisProjectile(this.scene, this.x, this.y, targetX, targetY);
     this.spawnDebris(proj);
 
-    // Throw animation flourish.
+    // Throw animation flourish (rock back along the facing side).
     this.scene.tweens.add({
       targets: this,
-      angle: this.marchDir * -8,
+      angle: (this.facingX >= 0 ? 1 : -1) * -8,
       duration: 120,
       yoyo: true,
     });

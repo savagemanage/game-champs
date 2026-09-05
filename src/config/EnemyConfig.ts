@@ -164,3 +164,60 @@ export const ENEMY_COMBAT = {
   /** Thrower projectile damage to the hero on a direct hit. */
   PROJECTILE_HERO_DAMAGE: 12,
 } as const;
+
+/**
+ * Hero-threat tuning (fix for reported issue 4 - "giants ignore the hero").
+ *
+ * When the hero strays within {@link THREAT_RADIUS} of a giant, the giant may
+ * DIVERT from its ring/citizen target to hunt the hero: it lunges in and, once
+ * within {@link MELEE_HERO_RANGE}, its attack is aimed at the hero (routed
+ * through GameScene.damageHero, which owns proximity + i-frames). How readily a
+ * giant diverts is role-dependent via {@link HERO_AGGRESSION} (a probability
+ * per attack-decision plus a divert bias), so each role keeps its identity: the
+ * Breaker almost never looks up from the wall, the Sprinter/Aberrant pounce.
+ *
+ * These are BEHAVIOUR/COMPOSITION numbers, not base stats: they never mutate
+ * ENEMY_STATS, they only steer targeting.
+ */
+export const HERO_THREAT = {
+  /** Distance within which a giant will consider diverting to the hero, px. */
+  THREAT_RADIUS: 150,
+  /** Planar reach at which a diverting melee giant can strike the hero, px. */
+  MELEE_HERO_RANGE: 60,
+  /**
+   * Forward lunge distance of the telegraphed hero-swipe tween, px. Gives the
+   * attack a readable wind-up so the player can dodge.
+   */
+  LUNGE_DISTANCE: 14,
+  /** Duration of the lunge tween (out-and-back), ms. */
+  LUNGE_MS: 130,
+} as const;
+
+/**
+ * Per-role hero aggression. `divertChance` is the probability, evaluated when a
+ * giant is eligible (hero inside THREAT_RADIUS), that it commits to hunting the
+ * hero this decision window rather than the wall. `stickiness` keeps a
+ * committed giant locked onto the hero for a short time so it does not flip-flop
+ * every frame. Kept in config so the wall-vs-hero balance is tunable centrally.
+ */
+export interface HeroAggression {
+  /** Probability [0..1] of diverting to the hero when eligible. */
+  readonly divertChance: number;
+  /** How long a hero-hunt commitment persists once taken, ms. */
+  readonly stickinessMs: number;
+}
+
+export const HERO_AGGRESSION: Record<EnemyRole, HeroAggression> = {
+  // Baseline: swipes opportunistically when the hero is adjacent.
+  [EnemyRole.Wanderer]: { divertChance: 0.45, stickinessMs: 900 },
+  // Pouncer: most likely to break off and lunge at a nearby hero.
+  [EnemyRole.Sprinter]: { divertChance: 0.85, stickinessMs: 1100 },
+  // Wall-smasher: fixated on the rings, barely notices the hero.
+  [EnemyRole.Breaker]: { divertChance: 0.08, stickinessMs: 500 },
+  // Erratic: unpredictable pounces at the hero.
+  [EnemyRole.Aberrant]: { divertChance: 0.7, stickinessMs: 800 },
+  // Armored: defensive, low hero aggression (hero must flank it anyway).
+  [EnemyRole.Armored]: { divertChance: 0.25, stickinessMs: 700 },
+  // Ranged: lobs at the hero when close but does not chase in melee.
+  [EnemyRole.Thrower]: { divertChance: 0.0, stickinessMs: 0 },
+} as const;

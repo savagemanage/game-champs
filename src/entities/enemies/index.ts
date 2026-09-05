@@ -8,8 +8,8 @@ import { Aberrant } from './Aberrant';
 import { Armored } from './Armored';
 import { Thrower, type SpawnDebris } from './Thrower';
 
-export { Enemy } from './Enemy';
-export type { AttackEvent, EnemyContext, HitResult } from './Enemy';
+export { Enemy, AttackTarget } from './Enemy';
+export type { AttackEvent, EnemyContext, HitResult, SiegeTarget } from './Enemy';
 export { Wanderer } from './Wanderer';
 export { Sprinter } from './Sprinter';
 export { Breaker } from './Breaker';
@@ -18,10 +18,13 @@ export { Armored } from './Armored';
 export { Thrower } from './Thrower';
 export { DebrisProjectile } from './DebrisProjectile';
 
-/** External hooks the Thrower role needs from the scene. */
+/**
+ * External hooks the enemy factory needs from the scene. Only the Thrower needs
+ * a way to register its projectiles; the hero position is delivered via
+ * EnemyContext each frame, so it is no longer a construction dependency.
+ */
 export interface EnemyFactoryDeps {
   readonly spawnDebris: SpawnDebris;
-  readonly heroPos: () => Phaser.Math.Vector2;
 }
 
 /**
@@ -48,7 +51,7 @@ export function createEnemy(
     case EnemyRole.Armored:
       return new Armored(scene, x, y);
     case EnemyRole.Thrower:
-      return new Thrower(scene, x, y, deps.spawnDebris, deps.heroPos);
+      return new Thrower(scene, x, y, deps.spawnDebris);
     default: {
       // Exhaustiveness guard: adding a role without a case is a compile error.
       const _never: never = role;

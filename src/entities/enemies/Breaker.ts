@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { EnemyRole } from '../../config/GameConfig';
-import { Enemy, type AttackEvent, type EnemyContext } from './Enemy';
+import { AttackTarget, Enemy, type AttackEvent, type EnemyContext } from './Enemy';
 
 /**
  * Breaker - the huge, slow, high-HP wall-smasher. It ignores citizens and
@@ -15,9 +15,16 @@ export class Breaker extends Enemy {
   }
 
   protected steer(ctx: EnemyContext): void {
-    // Fixates on the nearest ring segment (never diverts), then stops and smashes.
+    // Dedicated ring-breaker: largely IGNORES the hero (very low aggression in
+    // HERO_AGGRESSION) and fixates on the nearest segment, then stops and slams.
+    // It still runs the base hero-hunt gate so a rare divert is possible, but in
+    // practice it marches on the wall.
+    if (this.isHuntingHero(ctx)) {
+      this.steerTowardHero(ctx);
+      return;
+    }
     const h = this.headingTo(this.currentTarget(ctx));
-    this.setMarchDir(h.x >= 0 ? 1 : -1);
+    this.setFacing(h.x, h.y);
     if (this.inAttackRange(ctx)) {
       this.body.setVelocity(0, 0);
     } else {
@@ -25,15 +32,16 @@ export class Breaker extends Enemy {
     }
   }
 
-  protected performAttack(_ctx: EnemyContext): AttackEvent | null {
-    // A heavy slam telegraphed by a small forward lunge tween for feel.
-    this.scene.tweens.add({
-      targets: this,
-      x: this.x + this.marchDir * 6,
-      duration: 90,
-      yoyo: true,
-      ease: 'Quad.easeOut',
-    });
-    return { role: this.role, damage: this.stats.attack, x: this.x, y: this.y - this.displayHeight * 0.4 };
+  protected performAttack(ctx: EnemyContext): AttackEvent | null {
+    // A heavy slam telegraphed by a big slow forward lunge along the heading.
+    const t = this.currentTarget(ctx);
+    this.lungeAt(t.x, t.y);
+    return {
+      role: this.role,
+      damage: this.stats.attack,
+      x: this.x + this.facingX * this.displayHeight * 0.2,
+      y: this.y + this.facingY * this.displayHeight * 0.2,
+      target: AttackTarget.Structure,
+    };
   }
 }

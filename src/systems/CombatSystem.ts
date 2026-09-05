@@ -152,7 +152,7 @@ export class CombatSystem {
       const napeDist = Phaser.Math.Distance.Between(cxp, cyp, nape.x, nape.y);
       const onNape = napeDist <= enemy.getNapeRadius() + reach * 0.4;
 
-      const result = enemy.applyHit(PLAYER.BLADE_DAMAGE, cxp, onNape);
+      const result = enemy.applyHit(PLAYER.BLADE_DAMAGE, cxp, cyp, onNape);
       if (result.damage <= 0 && result.blocked) {
         // Armor fully absorbed: a clang, no blood.
         this.armorClang(cxp, cyp);

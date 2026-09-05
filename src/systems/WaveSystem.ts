@@ -148,7 +148,6 @@ export class WaveSystem {
     const y = ARENA.CENTER_Y + Math.sin(angle) * radius;
     const enemy = createEnemy(this.scene, role, x, y, {
       spawnDebris: this.hooks.spawnDebris,
-      heroPos: this.hooks.heroPos,
     });
     this.hooks.onSpawn(enemy);
   }
