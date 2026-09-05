@@ -1,4 +1,10 @@
-import { ENEMY_DEFS, TROOP_ORDER, enemyPower, troopDef } from '../config/TroopConfig';
+import {
+  ENEMY_DEFS,
+  TROOP_ORDER,
+  enemyPower,
+  troopDef,
+  troopVsEnemyMultiplier,
+} from '../config/TroopConfig';
 import { waveComposition, waveReward } from '../config/WaveConfig';
 import type { Army, ResourceCost, TroopKind } from '../types';
 
@@ -31,6 +37,13 @@ export interface CombatResult {
  * Math.random. A seed is accepted for future variability but the default
  * resolution is fully reproducible, so unit tests are stable.
  *
+ * Composition matters: each troop kind's power is scaled by the soft-RPS
+ * {@link troopVsEnemyMultiplier} counter against the wave's enemy roles
+ * (weighted by each enemy role's share of the wave power). Fielding the troop
+ * that counters a wave's dominant enemy is worth more than an equal-cost
+ * off-counter stack, so army mix changes outcomes. The comparison stays a pure,
+ * deterministic function of `(army, wave)`.
+ *
  * Casualty model: the loser is wiped out; the winner loses troops in proportion
  * to how close the fight was (a lopsided win costs almost nothing, a squeaker
  * costs a large share). Losses are distributed across troop kinds in proportion
@@ -38,14 +51,53 @@ export interface CombatResult {
  */
 export class CombatSystem {
   /**
-   * Total effective power of an army bundle. Sums each troop kind's
-   * `count * troopPower`. Pure and monotonic in troop counts.
+   * Raw total power of an army bundle, IGNORING matchups. Sums each troop
+   * kind's `count * troopPower`. Pure and monotonic in troop counts. Used for
+   * coarse sizing/UI; the battle decision uses {@link effectiveArmyPower}.
    */
   static armyPower(army: Army): number {
     let total = 0;
     for (const kind of TROOP_ORDER) {
       const count = Math.max(0, Math.floor(army[kind] ?? 0));
       if (count > 0) total += count * troopUnitPower(kind);
+    }
+    return total;
+  }
+
+  /**
+   * Composition-aware effective power of `army` against wave `n`. Each troop
+   * kind's raw power is multiplied by the wave-power-weighted average of its
+   * soft-RPS counter multiplier against every enemy role in the wave. This is
+   * the value the resolver compares against {@link wavePower}, so a stack that
+   * counters the wave's dominant enemy outperforms an equal raw-power stack
+   * that does not. Pure and deterministic.
+   */
+  static effectiveArmyPower(army: Army, n: number): number {
+    const composition = waveComposition(n);
+    // Wave power share per enemy kind (weights for the average multiplier).
+    let waveTotal = 0;
+    const share: { kind: (typeof composition)[number]['kind']; power: number }[] = [];
+    for (const entry of composition) {
+      const power = entry.count * enemyPower(entry.kind);
+      waveTotal += power;
+      share.push({ kind: entry.kind, power });
+    }
+
+    let total = 0;
+    for (const kind of TROOP_ORDER) {
+      const count = Math.max(0, Math.floor(army[kind] ?? 0));
+      if (count <= 0) continue;
+      const raw = count * troopUnitPower(kind);
+      if (waveTotal <= 0) {
+        // No wave to counter (empty/degenerate): matchups are neutral.
+        total += raw;
+        continue;
+      }
+      let weighted = 0;
+      for (const s of share) {
+        weighted += (s.power / waveTotal) * troopVsEnemyMultiplier(kind, s.kind);
+      }
+      total += raw * weighted;
     }
     return total;
   }
@@ -65,7 +117,10 @@ export class CombatSystem {
    * applies survivors/reward from the result.
    */
   static resolve(army: Army, wave: number): CombatResult {
-    const armyPower = CombatSystem.armyPower(army);
+    // The decision uses COMPOSITION-AWARE effective power (matchups applied),
+    // reported as `armyPower` so the HUD/result reflect what actually decided
+    // the battle. `wavePower` is the raw enemy total to beat.
+    const armyPower = CombatSystem.effectiveArmyPower(army, wave);
     const wavePower = CombatSystem.wavePower(wave);
 
     const casualties: Army = { spearman: 0, archer: 0, knight: 0 };

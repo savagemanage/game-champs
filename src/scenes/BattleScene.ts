@@ -252,8 +252,13 @@ export class BattleScene extends Phaser.Scene {
     this.finished = true;
     this.stepEvent?.remove();
 
-    // Snap the visible counts to the exact resolution as a final beat.
+    // Snap BOTH visible sides to the exact terminal resolution as a final beat
+    // so a maxed (sprite-capped) army reads cleanly on the last frame: friendly
+    // to the survivor total, enemy to its terminal timeline count (0 on a win,
+    // the surviving remainder on a loss). Without snapping the enemy side too,
+    // visibleRatio rounding could leave a stray raider standing at 42/side.
     this.trimSide(this.friendlyUnits, this.result.win ? this.armyTotal(this.result.survivors) : 0);
+    this.trimSide(this.enemyUnits, this.result.win ? 0 : this.enemyRemainingOnLoss());
 
     this.applyResult();
     this.refreshHud();

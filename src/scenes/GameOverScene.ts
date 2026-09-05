@@ -98,10 +98,24 @@ export class GameOverScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setLineSpacing(8);
 
-    // Buttons: Retry (unless the campaign is fully won) + To Town.
+    // Buttons. "Retry" only makes sense when there is still an army to send
+    // back into battle. A defeat wipes the army (survivors === 0), so re-entering
+    // BattleScene would just bounce off its empty-army guard back to Town - a
+    // dead button. In that case we instead offer "Train Troops" (routes to the
+    // Town, where the Barracks/training lives) so the action the player is given
+    // can actually be accomplished. Retry is also suppressed on a full-campaign
+    // victory (there is no next wave).
     const btnY = CANVAS.HEIGHT / 2 + 110;
-    if (!data.fullVictory) {
+    const canRetry = !data.fullVictory && data.survivors > 0;
+    if (canRetry) {
       Menu.button(this, cx - 110, btnY, tr('result.retry'), () => this.go(SceneKeys.Battle), {
+        width: 180,
+        accent: PALETTE.DANGER,
+      });
+      Menu.button(this, cx + 110, btnY, tr('result.toTown'), () => this.go(SceneKeys.Town), { width: 180 });
+    } else if (!data.win) {
+      // Defeat with no survivors: guide the player to rebuild their army.
+      Menu.button(this, cx - 110, btnY, tr('result.train'), () => this.go(SceneKeys.Town), {
         width: 180,
         accent: PALETTE.DANGER,
       });
@@ -110,10 +124,10 @@ export class GameOverScene extends Phaser.Scene {
       Menu.button(this, cx, btnY, tr('result.toTown'), () => this.go(SceneKeys.Town), { width: 220 });
     }
 
-    Menu.label(this, cx, CANVAS.HEIGHT / 2 + 150, tr('result.keyhint'), 12, 0.6);
+    Menu.label(this, cx, CANVAS.HEIGHT / 2 + 150, tr(canRetry ? 'result.keyhint' : 'result.keyhintNoRetry'), 12, 0.6);
 
-    // Keyboard shortcuts.
-    if (!data.fullVictory) {
+    // Keyboard shortcuts. `R` only bound when a real Retry is offered.
+    if (canRetry) {
       this.input.keyboard?.on('keydown-R', () => this.go(SceneKeys.Battle));
     }
     this.input.keyboard?.on('keydown-SPACE', () => this.go(SceneKeys.Town));

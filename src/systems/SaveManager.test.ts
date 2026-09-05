@@ -75,6 +75,42 @@ describe('SaveManager', () => {
     expect(loaded.snapshot.resources.get('stone')).toBe(300);
   });
 
+  it('splits the offline window at an upgrade boundary rather than over-crediting', () => {
+    const storage = memoryStorage();
+    const mgr = new SaveManager(storage);
+
+    // A farm at L2 with an in-progress upgrade to L3 that finishes 600s into a
+    // 1000s offline window. Production must be credited at L2 for the first
+    // 600s and L3 only for the final 400s - NOT L3 for the whole window.
+    const t0 = 1_000_000;
+    const windowSec = 1000;
+    const boundaryOffset = 600; // seconds into the window the upgrade completes
+    const resources = new ResourceStore({ food: 0, wood: 0, stone: 0, gold: 0 });
+    const buildings = new BuildingSystem([
+      { kind: 'town_center', level: 3, upgradeEndsAt: null },
+      { kind: 'farm', level: 2, upgradeEndsAt: t0 + boundaryOffset * 1000 },
+    ]);
+    const training = new TrainingQueue(undefined, { spearman: 0, archer: 0, knight: 0 });
+    mgr.save({ resources, buildings, training, waveCleared: 0 }, t0);
+
+    const loaded = mgr.load(t0 + windowSec * 1000);
+    expect(loaded.offlineSeconds).toBe(windowSec);
+    // Farm ended at L3.
+    expect(loaded.snapshot.buildings.level('farm')).toBe(3);
+
+    const eff = ECONOMY.OFFLINE_EFFICIENCY;
+    const expectedSplit =
+      outputPerSec('farm', 2) * boundaryOffset * eff +
+      outputPerSec('farm', 3) * (windowSec - boundaryOffset) * eff;
+    const naiveWhole = outputPerSec('farm', 3) * windowSec * eff;
+
+    expect(loaded.offlineGains.food).toBeCloseTo(expectedSplit, 4);
+    // The split credit is strictly less than the old over-credit (post-upgrade
+    // rate applied to the whole window), proving the fix.
+    expect(loaded.offlineGains.food).toBeLessThan(naiveWhole);
+    expect(loaded.snapshot.resources.get('food')).toBeCloseTo(expectedSplit, 4);
+  });
+
   it('caps offline time at ECONOMY.MAX_OFFLINE_SECONDS', () => {
     const storage = memoryStorage();
     const mgr = new SaveManager(storage);

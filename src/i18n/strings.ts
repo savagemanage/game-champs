@@ -193,8 +193,10 @@ export const STRINGS = {
   'result.nextWave': { en: 'Next wave: {wave}', ko: '다음 웨이브: {wave}' },
   'result.defeatDesc': { en: 'Your army fell, but the town still stands. Regroup and try again.', ko: '병력은 쓰러졌지만 마을은 건재합니다. 전열을 재정비하세요.' },
   'result.retry': { en: 'Retry', ko: '재도전' },
+  'result.train': { en: 'Train Troops', ko: '병력 훈련' },
   'result.toTown': { en: 'To Town', ko: '마을로' },
   'result.keyhint': { en: 'R Retry    SPACE Town', ko: 'R 재도전    SPACE 마을' },
+  'result.keyhintNoRetry': { en: 'SPACE Town', ko: 'SPACE 마을' },
 
   // Tooltips.
   'tooltip.cost': { en: 'Cost: {cost}', ko: '비용: {cost}' },

@@ -138,6 +138,19 @@ export class BuildingSystem {
     return completed;
   }
 
+  /**
+   * Epoch-ms timestamps of every in-progress upgrade's completion, unsorted.
+   * Used by the save layer to split an offline window at upgrade boundaries so
+   * production is credited at the rates actually in effect during each segment.
+   */
+  pendingCompletions(): number[] {
+    const out: number[] = [];
+    for (const state of this._buildings.values()) {
+      if (state.upgradeEndsAt !== null) out.push(state.upgradeEndsAt);
+    }
+    return out;
+  }
+
   /** Whether the Barracks is built (level >= 1), gating troop training. */
   get hasBarracks(): boolean {
     return this.level('barracks') >= 1;

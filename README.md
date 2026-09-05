@@ -13,6 +13,14 @@ are away. The UI is **Korean-first** (한국어), with English available.
 > audio are original to this project. It does **not** use "Kingshot" (or any
 > other third-party) names, characters, factions, story, or sprites. See
 > [`assets/CREDITS.md`](assets/CREDITS.md) for full asset provenance.
+>
+> The repository slug and GitHub Pages path (`kingshot-web`,
+> `savagemanage.github.io/kingshot-web`) are only a **deployment identifier**
+> describing the genre this project is a homage to; they are not part of the
+> game's brand. Nothing shipped in the build (the in-game title "Kingdom Rise /
+> 킹덤 라이즈", the lore, the troop/enemy names, the art, and the audio) uses any
+> third-party IP. The slug is a fixed deployment target and is intentionally
+> left unchanged.
 
 **Play the live build:** <https://savagemanage.github.io/kingshot-web/>
 
@@ -30,7 +38,8 @@ with nearest-neighbour rendering.
 
 ## Getting started
 
-Requires **Node 20+**.
+Requires **Node 22+** (the version the GitHub Pages deploy workflow builds
+with; see [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)).
 
 ```bash
 npm install       # install dependencies

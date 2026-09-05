@@ -58,12 +58,41 @@ export function troopDef(kind: TroopKind): TroopDef {
  * Damage multiplier a given attacker role deals to a given defender role.
  * 1.5 = strong counter, 1.0 = neutral, 0.75 = weak. Soft RPS:
  *   spear > knight, knight > archer, archer > spear.
+ *
+ * CombatSystem reads this (via {@link troopVsEnemyMultiplier}) so army
+ * composition genuinely changes battle outcomes: fielding the troop that
+ * counters a wave's dominant enemy role yields more effective power than an
+ * equal-cost off-counter stack.
  */
 export const TROOP_COUNTER: Record<TroopKind, Record<TroopKind, number>> = {
   spearman: { spearman: 1.0, archer: 0.75, knight: 1.5 },
   archer: { spearman: 1.5, archer: 1.0, knight: 0.75 },
   knight: { spearman: 0.75, archer: 1.5, knight: 1.0 },
 };
+
+/**
+ * Which troop ROLE each enemy kind fights like, so the soft-RPS
+ * {@link TROOP_COUNTER} matrix applies to the wave roster too:
+ *   - raider: light, fast skirmisher      -> spearman-role
+ *   - brute:  durable heavy infantry       -> knight-role
+ *   - ram:    slow, armored siege engine   -> knight-role
+ * A troop's multiplier against an enemy is the matrix entry for its own kind
+ * versus the enemy's analogous role.
+ */
+export const ENEMY_ROLE: Record<EnemyKind, TroopKind> = {
+  raider: 'spearman',
+  brute: 'knight',
+  ram: 'knight',
+};
+
+/**
+ * The soft-RPS damage multiplier a `troop` deals against an `enemy`, resolved
+ * through the enemy's analogous troop role. Pure and deterministic; feeds the
+ * composition-aware effective power in CombatSystem.
+ */
+export function troopVsEnemyMultiplier(troop: TroopKind, enemy: EnemyKind): number {
+  return TROOP_COUNTER[troop][ENEMY_ROLE[enemy]];
+}
 
 /** Enemy raider stat blocks (used by CombatSystem via WaveConfig composition). */
 export const ENEMY_DEFS: Record<EnemyKind, UnitStats> = {

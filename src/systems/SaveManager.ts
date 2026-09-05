@@ -79,18 +79,50 @@ export class SaveManager {
     const buildings = BuildingSystem.fromJSON(state.buildings);
     const training = TrainingQueue.fromJSON(state.trainingQueue, normalizeArmy(state.army));
 
-    // Complete any building upgrades / training that elapsed while away.
-    buildings.update(now);
+    // Training that finished while away joins the army. (Trained troops do not
+    // produce resources, so this ordering has no bearing on offline gains.)
     training.advance(now);
 
-    // Offline production reconciliation.
-    const rawSeconds = Math.max(0, (now - (state.lastSeenAt ?? now)) / 1000);
+    // Offline production reconciliation, credited over the capped window.
+    //
+    // Correctness note: buildings can FINISH upgrades mid-window, and a higher
+    // level produces more. Crediting the whole window at post-upgrade rates
+    // would over-pay for the pre-upgrade portion. So we split the window at
+    // each upgrade-completion boundary and credit each sub-segment at the rates
+    // in effect during it, advancing buildings segment by segment. The result
+    // is that a farm that hit L3 one minute before you return is paid at L2 for
+    // the earlier hours and L3 only for that final minute.
+    const lastSeen = state.lastSeenAt ?? now;
+    const rawSeconds = Math.max(0, (now - lastSeen) / 1000);
     const offlineSeconds = Math.min(rawSeconds, ECONOMY.MAX_OFFLINE_SECONDS);
-    const offlineGains = resources.applyProduction(
-      buildings.productionRates(),
-      offlineSeconds * 1000,
-      ECONOMY.OFFLINE_EFFICIENCY,
-    );
+    // The instant, in epoch ms, at which the credited (capped) window begins.
+    const windowStart = now - offlineSeconds * 1000;
+
+    // Upgrades that completed BEFORE the credited window began (possible when
+    // raw offline time exceeds the cap) were already at their new level for the
+    // whole credited window, so apply them up front.
+    buildings.update(windowStart);
+
+    const offlineGains = ResourceStore.emptyBundle();
+    let cursor = windowStart;
+    // Sorted upgrade-completion instants strictly inside the credited window.
+    const boundaries = buildings
+      .pendingCompletions()
+      .filter((t) => t > windowStart && t < now)
+      .sort((a, b) => a - b);
+
+    for (const boundary of boundaries) {
+      // Credit production at the CURRENT (pre-completion) rates up to this
+      // boundary, then apply the completion so later segments use higher rates.
+      accumulate(offlineGains, resources.applyProduction(buildings.productionRates(), boundary - cursor, ECONOMY.OFFLINE_EFFICIENCY));
+      buildings.update(boundary);
+      cursor = boundary;
+    }
+    // Final segment: from the last boundary (or window start) to `now`.
+    accumulate(offlineGains, resources.applyProduction(buildings.productionRates(), now - cursor, ECONOMY.OFFLINE_EFFICIENCY));
+    // Finish any upgrades whose timer elapsed exactly at/after `now` bookkeeping
+    // (also completes upgrades that ended before the capped window began).
+    buildings.update(now);
 
     return {
       snapshot: { resources, buildings, training, waveCleared: state.waveCleared ?? 0 },
@@ -152,6 +184,16 @@ export class SaveManager {
   /** Delete the save slot. */
   clear(): void {
     this.storage.removeItem(this.key);
+  }
+}
+
+/** Add every resource in `src` into `dst` in place (both full bundles). */
+function accumulate(
+  dst: ReturnType<ResourceStore['toJSON']>,
+  src: ReturnType<ResourceStore['toJSON']>,
+): void {
+  for (const key of Object.keys(dst) as (keyof typeof dst)[]) {
+    dst[key] += src[key] ?? 0;
   }
 }
 

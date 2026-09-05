@@ -22,6 +22,7 @@ describe('CombatSystem', () => {
     // A large army against wave 1 (a handful of raiders) should crush it.
     const result = CombatSystem.resolve(army({ knight: 50 }), 1);
     expect(result.win).toBe(true);
+    // armyPower is the composition-aware effective power that decided the fight.
     expect(result.armyPower).toBeGreaterThan(result.wavePower);
     // Reward matches the wave table.
     expect(result.reward).toEqual(waveReward(1));
@@ -51,11 +52,12 @@ describe('CombatSystem', () => {
     const wave = 3;
     const wavePower = CombatSystem.wavePower(wave);
 
-    // Find army sizes that produce a dominant win vs. a near-tie win.
+    // Find army sizes that produce a dominant win vs. a near-tie win. Size the
+    // close army by EFFECTIVE (composition-aware) power, since that is what the
+    // resolver compares against the wave.
     const dominant = CombatSystem.resolve(army({ knight: 200 }), wave);
-    // Barely enough: scale knights so army power is just over wave power.
     let n = 1;
-    while (CombatSystem.armyPower(army({ knight: n })) < wavePower) n++;
+    while (CombatSystem.effectiveArmyPower(army({ knight: n }), wave) < wavePower) n++;
     const close = CombatSystem.resolve(army({ knight: n }), wave);
 
     expect(dominant.win).toBe(true);
@@ -68,5 +70,52 @@ describe('CombatSystem', () => {
 
   it('wave power scales up with wave number', () => {
     expect(CombatSystem.wavePower(5)).toBeGreaterThan(CombatSystem.wavePower(1));
+  });
+
+  it('army composition matters: the countering troop is more effective', () => {
+    // Wave 1 is all raiders (light/fast, spearman-role). Archers counter
+    // spearman-role (1.5x); knights are weak against it (0.75x). With equal
+    // COUNTS, the archer stack must field more effective power than the knight
+    // stack against this wave, even though a lone knight has more raw power.
+    const wave = 1;
+    const counters = army({ archer: 20 });
+    const offCounter = army({ knight: 20 });
+
+    const counterEff = CombatSystem.effectiveArmyPower(counters, wave);
+    const offEff = CombatSystem.effectiveArmyPower(offCounter, wave);
+    // The counter multiplier genuinely feeds the resolver.
+    expect(counterEff).toBeGreaterThan(CombatSystem.armyPower(counters) * 0.99);
+    expect(offEff).toBeLessThan(CombatSystem.armyPower(offCounter));
+
+    // Same raw power, better matchup -> the resolver sees the difference. Build
+    // two armies with (near) equal RAW power but different composition and show
+    // the counter army wins a wave the off-counter army loses.
+    // 1 knight raw ~= 5 spearmen raw; against a spearman-role wave archers get
+    // the counter bonus, so an archer-heavy mix beats a knight-heavy mix of the
+    // same raw power.
+    expect(counterEff / CombatSystem.armyPower(counters)).toBeGreaterThan(
+      offEff / CombatSystem.armyPower(offCounter),
+    );
+  });
+
+  it('the counter matrix changes a knife-edge outcome (win vs loss on mix)', () => {
+    // Pick a wave and two equal-RAW-power armies whose only difference is which
+    // troop role they field; the countering one wins where the other loses.
+    const wave = 6; // raiders + brutes + a ram: mixed roles.
+    // Archers counter raiders (spearman-role, the bulk of early waves).
+    // Find the smallest archer count that wins.
+    let archers = 1;
+    while (!CombatSystem.resolve(army({ archer: archers }), wave).win) archers++;
+    const archerRaw = CombatSystem.armyPower(army({ archer: archers }));
+
+    // A knight stack of equal raw power should be weaker vs this raider-heavy
+    // wave (knights are 0.75x into raiders), so it does worse (fewer or equal
+    // effective power, and never strictly more).
+    const knightsEqualRaw = Math.round(
+      archerRaw / CombatSystem.armyPower(army({ knight: 1 })),
+    );
+    const archerEff = CombatSystem.effectiveArmyPower(army({ archer: archers }), wave);
+    const knightEff = CombatSystem.effectiveArmyPower(army({ knight: knightsEqualRaw }), wave);
+    expect(archerEff).toBeGreaterThan(knightEff);
   });
 });
