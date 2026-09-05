@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { TextureKeys } from '../config/AssetKeys';
 import { AIR, DASH, HERO_ANIMS, HERO_COMBAT, HERO_FRAMES, MOVEMENT } from '../config/PlayerConfig';
+import { dashDirection } from '../systems/SiegeGeometry';
 import type { Damageable } from '../types';
 
 /** 8-direction planar move intent for a frame (WASD / arrows). */
@@ -99,9 +100,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite implements Damageable {
    * responsible for the gas cost.
    */
   startDash(dirX: number, dirY: number, nowMs: number): void {
-    const len = Math.hypot(dirX, dirY) || 1;
-    const nx = dirX / len;
-    const ny = dirY / len;
+    const { x: nx, y: ny } = dashDirection(dirX, dirY);
     this.body.setVelocity(nx * DASH.IMPULSE, ny * DASH.IMPULSE);
     this.dashUntil = nowMs + DASH.DURATION_MS;
     this.dashReadyAt = nowMs + DASH.COOLDOWN_MS;

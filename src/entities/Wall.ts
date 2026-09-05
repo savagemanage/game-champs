@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { PALETTE, WALL } from '../config/GameConfig';
 import { ARENA } from '../config/PlayerConfig';
+import { nearestTargetIndex, radialPoint, segmentAngle } from '../systems/SiegeGeometry';
 import type { GrappleSurface } from '../systems/GrappleSystem';
 
 /** Which concentric ring a segment belongs to. */
@@ -73,9 +74,8 @@ export class Wall {
     const arc = (2 * Math.PI * radius) / count;
     const segLen = arc * 1.02;
     for (let i = 0; i < count; i++) {
-      const angle = (i / count) * Math.PI * 2;
-      const x = this.cx + Math.cos(angle) * radius;
-      const y = this.cy + Math.sin(angle) * radius;
+      const angle = segmentAngle(i, count);
+      const { x, y } = radialPoint(this.cx, this.cy, angle, radius);
       const rect = this.scene.add
         .rectangle(x, y, segLen, WALL.RING_THICKNESS, PALETTE.WALL)
         .setOrigin(0.5, 0.5)
@@ -152,20 +152,11 @@ export class Wall {
    * builds on.
    */
   nearestTarget(x: number, y: number): RingTarget | null {
-    const ring = this.isOuterBreached ? RingId.Inner : RingId.Outer;
-    const list = this.ringList(ring);
-    let best: RingTarget | null = null;
-    let bestDist = Infinity;
-    for (let i = 0; i < list.length; i++) {
-      const s = list[i];
-      if (s.breached) continue;
-      const d = Phaser.Math.Distance.Between(x, y, s.x, s.y);
-      if (d < bestDist) {
-        bestDist = d;
-        best = { x: s.x, y: s.y, ring, index: i };
-      }
-    }
-    return best;
+    const { ring, index } = nearestTargetIndex(x, y, this.outer, this.inner);
+    if (index < 0) return null;
+    const list = this.ringList(ring === 0 ? RingId.Outer : RingId.Inner);
+    const s = list[index];
+    return { x: s.x, y: s.y, ring: s.ring, index };
   }
 
   /**

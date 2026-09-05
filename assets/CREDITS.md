@@ -1,6 +1,6 @@
 # Wirework — Asset Credits
 
-Wirework is an **original-world**, side-view wall-defense ODM (omni-directional
+Wirework is an **original-world**, top-down wall-defense ODM (omni-directional
 mobility) action game *inspired by the giant-siege genre*. It is **not** based on
 "Attack on Titan" or any other copyrighted property. There are **no** IP names,
 character names, canonical creature names, faction logos, story text, or

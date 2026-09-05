@@ -8,6 +8,7 @@ import {
   HERO_THREAT,
   type EnemyStats,
 } from '../../config/EnemyConfig';
+import { isFrontalHit, napeOffset } from '../../systems/SiegeGeometry';
 
 /** Result of resolving an incoming blade hit against a giant. */
 export interface HitResult {
@@ -206,13 +207,14 @@ export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
    * (relative to its approach) to strike it cleanly from any angle.
    */
   getNapeWorld(): Phaser.Math.Vector2 {
-    const h = this.displayHeight;
-    // Back of the neck: a step opposite the facing heading in the plane.
-    const backOffset = h * 0.12;
-    const nx = this.x - this.facingX * backOffset;
-    // Keep the nape high on the body (near the head), plus the planar back-step.
-    const ny = this.y - h * 0.78 + this.napeLocalY * this.stats.scale - this.facingY * backOffset;
-    return new Phaser.Math.Vector2(nx, ny);
+    const off = napeOffset(
+      this.facingX,
+      this.facingY,
+      this.displayHeight,
+      this.napeLocalY,
+      this.stats.scale,
+    );
+    return new Phaser.Math.Vector2(this.x + off.x, this.y + off.y);
   }
 
   /** Radius of the nape hitbox in world px. */
@@ -243,14 +245,15 @@ export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
       // giant faces, tested in 2D via the dot product of the incoming hit
       // direction against the facing heading) is heavily reduced. A hit from
       // behind or the flank (outside the cone) bypasses the plate entirely.
-      let hdx = hitX - this.x;
-      let hdy = hitY - this.y;
-      const hlen = Math.hypot(hdx, hdy) || 1;
-      hdx /= hlen;
-      hdy /= hlen;
-      const facingDot = hdx * this.facingX + hdy * this.facingY;
-      const coneCos = Math.cos(Phaser.Math.DegToRad(ENEMY_COMBAT.FRONTAL_CONE_DEG));
-      if (facingDot >= coneCos) {
+      if (
+        isFrontalHit(
+          this.facingX,
+          this.facingY,
+          hitX - this.x,
+          hitY - this.y,
+          ENEMY_COMBAT.FRONTAL_CONE_DEG,
+        )
+      ) {
         damage = baseDamage * (1 - this.stats.frontalResist);
         blocked = true;
       }

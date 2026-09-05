@@ -12,6 +12,7 @@ import {
   type WaveDef,
 } from '../config/WaveConfig';
 import { AudioManager } from './AudioManager';
+import { radialPoint, spawnRadius } from './SiegeGeometry';
 import { createEnemy, type Enemy, type EnemyFactoryDeps } from '../entities/enemies';
 
 /** Callbacks the WaveSystem uses to hand spawned giants back to the scene. */
@@ -143,9 +144,8 @@ export class WaveSystem {
    */
   private spawnOne(role: EnemyRole): void {
     const angle = Math.random() * Math.PI * 2;
-    const radius = WALL.OUTER_RADIUS + 90 + Math.random() * 60; // just outside the outer ring
-    const x = ARENA.CENTER_X + Math.cos(angle) * radius;
-    const y = ARENA.CENTER_Y + Math.sin(angle) * radius;
+    const radius = spawnRadius(WALL.OUTER_RADIUS, Math.random()); // just outside the outer ring
+    const { x, y } = radialPoint(ARENA.CENTER_X, ARENA.CENTER_Y, angle, radius);
     const enemy = createEnemy(this.scene, role, x, y, {
       spawnDebris: this.hooks.spawnDebris,
     });
