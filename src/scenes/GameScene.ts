@@ -13,6 +13,7 @@ import { WaveSystem } from '../systems/WaveSystem';
 import { AudioManager } from '../systems/AudioManager';
 import { Hud } from '../ui/Hud';
 import type { GameOverData } from './GameOverScene';
+import type { LoseReason } from './GameOverReason';
 import {
   AttackTarget,
   DebrisProjectile,
@@ -255,7 +256,7 @@ export class GameScene extends Phaser.Scene {
     this.input.mouse?.disableContextMenu();
 
     // ESC abandons the run outright; P opens the pause overlay.
-    kb.on('keydown-ESC', () => this.endGame(false));
+    kb.on('keydown-ESC', () => this.endGame(false, 'abandoned'));
     this.keys.pause.on('down', () => this.pauseGame());
     this.keys.dash.on('down', () => this.tryDash());
   }
@@ -396,7 +397,7 @@ export class GameScene extends Phaser.Scene {
     if (!landed) return;
     this.audio.playSfx(AudioKeys.Hit, 0.8);
     this.cameras.main.shake(200, 0.012);
-    if (this.player.isDead) this.endGame(false);
+    if (this.player.isDead) this.endGame(false, 'hero_dead');
   }
 
   /**
@@ -406,7 +407,7 @@ export class GameScene extends Phaser.Scene {
    */
   private onSegmentBreached(): void {
     this.refreshGrappleSurfaces();
-    if (this.wall.isInnerBreached) this.endGame(false);
+    if (this.wall.isInnerBreached) this.endGame(false, 'inner_breached');
   }
 
   private eatNearestCitizen(x: number, y: number): void {
@@ -424,7 +425,7 @@ export class GameScene extends Phaser.Scene {
       nearest.devour();
       this.citizensSaved = Math.max(0, this.citizensSaved - 1);
       this.audio.playSfx(AudioKeys.CitizenScream, 0.6);
-      if (this.citizensSaved <= 0) this.endGame(false);
+      if (this.citizensSaved <= 0) this.endGame(false, 'citizens_lost');
     }
   }
 
@@ -540,13 +541,14 @@ export class GameScene extends Phaser.Scene {
   }
 
   /** End the run and transition to the summary with the results payload. */
-  private endGame(victory: boolean): void {
+  private endGame(victory: boolean, reason?: LoseReason): void {
     if (this.gameEnded) return;
     this.gameEnded = true;
     this.physics.world.timeScale = 1;
 
     const data: GameOverData = {
       victory,
+      reason: victory ? undefined : reason,
       wavesSurvived: victory ? this.waves.totalWaves : Math.max(0, this.wave),
       citizensSaved: this.citizensSaved,
       score: this.score,

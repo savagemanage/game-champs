@@ -3,9 +3,12 @@ import { SceneKeys, PALETTE, CANVAS } from '../config/GameConfig';
 import { Menu } from '../ui/Menu';
 import { textStyle } from '../ui/UiText';
 import { tr } from '../i18n/i18n';
+import { outcomeMessageKey, type LoseReason } from './GameOverReason';
 
 export interface GameOverData {
   victory?: boolean;
+  /** On a loss, the cause that ended the run; drives the outcome message. */
+  reason?: LoseReason;
   wavesSurvived?: number;
   citizensSaved?: number;
   /** Total score accrued from giant kills during the run. */
@@ -33,7 +36,7 @@ export class GameOverScene extends Phaser.Scene {
       .text(
         cx,
         CANVAS.HEIGHT * 0.22,
-        victory ? tr('gameover.victory') : tr('gameover.reason.inner_breached'),
+        tr(outcomeMessageKey(victory, data.reason)),
         textStyle(40, {
           color: victory ? PALETTE.TEXT_CSS : PALETTE.DANGER_CSS,
           fontStyle: 'bold',
