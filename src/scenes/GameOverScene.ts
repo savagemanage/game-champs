@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { SceneKeys, PALETTE, CANVAS } from '../config/GameConfig';
 import { Menu } from '../ui/Menu';
+import { textStyle } from '../ui/UiText';
 
 export interface GameOverData {
   victory?: boolean;
@@ -28,12 +29,15 @@ export class GameOverScene extends Phaser.Scene {
     const victory = data.victory ?? false;
 
     this.add
-      .text(cx, CANVAS.HEIGHT * 0.22, victory ? 'CITY HELD' : 'THE WALL HAS FALLEN', {
-        fontFamily: 'monospace',
-        fontSize: '20px',
-        color: victory ? PALETTE.TEXT_CSS : PALETTE.DANGER_CSS,
-        fontStyle: 'bold',
-      })
+      .text(
+        cx,
+        CANVAS.HEIGHT * 0.22,
+        victory ? 'CITY HELD' : 'THE WALL HAS FALLEN',
+        textStyle(40, {
+          color: victory ? PALETTE.TEXT_CSS : PALETTE.DANGER_CSS,
+          fontStyle: 'bold',
+        }),
+      )
       .setOrigin(0.5);
 
     const waves = data.wavesSurvived ?? 0;
@@ -45,21 +49,15 @@ export class GameOverScene extends Phaser.Scene {
         cx,
         CANVAS.HEIGHT * 0.46,
         `SCORE   ${score}\nWAVES SURVIVED   ${waves}\nCITIZENS SAVED   ${saved}`,
-        {
-          fontFamily: 'monospace',
-          fontSize: '10px',
-          color: PALETTE.TEXT_CSS,
-          align: 'center',
-          lineSpacing: 4,
-        },
+        textStyle(20, { align: 'center', lineSpacing: 8 }),
       )
       .setOrigin(0.5)
       .setAlpha(0.9);
 
-    Menu.button(this, cx - 62, CANVAS.HEIGHT * 0.78, 'Retry', () => this.retry(), { width: 100 });
-    Menu.button(this, cx + 62, CANVAS.HEIGHT * 0.78, 'Title', () => this.toTitle(), { width: 100 });
+    Menu.button(this, cx - 124, CANVAS.HEIGHT * 0.78, 'Retry', () => this.retry(), { width: 200 });
+    Menu.button(this, cx + 124, CANVAS.HEIGHT * 0.78, 'Title', () => this.toTitle(), { width: 200 });
 
-    Menu.label(this, cx, CANVAS.HEIGHT * 0.92, 'R Retry    SPACE Title', 7, 0.5);
+    Menu.label(this, cx, CANVAS.HEIGHT * 0.92, 'R Retry    SPACE Title', 14, 0.5);
 
     this.input.keyboard?.on('keydown-R', () => this.retry());
     this.input.keyboard?.on('keydown-SPACE', () => this.toTitle());

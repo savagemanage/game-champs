@@ -2,14 +2,15 @@ import Phaser from 'phaser';
 import { PALETTE } from '../config/GameConfig';
 import { AudioKeys } from '../config/AssetKeys';
 import { AudioManager } from '../systems/AudioManager';
+import { textStyle } from './UiText';
 
 /** Options for a pixel-styled menu button. */
 export interface ButtonOptions {
-  /** Font size in px (default 10). */
+  /** Font size in px (default 20). */
   fontSize?: number;
-  /** Horizontal padding around the label, px (default 10). */
+  /** Horizontal padding around the label, px (default 20). */
   padX?: number;
-  /** Vertical padding around the label, px (default 5). */
+  /** Vertical padding around the label, px (default 10). */
   padY?: number;
   /** Fixed width; if omitted the button hugs its label + padding. */
   width?: number;
@@ -29,23 +30,13 @@ export interface MenuButton {
  */
 export const Menu = {
   /** Standard pixel title text. */
-  title(scene: Phaser.Scene, x: number, y: number, text: string, size = 28): Phaser.GameObjects.Text {
-    return scene.add
-      .text(x, y, text, {
-        fontFamily: 'monospace',
-        fontSize: `${size}px`,
-        color: PALETTE.TEXT_CSS,
-        fontStyle: 'bold',
-      })
-      .setOrigin(0.5);
+  title(scene: Phaser.Scene, x: number, y: number, text: string, size = 56): Phaser.GameObjects.Text {
+    return scene.add.text(x, y, text, textStyle(size, { fontStyle: 'bold' })).setOrigin(0.5);
   },
 
   /** Muted body/label text. */
-  label(scene: Phaser.Scene, x: number, y: number, text: string, size = 9, alpha = 0.85): Phaser.GameObjects.Text {
-    return scene.add
-      .text(x, y, text, { fontFamily: 'monospace', fontSize: `${size}px`, color: PALETTE.TEXT_CSS })
-      .setOrigin(0.5)
-      .setAlpha(alpha);
+  label(scene: Phaser.Scene, x: number, y: number, text: string, size = 18, alpha = 0.85): Phaser.GameObjects.Text {
+    return scene.add.text(x, y, text, textStyle(size)).setOrigin(0.5).setAlpha(alpha);
   },
 
   /**
@@ -61,19 +52,17 @@ export const Menu = {
     onClick: () => void,
     opts: ButtonOptions = {},
   ): MenuButton {
-    const fontSize = opts.fontSize ?? 10;
-    const padX = opts.padX ?? 10;
-    const padY = opts.padY ?? 5;
+    const fontSize = opts.fontSize ?? 20;
+    const padX = opts.padX ?? 20;
+    const padY = opts.padY ?? 10;
 
-    const label = scene.add
-      .text(0, 0, text, { fontFamily: 'monospace', fontSize: `${fontSize}px`, color: PALETTE.TEXT_CSS })
-      .setOrigin(0.5);
+    const label = scene.add.text(0, 0, text, textStyle(fontSize)).setOrigin(0.5);
 
     const w = opts.width ?? Math.ceil(label.width) + padX * 2;
     const h = Math.ceil(label.height) + padY * 2;
 
     const bg = scene.add.rectangle(0, 0, w, h, PALETTE.BG_NEAR).setOrigin(0.5);
-    bg.setStrokeStyle(1, PALETTE.ACCENT);
+    bg.setStrokeStyle(2, PALETTE.ACCENT);
 
     const container = scene.add.container(x, y, [bg, label]);
     container.setSize(w, h);
@@ -81,13 +70,13 @@ export const Menu = {
 
     container.on(Phaser.Input.Events.POINTER_OVER, () => {
       bg.setFillStyle(PALETTE.BG_FAR);
-      bg.setStrokeStyle(1, PALETTE.TEXT);
+      bg.setStrokeStyle(2, PALETTE.TEXT);
       label.setColor(PALETTE.TEXT_CSS);
       scene.tweens.add({ targets: container, scale: 1.06, duration: 90 });
     });
     container.on(Phaser.Input.Events.POINTER_OUT, () => {
       bg.setFillStyle(PALETTE.BG_NEAR);
-      bg.setStrokeStyle(1, PALETTE.ACCENT);
+      bg.setStrokeStyle(2, PALETTE.ACCENT);
       scene.tweens.add({ targets: container, scale: 1, duration: 90 });
     });
     container.on(Phaser.Input.Events.POINTER_DOWN, () => {

@@ -1,23 +1,37 @@
 /**
  * GameConfig - centralized, config-driven tuning for Wirework.
  *
- * Wirework is an ORIGINAL-world side-view wall-defense action game. The player
- * uses an ODM (omni-directional mobility) grapple rig to defend citizens from
- * waves of giant humanoids called "Ravagers". All naming, lore, and enemy
- * archetypes are original and role-based; nothing is drawn from any existing IP.
+ * Wirework is an ORIGINAL-world TOP-DOWN wall-defense action game. The map is a
+ * concentric double-ring fortification: a citizen core sits at the very center,
+ * protected by an inner ring and an outer ring. The player uses an ODM
+ * (omni-directional mobility) grapple rig to defend the rings and the citizens
+ * from waves of giant humanoids called "Ravagers" that siege inward from every
+ * angle of the outer perimeter. All naming, lore, and enemy archetypes are
+ * original and role-based; nothing is drawn from any existing IP.
+ *
+ * Because the view is top-down there is no gravity; movement is planar.
  *
  * Keep balance numbers here so the whole game can be tuned in one place.
  */
 
-/** Logical (design) resolution. The canvas scales to fit while preserving this. */
+/**
+ * Logical (design) resolution. The canvas scales to fit while preserving this.
+ * 960x540 is a clean 2x of the original 480x270 pixel-art grid, so existing
+ * coordinates/scales carry over predictably while text and detail render at
+ * roughly double the pixel density (fixing the crushed-text problem) and it
+ * integer-scales nicely to common 1080p/1440p displays.
+ */
 export const CANVAS = {
-  WIDTH: 480,
-  HEIGHT: 270,
+  WIDTH: 960,
+  HEIGHT: 540,
 } as const;
 
-/** Physics tuning (arcade). Positive Y is downward. */
+/**
+ * Physics tuning (arcade). Positive Y is downward. Top-down view: no gravity,
+ * all movement is planar and driven directly by entity velocity.
+ */
 export const PHYSICS = {
-  GRAVITY_Y: 900,
+  GRAVITY_Y: 0,
 } as const;
 
 /**

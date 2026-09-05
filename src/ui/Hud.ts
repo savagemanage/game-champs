@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { PALETTE, CANVAS, WALL } from '../config/GameConfig';
+import { textStyle } from './UiText';
 
 /**
  * Snapshot of the state the HUD renders each frame. GameScene assembles this
@@ -63,69 +64,77 @@ export class Hud {
   /** Vector graphics used for the aimed weak-point reticle. */
   private readonly cueGfx: Phaser.GameObjects.Graphics;
 
-  private static readonly BAR_W = 84;
+  // Sized for the 960x540 canvas (2x the original 480x270 layout).
+  private static readonly BAR_W = 168;
+  private static readonly BAR_H = 12;
   private static readonly DEPTH = 50;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
 
     // --- Health gauge ---
-    scene.add.rectangle(6, 8, Hud.BAR_W, 6, PALETTE.WALL_DARK).setOrigin(0, 0.5).setScrollFactor(0).setDepth(Hud.DEPTH);
+    scene.add
+      .rectangle(12, 16, Hud.BAR_W, Hud.BAR_H, PALETTE.WALL_DARK)
+      .setOrigin(0, 0.5)
+      .setScrollFactor(0)
+      .setDepth(Hud.DEPTH);
     this.hpBar = scene.add
-      .rectangle(6, 8, Hud.BAR_W, 6, PALETTE.CITIZEN)
+      .rectangle(12, 16, Hud.BAR_W, Hud.BAR_H, PALETTE.CITIZEN)
       .setOrigin(0, 0.5)
       .setScrollFactor(0)
       .setDepth(Hud.DEPTH + 1);
     scene.add
-      .text(6, 13, 'HP', { fontFamily: 'monospace', fontSize: '7px', color: PALETTE.TEXT_CSS })
+      .text(12, 26, 'HP', textStyle(14))
       .setScrollFactor(0)
       .setDepth(Hud.DEPTH + 1);
 
     // --- Gas gauge ---
-    scene.add.rectangle(6, 26, Hud.BAR_W, 6, PALETTE.WALL_DARK).setOrigin(0, 0.5).setScrollFactor(0).setDepth(Hud.DEPTH);
+    scene.add
+      .rectangle(12, 52, Hud.BAR_W, Hud.BAR_H, PALETTE.WALL_DARK)
+      .setOrigin(0, 0.5)
+      .setScrollFactor(0)
+      .setDepth(Hud.DEPTH);
     this.gasBar = scene.add
-      .rectangle(6, 26, Hud.BAR_W, 6, PALETTE.PLAYER)
+      .rectangle(12, 52, Hud.BAR_W, Hud.BAR_H, PALETTE.PLAYER)
       .setOrigin(0, 0.5)
       .setScrollFactor(0)
       .setDepth(Hud.DEPTH + 1);
     scene.add
-      .text(6, 31, 'GAS', { fontFamily: 'monospace', fontSize: '7px', color: PALETTE.TEXT_CSS })
+      .text(12, 62, 'GAS', textStyle(14))
       .setScrollFactor(0)
       .setDepth(Hud.DEPTH + 1);
 
     // --- Wall-integrity gauge ---
-    scene.add.rectangle(6, 44, Hud.BAR_W, 6, PALETTE.WALL_DARK).setOrigin(0, 0.5).setScrollFactor(0).setDepth(Hud.DEPTH);
+    scene.add
+      .rectangle(12, 88, Hud.BAR_W, Hud.BAR_H, PALETTE.WALL_DARK)
+      .setOrigin(0, 0.5)
+      .setScrollFactor(0)
+      .setDepth(Hud.DEPTH);
     this.wallBar = scene.add
-      .rectangle(6, 44, Hud.BAR_W, 6, PALETTE.ACCENT)
+      .rectangle(12, 88, Hud.BAR_W, Hud.BAR_H, PALETTE.ACCENT)
       .setOrigin(0, 0.5)
       .setScrollFactor(0)
       .setDepth(Hud.DEPTH + 1);
     scene.add
-      .text(6, 49, 'WALL', { fontFamily: 'monospace', fontSize: '7px', color: PALETTE.TEXT_CSS })
+      .text(12, 98, 'WALL', textStyle(14))
       .setScrollFactor(0)
       .setDepth(Hud.DEPTH + 1);
 
     // --- Score / wave / citizens readout (top-right) ---
     this.statusText = scene.add
-      .text(CANVAS.WIDTH - 6, 8, '', {
-        fontFamily: 'monospace',
-        fontSize: '8px',
-        color: PALETTE.TEXT_CSS,
-        align: 'right',
-      })
+      .text(CANVAS.WIDTH - 12, 16, '', textStyle(16, { align: 'right' }))
       .setOrigin(1, 0)
       .setScrollFactor(0)
       .setDepth(Hud.DEPTH + 1);
 
     // --- Center wave banner (transient) ---
     this.waveBanner = scene.add
-      .text(CANVAS.WIDTH / 2, CANVAS.HEIGHT * 0.35, '', {
-        fontFamily: 'monospace',
-        fontSize: '16px',
-        color: PALETTE.DANGER_CSS,
-        fontStyle: 'bold',
-        align: 'center',
-      })
+      .text(
+        CANVAS.WIDTH / 2,
+        CANVAS.HEIGHT * 0.35,
+        '',
+        textStyle(32, { color: PALETTE.DANGER_CSS, fontStyle: 'bold', align: 'center' }),
+      )
       .setOrigin(0.5)
       .setScrollFactor(0)
       .setDepth(Hud.DEPTH + 2)
@@ -133,11 +142,7 @@ export class Hud {
 
     // --- Controls hint (bottom, low-key) ---
     this.hint = scene.add
-      .text(CANVAS.WIDTH / 2, CANVAS.HEIGHT - 8, 'P Pause    L-Click Grapple    R-Click Slash', {
-        fontFamily: 'monospace',
-        fontSize: '7px',
-        color: PALETTE.TEXT_CSS,
-      })
+      .text(CANVAS.WIDTH / 2, CANVAS.HEIGHT - 16, 'P Pause    L-Click Grapple    R-Click Slash', textStyle(14))
       .setOrigin(0.5, 1)
       .setScrollFactor(0)
       .setDepth(Hud.DEPTH + 1)

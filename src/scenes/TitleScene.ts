@@ -33,18 +33,18 @@ export class TitleScene extends Phaser.Scene {
     this.add.image(cx, CANVAS.HEIGHT / 2, TextureKeys.BgWall).setAlpha(0.85);
 
     // Hero silhouette perched on the wall.
-    this.add.image(cx + 150, CANVAS.HEIGHT * 0.62, TextureKeys.Hero, 0).setScale(2).setFlipX(true);
+    this.add.image(cx + 300, CANVAS.HEIGHT * 0.62, TextureKeys.Hero, 0).setScale(4).setFlipX(true);
 
     // Title + tagline.
-    const title = Menu.title(this, cx, CANVAS.HEIGHT * 0.3, 'WIREWORK', 32);
-    this.tweens.add({ targets: title, y: title.y - 2, duration: 1800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-    Menu.label(this, cx, CANVAS.HEIGHT * 0.44, 'Wall-Defense ODM Action', 10, 0.85);
+    const title = Menu.title(this, cx, CANVAS.HEIGHT * 0.3, 'WIREWORK', 64);
+    this.tweens.add({ targets: title, y: title.y - 4, duration: 1800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    Menu.label(this, cx, CANVAS.HEIGHT * 0.44, 'Wall-Defense ODM Action', 20, 0.85);
 
     // Menu buttons.
-    Menu.button(this, cx, CANVAS.HEIGHT * 0.62, 'Deploy', () => this.startGame(), { width: 120 });
-    Menu.button(this, cx, CANVAS.HEIGHT * 0.77, 'Settings', () => this.openSettings(), { width: 120 });
+    Menu.button(this, cx, CANVAS.HEIGHT * 0.62, 'Deploy', () => this.startGame(), { width: 240 });
+    Menu.button(this, cx, CANVAS.HEIGHT * 0.77, 'Settings', () => this.openSettings(), { width: 240 });
 
-    Menu.label(this, cx, CANVAS.HEIGHT * 0.92, 'SPACE Deploy    S Settings', 7, 0.5);
+    Menu.label(this, cx, CANVAS.HEIGHT * 0.92, 'SPACE Deploy    S Settings', 14, 0.5);
 
     // Keyboard shortcuts mirror the buttons.
     this.input.keyboard?.on('keydown-SPACE', () => this.startGame());

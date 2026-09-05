@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { SceneKeys, PALETTE } from '../config/GameConfig';
 import { AUDIO, IMAGES, SHEETS, assetPath } from '../config/AssetKeys';
+import { textStyle } from '../ui/UiText';
 
 /**
  * PreloadScene loads every runtime asset (spritesheets, backgrounds, UI,
@@ -49,26 +50,17 @@ export class PreloadScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor(PALETTE.BG_SKY_CSS);
 
     this.add
-      .text(cx, barY - 22, 'WIREWORK', {
-        fontFamily: 'monospace',
-        fontSize: '16px',
-        color: PALETTE.TEXT_CSS,
-        fontStyle: 'bold',
-      })
+      .text(cx, barY - 44, 'WIREWORK', textStyle(32, { fontStyle: 'bold' }))
       .setOrigin(0.5);
 
     const label = this.add
-      .text(cx, barY + 16, 'Loading 0%', {
-        fontFamily: 'monospace',
-        fontSize: '8px',
-        color: PALETTE.TEXT_CSS,
-      })
+      .text(cx, barY + 32, 'Loading 0%', textStyle(16))
       .setOrigin(0.5)
       .setAlpha(0.8);
 
-    const border = this.add.rectangle(cx, barY, barWidth + 4, 10, PALETTE.WALL_DARK);
-    border.setStrokeStyle(1, PALETTE.WALL);
-    const bar = this.add.rectangle(barX, barY, 1, 6, PALETTE.ACCENT).setOrigin(0, 0.5);
+    const border = this.add.rectangle(cx, barY, barWidth + 8, 20, PALETTE.WALL_DARK);
+    border.setStrokeStyle(2, PALETTE.WALL);
+    const bar = this.add.rectangle(barX, barY, 1, 12, PALETTE.ACCENT).setOrigin(0, 0.5);
 
     this.load.on(Phaser.Loader.Events.PROGRESS, (value: number) => {
       bar.width = Math.max(1, Math.floor(barWidth * value));

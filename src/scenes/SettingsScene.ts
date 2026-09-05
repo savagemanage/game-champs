@@ -3,6 +3,7 @@ import { SceneKeys, PALETTE, CANVAS } from '../config/GameConfig';
 import { AudioKeys } from '../config/AssetKeys';
 import { AudioManager, type Difficulty, type GameSettings } from '../systems/AudioManager';
 import { Menu } from '../ui/Menu';
+import { textStyle } from '../ui/UiText';
 
 /** Data passed when launching Settings as an overlay (e.g. from Pause). */
 export interface SettingsData {
@@ -46,10 +47,10 @@ export class SettingsScene extends Phaser.Scene {
     }
 
     const cx = CANVAS.WIDTH / 2;
-    Menu.title(this, cx, CANVAS.HEIGHT * 0.14, 'SETTINGS', 20);
+    Menu.title(this, cx, CANVAS.HEIGHT * 0.14, 'SETTINGS', 40);
 
     let y = CANVAS.HEIGHT * 0.3;
-    const step = 34;
+    const step = 68;
     this.buildSlider('Master', y, this.settings.masterVolume, (v) => {
       this.settings.masterVolume = v;
       this.audio.updateSettings({ masterVolume: v });
@@ -68,13 +69,13 @@ export class SettingsScene extends Phaser.Scene {
     y += step;
 
     // Difficulty selector (cycles on click).
-    Menu.label(this, cx - 120, y, 'Difficulty', 9, 0.9).setOrigin(0, 0.5);
-    const diffBtn = Menu.button(this, cx + 60, y, this.difficultyText(), () => this.cycleDifficulty(), {
-      width: 110,
+    Menu.label(this, cx - 240, y, 'Difficulty', 18, 0.9).setOrigin(0, 0.5);
+    const diffBtn = Menu.button(this, cx + 120, y, this.difficultyText(), () => this.cycleDifficulty(), {
+      width: 220,
     });
     this.difficultyBtnLabel = diffBtn.label;
 
-    Menu.button(this, cx, CANVAS.HEIGHT * 0.88, 'Back', () => this.close(), { width: 100 });
+    Menu.button(this, cx, CANVAS.HEIGHT * 0.88, 'Back', () => this.close(), { width: 200 });
 
     this.input.keyboard?.on('keydown-ESC', () => this.close());
   }
@@ -84,30 +85,26 @@ export class SettingsScene extends Phaser.Scene {
    * track) to set the value in [0..1]; `onChange` fires with the new value.
    */
   private buildSlider(name: string, y: number, initial: number, onChange: (v: number) => void): void {
-    const trackX = CANVAS.WIDTH / 2 - 40;
-    const trackW = 130;
+    const trackX = CANVAS.WIDTH / 2 - 80;
+    const trackW = 260;
 
-    Menu.label(this, trackX - 12, y, name, 9, 0.9).setOrigin(1, 0.5);
+    Menu.label(this, trackX - 24, y, name, 18, 0.9).setOrigin(1, 0.5);
 
     // Track.
-    this.add.rectangle(trackX, y, trackW, 4, PALETTE.WALL_DARK).setOrigin(0, 0.5);
-    const fill = this.add.rectangle(trackX, y, trackW * initial, 4, PALETTE.ACCENT).setOrigin(0, 0.5);
+    this.add.rectangle(trackX, y, trackW, 8, PALETTE.WALL_DARK).setOrigin(0, 0.5);
+    const fill = this.add.rectangle(trackX, y, trackW * initial, 8, PALETTE.ACCENT).setOrigin(0, 0.5);
 
     // Value readout.
     const readout = this.add
-      .text(trackX + trackW + 8, y, `${Math.round(initial * 100)}`, {
-        fontFamily: 'monospace',
-        fontSize: '8px',
-        color: PALETTE.TEXT_CSS,
-      })
+      .text(trackX + trackW + 16, y, `${Math.round(initial * 100)}`, textStyle(16))
       .setOrigin(0, 0.5);
 
     // Handle.
     const handle = this.add
-      .rectangle(trackX + trackW * initial, y, 6, 12, PALETTE.TEXT)
+      .rectangle(trackX + trackW * initial, y, 12, 24, PALETTE.TEXT)
       .setOrigin(0.5)
       .setInteractive({ useHandCursor: true, draggable: true });
-    handle.setStrokeStyle(1, PALETTE.BG_NEAR);
+    handle.setStrokeStyle(2, PALETTE.BG_NEAR);
 
     const apply = (px: number): void => {
       const clamped = Phaser.Math.Clamp(px, trackX, trackX + trackW);
@@ -123,7 +120,7 @@ export class SettingsScene extends Phaser.Scene {
 
     // Click the track to jump the handle.
     const hitZone = this.add
-      .rectangle(trackX, y, trackW, 16, 0x000000, 0)
+      .rectangle(trackX, y, trackW, 32, 0x000000, 0)
       .setOrigin(0, 0.5)
       .setInteractive({ useHandCursor: true });
     hitZone.on(Phaser.Input.Events.POINTER_DOWN, (p: Phaser.Input.Pointer) => apply(p.worldX));

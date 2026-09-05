@@ -23,6 +23,7 @@ const config: Phaser.Types.Core.GameConfig = {
   physics: {
     default: 'arcade',
     arcade: {
+      // Top-down view: no gravity. PHYSICS.GRAVITY_Y is 0 so movement is planar.
       gravity: { x: 0, y: PHYSICS.GRAVITY_Y },
       debug: false,
     },
