@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
-import { AudioKeys } from '../config/AssetKeys';
+import { AudioKeys, type AudioKey } from '../config/AssetKeys';
 import { GAS, GRAPPLE } from '../config/PlayerConfig';
+import { AudioManager } from './AudioManager';
 import type { Player } from '../entities/Player';
 import type { GasSystem } from './GasSystem';
 
@@ -52,10 +53,10 @@ export interface GrappleInput {
  * A shot can be re-fired at any time (re-grapple) for continuous traversal.
  */
 export class GrappleSystem {
-  private readonly scene: Phaser.Scene;
   private readonly player: Player;
   private readonly gas: GasSystem;
   private readonly wire: Phaser.GameObjects.Graphics;
+  private readonly audio: AudioManager;
 
   private phase: WirePhase = WirePhase.Idle;
   /** World-space anchor point once attached. */
@@ -72,9 +73,9 @@ export class GrappleSystem {
   private surfaces: GrappleSurface[] = [];
 
   constructor(scene: Phaser.Scene, player: Player, gas: GasSystem) {
-    this.scene = scene;
     this.player = player;
     this.gas = gas;
+    this.audio = AudioManager.get(scene);
     this.wire = scene.add.graphics();
     this.wire.setDepth(5);
   }
@@ -308,12 +309,8 @@ export class GrappleSystem {
     this.playSound(AudioKeys.SwingWhoosh, 0.5);
   }
 
-  private playSound(key: string, volume = 0.6): void {
-    // Direct sound call is acceptable at this stage; a centralized AudioManager
-    // arrives in FEAT-005. Guard against a missing cache entry.
-    if (this.scene.cache.audio.exists(key)) {
-      this.scene.sound.play(key, { volume });
-    }
+  private playSound(key: AudioKey, volume = 0.6): void {
+    this.audio.playSfx(key, volume);
   }
 
   /** Free graphics resources. */

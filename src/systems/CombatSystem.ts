@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
-import { AudioKeys, TextureKeys } from '../config/AssetKeys';
+import { AudioKeys, type AudioKey, TextureKeys } from '../config/AssetKeys';
 import { PLAYER } from '../config/GameConfig';
+import { AudioManager } from './AudioManager';
 import type { Player } from '../entities/Player';
 import type { Enemy, HitResult } from '../entities/enemies';
 
@@ -38,6 +39,7 @@ export class CombatSystem {
 
   private readonly sparks: Phaser.GameObjects.Particles.ParticleEmitter;
   private readonly steam: Phaser.GameObjects.Particles.ParticleEmitter;
+  private readonly audio: AudioManager;
 
   /** Cooldown between slashes, ms. */
   private static readonly SLASH_COOLDOWN_MS = 300;
@@ -50,6 +52,7 @@ export class CombatSystem {
     this.scene = scene;
     this.player = player;
     this.hooks = hooks;
+    this.audio = AudioManager.get(scene);
 
     // Particle emitters (created stopped; we burst on demand).
     this.sparks = scene.add.particles(0, 0, TextureKeys.FxSpark, {
@@ -81,6 +84,14 @@ export class CombatSystem {
   /** Whether a slash can currently be fired. */
   canSlash(nowMs: number): boolean {
     return nowMs >= this.slashReadyAt;
+  }
+
+  /**
+   * Approximate distance from the player at which a slash can still connect
+   * with a nape. Used by the HUD weak-point cue to decide when to go "hot".
+   */
+  get napeStrikeRange(): number {
+    return CombatSystem.SLASH_REACH + CombatSystem.SLASH_HALF_H;
   }
 
   /** True while the brief hit-stop window is active (scene may gate input). */
@@ -213,8 +224,8 @@ export class CombatSystem {
     });
   }
 
-  private playSound(key: string, volume: number): void {
-    if (this.scene.cache.audio.exists(key)) this.scene.sound.play(key, { volume });
+  private playSound(key: AudioKey, volume: number): void {
+    this.audio.playSfx(key, volume);
   }
 
   /** Release particle resources. */

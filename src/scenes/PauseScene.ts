@@ -1,0 +1,60 @@
+import Phaser from 'phaser';
+import { SceneKeys, CANVAS } from '../config/GameConfig';
+import { Menu } from '../ui/Menu';
+
+/**
+ * PauseScene is a translucent overlay launched ON TOP of a paused GameScene.
+ * It offers Resume, Settings, and Quit-to-Title. While it is up, GameScene's
+ * update loop is halted (the GameScene pauses itself before launching this).
+ *
+ * Resume/P/ESC resume the game; Settings opens the Settings scene (from which
+ * "back" returns here); Quit fades out to the Title and stops the run.
+ */
+export class PauseScene extends Phaser.Scene {
+  constructor() {
+    super({ key: SceneKeys.Pause });
+  }
+
+  create(): void {
+    const cx = CANVAS.WIDTH / 2;
+
+    // Dim the world behind the overlay.
+    this.add.rectangle(0, 0, CANVAS.WIDTH, CANVAS.HEIGHT, 0x000000, 0.55).setOrigin(0, 0);
+
+    Menu.title(this, cx, CANVAS.HEIGHT * 0.24, 'PAUSED', 22);
+
+    Menu.button(this, cx, CANVAS.HEIGHT * 0.46, 'Resume', () => this.resume(), { width: 120 });
+    Menu.button(this, cx, CANVAS.HEIGHT * 0.62, 'Settings', () => this.openSettings(), { width: 120 });
+    Menu.button(this, cx, CANVAS.HEIGHT * 0.78, 'Quit to Title', () => this.quit(), { width: 120 });
+
+    Menu.label(this, cx, CANVAS.HEIGHT * 0.9, 'P / ESC to resume', 7, 0.5);
+
+    this.input.keyboard?.on('keydown-P', () => this.resume());
+    this.input.keyboard?.on('keydown-ESC', () => this.resume());
+
+    // If Settings was closed and returned focus here, make the overlay visible
+    // again (see openSettings + SettingsScene's returnTo handling).
+    this.events.on(Phaser.Scenes.Events.WAKE, () => this.scene.setVisible(true));
+  }
+
+  private resume(): void {
+    this.scene.stop();
+    this.scene.resume(SceneKeys.Game);
+  }
+
+  private openSettings(): void {
+    // Open Settings as its own overlay on top; keep this Pause scene alive but
+    // asleep + hidden. When Settings closes with returnTo=Pause it wakes us.
+    this.scene.launch(SceneKeys.Settings, { returnTo: SceneKeys.Pause });
+    this.scene.setVisible(false);
+    this.scene.sleep();
+  }
+
+  private quit(): void {
+    Menu.fadeTo(this, () => {
+      this.scene.stop(SceneKeys.Game);
+      this.scene.stop();
+      this.scene.start(SceneKeys.Title);
+    });
+  }
+}

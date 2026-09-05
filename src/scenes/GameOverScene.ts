@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { SceneKeys, PALETTE, CANVAS } from '../config/GameConfig';
+import { Menu } from '../ui/Menu';
 
 export interface GameOverData {
   victory?: boolean;
@@ -10,7 +11,9 @@ export interface GameOverData {
 }
 
 /**
- * GameOverScene shows the run summary and lets the player return to the Title.
+ * GameOverScene - the run summary. Shows outcome, final score, waves survived,
+ * and citizens saved, then offers Retry (straight back into a fresh run) or
+ * Return to Title. Fades in on show and fades out on either choice.
  */
 export class GameOverScene extends Phaser.Scene {
   constructor() {
@@ -19,12 +22,13 @@ export class GameOverScene extends Phaser.Scene {
 
   create(data: GameOverData): void {
     this.cameras.main.setBackgroundColor(PALETTE.GROUND);
+    Menu.fadeIn(this, 500);
 
     const cx = CANVAS.WIDTH / 2;
     const victory = data.victory ?? false;
 
     this.add
-      .text(cx, CANVAS.HEIGHT * 0.32, victory ? 'CITY HELD' : 'THE WALL HAS FALLEN', {
+      .text(cx, CANVAS.HEIGHT * 0.22, victory ? 'CITY HELD' : 'THE WALL HAS FALLEN', {
         fontFamily: 'monospace',
         fontSize: '20px',
         color: victory ? PALETTE.TEXT_CSS : PALETTE.DANGER_CSS,
@@ -35,26 +39,37 @@ export class GameOverScene extends Phaser.Scene {
     const waves = data.wavesSurvived ?? 0;
     const saved = data.citizensSaved ?? 0;
     const score = data.score ?? 0;
-    this.add
-      .text(cx, CANVAS.HEIGHT * 0.52, `Score: ${score}\nWaves survived: ${waves}    Citizens saved: ${saved}`, {
-        fontFamily: 'monospace',
-        fontSize: '10px',
-        color: PALETTE.TEXT_CSS,
-        align: 'center',
-      })
-      .setOrigin(0.5)
-      .setAlpha(0.85);
 
     this.add
-      .text(cx, CANVAS.HEIGHT * 0.76, 'Press SPACE / Click to return', {
-        fontFamily: 'monospace',
-        fontSize: '9px',
-        color: PALETTE.TEXT_CSS,
-      })
+      .text(
+        cx,
+        CANVAS.HEIGHT * 0.46,
+        `SCORE   ${score}\nWAVES SURVIVED   ${waves}\nCITIZENS SAVED   ${saved}`,
+        {
+          fontFamily: 'monospace',
+          fontSize: '10px',
+          color: PALETTE.TEXT_CSS,
+          align: 'center',
+          lineSpacing: 4,
+        },
+      )
       .setOrigin(0.5)
-      .setAlpha(0.7);
+      .setAlpha(0.9);
 
-    this.input.keyboard?.once('keydown-SPACE', () => this.scene.start(SceneKeys.Title));
-    this.input.once(Phaser.Input.Events.POINTER_DOWN, () => this.scene.start(SceneKeys.Title));
+    Menu.button(this, cx - 62, CANVAS.HEIGHT * 0.78, 'Retry', () => this.retry(), { width: 100 });
+    Menu.button(this, cx + 62, CANVAS.HEIGHT * 0.78, 'Title', () => this.toTitle(), { width: 100 });
+
+    Menu.label(this, cx, CANVAS.HEIGHT * 0.92, 'R Retry    SPACE Title', 7, 0.5);
+
+    this.input.keyboard?.on('keydown-R', () => this.retry());
+    this.input.keyboard?.on('keydown-SPACE', () => this.toTitle());
+  }
+
+  private retry(): void {
+    Menu.fadeTo(this, () => this.scene.start(SceneKeys.Game));
+  }
+
+  private toTitle(): void {
+    Menu.fadeTo(this, () => this.scene.start(SceneKeys.Title));
   }
 }

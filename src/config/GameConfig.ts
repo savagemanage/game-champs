@@ -92,5 +92,6 @@ export const SceneKeys = {
   Title: 'TitleScene',
   Settings: 'SettingsScene',
   Game: 'GameScene',
+  Pause: 'PauseScene',
   GameOver: 'GameOverScene',
 } as const;

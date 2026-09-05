@@ -9,6 +9,8 @@ import { GasSystem } from '../systems/GasSystem';
 import { GrappleSystem, type GrappleSurface } from '../systems/GrappleSystem';
 import { CombatSystem } from '../systems/CombatSystem';
 import { WaveSystem } from '../systems/WaveSystem';
+import { AudioManager } from '../systems/AudioManager';
+import { Hud } from '../ui/Hud';
 import type { GameOverData } from './GameOverScene';
 import { DebrisProjectile, type AttackEvent, type Enemy } from '../entities/enemies';
 
@@ -35,6 +37,8 @@ export class GameScene extends Phaser.Scene {
   private combat!: CombatSystem;
   private waves!: WaveSystem;
   private wall!: Wall;
+  private hud!: Hud;
+  private audio!: AudioManager;
 
   private keys!: {
     left: Phaser.Input.Keyboard.Key;
@@ -43,6 +47,7 @@ export class GameScene extends Phaser.Scene {
     down: Phaser.Input.Keyboard.Key;
     jump: Phaser.Input.Keyboard.Key;
     dash: Phaser.Input.Keyboard.Key;
+    pause: Phaser.Input.Keyboard.Key;
   };
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
 
@@ -63,19 +68,17 @@ export class GameScene extends Phaser.Scene {
   private citizensSaved = 0;
   private gameEnded = false;
 
-  // --- HUD ---
-  private gasBar!: Phaser.GameObjects.Rectangle;
-  private wallBar!: Phaser.GameObjects.Rectangle;
-  private statusText!: Phaser.GameObjects.Text;
-  private waveBanner!: Phaser.GameObjects.Text;
-
   constructor() {
     super({ key: SceneKeys.Game });
   }
 
   create(): void {
     this.cameras.main.setBackgroundColor(PALETTE.BG_SKY_CSS);
+    this.cameras.main.fadeIn(350, 0, 0, 0);
     this.physics.world.setBounds(0, 0, LEVEL.WIDTH, LEVEL.HEIGHT);
+
+    this.audio = AudioManager.get(this);
+    this.audio.playMusic(AudioKeys.MusicLoop);
 
     this.score = 0;
     this.wave = 0;
@@ -92,7 +95,8 @@ export class GameScene extends Phaser.Scene {
     this.buildSystems();
     this.buildCamera();
     this.buildInput();
-    this.buildHud();
+    this.hud = new Hud(this);
+    this.hud.showHint();
 
     this.waves.start(this.time.now);
   }
@@ -212,6 +216,7 @@ export class GameScene extends Phaser.Scene {
       down: kb.addKey(Phaser.Input.Keyboard.KeyCodes.S),
       jump: kb.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE),
       dash: kb.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT),
+      pause: kb.addKey(Phaser.Input.Keyboard.KeyCodes.P),
     };
 
     this.input.on(Phaser.Input.Events.POINTER_DOWN, (pointer: Phaser.Input.Pointer) => {
@@ -229,46 +234,21 @@ export class GameScene extends Phaser.Scene {
 
     this.input.mouse?.disableContextMenu();
 
+    // ESC abandons the run outright; P opens the pause overlay.
     kb.on('keydown-ESC', () => this.endGame(false));
+    this.keys.pause.on('down', () => this.pauseGame());
     this.keys.dash.on('down', () => this.tryDash());
   }
 
-  private buildHud(): void {
-    // Gas gauge.
-    this.add.rectangle(6, 8, 84, 6, PALETTE.WALL_DARK).setOrigin(0, 0.5).setScrollFactor(0).setDepth(50);
-    this.gasBar = this.add.rectangle(6, 8, 84, 6, PALETTE.PLAYER).setOrigin(0, 0.5).setScrollFactor(0).setDepth(51);
-    this.add.text(6, 13, 'GAS', { fontFamily: 'monospace', fontSize: '7px', color: PALETTE.TEXT_CSS }).setScrollFactor(0).setDepth(51);
-
-    // Wall-integrity gauge.
-    this.add.rectangle(6, 26, 84, 6, PALETTE.WALL_DARK).setOrigin(0, 0.5).setScrollFactor(0).setDepth(50);
-    this.wallBar = this.add.rectangle(6, 26, 84, 6, PALETTE.ACCENT).setOrigin(0, 0.5).setScrollFactor(0).setDepth(51);
-    this.add.text(6, 31, 'WALL', { fontFamily: 'monospace', fontSize: '7px', color: PALETTE.TEXT_CSS }).setScrollFactor(0).setDepth(51);
-
-    // Score / wave / citizens readout.
-    this.statusText = this.add
-      .text(CANVAS.WIDTH - 6, 8, '', { fontFamily: 'monospace', fontSize: '8px', color: PALETTE.TEXT_CSS, align: 'right' })
-      .setOrigin(1, 0)
-      .setScrollFactor(0)
-      .setDepth(51);
-
-    // Center wave banner (transient).
-    this.waveBanner = this.add
-      .text(CANVAS.WIDTH / 2, CANVAS.HEIGHT * 0.35, '', {
-        fontFamily: 'monospace',
-        fontSize: '16px',
-        color: PALETTE.DANGER_CSS,
-        fontStyle: 'bold',
-      })
-      .setOrigin(0.5)
-      .setScrollFactor(0)
-      .setDepth(52)
-      .setAlpha(0);
+  /** Pause the sim and launch the Pause overlay on top of this scene. */
+  private pauseGame(): void {
+    if (this.gameEnded) return;
+    this.scene.pause();
+    this.scene.launch(SceneKeys.Pause);
   }
 
   private announceWave(wave: number, size: number): void {
-    this.waveBanner.setText(`WAVE ${wave} / ${this.waves.totalWaves}\n${size} INCOMING`);
-    this.waveBanner.setAlpha(1);
-    this.tweens.add({ targets: this.waveBanner, alpha: 0, duration: 1600, delay: 900 });
+    this.hud.announceWave(wave, this.waves.totalWaves, size);
   }
 
   private pointerWorld(pointer: Phaser.Input.Pointer): Phaser.Math.Vector2 {
@@ -290,7 +270,7 @@ export class GameScene extends Phaser.Scene {
     }
     if (!this.gas.spend(GAS.COST_DASH, now)) return;
     this.player.startDash(dx, dy, now);
-    if (this.cache.audio.exists(AudioKeys.SwingWhoosh)) this.sound.play(AudioKeys.SwingWhoosh, { volume: 0.7 });
+    this.audio.playSfx(AudioKeys.SwingWhoosh, 0.7);
   }
 
   update(_time: number, delta: number): void {
@@ -383,7 +363,7 @@ export class GameScene extends Phaser.Scene {
     if (nearest && best < 60) {
       nearest.devour();
       this.citizensSaved = Math.max(0, this.citizensSaved - 1);
-      if (this.cache.audio.exists(AudioKeys.CitizenScream)) this.sound.play(AudioKeys.CitizenScream, { volume: 0.6 });
+      this.audio.playSfx(AudioKeys.CitizenScream, 0.6);
       if (this.citizensSaved <= 0) this.endGame(false);
     }
   }
@@ -446,15 +426,59 @@ export class GameScene extends Phaser.Scene {
   }
 
   private updateHud(): void {
-    this.gasBar.width = Math.max(0, Math.floor(84 * this.gas.ratio));
-    this.gasBar.fillColor = this.gas.isEmpty ? PALETTE.ENEMY_WEAKPOINT : PALETTE.PLAYER;
+    this.hud.update({
+      gasRatio: this.gas.ratio,
+      gasEmpty: this.gas.isEmpty,
+      wallRatio: this.wall.ratio,
+      citizensSaved: this.citizensSaved,
+      citizensTotal: WALL.START_CITIZENS,
+      wave: this.wave,
+      totalWaves: this.waves.totalWaves,
+      score: this.score,
+    });
+    this.updateWeakPointCue();
+  }
 
-    this.wallBar.width = Math.max(0, Math.floor(84 * this.wall.ratio));
-    this.wallBar.fillColor = this.wall.ratio < 0.3 ? PALETTE.ENEMY_WEAKPOINT : PALETTE.ACCENT;
+  /**
+   * Highlight the nape of the enemy the player is aiming at. We pick the giant
+   * whose nape is nearest the aim point (within a screen tolerance) and mark it;
+   * the cue goes "hot" when that nape is within blade reach so the player knows
+   * a slash there will crit.
+   */
+  private updateWeakPointCue(): void {
+    const pointer = this.input.activePointer;
+    const aim = this.pointerWorld(pointer);
 
-    this.statusText.setText(
-      `SCORE ${this.score}\nWAVE ${this.wave}/${this.waves.totalWaves}\nCITIZENS ${this.citizensSaved}/${WALL.START_CITIZENS}`,
-    );
+    let best: Enemy | null = null;
+    let bestDist = Infinity;
+    for (const enemy of this.enemies) {
+      if (enemy.isDying || !enemy.active) continue;
+      const nape = enemy.getNapeWorld();
+      const d = Phaser.Math.Distance.Between(aim.x, aim.y, nape.x, nape.y);
+      // Only consider napes the aim is reasonably close to (aim assist window).
+      if (d < enemy.getNapeRadius() + 26 && d < bestDist) {
+        bestDist = d;
+        best = enemy;
+      }
+    }
+
+    if (!best) {
+      this.hud.drawWeakPointCue(null);
+      return;
+    }
+
+    const nape = best.getNapeWorld();
+    const cam = this.cameras.main;
+    const screenX = (nape.x - cam.scrollX) * cam.zoom;
+    const screenY = (nape.y - cam.scrollY) * cam.zoom;
+    const playerToNape = Phaser.Math.Distance.Between(this.player.x, this.player.y, nape.x, nape.y);
+    const inRange = playerToNape <= this.combat.napeStrikeRange;
+    this.hud.drawWeakPointCue({
+      screenX,
+      screenY,
+      radius: Math.max(5, best.getNapeRadius() + 3),
+      inRange,
+    });
   }
 
   /** End the run and transition to the summary with the results payload. */

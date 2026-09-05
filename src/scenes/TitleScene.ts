@@ -1,81 +1,73 @@
 import Phaser from 'phaser';
 import { SceneKeys, PALETTE, CANVAS } from '../config/GameConfig';
-import { TextureKeys } from '../config/AssetKeys';
+import { TextureKeys, AudioKeys } from '../config/AssetKeys';
+import { AudioManager } from '../systems/AudioManager';
+import { Menu } from '../ui/Menu';
 
 /**
- * TitleScene renders the game title and prompts the player to start. It
- * transitions into the GameScene on input and can open the SettingsScene.
+ * TitleScene - the front door. Renders the layered pixel backdrop, the game
+ * title, and Start / Settings buttons, and kicks off the music bed. Deploys
+ * into the GameScene with a fade transition.
  */
 export class TitleScene extends Phaser.Scene {
+  private bgSky!: Phaser.GameObjects.TileSprite;
+  private bgHills!: Phaser.GameObjects.TileSprite;
+  private drift = 0;
+
   constructor() {
     super({ key: SceneKeys.Title });
   }
 
   create(): void {
     this.cameras.main.setBackgroundColor(PALETTE.BG_SKY_CSS);
+    Menu.fadeIn(this);
 
     const cx = CANVAS.WIDTH / 2;
 
-    // Parallax backdrop built from the loaded background layers.
-    this.add.image(cx, CANVAS.HEIGHT / 2, TextureKeys.BgSky);
-    this.add.image(cx, CANVAS.HEIGHT / 2, TextureKeys.BgHills).setAlpha(0.9);
+    // Parallax backdrop from the loaded background layers (slow auto-drift).
+    this.bgSky = this.add.tileSprite(0, 0, CANVAS.WIDTH, CANVAS.HEIGHT, TextureKeys.BgSky).setOrigin(0, 0);
+    this.bgHills = this.add
+      .tileSprite(0, 0, CANVAS.WIDTH, CANVAS.HEIGHT, TextureKeys.BgHills)
+      .setOrigin(0, 0)
+      .setAlpha(0.92);
     this.add.image(cx, CANVAS.HEIGHT / 2, TextureKeys.BgWall).setAlpha(0.85);
 
-    // Hero silhouette standing on the wall, scaled up for the splash.
-    this.add
-      .image(cx + 150, CANVAS.HEIGHT * 0.62, TextureKeys.Hero, 0)
-      .setScale(2)
-      .setFlipX(true);
+    // Hero silhouette perched on the wall.
+    this.add.image(cx + 150, CANVAS.HEIGHT * 0.62, TextureKeys.Hero, 0).setScale(2).setFlipX(true);
 
-    this.add
-      .text(cx, CANVAS.HEIGHT * 0.34, 'WIREWORK', {
-        fontFamily: 'monospace',
-        fontSize: '32px',
-        color: PALETTE.TEXT_CSS,
-        fontStyle: 'bold',
-      })
-      .setOrigin(0.5);
+    // Title + tagline.
+    const title = Menu.title(this, cx, CANVAS.HEIGHT * 0.3, 'WIREWORK', 32);
+    this.tweens.add({ targets: title, y: title.y - 2, duration: 1800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    Menu.label(this, cx, CANVAS.HEIGHT * 0.44, 'Wall-Defense ODM Action', 10, 0.85);
 
-    this.add
-      .text(cx, CANVAS.HEIGHT * 0.48, 'Wall-Defense ODM Action', {
-        fontFamily: 'monospace',
-        fontSize: '10px',
-        color: PALETTE.TEXT_CSS,
-      })
-      .setOrigin(0.5)
-      .setAlpha(0.8);
+    // Menu buttons.
+    Menu.button(this, cx, CANVAS.HEIGHT * 0.62, 'Deploy', () => this.startGame(), { width: 120 });
+    Menu.button(this, cx, CANVAS.HEIGHT * 0.77, 'Settings', () => this.openSettings(), { width: 120 });
 
-    const prompt = this.add
-      .text(cx, CANVAS.HEIGHT * 0.7, 'Press SPACE / Click to Deploy', {
-        fontFamily: 'monospace',
-        fontSize: '10px',
-        color: PALETTE.TEXT_CSS,
-      })
-      .setOrigin(0.5);
+    Menu.label(this, cx, CANVAS.HEIGHT * 0.92, 'SPACE Deploy    S Settings', 7, 0.5);
 
-    this.tweens.add({
-      targets: prompt,
-      alpha: { from: 1, to: 0.3 },
-      duration: 700,
-      yoyo: true,
-      repeat: -1,
-    });
+    // Keyboard shortcuts mirror the buttons.
+    this.input.keyboard?.on('keydown-SPACE', () => this.startGame());
+    this.input.keyboard?.on('keydown-S', () => this.openSettings());
 
-    this.add
-      .text(cx, CANVAS.HEIGHT * 0.86, 'S: Settings', {
-        fontFamily: 'monospace',
-        fontSize: '8px',
-        color: PALETTE.TEXT_CSS,
-      })
-      .setOrigin(0.5)
-      .setAlpha(0.6);
+    // Start the music bed (idempotent; survives across scenes via AudioManager).
+    const audio = AudioManager.get(this);
+    // The browser may hold audio locked until the first gesture; retry on input.
+    audio.playMusic(AudioKeys.MusicLoop);
+    this.input.once(Phaser.Input.Events.POINTER_DOWN, () => audio.playMusic(AudioKeys.MusicLoop));
+  }
 
-    this.input.keyboard?.once('keydown-SPACE', () => this.startGame());
-    this.input.keyboard?.once('keydown-S', () => this.scene.start(SceneKeys.Settings));
-    this.input.once(Phaser.Input.Events.POINTER_DOWN, () => this.startGame());
+  update(_time: number, delta: number): void {
+    this.drift += delta * 0.004;
+    this.bgSky.tilePositionX = this.drift * 0.4;
+    this.bgHills.tilePositionX = this.drift;
   }
 
   private startGame(): void {
-    this.scene.start(SceneKeys.Game);
+    Menu.fadeTo(this, () => this.scene.start(SceneKeys.Game));
+  }
+
+  private openSettings(): void {
+    Menu.fadeTo(this, () => this.scene.start(SceneKeys.Settings));
   }
 }
