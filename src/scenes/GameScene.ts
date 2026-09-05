@@ -9,6 +9,7 @@ import { Citizen } from '../entities/Citizen';
 import { GasSystem } from '../systems/GasSystem';
 import { GrappleSystem, type GrappleSurface, type GrappleTarget } from '../systems/GrappleSystem';
 import { CombatSystem } from '../systems/CombatSystem';
+import { isTraversing } from '../systems/SiegeGeometry';
 import { WaveSystem } from '../systems/WaveSystem';
 import { AudioManager } from '../systems/AudioManager';
 import { Hud } from '../ui/Hud';
@@ -46,6 +47,15 @@ export class GameScene extends Phaser.Scene {
   private wall!: Wall;
   private hud!: Hud;
   private audio!: AudioManager;
+
+  /**
+   * The SINGLE Arcade collider between the hero and the whole set of standing
+   * wall blocks (ODM traversal, FEAT-004). It is toggled off each frame while
+   * the hero is dashing or flinging on a wire so the hero passes OVER the walls,
+   * and on again during plain movement so walls block. Giants never share this
+   * collider, so toggling it only affects the hero.
+   */
+  private wallCollider!: Phaser.Physics.Arcade.Collider;
 
   private keys!: {
     left: Phaser.Input.Keyboard.Key;
@@ -174,9 +184,14 @@ export class GameScene extends Phaser.Scene {
     const spawnR = (WALL.OUTER_RADIUS + WALL.INNER_RADIUS) / 2;
     this.player = new Player(this, ARENA.CENTER_X, ARENA.CENTER_Y - spawnR);
     this.player.setDepth(6);
-    for (const block of this.wall.colliders) {
-      this.physics.add.collider(this.player, block);
-    }
+    // ODM traversal (FEAT-004): a SINGLE collider between the hero and the whole
+    // array of ring blocks, stored so its `active` state can be toggled as one
+    // each frame. Breached segments disable their own static bodies
+    // (Wall.breachSegment), so this array-based collider naturally stops
+    // colliding with them. Giants are NOT part of this collider - the hero is
+    // the only body that ever collided with the walls (they path to and chip
+    // segments via AI, not physics), so toggling it never affects enemies.
+    this.wallCollider = this.physics.add.collider(this.player, this.wall.colliders);
   }
 
   /** Populate the citizen core at the arena center (inside the inner ring). */
@@ -323,6 +338,13 @@ export class GameScene extends Phaser.Scene {
 
     // --- player + gas ---
     this.player.updatePlayer({ up, down, left, right }, delta, now);
+
+    // ODM wall traversal (FEAT-004, option B): while dashing or flinging on a
+    // wire the hero crosses OVER the walls, so disable the single player<->wall
+    // collider; during plain grounded movement it stays enabled and walls
+    // block. Only the hero is affected (giants share no wall collider).
+    const traversing = isTraversing(this.player.isDashing(now), this.player.swinging);
+    this.wallCollider.active = !traversing;
     // Top-down has no "grounded"; regen at the settled rate when not swinging.
     this.gas.regen(!this.player.swinging, delta, now);
 

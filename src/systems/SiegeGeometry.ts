@@ -189,6 +189,23 @@ export function napeFlingAccel(base: number, boosted: number, napeHooked: boolea
 }
 
 /**
+ * ODM wall-traversal predicate (FEAT-004, option B). The hero passes OVER/ACROSS
+ * the walls while USING the omni-directional mobility gear - that is, while
+ * DASHING or while FLINGING/attached on a wire - and is blocked by standing
+ * walls only during plain grounded movement. GameScene toggles the single
+ * player<->wall Arcade collider off whenever this returns true.
+ *
+ * Only the hero traverses: giants share no collider with the walls, so this
+ * predicate never touches enemy behaviour.
+ *
+ * @param dashing whether the hero's dash burst window is active.
+ * @param swinging whether a grapple wire is attached / flinging the hero.
+ */
+export function isTraversing(dashing: boolean, swinging: boolean): boolean {
+  return dashing || swinging;
+}
+
+/**
  * Frontal-armor test in 2D: is an incoming hit landing within the giant's
  * frontal cone? A hit whose direction (from the giant toward the strike) lies
  * within `coneDeg` of the facing heading is "frontal" and gets reduced by the

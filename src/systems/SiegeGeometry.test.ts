@@ -7,6 +7,7 @@ import {
   facingDashDirection,
   isFrontalHit,
   isNapeHook,
+  isTraversing,
   napeFlingAccel,
   napeOffset,
   nearestTargetIndex,
@@ -251,5 +252,23 @@ describe('weak-point (nape) grapple hook decision (FEAT-003)', () => {
     expect(napeFlingAccel(base, boosted, false)).toBe(base);
     // The boosted pull is genuinely stronger so the hero is flung, not reeled.
     expect(boosted).toBeGreaterThan(base);
+  });
+});
+
+describe('ODM wall traversal predicate (FEAT-004: hero crosses walls while using ODM)', () => {
+  it('traverses (collider disabled) while DASHING', () => {
+    expect(isTraversing(true, false)).toBe(true);
+  });
+
+  it('traverses (collider disabled) while FLINGING/attached on a wire', () => {
+    expect(isTraversing(false, true)).toBe(true);
+  });
+
+  it('traverses while both dashing AND swinging at once', () => {
+    expect(isTraversing(true, true)).toBe(true);
+  });
+
+  it('is BLOCKED (collider enabled) during plain grounded movement', () => {
+    expect(isTraversing(false, false)).toBe(false);
   });
 });
