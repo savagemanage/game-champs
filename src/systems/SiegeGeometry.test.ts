@@ -6,6 +6,8 @@ import {
   dashDirection,
   facingDashDirection,
   isFrontalHit,
+  isNapeHook,
+  napeFlingAccel,
   napeOffset,
   nearestTargetIndex,
   radialPoint,
@@ -14,6 +16,7 @@ import {
   distance,
   type SegmentLike,
 } from './SiegeGeometry';
+import { GRAPPLE } from '../config/PlayerConfig';
 
 /**
  * Pure-logic tests for the top-down radial siege geometry (FEAT-002/003), in
@@ -216,5 +219,37 @@ describe('2D frontal-armor cone (fix: armor uses full facing vector)', () => {
     expect(isFrontalHit(0.7071, -0.7071, 0.7071, -0.7071, cone)).toBe(true);
     // ...while a hit from the south-west (behind that heading) is not.
     expect(isFrontalHit(0.7071, -0.7071, -0.7071, 0.7071, cone)).toBe(false);
+  });
+});
+
+describe('weak-point (nape) grapple hook decision (FEAT-003)', () => {
+  const snap = GRAPPLE.NAPE_ANCHOR_SNAP_DIST;
+
+  it('counts a hit landing ON the nape as a weak-point hook', () => {
+    expect(isNapeHook(100, 100, 100, 100, snap)).toBe(true);
+  });
+
+  it('counts a hit within the snap distance of the nape as a weak-point hook', () => {
+    // Just inside the snap radius (0.9x) -> still hooks the nape.
+    expect(isNapeHook(100 + snap * 0.9, 100, 100, 100, snap)).toBe(true);
+  });
+
+  it('treats a hit on the body edge (beyond the snap distance) as an ordinary grapple', () => {
+    // Well outside the snap radius (2x) -> body grapple, not a nape hook.
+    expect(isNapeHook(100 + snap * 2, 100, 100, 100, snap)).toBe(false);
+  });
+
+  it('is inclusive exactly at the snap distance boundary', () => {
+    expect(isNapeHook(100 + snap, 100, 100, 100, snap)).toBe(true);
+    expect(isNapeHook(100 + snap + 0.001, 100, 100, 100, snap)).toBe(false);
+  });
+
+  it('returns the boosted fling accel ONLY when the wire is nape-hooked', () => {
+    const base = GRAPPLE.PULL_ACCEL;
+    const boosted = GRAPPLE.NAPE_PULL_ACCEL;
+    expect(napeFlingAccel(base, boosted, true)).toBe(boosted);
+    expect(napeFlingAccel(base, boosted, false)).toBe(base);
+    // The boosted pull is genuinely stronger so the hero is flung, not reeled.
+    expect(boosted).toBeGreaterThan(base);
   });
 });

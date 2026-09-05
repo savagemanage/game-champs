@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { AudioKeys, type AudioKey } from '../config/AssetKeys';
 import { GAS, GRAPPLE } from '../config/PlayerConfig';
+import { isNapeHook, napeFlingAccel } from './SiegeGeometry';
 import { AudioManager } from './AudioManager';
 import type { Player } from '../entities/Player';
 import type { GasSystem } from './GasSystem';
@@ -26,6 +27,13 @@ export interface GrappleTarget {
   readonly bounds: Phaser.Geom.Rectangle;
   /** False once the giant is dying / destroyed - the wire must let go. */
   readonly isValid: boolean;
+  /**
+   * Live world position of the giant's WEAK POINT (nape), if it has one. When a
+   * shot's ray strikes within GRAPPLE.NAPE_ANCHOR_SNAP_DIST of this point the
+   * wire hooks the weak point and flings the hero toward it (FEAT-003); the
+   * anchor then tracks this live position each frame. Absent = no weak point.
+   */
+  readonly getNape?: () => { x: number; y: number };
 }
 
 /** Lifecycle phase of the wire. */
@@ -94,6 +102,14 @@ export class GrappleSystem {
    * release or when the target dies / moves out of MAX_LENGTH.
    */
   private attachedTarget: GrappleTarget | null = null;
+  /**
+   * True when the current shot hooked a giant's WEAK POINT (nape): the ray hit a
+   * giant within GRAPPLE.NAPE_ANCHOR_SNAP_DIST of its live nape. While set, the
+   * anchor tracks the LIVE nape, the pull uses the boosted NAPE_PULL_ACCEL, the
+   * rope auto-reels toward NAPE_MIN_LENGTH, and release retains NAPE_RELEASE_KEEP
+   * so the hero is flung into blade reach. Cleared on every release (FEAT-003).
+   */
+  private napeHooked = false;
 
   constructor(scene: Phaser.Scene, player: Player, gas: GasSystem) {
     this.player = player;
@@ -147,10 +163,24 @@ export class GrappleSystem {
     // struck a giant, remember it so the anchor tracks that moving target.
     this.phase = WirePhase.Firing;
     this.attachedTarget = hit.target;
-    this.anchor.set(hit.point.x, hit.point.y);
+
+    // Weak-point (nape) hook: if the ray struck a giant that exposes a nape AND
+    // the hit landed within the snap distance of that live nape, anchor to the
+    // nape (not the body hit point) and flag the boosted fling (FEAT-003).
+    this.napeHooked = false;
+    let anchorX = hit.point.x;
+    let anchorY = hit.point.y;
+    const nape = hit.target?.getNape?.();
+    if (nape && isNapeHook(hit.point.x, hit.point.y, nape.x, nape.y, GRAPPLE.NAPE_ANCHOR_SNAP_DIST)) {
+      this.napeHooked = true;
+      anchorX = nape.x;
+      anchorY = nape.y;
+    }
+
+    this.anchor.set(anchorX, anchorY);
     this.hookPos.set(originX, originY);
-    const dx = hit.point.x - originX;
-    const dy = hit.point.y - originY;
+    const dx = anchorX - originX;
+    const dy = anchorY - originY;
     const dist = Math.hypot(dx, dy) || 1;
     this.hookDir.set(dx / dist, dy / dist);
     this.hookRemaining = dist;
@@ -168,8 +198,11 @@ export class GrappleSystem {
     if (this.phase === WirePhase.Idle) return;
     if (this.phase === WirePhase.Attached) {
       const body = this.player.body;
-      body.velocity.x *= GRAPPLE.RELEASE_VELOCITY_KEEP;
-      body.velocity.y *= GRAPPLE.RELEASE_VELOCITY_KEEP;
+      // A weak-point hook retains its own (typically higher) momentum so the
+      // hero keeps speed heading INTO the nape for the finishing slash.
+      const keep = this.napeHooked ? GRAPPLE.NAPE_RELEASE_KEEP : GRAPPLE.RELEASE_VELOCITY_KEEP;
+      body.velocity.x *= keep;
+      body.velocity.y *= keep;
       // Outward radial direction (anchor -> player), normalized.
       const rx = this.player.x - this.anchor.x;
       const ry = this.player.y - this.anchor.y;
@@ -180,6 +213,7 @@ export class GrappleSystem {
     this.phase = WirePhase.Idle;
     this.player.swinging = false;
     this.attachedTarget = null;
+    this.napeHooked = false;
     this.wire.clear();
   }
 
@@ -236,12 +270,20 @@ export class GrappleSystem {
       return false;
     }
 
-    // Glue the anchor to the giant's current position (the moving anchor).
-    this.anchor.set(target.x, target.y);
+    // Glue the anchor to the giant's current position (the moving anchor). When
+    // the shot hooked the weak point, track the LIVE nape instead of the body
+    // centre so the fling homes on the moving weak point (FEAT-003).
+    if (this.napeHooked && target.getNape) {
+      const nape = target.getNape();
+      this.anchor.set(nape.x, nape.y);
+    } else {
+      this.anchor.set(target.x, target.y);
+    }
 
     if (this.phase === WirePhase.Attached) {
       // A moving giant can drag the anchor out of reach: let go past MAX_LENGTH.
-      const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, target.x, target.y);
+      // Measure to the live anchor (nape when weak-point hooked, else body).
+      const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, this.anchor.x, this.anchor.y);
       if (d > GRAPPLE.MAX_LENGTH) {
         this.release();
         return false;
@@ -281,6 +323,16 @@ export class GrappleSystem {
     }
     this.gas.drain(GAS.COST_SWING_PER_SEC, dtMs, nowMs);
 
+    // --- weak-point auto-reel: a nape hook draws the hero IN toward the nape ---
+    // The rope shrinks toward NAPE_MIN_LENGTH every frame (independent of manual
+    // reeling, no gas cost) so the boosted pull lands the hero in blade reach.
+    if (this.napeHooked && this.ropeLength > GRAPPLE.NAPE_MIN_LENGTH) {
+      this.ropeLength = Math.max(
+        GRAPPLE.NAPE_MIN_LENGTH,
+        this.ropeLength - GRAPPLE.NAPE_REEL_SPEED * dt,
+      );
+    }
+
     // --- reeling: change the enforced rope length ---
     if (input.reelIn && !this.gas.isEmpty) {
       if (this.gas.drain(GAS.COST_REEL_PER_SEC, dtMs, nowMs) > 0) {
@@ -298,8 +350,11 @@ export class GrappleSystem {
     let ry = this.player.y - this.anchor.y;
     let dist = Math.hypot(rx, ry) || 0.0001;
 
-    // Constant pull toward the anchor gives the swing "pump" energy + climb.
-    const pull = GRAPPLE.PULL_ACCEL * dt;
+    // Constant pull toward the anchor gives the swing "pump" energy + climb. A
+    // weak-point hook uses the boosted NAPE_PULL_ACCEL so the hero is visibly
+    // flung at the nape rather than lazily reeled (FEAT-003).
+    const accel = napeFlingAccel(GRAPPLE.PULL_ACCEL, GRAPPLE.NAPE_PULL_ACCEL, this.napeHooked);
+    const pull = accel * dt;
     body.velocity.x -= (rx / dist) * pull;
     body.velocity.y -= (ry / dist) * pull;
 

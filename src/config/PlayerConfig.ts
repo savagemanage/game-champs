@@ -119,6 +119,41 @@ export const GRAPPLE = {
   ANCHOR_RADIUS: 2,
   /** How long the anchor stays "hooked" before auto-detach if unused, ms (0 = never). */
   AUTO_DETACH_MS: 0,
+
+  // --- weak-point (nape) hook fling (FEAT-003) ---
+  // Hooking a giant's WEAK POINT (nape) flings the hero straight at it with a
+  // stronger, clearly-readable pull, tying traversal to the weak point and
+  // setting up the finishing nape slash on arrival. These only apply when the
+  // aim ray strikes a giant within NAPE_ANCHOR_SNAP_DIST of its live nape;
+  // ordinary body grapples and wall grapples use the values above unchanged.
+  /**
+   * How close (px) the grapple ray's hit point must be to the giant's live nape
+   * for the shot to count as a WEAK-POINT hook. Roughly a nape-radius-and-a-bit
+   * so aiming at the neck reliably latches the weak point, while a hit on the
+   * torso / limbs stays an ordinary body grapple.
+   */
+  NAPE_ANCHOR_SNAP_DIST: 34,
+  /**
+   * Boosted pull acceleration along the wire while hooked to the nape, px/s^2.
+   * Stronger than PULL_ACCEL so the hero is visibly FLUNG toward the weak point
+   * rather than lazily reeled, reading as a committed lunge into blade reach.
+   */
+  NAPE_PULL_ACCEL: 1150,
+  /**
+   * Auto-reel target rope length while hooked to the nape, px. The rope shrinks
+   * toward this each frame so the hero is drawn in CLOSE to the weak point and
+   * arrives inside CombatSystem.napeStrikeRange for the finishing slash. Slightly
+   * larger than MIN_LENGTH so the hero settles beside the nape, not on top of it.
+   */
+  NAPE_MIN_LENGTH: 40,
+  /** How fast the rope auto-reels toward NAPE_MIN_LENGTH while nape-hooked, px/s. */
+  NAPE_REEL_SPEED: 320,
+  /**
+   * Velocity retained when releasing a nape hook (fraction of current). Kept at
+   * or near 1 so the hero keeps their speed heading INTO the nape for the slash
+   * instead of stalling out on release.
+   */
+  NAPE_RELEASE_KEEP: 1,
 } as const;
 
 /**

@@ -158,6 +158,12 @@ export class GameScene extends Phaser.Scene {
         get isValid() {
           return enemy.active && !enemy.isDying;
         },
+        // Live weak-point (nape) position so the wire can hook the nape and
+        // fling the hero to it for the finishing slash (FEAT-003).
+        getNape() {
+          const nape = enemy.getNapeWorld();
+          return { x: nape.x, y: nape.y };
+        },
       });
     }
     return targets;

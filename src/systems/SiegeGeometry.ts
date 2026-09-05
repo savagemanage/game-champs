@@ -154,6 +154,41 @@ export function napeOffset(
 }
 
 /**
+ * Weak-point (nape) hook decision for the grapple. A grapple ray that strikes a
+ * giant "hooks the nape" when the hit point lands within `snapDist` of the
+ * giant's live nape/weak-point. When it does, the wire anchors to the nape and
+ * the fling is boosted (see {@link napeFlingAccel}); otherwise it is an ordinary
+ * body grapple. Kept pure so the decision is unit-tested without a Phaser ray.
+ *
+ * @param hitX,hitY the world point where the grapple ray struck the giant.
+ * @param napeX,napeY the giant's live nape/weak-point world position.
+ * @param snapDist how close the hit must be to the nape to count (px, >= 0).
+ */
+export function isNapeHook(
+  hitX: number,
+  hitY: number,
+  napeX: number,
+  napeY: number,
+  snapDist: number,
+): boolean {
+  return distance(hitX, hitY, napeX, napeY) <= snapDist;
+}
+
+/**
+ * Select the grapple pull acceleration for this frame: the boosted nape pull
+ * when the wire is hooked to a weak-point, otherwise the ordinary body pull.
+ * Trivial but centralized so GrappleSystem carries no magic numbers and the
+ * gating is directly testable.
+ *
+ * @param base the ordinary PULL_ACCEL.
+ * @param boosted the stronger NAPE_PULL_ACCEL.
+ * @param napeHooked whether the wire is anchored to the nape.
+ */
+export function napeFlingAccel(base: number, boosted: number, napeHooked: boolean): number {
+  return napeHooked ? boosted : base;
+}
+
+/**
  * Frontal-armor test in 2D: is an incoming hit landing within the giant's
  * frontal cone? A hit whose direction (from the giant toward the strike) lies
  * within `coneDeg` of the facing heading is "frontal" and gets reduced by the
