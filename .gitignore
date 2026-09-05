@@ -1,43 +1,19 @@
-# Godot 4.x .gitignore
+# Dependencies
+node_modules/
 
-# Import cache and generated metadata (regenerated on editor open).
-.godot/
+# Build output
+dist/
+.vite/
 
-# Godot 4.x script UID sidecars (regenerated on import).
-*.uid
+# Test coverage
+coverage/
 
-# Compiled translations (generated from locale/*.csv on import).
-*.translation
-
-# GLB-embedded textures extracted on scene import.
-assets/models/*_texture-*.png
-assets/models/*_colormap.png
-
-# Downloaded Godot binary (spec 0 harness). Never commit the binary.
-.godot-bin/
-
-# Generated report/CSV artifacts (spec 0 harness).
-reports/
-
-# Imported asset metadata.
-*.import
-
-# Mono/.NET (unused here, but safe to ignore).
-.mono/
-data_*/
-
-# Export artifacts.
-export.cfg
-export_presets.cfg
-*.pck
-*.zip
-build/
-exports/
-
-# OS / editor cruft.
-.DS_Store
-Thumbs.db
-*~
-
-# Agent task state.
+# Task state (agent workspace)
 .agents/
+
+# OS / editor
+.DS_Store
+
+# Logs
+*.log
+logs/

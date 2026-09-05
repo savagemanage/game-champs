@@ -1,0 +1,21 @@
+{
+  "name": "wirework",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Wirework - an original-world 2D pixel-art wall-defense ODM action game built with Phaser 3.",
+  "license": "Apache-2.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "phaser": "^3.80.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "vite": "^5.2.0"
+  }
+}
