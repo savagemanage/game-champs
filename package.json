@@ -1,0 +1,23 @@
+{
+  "name": "kingshot-web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Kingdom Rise - an original-world medieval strategy/idle browser game (idle resource generation, a Town-Center-gated building tree, troop training queues, and wave-based combat) built with Phaser 3.",
+  "license": "Apache-2.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "phaser": "^3.80.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "vite": "^5.2.0",
+    "vitest": "^1.6.0"
+  }
+}
