@@ -96,14 +96,36 @@ export function nearestTargetIndex(
 
 /**
  * Dash direction normalization (fix for the "Shift dashes backward" bug). Given
- * an aim vector (worldAim - player), return the UNIT direction pointing toward
- * it - never inverted. A zero vector falls back to a safe default so a dash in
- * place still has a direction.
+ * an aim/facing vector, return the UNIT direction pointing toward it - never
+ * inverted. A zero vector falls back to a safe default so a dash in place still
+ * has a direction.
  */
 export function dashDirection(dirX: number, dirY: number): Vec2 {
   const len = Math.hypot(dirX, dirY);
   if (len < 1e-6) return { x: 1, y: 0 };
   return { x: dirX / len, y: dirY / len };
+}
+
+/**
+ * Compute the hero's FACING direction the dash should use. The dash goes toward
+ * where the character is facing (its planar movement direction), not the mouse
+ * cursor. Priority:
+ *   1. the current move-input direction while the hero is actively moving, else
+ *   2. the last non-zero facing the hero held (so a dash while standing still
+ *      still goes toward the last faced direction, never backward / nowhere).
+ * The result is a UNIT vector via {@link dashDirection}, so it can never invert.
+ *
+ * @param inputX,inputY raw 8-direction move intent this frame (-1/0/1 each).
+ * @param lastX,lastY the last non-zero facing unit vector the hero held.
+ */
+export function facingDashDirection(
+  inputX: number,
+  inputY: number,
+  lastX: number,
+  lastY: number,
+): Vec2 {
+  if (Math.hypot(inputX, inputY) > 1e-6) return dashDirection(inputX, inputY);
+  return dashDirection(lastX, lastY);
 }
 
 /**

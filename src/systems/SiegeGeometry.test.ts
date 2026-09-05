@@ -4,6 +4,7 @@ import { ARENA } from '../config/PlayerConfig';
 import { ENEMY_COMBAT } from '../config/EnemyConfig';
 import {
   dashDirection,
+  facingDashDirection,
   isFrontalHit,
   napeOffset,
   nearestTargetIndex,
@@ -140,6 +141,36 @@ describe('dash direction (fix: Shift dash goes toward aim, never backward)', () 
 
   it('falls back to a valid unit direction for a zero aim', () => {
     const d = dashDirection(0, 0);
+    expect(Math.hypot(d.x, d.y)).toBeCloseTo(1, 6);
+  });
+});
+
+describe('facing dash direction (dash goes where the CHARACTER faces, not the cursor)', () => {
+  it('uses the current move-input direction while the hero is moving', () => {
+    // Moving right+down; last facing was left - the LIVE input must win.
+    const d = facingDashDirection(1, 1, -1, 0);
+    expect(Math.hypot(d.x, d.y)).toBeCloseTo(1, 6);
+    expect(d.x).toBeGreaterThan(0);
+    expect(d.y).toBeGreaterThan(0);
+  });
+
+  it('falls back to the last-held facing when standing still (never nowhere)', () => {
+    // No input this frame; last facing pointed up (-y). Dash must go up.
+    const d = facingDashDirection(0, 0, 0, -1);
+    expect(Math.hypot(d.x, d.y)).toBeCloseTo(1, 6);
+    expect(d.x).toBeCloseTo(0, 6);
+    expect(d.y).toBeCloseTo(-1, 6);
+  });
+
+  it('never dashes backward: the result matches the facing hemisphere', () => {
+    // Idle, last facing left+up: the dash must point left+up too, not inverted.
+    const d = facingDashDirection(0, 0, -1, -1);
+    expect(d.x).toBeLessThan(0);
+    expect(d.y).toBeLessThan(0);
+  });
+
+  it('always yields a unit direction even if both input and facing are zero', () => {
+    const d = facingDashDirection(0, 0, 0, 0);
     expect(Math.hypot(d.x, d.y)).toBeCloseTo(1, 6);
   });
 });

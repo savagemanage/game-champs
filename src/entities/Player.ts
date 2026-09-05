@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { TextureKeys } from '../config/AssetKeys';
 import { AIR, DASH, HERO_ANIMS, HERO_COMBAT, HERO_FRAMES, MOVEMENT } from '../config/PlayerConfig';
-import { dashDirection } from '../systems/SiegeGeometry';
+import { dashDirection, facingDashDirection, type Vec2 } from '../systems/SiegeGeometry';
 import type { Damageable } from '../types';
 
 /** 8-direction planar move intent for a frame (WASD / arrows). */
@@ -28,6 +28,19 @@ export class Player extends Phaser.Physics.Arcade.Sprite implements Damageable {
 
   /** +1 facing right, -1 facing left (drives sprite flip + nape side). */
   private facing: 1 | -1 = 1;
+
+  /**
+   * The hero's 2D FACING direction: the last non-zero planar movement direction
+   * (8-direction), updated every frame the hero moves and retained while idle.
+   * This is what the dash aims along (the character faces this way), NOT the
+   * mouse cursor. Initialized pointing "up" (toward the besieged center) so a
+   * very first dash before any movement still has a sensible direction.
+   */
+  private facingX2 = 0;
+  private facingY2 = -1;
+  /** The raw 8-direction move intent captured on the latest update frame. */
+  private moveInputX = 0;
+  private moveInputY = 0;
 
   /** Health pool (Damageable contract). */
   public readonly maxHp: number = MOVEMENT.MAX_HP;
@@ -85,6 +98,16 @@ export class Player extends Phaser.Physics.Arcade.Sprite implements Damageable {
   /** Current facing direction (+1 right, -1 left). */
   get facingDir(): 1 | -1 {
     return this.facing;
+  }
+
+  /**
+   * The unit direction a dash should travel: where the CHARACTER IS FACING. Uses
+   * the current move-input direction while the hero is moving, otherwise the
+   * last non-zero facing held (so a standing dash goes toward the last faced
+   * direction, never backward or nowhere). Never the mouse cursor.
+   */
+  get dashFacing(): Vec2 {
+    return facingDashDirection(this.moveInputX, this.moveInputY, this.facingX2, this.facingY2);
   }
 
   /** Whether a dash is currently ready to fire (cooldown elapsed). */
@@ -209,6 +232,17 @@ export class Player extends Phaser.Physics.Arcade.Sprite implements Damageable {
     const ix = (input.right ? 1 : 0) - (input.left ? 1 : 0);
     const iy = (input.down ? 1 : 0) - (input.up ? 1 : 0);
     if (ix !== 0) this.setFacing(ix > 0 ? 1 : -1);
+
+    // Record this frame's move intent and, whenever it is non-zero, update the
+    // retained 2D facing (normalized) so a later dash aims where the hero is
+    // heading. Idle frames keep the last facing intact.
+    this.moveInputX = ix;
+    this.moveInputY = iy;
+    if (ix !== 0 || iy !== 0) {
+      const d = dashDirection(ix, iy);
+      this.facingX2 = d.x;
+      this.facingY2 = d.y;
+    }
 
     if (!dashing) {
       if (!this.swinging) {

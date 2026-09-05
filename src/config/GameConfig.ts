@@ -65,7 +65,15 @@ export const PLAYER = {
   GRAPPLE_PULL_ACCEL: 1200,
   GRAPPLE_MAX_LENGTH: 320,
   BLADE_DAMAGE: 34,
-  BLADE_RANGE: 28,
+  /**
+   * Blade slash reach forward from the hero centre, world px. Raised from the
+   * old 28 (which read as a stubby poke on the 960x540 top-down plane) to a
+   * longer, more reachable sweep so closing to strike a giant's nape connects
+   * reliably without being absurd. CombatSystem.SLASH_REACH reads this constant
+   * so the hit-detection arc grows with it; BLADE_DAMAGE and the nape-crit logic
+   * are unchanged.
+   */
+  BLADE_RANGE: 48,
 } as const;
 
 /**

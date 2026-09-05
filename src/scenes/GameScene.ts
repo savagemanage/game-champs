@@ -7,7 +7,7 @@ import { Player } from '../entities/Player';
 import { Wall } from '../entities/Wall';
 import { Citizen } from '../entities/Citizen';
 import { GasSystem } from '../systems/GasSystem';
-import { GrappleSystem, type GrappleSurface } from '../systems/GrappleSystem';
+import { GrappleSystem, type GrappleSurface, type GrappleTarget } from '../systems/GrappleSystem';
 import { CombatSystem } from '../systems/CombatSystem';
 import { WaveSystem } from '../systems/WaveSystem';
 import { AudioManager } from '../systems/AudioManager';
@@ -131,6 +131,37 @@ export class GameScene extends Phaser.Scene {
     if (this.grapple) this.grapple.setSurfaces(this.surfaces);
   }
 
+  /**
+   * Build fresh MOVING grapple-target adapters from the live giants so the wire
+   * can hook onto them (not just walls). Each adapter reads the giant's LIVE
+   * position + AABB and reports isValid=false the moment the giant is dying or
+   * inactive, so the GrappleSystem tracks a moving anchor and detaches cleanly
+   * on death without ever holding a hard Enemy reference across frames.
+   */
+  private buildGrappleTargets(): GrappleTarget[] {
+    const targets: GrappleTarget[] = [];
+    for (const enemy of this.enemies) {
+      if (!enemy.active || enemy.isDying) continue;
+      const body = enemy.body;
+      if (!body) continue;
+      targets.push({
+        get x() {
+          return enemy.x;
+        },
+        get y() {
+          return enemy.y;
+        },
+        get bounds() {
+          return new Phaser.Geom.Rectangle(body.left, body.top, body.width, body.height);
+        },
+        get isValid() {
+          return enemy.active && !enemy.isDying;
+        },
+      });
+    }
+    return targets;
+  }
+
   private buildPlayer(): void {
     // Spawn the hero between the inner and outer rings, ready to defend.
     const spawnR = (WALL.OUTER_RADIUS + WALL.INNER_RADIUS) / 2;
@@ -245,26 +276,20 @@ export class GameScene extends Phaser.Scene {
   }
 
   /**
-   * Fire the omnidirectional dash toward the aim point. The direction is simply
-   * (worldAim - player); Player.startDash normalizes and applies it unmodified,
-   * so the hero dashes exactly toward the cursor (fixes the old backward dash).
-   * If the cursor is on top of the hero, fall back to the current facing.
+   * Fire the dash toward WHERE THE CHARACTER IS FACING (its planar
+   * movement/facing direction), NOT the mouse cursor. Player.dashFacing yields
+   * the current move direction while moving, else the last-held facing, so a
+   * dash while standing still still shoots toward the last faced direction.
+   * Player.startDash normalizes and applies it unmodified (never inverts).
    */
   private tryDash(): void {
     const now = this.time.now;
     if (!this.player.isDashReady(now)) return;
     if (!this.gas.canAfford(GAS.COST_DASH)) return;
 
-    const pointer = this.input.activePointer;
-    const world = this.pointerWorld(pointer);
-    let dx = world.x - this.player.x;
-    let dy = world.y - this.player.y;
-    if (Math.hypot(dx, dy) < 8) {
-      dx = this.player.facingDir;
-      dy = 0;
-    }
+    const dir = this.player.dashFacing;
     if (!this.gas.spend(GAS.COST_DASH, now)) return;
-    this.player.startDash(dx, dy, now);
+    this.player.startDash(dir.x, dir.y, now);
     this.audio.playSfx(AudioKeys.SwingWhoosh, 0.7);
   }
 
@@ -283,6 +308,10 @@ export class GameScene extends Phaser.Scene {
     const world = this.pointerWorld(pointer);
     const reelIn = this.keys.reelIn.isDown;
     const reelOut = this.keys.reelOut.isDown;
+    // Refresh the moving giant targets the grapple may hook onto BEFORE the
+    // grapple steps, so a hooked giant's anchor tracks its current position and
+    // a giant that died this frame is dropped gracefully.
+    this.grapple.setTargets(this.buildGrappleTargets());
     this.grapple.update({ fireHeld: pointer.leftButtonDown(), aimX: world.x, aimY: world.y, reelIn, reelOut }, delta, now);
 
     // --- player + gas ---

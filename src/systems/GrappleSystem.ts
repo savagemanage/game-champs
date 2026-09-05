@@ -11,6 +11,23 @@ export interface GrappleSurface {
   readonly bounds: Phaser.Geom.Rectangle;
 }
 
+/**
+ * A MOVING grapple target: a giant the hook can attach to. Because giants move
+ * (and die), the anchor tracks {@link x}/{@link y} every frame while attached
+ * and the wire detaches gracefully once {@link isValid} goes false (the giant
+ * died / despawned). The GrappleSystem holds only this small adapter, never a
+ * hard Enemy reference, so a freed giant can't dangle.
+ */
+export interface GrappleTarget {
+  /** Live world position of the giant's grapple point (its centre-ish). */
+  readonly x: number;
+  readonly y: number;
+  /** AABB used to hit-test the aim ray against the giant. */
+  readonly bounds: Phaser.Geom.Rectangle;
+  /** False once the giant is dying / destroyed - the wire must let go. */
+  readonly isValid: boolean;
+}
+
 /** Lifecycle phase of the wire. */
 const enum WirePhase {
   Idle = 0,
@@ -69,6 +86,14 @@ export class GrappleSystem {
   private ropeLength = 0;
 
   private surfaces: GrappleSurface[] = [];
+  /** Live giants the hook may attach to (refreshed each frame by the scene). */
+  private targets: GrappleTarget[] = [];
+  /**
+   * The giant the wire is currently anchored to, if any. While set, the anchor
+   * TRACKS this target's live position each frame (a moving anchor). Cleared on
+   * release or when the target dies / moves out of MAX_LENGTH.
+   */
+  private attachedTarget: GrappleTarget | null = null;
 
   constructor(scene: Phaser.Scene, player: Player, gas: GasSystem) {
     this.player = player;
@@ -78,9 +103,22 @@ export class GrappleSystem {
     this.wire.setDepth(5);
   }
 
-  /** Provide/refresh the set of attachable surfaces (walls, terrain, enemies). */
+  /** Provide/refresh the set of attachable static surfaces (walls, terrain). */
   setSurfaces(surfaces: GrappleSurface[]): void {
     this.surfaces = surfaces;
+  }
+
+  /**
+   * Provide/refresh the set of MOVING giant targets the hook may attach to. The
+   * scene rebuilds these adapters each frame from its live giant list; the
+   * system keeps only the adapters for aim-raycasting. The currently-attached
+   * target is NOT re-resolved from this list (the adapters are fresh objects
+   * each frame): its own {@link GrappleTarget.isValid} getter - which reads the
+   * live giant - drives graceful detach in {@link trackMovingAnchor}, so a
+   * destroyed giant releases the wire without any dangling reference.
+   */
+  setTargets(targets: GrappleTarget[]): void {
+    this.targets = targets;
   }
 
   /** True when a wire is currently anchored and swinging. */
@@ -101,16 +139,18 @@ export class GrappleSystem {
   fire(aimX: number, aimY: number, nowMs: number): boolean {
     const originX = this.player.x;
     const originY = this.player.y;
-    const target = this.raycast(originX, originY, aimX, aimY);
-    if (!target) return false;
+    const hit = this.raycast(originX, originY, aimX, aimY);
+    if (!hit) return false;
     if (!this.gas.spend(GAS.COST_GRAPPLE_FIRE, nowMs)) return false;
 
-    // Launch the hook projectile toward the resolved anchor point.
+    // Launch the hook projectile toward the resolved anchor point. If the ray
+    // struck a giant, remember it so the anchor tracks that moving target.
     this.phase = WirePhase.Firing;
-    this.anchor.set(target.x, target.y);
+    this.attachedTarget = hit.target;
+    this.anchor.set(hit.point.x, hit.point.y);
     this.hookPos.set(originX, originY);
-    const dx = target.x - originX;
-    const dy = target.y - originY;
+    const dx = hit.point.x - originX;
+    const dy = hit.point.y - originY;
     const dist = Math.hypot(dx, dy) || 1;
     this.hookDir.set(dx / dist, dy / dist);
     this.hookRemaining = dist;
@@ -139,6 +179,7 @@ export class GrappleSystem {
     }
     this.phase = WirePhase.Idle;
     this.player.swinging = false;
+    this.attachedTarget = null;
     this.wire.clear();
   }
 
@@ -148,6 +189,15 @@ export class GrappleSystem {
    */
   update(input: GrappleInput, dtMs: number, nowMs: number): void {
     const dt = dtMs / 1000;
+
+    // Moving anchor: if the wire is hooked to a giant, keep the anchor glued to
+    // that giant's live position, and detach gracefully if it died or slipped
+    // out of reach. Done before physics so this frame swings around the giant's
+    // CURRENT position; returns early if it forced a release.
+    if (this.attachedTarget && !this.trackMovingAnchor()) {
+      this.render();
+      return;
+    }
 
     if (this.phase === WirePhase.Firing) {
       this.advanceHook(dt);
@@ -163,6 +213,41 @@ export class GrappleSystem {
     }
 
     this.render();
+  }
+
+  /**
+   * Keep the anchor tracking the attached giant's live position and enforce the
+   * graceful-detach rules for a MOVING target. Returns false (after releasing)
+   * when the wire had to let go, true when it remains attached to the giant.
+   *
+   * Detach conditions:
+   *  - the giant died / despawned ({@link GrappleTarget.isValid} is false), or
+   *  - the giant carried the anchor beyond GRAPPLE.MAX_LENGTH from the hero.
+   * While firing, the hook simply retargets the giant's new position (no length
+   * check yet - the hook is still travelling).
+   */
+  private trackMovingAnchor(): boolean {
+    const target = this.attachedTarget;
+    if (!target) return true;
+
+    // Target died/despawned: drop the wire (release() also clears the ref).
+    if (!target.isValid) {
+      this.release();
+      return false;
+    }
+
+    // Glue the anchor to the giant's current position (the moving anchor).
+    this.anchor.set(target.x, target.y);
+
+    if (this.phase === WirePhase.Attached) {
+      // A moving giant can drag the anchor out of reach: let go past MAX_LENGTH.
+      const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, target.x, target.y);
+      if (d > GRAPPLE.MAX_LENGTH) {
+        this.release();
+        return false;
+      }
+    }
+    return true;
   }
 
   /** Move the hook projectile; on arrival, anchor and begin swinging. */
@@ -260,11 +345,18 @@ export class GrappleSystem {
   }
 
   /**
-   * Raycast from origin toward the aim point and return the first attachable
-   * surface intersection within {@link GRAPPLE.RANGE}. Returns null if the aim
-   * hits nothing valid in range.
+   * Raycast from origin toward the aim point and return the nearest attachable
+   * intersection within {@link GRAPPLE.RANGE} - a static surface (wall/terrain)
+   * OR a giant. Returns null if the aim hits nothing valid in range. When the
+   * nearest hit is a giant, its {@link GrappleTarget} rides along so the caller
+   * can set up the moving anchor.
    */
-  private raycast(originX: number, originY: number, aimX: number, aimY: number): Phaser.Math.Vector2 | null {
+  private raycast(
+    originX: number,
+    originY: number,
+    aimX: number,
+    aimY: number,
+  ): { point: Phaser.Math.Vector2; target: GrappleTarget | null } | null {
     const dx = aimX - originX;
     const dy = aimY - originY;
     const len = Math.hypot(dx, dy);
@@ -275,23 +367,33 @@ export class GrappleSystem {
     // to GRAPPLE.RANGE below so nothing beyond reach can anchor.
     const reach = GRAPPLE.RANGE;
 
-    // Cast a ray and test each attachable AABB surface for the nearest edge
-    // crossing. Simple and robust for a handful of surfaces at this scale.
+    // Cast a ray and test each attachable AABB (static surfaces AND giants) for
+    // the nearest edge crossing. Simple and robust at this scale.
     const ray = new Phaser.Geom.Line(originX, originY, originX + nx * reach, originY + ny * reach);
-    let best: Phaser.Math.Vector2 | null = null;
+    let bestPoint: Phaser.Math.Vector2 | null = null;
+    let bestTarget: GrappleTarget | null = null;
     let bestDist = Infinity;
 
-    for (const surface of this.surfaces) {
-      const points = Phaser.Geom.Intersects.GetLineToRectangle(ray, surface.bounds) as Phaser.Geom.Point[];
+    const consider = (bounds: Phaser.Geom.Rectangle, target: GrappleTarget | null): void => {
+      const points = Phaser.Geom.Intersects.GetLineToRectangle(ray, bounds) as Phaser.Geom.Point[];
       for (const p of points) {
         const d = Phaser.Math.Distance.Between(originX, originY, p.x, p.y);
         if (d <= GRAPPLE.RANGE && d < bestDist) {
           bestDist = d;
-          best = new Phaser.Math.Vector2(p.x, p.y);
+          bestPoint = new Phaser.Math.Vector2(p.x, p.y);
+          bestTarget = target;
         }
       }
+    };
+
+    for (const surface of this.surfaces) consider(surface.bounds, null);
+    for (const target of this.targets) {
+      if (!target.isValid) continue;
+      consider(target.bounds, target);
     }
-    return best;
+
+    if (!bestPoint) return null;
+    return { point: bestPoint, target: bestTarget };
   }
 
   /** Draw the wire (and hook in flight). */
