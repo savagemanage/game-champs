@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
-import { EnemyRole } from '../config/GameConfig';
-import { LEVEL } from '../config/PlayerConfig';
+import { EnemyRole, WALL } from '../config/GameConfig';
+import { ARENA } from '../config/PlayerConfig';
 import {
   WAVES,
   WAVE_TUNING,
@@ -135,10 +135,17 @@ export class WaveSystem {
     this.nextEventAt = nowMs + interval + Phaser.Math.Between(-jitter, jitter);
   }
 
-  /** Instantiate one giant at the left approach lane and hand it to the scene. */
+  /**
+   * Instantiate one giant at a random angle around the OUTER ring perimeter
+   * (just outside OUTER_RADIUS) and hand it to the scene, so giants besiege the
+   * center from all sides. FEAT-003 layers the full radial siege AI on top; the
+   * spawn position math is finalized here.
+   */
   private spawnOne(role: EnemyRole): void {
-    const x = -40 - Math.random() * 60; // just off the left edge
-    const y = LEVEL.GROUND_Y;
+    const angle = Math.random() * Math.PI * 2;
+    const radius = WALL.OUTER_RADIUS + 90 + Math.random() * 60; // just outside the outer ring
+    const x = ARENA.CENTER_X + Math.cos(angle) * radius;
+    const y = ARENA.CENTER_Y + Math.sin(angle) * radius;
     const enemy = createEnemy(this.scene, role, x, y, {
       spawnDebris: this.hooks.spawnDebris,
       heroPos: this.hooks.heroPos,

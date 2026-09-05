@@ -15,14 +15,40 @@ export interface HitResult {
   readonly killed: boolean;
 }
 
-/** Behavioural context passed to a giant each frame by the scene. */
+/**
+ * A world point a giant should path toward / attack: the nearest un-breached
+ * ring segment, mirrored from Wall.RingTarget but kept structural here so the
+ * enemy layer does not depend on the Wall entity.
+ */
+export interface SiegeTarget {
+  readonly x: number;
+  readonly y: number;
+  /** 0 = outer ring, 1 = inner ring. */
+  readonly ring: number;
+  readonly index: number;
+}
+
+/**
+ * Behavioural context passed to a giant each frame by the scene. Top-down: the
+ * giants siege the arena CENTER, so the context carries the center, the hero
+ * position (for hero-threat behaviour in FEAT-003), and a handle to resolve the
+ * nearest attackable ring target for a given giant position. FEAT-003 builds
+ * the full radial AI on this shape.
+ */
 export interface EnemyContext {
-  /** X of the wall face the giants march toward. */
-  readonly wallX: number;
-  /** Ground surface Y (feet rest here). */
-  readonly groundY: number;
-  /** Current wall integrity ratio [0..1] (for pathing past a breach). */
-  readonly wallBreached: boolean;
+  /** Arena center the giants converge on. */
+  readonly centerX: number;
+  readonly centerY: number;
+  /** Hero world position (for situational hero-targeting / dodging). */
+  readonly heroX: number;
+  readonly heroY: number;
+  /** True once the inner ring is fully breached (giants can reach citizens). */
+  readonly innerBreached: boolean;
+  /**
+   * Resolve the nearest un-breached ring segment a giant at (x, y) should
+   * attack, or null when both rings are down (path to the center instead).
+   */
+  readonly nearestTarget: (x: number, y: number) => SiegeTarget | null;
   readonly nowMs: number;
   readonly dtMs: number;
 }
@@ -218,24 +244,38 @@ export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
   }
 
   /**
-   * Whether the giant is close enough to attack its current target (wall or,
-   * past a breach, the citizens behind it).
+   * Resolve the world point this giant is currently advancing on: the nearest
+   * un-breached ring segment, or the arena center once both rings are down.
+   */
+  protected currentTarget(ctx: EnemyContext): { x: number; y: number } {
+    const seg = ctx.nearestTarget(this.x, this.y);
+    return seg ?? { x: ctx.centerX, y: ctx.centerY };
+  }
+
+  /** Unit heading vector from this giant toward its current siege target. */
+  protected headingTo(target: { x: number; y: number }): { x: number; y: number } {
+    const dx = target.x - this.x;
+    const dy = target.y - this.y;
+    const len = Math.hypot(dx, dy) || 1;
+    return { x: dx / len, y: dy / len };
+  }
+
+  /**
+   * Whether the giant is close enough to attack its current target. Top-down:
+   * measured as planar distance to the nearest ring segment / the center.
    */
   protected inAttackRange(ctx: EnemyContext): boolean {
-    const targetX = ctx.wallBreached ? ctx.wallX + 40 : ctx.wallX;
-    return Math.abs(this.x - targetX) <= this.stats.attackRange;
+    const t = this.currentTarget(ctx);
+    return Phaser.Math.Distance.Between(this.x, this.y, t.x, t.y) <= this.stats.attackRange;
   }
 
   /**
    * Per-frame update. Runs the shared death/stagger gates, then delegates
-   * movement to {@link steer} and attacking to {@link tryAttack}. Returns an
-   * AttackEvent for the scene to apply (wall/citizen damage) or null.
+   * movement to {@link steer} and attacking to {@link performAttack}. Returns an
+   * AttackEvent for the scene to apply (ring/citizen/hero damage) or null.
    */
   update(ctx: EnemyContext): AttackEvent | null {
     if (this.dying || this.dead) return null;
-
-    // Keep feet on the ground plane (arcade bodies don't fall - we drive Y).
-    this.y = ctx.groundY;
 
     if (this.staggered) {
       this.body.setVelocity(0, 0);
@@ -252,23 +292,32 @@ export abstract class Enemy extends Phaser.Physics.Arcade.Sprite {
   }
 
   /**
-   * Movement AI - overridden per role. Default: march straight toward the wall
-   * and stop at attack range. Subclasses add charges, weaving, standoff, etc.
+   * Movement AI - overridden per role. Default (top-down): advance radially
+   * toward the nearest un-breached ring segment / the center, stopping at
+   * attack range. FEAT-003 fleshes this into distinct radial-siege behaviours.
    */
   protected steer(ctx: EnemyContext): void {
-    const targetX = ctx.wallX;
-    const dir: 1 | -1 = targetX >= this.x ? 1 : -1;
-    this.setMarchDir(dir);
+    const t = this.currentTarget(ctx);
+    let dx = t.x - this.x;
+    let dy = t.y - this.y;
+    const len = Math.hypot(dx, dy) || 1;
+    dx /= len;
+    dy /= len;
+    // Facing follows the horizontal component of the heading (2D facing lands
+    // in FEAT-003; a flip is enough to read direction here).
+    this.setMarchDir(dx >= 0 ? 1 : -1);
     if (this.inAttackRange(ctx)) {
-      this.body.setVelocityX(0);
+      this.body.setVelocity(0, 0);
     } else {
-      this.body.setVelocityX(dir * this.stats.moveSpeed);
+      this.body.setVelocity(dx * this.stats.moveSpeed, dy * this.stats.moveSpeed);
     }
   }
 
   /**
-   * Perform an attack when in range. Default: a melee strike on the wall.
-   * Thrower overrides this to spawn a ranged projectile instead.
+   * Perform an attack when in range. Default: a melee strike carrying the
+   * giant's world position; the scene routes it to the nearest ring segment,
+   * a citizen past a breach, or the hero if adjacent. Thrower overrides this to
+   * spawn a ranged projectile instead.
    */
   protected performAttack(_ctx: EnemyContext): AttackEvent | null {
     return { role: this.role, damage: this.stats.attack, x: this.x, y: this.y };

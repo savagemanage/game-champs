@@ -14,8 +14,10 @@ export interface HudState {
   gasRatio: number;
   /** Whether gas is fully depleted (drives the danger tint). */
   gasEmpty: boolean;
-  /** Wall integrity ratio [0..1]. */
-  wallRatio: number;
+  /** Outer ring integrity ratio [0..1]. */
+  outerRatio: number;
+  /** Inner ring integrity ratio [0..1]. */
+  innerRatio: number;
   /** Living citizens remaining. */
   citizensSaved: number;
   /** Citizen total at the start of the run. */
@@ -56,7 +58,8 @@ export class Hud {
 
   private readonly hpBar: Phaser.GameObjects.Rectangle;
   private readonly gasBar: Phaser.GameObjects.Rectangle;
-  private readonly wallBar: Phaser.GameObjects.Rectangle;
+  private readonly outerBar: Phaser.GameObjects.Rectangle;
+  private readonly innerBar: Phaser.GameObjects.Rectangle;
   private readonly statusText: Phaser.GameObjects.Text;
   private readonly waveBanner: Phaser.GameObjects.Text;
   private readonly hint: Phaser.GameObjects.Text;
@@ -104,19 +107,35 @@ export class Hud {
       .setScrollFactor(0)
       .setDepth(Hud.DEPTH + 1);
 
-    // --- Wall-integrity gauge ---
+    // --- Outer ring integrity gauge ---
     scene.add
       .rectangle(12, 88, Hud.BAR_W, Hud.BAR_H, PALETTE.WALL_DARK)
       .setOrigin(0, 0.5)
       .setScrollFactor(0)
       .setDepth(Hud.DEPTH);
-    this.wallBar = scene.add
+    this.outerBar = scene.add
       .rectangle(12, 88, Hud.BAR_W, Hud.BAR_H, PALETTE.ACCENT)
       .setOrigin(0, 0.5)
       .setScrollFactor(0)
       .setDepth(Hud.DEPTH + 1);
     scene.add
-      .text(12, 98, 'WALL', textStyle(14))
+      .text(12, 98, 'OUTER RING', textStyle(14))
+      .setScrollFactor(0)
+      .setDepth(Hud.DEPTH + 1);
+
+    // --- Inner ring integrity gauge ---
+    scene.add
+      .rectangle(12, 124, Hud.BAR_W, Hud.BAR_H, PALETTE.WALL_DARK)
+      .setOrigin(0, 0.5)
+      .setScrollFactor(0)
+      .setDepth(Hud.DEPTH);
+    this.innerBar = scene.add
+      .rectangle(12, 124, Hud.BAR_W, Hud.BAR_H, PALETTE.ACCENT)
+      .setOrigin(0, 0.5)
+      .setScrollFactor(0)
+      .setDepth(Hud.DEPTH + 1);
+    scene.add
+      .text(12, 134, 'INNER RING', textStyle(14))
       .setScrollFactor(0)
       .setDepth(Hud.DEPTH + 1);
 
@@ -142,7 +161,12 @@ export class Hud {
 
     // --- Controls hint (bottom, low-key) ---
     this.hint = scene.add
-      .text(CANVAS.WIDTH / 2, CANVAS.HEIGHT - 16, 'P Pause    L-Click Grapple    R-Click Slash', textStyle(14))
+      .text(
+        CANVAS.WIDTH / 2,
+        CANVAS.HEIGHT - 16,
+        'WASD Move   Shift Dash   L-Click Grapple   R-Click Slash   Q/E Reel   P Pause',
+        textStyle(14),
+      )
       .setOrigin(0.5, 1)
       .setScrollFactor(0)
       .setDepth(Hud.DEPTH + 1)
@@ -160,8 +184,11 @@ export class Hud {
     this.gasBar.width = Math.max(0, Math.floor(Hud.BAR_W * state.gasRatio));
     this.gasBar.fillColor = state.gasEmpty ? PALETTE.ENEMY_WEAKPOINT : PALETTE.PLAYER;
 
-    this.wallBar.width = Math.max(0, Math.floor(Hud.BAR_W * state.wallRatio));
-    this.wallBar.fillColor = state.wallRatio < 0.3 ? PALETTE.ENEMY_WEAKPOINT : PALETTE.ACCENT;
+    this.outerBar.width = Math.max(0, Math.floor(Hud.BAR_W * state.outerRatio));
+    this.outerBar.fillColor = state.outerRatio < 0.3 ? PALETTE.ENEMY_WEAKPOINT : PALETTE.ACCENT;
+
+    this.innerBar.width = Math.max(0, Math.floor(Hud.BAR_W * state.innerRatio));
+    this.innerBar.fillColor = state.innerRatio < 0.3 ? PALETTE.ENEMY_WEAKPOINT : PALETTE.ACCENT;
 
     const total = state.citizensTotal || WALL.START_CITIZENS;
     this.statusText.setText(

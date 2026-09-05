@@ -32,23 +32,21 @@ export interface GrappleInput {
 }
 
 /**
- * GrappleSystem - the mouse-aimed ODM wire and its swing physics.
+ * GrappleSystem - the mouse-aimed ODM wire for the TOP-DOWN plane.
  *
- * ## Momentum model
- * The wire is treated as a **taut rope** and the player as a bob on a
- * **pendulum**. Each frame while attached we:
- *   1. Integrate normal physics (gravity + air control run in Player).
- *   2. If the player is at/beyond the current rope length, apply a
+ * ## Momentum model (no gravity)
+ * The wire is treated as a **taut rope** and, with zero gravity, becomes a
+ * fling/pull line rather than a pendulum. Each frame while attached we:
+ *   1. Add a constant pull toward the anchor (PULL_ACCEL) so firing hauls the
+ *      hero across the plane toward the ring - this is the primary traversal.
+ *   2. If the hero is at/beyond the current rope length, apply a
  *      *position-based distance constraint*: snap the position back onto the
- *      rope circle and remove the velocity component ALONG the rope (radial),
- *      keeping only the component PERPENDICULAR to it (tangential). That
- *      projection is what conserves swing momentum and produces a believable
- *      pendulum arc - energy is preserved across the bottom of the swing and
- *      converted back to height on the way up.
- *   3. Add a small constant pull toward the anchor (PULL_ACCEL) so the player
- *      can "pump" the swing and climb, and apply light tangential damping.
- * Releasing simply stops constraining, so the player flies off along the
- * tangent with the velocity they had built up (conserved fling).
+ *      rope circle and remove the outward radial velocity component, keeping
+ *      the component PERPENDICULAR to the rope (tangential). That projection
+ *      conserves the sideways momentum so arcing around an anchor feels fluid.
+ *   3. Apply light tangential damping so an idle orbit eventually settles.
+ * Releasing stops constraining, so the hero flies off with the velocity they
+ * built up plus a small outward radial boost (conserved fling).
  *
  * A shot can be re-fired at any time (re-grapple) for continuous traversal.
  */
@@ -121,13 +119,23 @@ export class GrappleSystem {
     return true;
   }
 
-  /** Release the wire; the player keeps their built-up velocity (fling). */
+  /**
+   * Release the wire; the player keeps their built-up velocity (fling). A small
+   * radial boost AWAY from the anchor is added along the wire so a release off
+   * a ring reads as a launch (the top-down replacement for the old up-boost).
+   */
   release(): void {
     if (this.phase === WirePhase.Idle) return;
     if (this.phase === WirePhase.Attached) {
       const body = this.player.body;
       body.velocity.x *= GRAPPLE.RELEASE_VELOCITY_KEEP;
-      body.velocity.y = body.velocity.y * GRAPPLE.RELEASE_VELOCITY_KEEP - GRAPPLE.RELEASE_UP_BOOST;
+      body.velocity.y *= GRAPPLE.RELEASE_VELOCITY_KEEP;
+      // Outward radial direction (anchor -> player), normalized.
+      const rx = this.player.x - this.anchor.x;
+      const ry = this.player.y - this.anchor.y;
+      const len = Math.hypot(rx, ry) || 1;
+      body.velocity.x += (rx / len) * GRAPPLE.RELEASE_RADIAL_BOOST;
+      body.velocity.y += (ry / len) * GRAPPLE.RELEASE_RADIAL_BOOST;
     }
     this.phase = WirePhase.Idle;
     this.player.swinging = false;

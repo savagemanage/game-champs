@@ -20,17 +20,18 @@ export class Sprinter extends Enemy {
   }
 
   protected steer(ctx: EnemyContext): void {
-    const dir: 1 | -1 = ctx.wallX >= this.x ? 1 : -1;
-    this.setMarchDir(dir);
+    const target = this.currentTarget(ctx);
+    const h = this.headingTo(target);
+    this.setMarchDir(h.x >= 0 ? 1 : -1);
     if (this.inAttackRange(ctx)) {
-      this.body.setVelocityX(0);
+      this.body.setVelocity(0, 0);
       return;
     }
-    const dist = Math.abs(this.x - ctx.wallX);
+    const dist = Phaser.Math.Distance.Between(this.x, this.y, target.x, target.y);
     const charging = dist < Sprinter.CHARGE_RANGE;
     // Speed comes from the FIXED base stat; the charge is a movement pattern
     // (multiplier on displacement), not a mutation of the giant's base speed.
     const speed = this.stats.moveSpeed * (charging ? Sprinter.CHARGE_MULT : 1);
-    this.body.setVelocityX(dir * speed);
+    this.body.setVelocity(h.x * speed, h.y * speed);
   }
 }

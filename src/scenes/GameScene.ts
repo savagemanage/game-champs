@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
-import { SceneKeys, PALETTE, CANVAS, WALL } from '../config/GameConfig';
+import { SceneKeys, PALETTE, WALL } from '../config/GameConfig';
 import { AudioKeys, TextureKeys } from '../config/AssetKeys';
-import { CAMERA, GAS, LEVEL } from '../config/PlayerConfig';
+import { ARENA, CAMERA, GAS } from '../config/PlayerConfig';
 import { Player } from '../entities/Player';
 import { Wall } from '../entities/Wall';
 import { Citizen } from '../entities/Citizen';
@@ -12,23 +12,22 @@ import { WaveSystem } from '../systems/WaveSystem';
 import { AudioManager } from '../systems/AudioManager';
 import { Hud } from '../ui/Hud';
 import type { GameOverData } from './GameOverScene';
-import { DebrisProjectile, type AttackEvent, type Enemy } from '../entities/enemies';
+import { DebrisProjectile, type AttackEvent, type Enemy, type EnemyContext } from '../entities/enemies';
 
 /**
- * GameScene wires the hero, ODM traversal, and the full wall-defense combat
- * loop: waves of six giant types marching on the settlement, blade combat with
- * nape criticals, a defendable wall, fleeing citizens, and the game-over
- * conditions (the hero's HP hits zero, all citizens eaten, OR the wall
- * breached; clearing every wave is a victory).
+ * GameScene wires the hero, ODM traversal, and the top-down wall-defense loop:
+ * waves of six giant types besieging the settlement from every angle, blade
+ * combat with nape criticals, a concentric DOUBLE ring wall (outer + inner)
+ * around a citizen core at the arena center, fleeing citizens, and the
+ * game-over conditions (the hero's HP hits zero, all citizens eaten, OR the
+ * inner ring falls; clearing every wave is a victory).
  *
- * Controls:
- *   - A / D (or arrows): run left/right
- *   - W / Space: jump
+ * Controls (top-down):
+ *   - W / A / S / D (or arrows): 8-direction planar movement
  *   - Mouse aim + Left click (hold): fire & hold the grapple wire; release to fling
  *   - Right click: aimed BLADE SLASH (nape hits = critical)
- *   - W / S while swinging: reel in / out
- *   - Shift: dash burst toward the aim/movement direction
- *   - ESC: abandon the run
+ *   - Shift: OMNIDIRECTIONAL dash toward the aim/movement direction
+ *   - P: pause    ESC: abandon the run
  */
 export class GameScene extends Phaser.Scene {
   private player!: Player;
@@ -45,18 +44,14 @@ export class GameScene extends Phaser.Scene {
     right: Phaser.Input.Keyboard.Key;
     up: Phaser.Input.Keyboard.Key;
     down: Phaser.Input.Keyboard.Key;
-    jump: Phaser.Input.Keyboard.Key;
     dash: Phaser.Input.Keyboard.Key;
     pause: Phaser.Input.Keyboard.Key;
+    reelIn: Phaser.Input.Keyboard.Key;
+    reelOut: Phaser.Input.Keyboard.Key;
   };
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
 
   private surfaces: GrappleSurface[] = [];
-  private groundBody!: Phaser.GameObjects.Rectangle;
-
-  private bgSky!: Phaser.GameObjects.TileSprite;
-  private bgHills!: Phaser.GameObjects.TileSprite;
-  private bgWall!: Phaser.GameObjects.Image;
 
   private enemies: Enemy[] = [];
   private projectiles: DebrisProjectile[] = [];
@@ -78,7 +73,7 @@ export class GameScene extends Phaser.Scene {
   create(): void {
     this.cameras.main.setBackgroundColor(PALETTE.BG_SKY_CSS);
     this.cameras.main.fadeIn(350, 0, 0, 0);
-    this.physics.world.setBounds(0, 0, LEVEL.WIDTH, LEVEL.HEIGHT);
+    this.physics.world.setBounds(0, 0, ARENA.WIDTH, ARENA.HEIGHT);
 
     this.audio = AudioManager.get(this);
     this.audio.playMusic(AudioKeys.MusicLoop);
@@ -90,8 +85,7 @@ export class GameScene extends Phaser.Scene {
     this.projectiles = [];
     this.citizens = [];
 
-    this.buildBackground();
-    this.buildLevel();
+    this.buildArena();
     this.buildWall();
     this.buildPlayer();
     this.buildCitizens();
@@ -104,69 +98,59 @@ export class GameScene extends Phaser.Scene {
     this.waves.start(this.time.now);
   }
 
-  /** Parallax background layers spanning the level. */
-  private buildBackground(): void {
-    this.bgSky = this.add
-      .tileSprite(0, 0, CANVAS.WIDTH, CANVAS.HEIGHT, TextureKeys.BgSky)
+  /** Top-down arena floor: a tiled ground fill spanning the whole arena. */
+  private buildArena(): void {
+    this.add
+      .tileSprite(0, 0, ARENA.WIDTH, ARENA.HEIGHT, TextureKeys.BgSky)
       .setOrigin(0, 0)
-      .setScrollFactor(0)
-      .setDepth(-30);
-    this.bgHills = this.add
-      .tileSprite(0, 0, CANVAS.WIDTH, CANVAS.HEIGHT, TextureKeys.BgHills)
-      .setOrigin(0, 0)
-      .setScrollFactor(0)
-      .setDepth(-20)
-      .setAlpha(0.95);
-    this.bgWall = this.add
-      .image(LEVEL.WALL_X, LEVEL.GROUND_Y, TextureKeys.BgWall)
-      .setOrigin(0.5, 1)
-      .setScrollFactor(0.6)
-      .setDepth(-10);
-  }
-
-  /** Ground floor + floating anchor pylons for verticality. */
-  private buildLevel(): void {
-    const groundH = LEVEL.HEIGHT - LEVEL.GROUND_Y;
-    this.groundBody = this.add
-      .rectangle(LEVEL.WIDTH / 2, LEVEL.GROUND_Y + groundH / 2, LEVEL.WIDTH, groundH, PALETTE.GROUND)
-      .setDepth(1);
-    this.physics.add.existing(this.groundBody, true);
-
-    this.surfaces = [{ bounds: new Phaser.Geom.Rectangle(0, LEVEL.GROUND_Y, LEVEL.WIDTH, groundH) }];
-
-    for (const px of [640, 1040, 1360]) {
-      const py = 220;
-      const pylon = this.add.rectangle(px, py, 20, 20, PALETTE.WALL_DARK).setDepth(1);
-      pylon.setStrokeStyle(1, PALETTE.WALL);
-      this.physics.add.existing(pylon, true);
-      this.surfaces.push({ bounds: new Phaser.Geom.Rectangle(px - 10, py - 10, 20, 20) });
-    }
+      .setDepth(-30)
+      .setTint(PALETTE.GROUND);
+    // A subtle concentric guide ring at the center reads as the plaza floor.
+    const plaza = this.add.graphics().setDepth(-29);
+    plaza.fillStyle(PALETTE.BG_NEAR, 0.35);
+    plaza.fillCircle(ARENA.CENTER_X, ARENA.CENTER_Y, WALL.INNER_RADIUS);
+    plaza.lineStyle(2, PALETTE.WALL_DARK, 0.5);
+    plaza.strokeCircle(ARENA.CENTER_X, ARENA.CENTER_Y, WALL.OUTER_RADIUS);
+    plaza.strokeCircle(ARENA.CENTER_X, ARENA.CENTER_Y, WALL.INNER_RADIUS);
   }
 
   private buildWall(): void {
+    // Wall creates its own static bodies for each ring block; the scene just
+    // wires colliders (see buildPlayer) and reads grapple surfaces.
     this.wall = new Wall(this);
-    const wallH = LEVEL.GROUND_Y - LEVEL.WALL_TOP_Y;
-    this.surfaces.push({
-      bounds: new Phaser.Geom.Rectangle(this.wall.faceX, LEVEL.WALL_TOP_Y, 60, wallH),
-    });
+    this.refreshGrappleSurfaces();
+  }
+
+  /** Rebuild the grapple anchor surfaces from the current (un-breached) rings. */
+  private refreshGrappleSurfaces(): void {
+    this.surfaces = this.wall.grappleSurfaces;
+    if (this.grapple) this.grapple.setSurfaces(this.surfaces);
   }
 
   private buildPlayer(): void {
-    this.player = new Player(this, 120, LEVEL.GROUND_Y - 40);
+    // Spawn the hero between the inner and outer rings, ready to defend.
+    const spawnR = (WALL.OUTER_RADIUS + WALL.INNER_RADIUS) / 2;
+    this.player = new Player(this, ARENA.CENTER_X, ARENA.CENTER_Y - spawnR);
     this.player.setDepth(6);
-    this.physics.add.collider(this.player, this.groundBody);
-    this.physics.add.collider(this.player, this.wall.body);
+    for (const block of this.wall.colliders) {
+      this.physics.add.collider(this.player, block);
+    }
   }
 
-  /** Populate the settlement (right of the wall) with citizens to protect. */
+  /** Populate the citizen core at the arena center (inside the inner ring). */
   private buildCitizens(): void {
-    const minX = LEVEL.WALL_X + 40;
-    const maxX = LEVEL.WIDTH - 20;
-    const home = { minX, maxX, groundY: LEVEL.GROUND_Y };
+    const home = {
+      centerX: ARENA.CENTER_X,
+      centerY: ARENA.CENTER_Y,
+      radius: WALL.INNER_RADIUS - 30,
+    };
     this.citizensSaved = WALL.START_CITIZENS;
     for (let i = 0; i < WALL.START_CITIZENS; i++) {
-      const x = Phaser.Math.Between(minX, maxX);
-      this.citizens.push(new Citizen(this, x, home));
+      const angle = Math.random() * Math.PI * 2;
+      const r = Math.random() * home.radius * 0.8;
+      const x = home.centerX + Math.cos(angle) * r;
+      const y = home.centerY + Math.sin(angle) * r;
+      this.citizens.push(new Citizen(this, x, y, home));
     }
   }
 
@@ -189,7 +173,6 @@ export class GameScene extends Phaser.Scene {
       heroPos: () => new Phaser.Math.Vector2(this.player.x, this.player.y),
       onSpawn: (enemy) => {
         enemy.setDepth(5);
-        this.physics.add.collider(enemy, this.groundBody);
         this.enemies.push(enemy);
       },
       onWaveStart: (wave, size) => {
@@ -202,10 +185,9 @@ export class GameScene extends Phaser.Scene {
 
   private buildCamera(): void {
     const cam = this.cameras.main;
-    cam.setBounds(0, 0, LEVEL.WIDTH, LEVEL.HEIGHT);
+    cam.setBounds(0, 0, ARENA.WIDTH, ARENA.HEIGHT);
     cam.startFollow(this.player, true, CAMERA.LERP_X, CAMERA.LERP_Y);
     cam.setDeadzone(CAMERA.DEADZONE_W, CAMERA.DEADZONE_H);
-    cam.setFollowOffset(0, 20);
   }
 
   private buildInput(): void {
@@ -217,9 +199,10 @@ export class GameScene extends Phaser.Scene {
       right: kb.addKey(Phaser.Input.Keyboard.KeyCodes.D),
       up: kb.addKey(Phaser.Input.Keyboard.KeyCodes.W),
       down: kb.addKey(Phaser.Input.Keyboard.KeyCodes.S),
-      jump: kb.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE),
       dash: kb.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT),
       pause: kb.addKey(Phaser.Input.Keyboard.KeyCodes.P),
+      reelIn: kb.addKey(Phaser.Input.Keyboard.KeyCodes.Q),
+      reelOut: kb.addKey(Phaser.Input.Keyboard.KeyCodes.E),
     };
 
     this.input.on(Phaser.Input.Events.POINTER_DOWN, (pointer: Phaser.Input.Pointer) => {
@@ -258,6 +241,12 @@ export class GameScene extends Phaser.Scene {
     return this.cameras.main.getWorldPoint(pointer.x, pointer.y);
   }
 
+  /**
+   * Fire the omnidirectional dash toward the aim point. The direction is simply
+   * (worldAim - player); Player.startDash normalizes and applies it unmodified,
+   * so the hero dashes exactly toward the cursor (fixes the old backward dash).
+   * If the cursor is on top of the hero, fall back to the current facing.
+   */
   private tryDash(): void {
     const now = this.time.now;
     if (!this.player.isDashReady(now)) return;
@@ -280,25 +269,23 @@ export class GameScene extends Phaser.Scene {
     const now = this.time.now;
     if (this.gameEnded) return;
 
-    // --- input ---
+    // --- 8-direction planar input ---
     const left = this.keys.left.isDown || this.cursors.left.isDown;
     const right = this.keys.right.isDown || this.cursors.right.isDown;
-    const jumpDown = this.keys.jump.isDown || this.keys.up.isDown || this.cursors.up.isDown;
-    const jumpPressed =
-      Phaser.Input.Keyboard.JustDown(this.keys.jump) ||
-      Phaser.Input.Keyboard.JustDown(this.keys.up) ||
-      Phaser.Input.Keyboard.JustDown(this.cursors.up);
+    const up = this.keys.up.isDown || this.cursors.up.isDown;
+    const down = this.keys.down.isDown || this.cursors.down.isDown;
 
-    // --- grapple / swing ---
+    // --- grapple / fling ---
     const pointer = this.input.activePointer;
     const world = this.pointerWorld(pointer);
-    const reelIn = this.keys.up.isDown;
-    const reelOut = this.keys.down.isDown;
+    const reelIn = this.keys.reelIn.isDown;
+    const reelOut = this.keys.reelOut.isDown;
     this.grapple.update({ fireHeld: pointer.leftButtonDown(), aimX: world.x, aimY: world.y, reelIn, reelOut }, delta, now);
 
     // --- player + gas ---
-    this.player.updatePlayer({ left, right, jumpPressed, jumpHeld: jumpDown }, delta, now);
-    this.gas.regen(this.player.grounded, delta, now);
+    this.player.updatePlayer({ up, down, left, right }, delta, now);
+    // Top-down has no "grounded"; regen at the settled rate when not swinging.
+    this.gas.regen(!this.player.swinging, delta, now);
 
     // --- world simulation ---
     this.updateEnemies(now, delta);
@@ -312,16 +299,18 @@ export class GameScene extends Phaser.Scene {
     this.waves.update(now, this.enemies.filter((e) => !e.isDying).length);
 
     // --- presentation ---
-    this.updateParallax();
     this.updateHud();
   }
 
-  /** Step every giant, apply its attack events to the wall/citizens, cull dead. */
+  /** Step every giant, apply its attack events, cull dead. */
   private updateEnemies(now: number, delta: number): void {
-    const ctx = {
-      wallX: this.wall.faceX,
-      groundY: LEVEL.GROUND_Y,
-      wallBreached: this.wall.isBreached,
+    const ctx: EnemyContext = {
+      centerX: ARENA.CENTER_X,
+      centerY: ARENA.CENTER_Y,
+      heroX: this.player.x,
+      heroY: this.player.y,
+      innerBreached: this.wall.isInnerBreached,
+      nearestTarget: (x, y) => this.wall.nearestTarget(x, y),
       nowMs: now,
       dtMs: delta,
     };
@@ -337,9 +326,9 @@ export class GameScene extends Phaser.Scene {
 
   /**
    * Apply a melee giant attack. If the hero is standing within the giant's
-   * swing when it strikes, the hero takes the hit too (their body is a valid
-   * target, not just the wall). Otherwise it damages the wall, or eats the
-   * nearest citizen past a breach.
+   * swing when it strikes, the hero takes the hit too. Otherwise it damages the
+   * nearest ring segment, or eats the nearest citizen once giants reach the
+   * core past a breach.
    */
   private resolveEnemyAttack(attack: AttackEvent): void {
     // A melee swing that lands close to the hero hurts the hero.
@@ -347,20 +336,20 @@ export class GameScene extends Phaser.Scene {
       this.damageHero(attack.damage, attack.x, attack.y);
     }
 
-    if (!this.wall.isBreached) {
-      const breached = this.wall.damage(attack.damage);
-      if (breached) this.onWallBreached();
+    if (this.wall.isInsideInner(attack.x, attack.y)) {
+      // Past the rings, at the core: eat the nearest citizen.
+      this.eatNearestCitizen(attack.x, attack.y);
     } else {
-      // Past the breach: attack the nearest citizen (eat it).
-      this.eatNearestCitizen(attack.x);
+      // Otherwise chip the nearest un-breached ring segment.
+      const breached = this.wall.damageNearest(attack.x, attack.y, attack.damage);
+      if (breached) this.onSegmentBreached();
     }
   }
 
   /**
    * Route damage into the hero. The Player owns i-frames/knockback/anim, so a
    * blocked (invulnerable) hit is a no-op; a landed hit plays the hurt SFX and
-   * ends the run if it drops the hero. Screen-shake gives every landed hit
-   * weight.
+   * ends the run if it drops the hero.
    */
   private damageHero(amount: number, srcX: number, srcY: number): void {
     if (this.gameEnded) return;
@@ -371,18 +360,22 @@ export class GameScene extends Phaser.Scene {
     if (this.player.isDead) this.endGame(false);
   }
 
-  private onWallBreached(): void {
-    // Open the wall as a grapple/traversal surface change is unnecessary; the
-    // breach simply lets giants path onward. Losing the wall ends the run.
-    this.endGame(false);
+  /**
+   * A ring segment was breached. Refresh grapple surfaces (the collapsed block
+   * is no longer an anchor) and, if the inner ring has now fully fallen, the
+   * core is exposed and the run is lost.
+   */
+  private onSegmentBreached(): void {
+    this.refreshGrappleSurfaces();
+    if (this.wall.isInnerBreached) this.endGame(false);
   }
 
-  private eatNearestCitizen(x: number): void {
+  private eatNearestCitizen(x: number, y: number): void {
     let nearest: Citizen | null = null;
     let best = Infinity;
     for (const c of this.citizens) {
       if (c.isConsumed) continue;
-      const d = Math.abs(c.x - x);
+      const d = Phaser.Math.Distance.Between(c.x, c.y, x, y);
       if (d < best) {
         best = d;
         nearest = c;
@@ -402,20 +395,23 @@ export class GameScene extends Phaser.Scene {
       if (!proj.active || proj.isSpent) continue;
       proj.updateProjectile(delta);
 
-      // Impact with the wall face.
-      if (!this.wall.isBreached && proj.x >= this.wall.faceX - 6 && proj.y > LEVEL.WALL_TOP_Y) {
-        if (this.wall.damage(proj.wallDamage)) this.onWallBreached();
-        proj.onImpact();
-        continue;
-      }
       // Direct hit on the hero: apply the projectile's hero damage.
       if (Phaser.Math.Distance.Between(proj.x, proj.y, this.player.x, this.player.y) < 16) {
         this.damageHero(proj.heroDamage, proj.x, proj.y);
         proj.onImpact();
         continue;
       }
-      // Hit the ground or left the world.
-      if (proj.y >= LEVEL.GROUND_Y || proj.x < -40 || proj.x > LEVEL.WIDTH + 40) {
+      // Impact with a standing ring segment (outside the core).
+      if (!this.wall.isInsideInner(proj.x, proj.y)) {
+        const contact = this.wall.hitNearestIfClose(proj.x, proj.y, proj.wallDamage);
+        if (contact.hit) {
+          if (contact.breached) this.onSegmentBreached();
+          proj.onImpact();
+          continue;
+        }
+      }
+      // Left the arena.
+      if (proj.x < -40 || proj.x > ARENA.WIDTH + 40 || proj.y < -40 || proj.y > ARENA.HEIGHT + 40) {
         proj.onImpact();
         continue;
       }
@@ -425,32 +421,25 @@ export class GameScene extends Phaser.Scene {
   }
 
   private updateCitizens(now: number, delta: number): void {
-    // Nearest giant that has crossed the (breached) wall, for flee behaviour.
-    let threatX: number | null = null;
-    if (this.wall.isBreached) {
-      let best = Infinity;
-      for (const e of this.enemies) {
-        if (e.isDying) continue;
-        if (e.x > this.wall.faceX && e.x < best) {
-          best = e.x;
-          threatX = e.x;
-        }
+    // Nearest giant that has crossed inside the inner ring, for flee behaviour.
+    let threat: { x: number; y: number } | null = null;
+    let best = Infinity;
+    for (const e of this.enemies) {
+      if (e.isDying) continue;
+      if (!this.wall.isInsideInner(e.x, e.y)) continue;
+      const d = Phaser.Math.Distance.Between(e.x, e.y, ARENA.CENTER_X, ARENA.CENTER_Y);
+      if (d < best) {
+        best = d;
+        threat = { x: e.x, y: e.y };
       }
     }
     const alive: Citizen[] = [];
     for (const c of this.citizens) {
       if (!c.active) continue;
-      c.updateCitizen(now, delta, threatX);
+      c.updateCitizen(now, delta, threat);
       if (!c.isConsumed) alive.push(c);
     }
     this.citizens = alive.filter((c) => c.active);
-  }
-
-  private updateParallax(): void {
-    const scrollX = this.cameras.main.scrollX;
-    this.bgSky.tilePositionX = scrollX * 0.1;
-    this.bgHills.tilePositionX = scrollX * 0.3;
-    void this.bgWall;
   }
 
   private updateHud(): void {
@@ -458,7 +447,8 @@ export class GameScene extends Phaser.Scene {
       hpRatio: this.player.maxHp > 0 ? this.player.hp / this.player.maxHp : 0,
       gasRatio: this.gas.ratio,
       gasEmpty: this.gas.isEmpty,
-      wallRatio: this.wall.ratio,
+      outerRatio: this.wall.outerRatio,
+      innerRatio: this.wall.innerRatio,
       citizensSaved: this.citizensSaved,
       citizensTotal: WALL.START_CITIZENS,
       wave: this.wave,

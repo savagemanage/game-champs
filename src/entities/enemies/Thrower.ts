@@ -14,9 +14,8 @@ export type SpawnDebris = (proj: DebrisProjectile) => void;
  */
 export class Thrower extends Enemy {
   private readonly spawnDebris: SpawnDebris;
-  private heroPos: () => Phaser.Math.Vector2;
 
-  /** Standoff distance from the wall the Thrower prefers to hold, px. */
+  /** Standoff distance from its target the Thrower prefers to hold, px. */
   private static readonly STANDOFF = 420;
 
   constructor(
@@ -24,40 +23,48 @@ export class Thrower extends Enemy {
     x: number,
     y: number,
     spawnDebris: SpawnDebris,
-    heroPos: () => Phaser.Math.Vector2,
+    _heroPos: () => Phaser.Math.Vector2,
   ) {
     super(scene, x, y, EnemyRole.Thrower);
     this.napeLocalY = -10;
     this.spawnDebris = spawnDebris;
-    this.heroPos = heroPos;
+    // The hero position now arrives via EnemyContext each frame; the legacy
+    // heroPos accessor is retained in the factory signature for FEAT-003.
+    void _heroPos;
   }
 
   protected inAttackRange(ctx: EnemyContext): boolean {
-    // Ranged: "in range" means within its long throwing reach of the wall.
-    return Math.abs(this.x - ctx.wallX) <= this.stats.attackRange;
+    // Ranged: "in range" means within its long throwing reach of its target.
+    const t = this.currentTarget(ctx);
+    return Phaser.Math.Distance.Between(this.x, this.y, t.x, t.y) <= this.stats.attackRange;
   }
 
   protected steer(ctx: EnemyContext): void {
-    const dir: 1 | -1 = ctx.wallX >= this.x ? 1 : -1;
-    this.setMarchDir(dir);
-    const dist = Math.abs(this.x - ctx.wallX);
+    const t = this.currentTarget(ctx);
+    let dx = t.x - this.x;
+    let dy = t.y - this.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    dx /= dist;
+    dy /= dist;
+    this.setMarchDir(dx >= 0 ? 1 : -1);
     if (dist > Thrower.STANDOFF) {
-      // Advance until within standoff, then hold position to throw.
-      this.body.setVelocityX(dir * this.stats.moveSpeed);
+      // Advance toward its target until within standoff, then hold to throw.
+      this.body.setVelocity(dx * this.stats.moveSpeed, dy * this.stats.moveSpeed);
     } else {
-      this.body.setVelocityX(0);
+      this.body.setVelocity(0, 0);
     }
   }
 
   protected performAttack(ctx: EnemyContext): AttackEvent | null {
-    // Lob debris at the hero if close, otherwise at the wall top.
-    const hero = this.heroPos();
-    const heroClose = Math.abs(hero.x - this.x) < Thrower.STANDOFF + 120;
-    const targetX = heroClose ? hero.x : ctx.wallX;
-    const targetY = heroClose ? hero.y : ctx.groundY - 80;
+    // Lob debris at the hero if close, otherwise at the current ring target.
+    const heroDx = ctx.heroX - this.x;
+    const heroDy = ctx.heroY - this.y;
+    const heroClose = Math.hypot(heroDx, heroDy) < Thrower.STANDOFF + 120;
+    const t = this.currentTarget(ctx);
+    const targetX = heroClose ? ctx.heroX : t.x;
+    const targetY = heroClose ? ctx.heroY : t.y;
 
-    const originY = this.y - this.displayHeight * 0.7;
-    const proj = new DebrisProjectile(this.scene, this.x, originY, targetX, targetY);
+    const proj = new DebrisProjectile(this.scene, this.x, this.y, targetX, targetY);
     this.spawnDebris(proj);
 
     // Throw animation flourish.
@@ -68,8 +75,8 @@ export class Thrower extends Enemy {
       yoyo: true,
     });
 
-    // The ranged attack does not itself apply melee wall damage; the projectile
-    // carries the damage. Return null so the scene doesn't double-apply.
+    // The ranged attack does not itself apply melee damage; the projectile
+    // carries it. Return null so the scene doesn't double-apply.
     return null;
   }
 }

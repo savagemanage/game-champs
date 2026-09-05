@@ -3,12 +3,13 @@ import { TextureKeys } from '../../config/AssetKeys';
 import { ENEMY_COMBAT } from '../../config/EnemyConfig';
 
 /**
- * DebrisProjectile - a chunk of rubble lobbed by a Thrower giant.
+ * DebrisProjectile - a chunk of rubble hurled by a Thrower giant.
  *
- * Follows a ballistic arc (initial velocity + gravity) toward a target point.
- * On impact with the wall it damages the wall; a direct hit on the hero damages
- * the hero. The scene owns overlap checks and calls {@link onImpact} to clean
- * up. Uses the Fx dust sprite (from FEAT-002) as a compact rubble mote.
+ * Top-down (no gravity): it travels in a straight line across the plane toward
+ * the target point at a fixed speed. On impact with a ring it damages the ring;
+ * a direct hit on the hero damages the hero. The scene owns overlap checks and
+ * calls {@link onImpact} to clean up. Uses the Fx dust sprite as a compact
+ * rubble mote.
  */
 export class DebrisProjectile extends Phaser.Physics.Arcade.Sprite {
   declare public body: Phaser.Physics.Arcade.Body;
@@ -31,19 +32,16 @@ export class DebrisProjectile extends Phaser.Physics.Arcade.Sprite {
     this.setScale(1.5);
     this.setTint(0x8a7a63);
 
-    this.body.setAllowGravity(true);
-    this.body.setGravityY(ENEMY_COMBAT.PROJECTILE_GRAVITY);
+    this.body.setAllowGravity(false);
 
-    // Solve a lob: horizontal at fixed speed, vertical to reach target with arc.
-    const dx = targetX - x;
-    const dir = Math.sign(dx) || 1;
+    // Straight-line travel across the plane toward the target at fixed speed.
+    let dx = targetX - x;
+    let dy = targetY - y;
+    const len = Math.hypot(dx, dy) || 1;
+    dx /= len;
+    dy /= len;
     const speed = ENEMY_COMBAT.PROJECTILE_SPEED;
-    const t = Math.max(0.35, Math.abs(dx) / speed);
-    const vx = dir * speed;
-    // vy from: targetY = y + vy*t + 0.5*g*t^2  ->  vy = (dy - 0.5 g t^2) / t
-    const g = ENEMY_COMBAT.PROJECTILE_GRAVITY;
-    const vy = (targetY - y - 0.5 * g * t * t) / t;
-    this.body.setVelocity(vx, vy);
+    this.body.setVelocity(dx * speed, dy * speed);
   }
 
   /** True once the projectile has hit something and should be removed. */

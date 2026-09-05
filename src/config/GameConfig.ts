@@ -68,9 +68,30 @@ export const PLAYER = {
   BLADE_RANGE: 28,
 } as const;
 
-/** Wall / objective tuning. Citizens live behind the wall the player defends. */
+/**
+ * Ring / objective tuning. The settlement is defended by a CONCENTRIC DOUBLE
+ * ring wall centred on the arena: an OUTER ring the giants reach first and an
+ * INNER ring guarding the citizen core at the very center. Each ring is split
+ * into breachable arc SEGMENTS with their own HP; a segment that runs out of HP
+ * is breached and giants can path inward through the gap. Losing every inner
+ * segment (the inner ring falls) is a lose condition, as is losing all
+ * citizens. Radii are world px measured from the arena center (see
+ * PLAYER_CONFIG ARENA.CENTER_X / CENTER_Y).
+ */
 export const WALL = {
-  MAX_INTEGRITY: 100,
+  /** Outer ring radius from the arena center, world px. */
+  OUTER_RADIUS: 360,
+  /** Inner ring radius from the arena center, world px (guards the core). */
+  INNER_RADIUS: 200,
+  /** Number of breachable arc segments per ring. */
+  OUTER_SEGMENTS: 24,
+  INNER_SEGMENTS: 16,
+  /** Per-segment HP for each ring (aggregate integrity is the sum). */
+  OUTER_SEGMENT_HP: 60,
+  INNER_SEGMENT_HP: 80,
+  /** Radial thickness of each ring's rampart band, world px. */
+  RING_THICKNESS: 22,
+  /** Citizens present at the start of a run (clustered at the center). */
   START_CITIZENS: 12,
 } as const;
 

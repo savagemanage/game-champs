@@ -15,10 +15,14 @@ export class Breaker extends Enemy {
   }
 
   protected steer(ctx: EnemyContext): void {
-    // Always march to the wall itself (never diverts), then stop and smash.
-    const dir: 1 | -1 = ctx.wallX >= this.x ? 1 : -1;
-    this.setMarchDir(dir);
-    this.body.setVelocityX(this.inAttackRange(ctx) ? 0 : dir * this.stats.moveSpeed);
+    // Fixates on the nearest ring segment (never diverts), then stops and smashes.
+    const h = this.headingTo(this.currentTarget(ctx));
+    this.setMarchDir(h.x >= 0 ? 1 : -1);
+    if (this.inAttackRange(ctx)) {
+      this.body.setVelocity(0, 0);
+    } else {
+      this.body.setVelocity(h.x * this.stats.moveSpeed, h.y * this.stats.moveSpeed);
+    }
   }
 
   protected performAttack(_ctx: EnemyContext): AttackEvent | null {

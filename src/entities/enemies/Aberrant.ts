@@ -20,28 +20,34 @@ export class Aberrant extends Enemy {
   }
 
   protected steer(ctx: EnemyContext): void {
+    const target = this.currentTarget(ctx);
     if (this.inAttackRange(ctx)) {
-      this.setMarchDir(ctx.wallX >= this.x ? 1 : -1);
-      this.body.setVelocityX(0);
+      const hh = this.headingTo(target);
+      this.setMarchDir(hh.x >= 0 ? 1 : -1);
+      this.body.setVelocity(0, 0);
       return;
     }
 
-    // Base heading toward the wall, but jittered by a wandering oscillation and
-    // periodic twitches so movement reads as unpredictable rather than a march.
+    // Base heading toward the nearest ring target, but jittered by a wandering
+    // oscillation and periodic twitches so movement reads as unpredictable
+    // rather than a march. The wobble is applied perpendicular to the heading.
     this.phase += (ctx.dtMs / 1000) * 5;
     if (ctx.nowMs >= this.nextTwitchAt) {
       this.nextTwitchAt = ctx.nowMs + 300 + Math.random() * 500;
-      // Occasionally lurch away from the wall before resuming.
+      // Occasionally lurch away from the target before resuming.
       this.twitchDir = Math.random() < 0.25 ? -1 : 1;
     }
 
-    const toWall: 1 | -1 = ctx.wallX >= this.x ? 1 : -1;
+    const h = this.headingTo(target);
     const wobble = Math.sin(this.phase); // [-1..1]
     const speed = this.stats.moveSpeed;
-    const vx = toWall * this.twitchDir * speed * (0.6 + 0.4 * Math.abs(wobble));
-    this.body.setVelocityX(vx);
-    // Vertical bob within a small band above the ground for a lurching gait.
+    // Perpendicular to the heading, for a weaving 2D gait.
+    const perpX = -h.y;
+    const perpY = h.x;
+    const forward = 0.6 + 0.4 * Math.abs(wobble);
+    const vx = (h.x * forward + perpX * wobble * 0.5) * speed * this.twitchDir;
+    const vy = (h.y * forward + perpY * wobble * 0.5) * speed * this.twitchDir;
+    this.body.setVelocity(vx, vy);
     this.setMarchDir(vx >= 0 ? 1 : -1);
-    this.y = ctx.groundY - Math.abs(Math.sin(this.phase * 0.5)) * 4;
   }
 }

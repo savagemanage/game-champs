@@ -1,7 +1,8 @@
 /**
  * PlayerConfig - centralized tuning for the hero and the ODM (omni-directional
- * mobility) traversal systems: ground movement, air control, the mouse-aimed
- * grapple wire with pendulum swing physics, the dash burst, and the gas /
+ * mobility) traversal systems in the TOP-DOWN arena: planar 8-direction
+ * movement, the mouse-aimed grapple wire (a fling/pull toward an anchor now
+ * that there is no gravity), the omnidirectional dash burst, and the gas /
  * stamina meter.
  *
  * ALL traversal "feel" numbers live here so balance can be tweaked in one
@@ -13,35 +14,29 @@
  * (and extend) those legacy constants.
  */
 
-/** Core body / ground-movement tuning. */
+/**
+ * Core body / planar-movement tuning. Top-down: movement is 8-directional and
+ * planar (no gravity, no jump). Input drives a target velocity toward
+ * MOVE_SPEED along whichever of the eight directions are held, with an
+ * acceleration ramp and friction when input is released.
+ */
 export const MOVEMENT = {
   /** Player max health (mirrors legacy PLAYER.MAX_HP). */
   MAX_HP: 100,
-  /** Horizontal run speed on the ground, px/s. */
-  MOVE_SPEED: 190,
-  /** Upward jump velocity (positive = magnitude; applied as negative Y), px/s. */
-  JUMP_VELOCITY: 430,
-  /** Extra gravity multiplier while falling for a snappier arc (1 = normal). */
-  FALL_GRAVITY_MULT: 1.35,
-  /** Gravity multiplier while ascending and holding jump, for variable-height jumps. */
-  LOW_JUMP_GRAVITY_MULT: 1.9,
-  /** Coyote time after leaving a ledge during which a jump still fires, ms. */
-  COYOTE_MS: 90,
-  /** Jump input buffer window so an early press still registers on landing, ms. */
-  JUMP_BUFFER_MS: 110,
-  /** Ground acceleration toward target run speed, px/s^2. */
-  GROUND_ACCEL: 2600,
-  /** Ground deceleration when no input, px/s^2. */
-  GROUND_FRICTION: 2200,
+  /** Planar run speed, px/s (applies on every axis for 8-dir movement). */
+  MOVE_SPEED: 200,
+  /** Acceleration toward the target move velocity, px/s^2. */
+  MOVE_ACCEL: 2600,
+  /** Deceleration (friction) when no input is held, px/s^2. */
+  MOVE_FRICTION: 2400,
   /** Physics body size (logical px) and offset within the 32x32 hero frame. */
   BODY_WIDTH: 12,
   BODY_HEIGHT: 22,
   BODY_OFFSET_X: 10,
   BODY_OFFSET_Y: 9,
-  /** Hard cap on horizontal speed the player can carry (fling, swing), px/s. */
-  MAX_H_SPEED: 620,
-  /** Hard cap on vertical speed, px/s. */
-  MAX_V_SPEED: 900,
+  /** Hard cap on speed the player can carry on each axis (fling, dash), px/s. */
+  MAX_H_SPEED: 640,
+  MAX_V_SPEED: 640,
 } as const;
 
 /**
@@ -54,27 +49,30 @@ export const HERO_COMBAT = {
   /** Invulnerability window after taking a hit, ms (i-frames). */
   INVULN_MS: 800,
   /** Knockback speed applied away from the damage source on a hit, px/s. */
-  HIT_KNOCKBACK: 220,
-  /** Upward component added to knockback so a hit pops the hero up a little, px/s. */
-  HIT_KNOCKBACK_UP: 140,
+  HIT_KNOCKBACK: 240,
 } as const;
 
-/** Air-control tuning (applies while airborne, whether jumping or swinging). */
+/**
+ * Steering tuning for momentum-carrying states (fling / swing). Applies while
+ * the hero is carrying built-up velocity from a grapple fling and lets input
+ * nudge that trajectory without fully overriding the momentum.
+ */
 export const AIR = {
-  /** Horizontal acceleration from input while airborne, px/s^2. */
+  /** Steering acceleration from input while carrying fling momentum, px/s^2. */
   ACCEL: 900,
-  /** Max horizontal speed reachable from air input alone, px/s. */
-  MAX_INPUT_SPEED: 200,
-  /** Passive horizontal drag applied while airborne (per second fraction). */
-  DRAG: 0.6,
-  /** Extra steering force applied to nudge swing direction, px/s^2. */
+  /** Max speed reachable from input steering alone, px/s. */
+  MAX_INPUT_SPEED: 220,
+  /** Passive drag applied to uncontrolled fling drift (per second fraction). */
+  DRAG: 0.5,
+  /** Extra steering force applied to nudge an attached swing direction, px/s^2. */
   SWING_STEER_ACCEL: 520,
 } as const;
 
 /**
- * Grapple / ODM wire tuning. The wire behaves as a taut rope: while attached
- * the player is constrained to a maximum distance from the anchor and swings
- * as a pendulum, conserving tangential momentum. Reeling shortens the rope.
+ * Grapple / ODM wire tuning for the TOP-DOWN plane. With zero gravity the wire
+ * is a fling/pull line rather than a pendulum: firing pulls the hero toward the
+ * anchor (PULL_ACCEL), the rope length constrains how far out the hero can
+ * drift, and releasing keeps the built-up velocity for a satisfying fling.
  */
 export const GRAPPLE = {
   /** Maximum distance a grapple can reach from the player to a surface, px. */
@@ -107,8 +105,12 @@ export const GRAPPLE = {
   PULL_ACCEL: 520,
   /** Velocity retained when releasing the wire (fling), fraction of current. */
   RELEASE_VELOCITY_KEEP: 1,
-  /** Small upward boost added on release for a satisfying launch, px/s. */
-  RELEASE_UP_BOOST: 60,
+  /**
+   * Small radial boost added AWAY from the anchor on release, px/s. Replaces
+   * the old vertical up-boost (meaningless top-down): it kicks the hero
+   * outward along the wire so a fling off a ring reads as a launch.
+   */
+  RELEASE_RADIAL_BOOST: 70,
   /** Wire render thickness in logical px. */
   WIRE_THICKNESS: 1,
   /** Wire render color (0xRRGGBB). */
@@ -119,18 +121,18 @@ export const GRAPPLE = {
   AUTO_DETACH_MS: 0,
 } as const;
 
-/** Dash: a short directional burst impulse toward aim/movement direction. */
+/**
+ * Dash: a short OMNIDIRECTIONAL burst impulse toward the aim/movement
+ * direction. Top-down, so there is no air-dash concept - it is simply gated by
+ * a cooldown and gas.
+ */
 export const DASH = {
   /** Impulse speed applied instantly in the dash direction, px/s. */
-  IMPULSE: 460,
-  /** Duration the dash "locks in" reduced gravity for a flat burst, ms. */
-  DURATION_MS: 160,
-  /** Gravity multiplier during the dash window (0 = weightless burst). */
-  GRAVITY_MULT: 0.15,
+  IMPULSE: 480,
+  /** Duration the dash "locks in" its burst velocity before control resumes, ms. */
+  DURATION_MS: 150,
   /** Cooldown before another dash can fire, ms. */
   COOLDOWN_MS: 420,
-  /** Number of air dashes allowed before touching ground/grapple resets them. */
-  AIR_DASHES: 1,
 } as const;
 
 /**
@@ -151,38 +153,38 @@ export const GAS = {
   COST_SWING_PER_SEC: 4,
   /** One-off cost to dash. */
   COST_DASH: 18,
-  /** Regen per second while grounded and not spending gas. */
+  /**
+   * Regen per second while "settled" (not flinging on a wire) and not spending
+   * gas. Top-down has no ground, so this is the baseline standing regen.
+   */
   REGEN_GROUNDED_PER_SEC: 55,
-  /** Regen per second while airborne but not spending gas (slower). */
-  REGEN_AIRBORNE_PER_SEC: 18,
+  /** Regen per second while carrying fling momentum but not spending gas. */
+  REGEN_AIRBORNE_PER_SEC: 26,
   /** Delay after spending gas before regen resumes, ms. */
   REGEN_DELAY_MS: 350,
 } as const;
 
-/** Camera-follow tuning for the side-scrolling level. */
+/** Camera-follow tuning for the top-down arena. */
 export const CAMERA = {
   /** Lerp factor for smooth follow [0..1] per axis. */
   LERP_X: 0.12,
-  LERP_Y: 0.1,
+  LERP_Y: 0.12,
   /** Deadzone rectangle (logical px) centered on the viewport. */
-  DEADZONE_W: 120,
-  DEADZONE_H: 80,
-  /** Lookahead in the direction of horizontal motion, px. */
-  LOOKAHEAD_X: 60,
+  DEADZONE_W: 140,
+  DEADZONE_H: 100,
 } as const;
 
 /**
- * Level bounds for the side-scrolling arena. Wider than the canvas with a tall
- * wall section on the right that provides verticality for grapple traversal.
+ * ARENA bounds for the TOP-DOWN siege. A large square whose CENTER holds the
+ * citizen core; the concentric double ring (see GameConfig WALL) is laid out
+ * around this center. The camera and physics world are bounded to this square.
  */
-export const LEVEL = {
-  WIDTH: 1920,
-  HEIGHT: 720,
-  /** Ground surface Y within the level (world coords). */
-  GROUND_Y: 640,
-  /** The tall defensive wall: x position and how far up it rises. */
-  WALL_X: 1680,
-  WALL_TOP_Y: 40,
+export const ARENA = {
+  WIDTH: 1280,
+  HEIGHT: 1280,
+  /** Arena center (rings + citizen core are concentric about this point). */
+  CENTER_X: 640,
+  CENTER_Y: 640,
 } as const;
 
 /** Hero animation frame indices in the hero spritesheet (32x32, 7 frames). */
@@ -196,12 +198,14 @@ export const HERO_FRAMES = {
   HURT: 6,
 } as const;
 
-/** Animation keys registered on the hero texture. */
+/**
+ * Animation keys registered on the hero texture. Top-down uses no jump/fall
+ * states; DASH reuses the dynamic SWING pose for the burst.
+ */
 export const HERO_ANIMS = {
   IDLE: 'hero_idle',
   RUN: 'hero_run',
-  JUMP: 'hero_jump',
-  FALL: 'hero_fall',
+  DASH: 'hero_dash',
   SWING: 'hero_swing',
   SLASH: 'hero_slash',
   HURT: 'hero_hurt',
