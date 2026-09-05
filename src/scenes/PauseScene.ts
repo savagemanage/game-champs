@@ -19,7 +19,8 @@ export class PauseScene extends Phaser.Scene {
   create(): void {
     const cx = CANVAS.WIDTH / 2;
 
-    // Dim the world behind the overlay.
+    // Dim the world behind the overlay. Passive visual only - never made
+    // interactive, so it cannot intercept button presses.
     this.add.rectangle(0, 0, CANVAS.WIDTH, CANVAS.HEIGHT, 0x000000, 0.55).setOrigin(0, 0);
 
     Menu.title(this, cx, CANVAS.HEIGHT * 0.24, tr('pause.title'), 44);
@@ -34,8 +35,14 @@ export class PauseScene extends Phaser.Scene {
     this.input.keyboard?.on('keydown-ESC', () => this.resume());
 
     // If Settings was closed and returned focus here, make the overlay visible
-    // again (see openSettings + SettingsScene's returnTo handling).
-    this.events.on(Phaser.Scenes.Events.WAKE, () => this.scene.setVisible(true));
+    // again (see openSettings + SettingsScene's returnTo handling). A slept
+    // scene can come back with its input plugin still parked, which would make
+    // the Resume/Settings/Quit buttons feel dead, so defensively re-arm input
+    // on every wake.
+    this.events.on(Phaser.Scenes.Events.WAKE, () => {
+      this.scene.setVisible(true);
+      this.input.enabled = true;
+    });
   }
 
   private resume(): void {

@@ -68,6 +68,11 @@ export const Menu = {
     container.setSize(w, h);
     container.setInteractive(new Phaser.Geom.Rectangle(-w / 2, -h / 2, w, h), Phaser.Geom.Rectangle.Contains);
 
+    // Only the topmost interactive object under the pointer should fire, so a
+    // passive/transparent rect that happens to sit under a button can never
+    // steal its press. Safe to set once per scene from any button.
+    scene.input.setTopOnly(true);
+
     container.on(Phaser.Input.Events.POINTER_OVER, () => {
       bg.setFillStyle(PALETTE.BG_FAR);
       bg.setStrokeStyle(2, PALETTE.TEXT);
@@ -79,10 +84,27 @@ export const Menu = {
       bg.setStrokeStyle(2, PALETTE.ACCENT);
       scene.tweens.add({ targets: container, scale: 1, duration: 90 });
     });
+    // Fire onClick synchronously ON PRESS. Previously onClick was invoked only
+    // from the squash tween's onComplete; the hover scale tween shares the same
+    // `container` target, so a POINTER_OVER/OUT tween starting a frame later
+    // could override (and drop the onComplete of) the press tween, silently
+    // eating the click ("가끔 버튼이 클릭이 안돼"). The squash is now PURELY
+    // cosmetic feedback and no longer gates the action. A per-press latch guards
+    // against a double-fire if the same press is delivered twice; it is cleared
+    // on POINTER_UP / POINTER_OUT so the button remains reusable.
+    let fired = false;
+    const arm = (): void => {
+      fired = false;
+    };
     container.on(Phaser.Input.Events.POINTER_DOWN, () => {
+      if (fired) return;
+      fired = true;
       AudioManager.get(scene).playSfx(AudioKeys.UiClick, 0.7);
-      scene.tweens.add({ targets: container, scale: 0.94, duration: 60, yoyo: true, onComplete: () => onClick() });
+      scene.tweens.add({ targets: container, scale: 0.94, duration: 60, yoyo: true });
+      onClick();
     });
+    container.on(Phaser.Input.Events.POINTER_UP, arm);
+    container.on(Phaser.Input.Events.POINTER_OUT, arm);
 
     return {
       container,

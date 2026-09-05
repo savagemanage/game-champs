@@ -45,7 +45,13 @@ export class SettingsScene extends Phaser.Scene {
 
     const overlay = this.returnTo !== SceneKeys.Title;
     if (overlay) {
-      // Dim backdrop when floating over the Pause/Game scenes.
+      // Defensive: clear any camera fade this scene inherited from a prior
+      // transition/restart so buttons never render under a stale black fade
+      // that would make input feel dead. (The language selector restarts this
+      // scene in place, so guarantee a clean camera on every (re)entry.)
+      this.cameras.main.resetFX();
+      // Dim backdrop when floating over the Pause/Game scenes. Passive visual
+      // only - never made interactive, so it cannot swallow button presses.
       this.add.rectangle(0, 0, CANVAS.WIDTH, CANVAS.HEIGHT, 0x000000, 0.6).setOrigin(0, 0);
     } else {
       this.cameras.main.setBackgroundColor(PALETTE.BG_FAR);
