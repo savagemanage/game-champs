@@ -24,7 +24,12 @@ const config: Phaser.Types.Core.GameConfig = {
   roundPixels: true,
   scale: {
     mode: Phaser.Scale.FIT,
-    autoCenter: Phaser.Scale.CENTER_BOTH,
+    // The #game parent is a flexbox that already centers the canvas both axes.
+    // Letting Phaser ALSO center (CENTER_BOTH sets CSS margins on the canvas)
+    // compounds with the flex centering and produces asymmetric letterbox
+    // margins (top != bottom, left != right). Use NO_CENTER so flexbox is the
+    // single source of centering and opposing margins stay equal at any size.
+    autoCenter: Phaser.Scale.NO_CENTER,
     width: CANVAS.WIDTH,
     height: CANVAS.HEIGHT,
   },

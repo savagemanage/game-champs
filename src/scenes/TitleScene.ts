@@ -57,7 +57,7 @@ export class TitleScene extends Phaser.Scene {
     // Compact language toggle in the top-right so players can switch language
     // straight from the front door without opening Settings. Reuses the
     // Settings ◀ value ▶ stepper feel and persists via the AudioManager.
-    this.buildLanguageToggle(CANVAS.WIDTH - 150, 36);
+    this.buildLanguageToggle(36);
 
     Menu.label(this, cx, CANVAS.HEIGHT * 0.94, tr('title.hint'), 14, 0.55);
 
@@ -90,16 +90,28 @@ export class TitleScene extends Phaser.Scene {
   }
 
   /**
-   * A compact language toggle: a small label, a prev button, the current
-   * language name, and a next button, centered on (x, y). Mirrors the Settings
+   * A compact language toggle in the top-right corner: a small label, a prev
+   * button, the current language name, and a next button. Mirrors the Settings
    * stepper so the front-door control feels identical.
+   *
+   * The whole cluster is anchored to a right edge (RIGHT_EDGE) and laid out
+   * leftward from there so the right-most element (the ▶ button) always stays a
+   * comfortable margin inside the 960px-wide canvas rather than clipping off.
    */
-  private buildLanguageToggle(x: number, y: number): void {
+  private buildLanguageToggle(y: number): void {
     const lang = AudioManager.get(this).getSettings().language;
-    Menu.label(this, x - 92, y, tr('settings.language'), 14, 0.7).setOrigin(0, 0.5);
-    this.add.text(x + 44, y, tr(`language.${lang}`), textStyle(16)).setOrigin(0.5);
-    Menu.button(this, x + 8, y, '\u25C0', () => this.stepLanguage(-1), { width: 34, fontSize: 14, padY: 6 });
-    Menu.button(this, x + 96, y, '\u25B6', () => this.stepLanguage(1), { width: 34, fontSize: 14, padY: 6 });
+
+    // Keep the whole control inside the 960-wide canvas with room to spare: the
+    // ▶ button (34px wide) is centered so its right edge sits well under 944.
+    const nextX = CANVAS.WIDTH - 40; // 920 -> right edge 937 (>=16px margin)
+    const valueX = nextX - 48; // 872: current-language name (centered)
+    const prevX = valueX - 48; // 824: ◀ button
+    const labelX = prevX - 30; // 794: right-aligned label ends here
+
+    Menu.label(this, labelX, y, tr('settings.language'), 14, 0.7).setOrigin(1, 0.5);
+    this.add.text(valueX, y, tr(`language.${lang}`), textStyle(16)).setOrigin(0.5);
+    Menu.button(this, prevX, y, '\u25C0', () => this.stepLanguage(-1), { width: 34, fontSize: 14, padY: 6 });
+    Menu.button(this, nextX, y, '\u25B6', () => this.stepLanguage(1), { width: 34, fontSize: 14, padY: 6 });
   }
 
   /**
