@@ -12,6 +12,7 @@ import {
   napeOffset,
   nearestTargetIndex,
   radialPoint,
+  reelStep,
   segmentAngle,
   spawnRadius,
   distance,
@@ -270,5 +271,62 @@ describe('ODM wall traversal predicate (FEAT-004: hero crosses walls while using
 
   it('is BLOCKED (collider enabled) during plain grounded movement', () => {
     expect(isTraversing(false, false)).toBe(false);
+  });
+});
+
+describe('manual reel HAULS the hero along the wire (fix: Q/E now visibly move the hero)', () => {
+  // Anchor at origin; hero 200px to the right along +x.
+  const anchor = { x: 0, y: 0 };
+  const hero = { x: 200, y: 0 };
+
+  it('reel-IN moves the hero TOWARD the anchor by speed*dt and tightens the rope', () => {
+    const r = reelStep(hero.x, hero.y, anchor.x, anchor.y, true, 190, 1, GRAPPLE.MIN_LENGTH, GRAPPLE.MAX_LENGTH);
+    // 200 - 190*1 = 10, but clamped up to MIN_LENGTH.
+    expect(r.ropeLength).toBeCloseTo(Math.max(GRAPPLE.MIN_LENGTH, 10));
+    // Hero stays on the +x ray, now closer to the anchor.
+    expect(r.y).toBeCloseTo(0);
+    expect(r.x).toBeLessThan(hero.x);
+    expect(r.x).toBeCloseTo(r.ropeLength);
+  });
+
+  it('reel-IN over a small step visibly closes distance without overshooting the anchor', () => {
+    const r = reelStep(hero.x, hero.y, anchor.x, anchor.y, true, 50, 1, GRAPPLE.MIN_LENGTH, GRAPPLE.MAX_LENGTH);
+    expect(r.x).toBeCloseTo(150); // 200 - 50
+    expect(r.ropeLength).toBeCloseTo(150);
+  });
+
+  it('reel-OUT feeds line so the hero drifts WIDER from the anchor', () => {
+    const r = reelStep(hero.x, hero.y, anchor.x, anchor.y, false, 160, 1, GRAPPLE.MIN_LENGTH, GRAPPLE.MAX_LENGTH);
+    expect(r.x).toBeCloseTo(360); // 200 + 160
+    expect(r.ropeLength).toBeCloseTo(360);
+    expect(r.x).toBeGreaterThan(hero.x);
+  });
+
+  it('reel-IN never pulls the hero past the anchor (clamped to MIN_LENGTH)', () => {
+    const r = reelStep(30, 0, 0, 0, true, 190, 1, GRAPPLE.MIN_LENGTH, GRAPPLE.MAX_LENGTH);
+    expect(r.ropeLength).toBeCloseTo(GRAPPLE.MIN_LENGTH);
+    expect(r.x).toBeGreaterThanOrEqual(0);
+  });
+
+  it('reel-OUT never exceeds the (now huge) MAX_LENGTH', () => {
+    const r = reelStep(GRAPPLE.MAX_LENGTH - 10, 0, 0, 0, false, 160, 1, GRAPPLE.MIN_LENGTH, GRAPPLE.MAX_LENGTH);
+    expect(r.ropeLength).toBeCloseTo(GRAPPLE.MAX_LENGTH);
+  });
+
+  it('preserves the direction from the anchor on a diagonal wire', () => {
+    // Hero at (100,100) -> distance ~141.42 along the 45-degree ray.
+    const r = reelStep(100, 100, 0, 0, true, 41.42, 1, GRAPPLE.MIN_LENGTH, GRAPPLE.MAX_LENGTH);
+    expect(r.x).toBeCloseTo(r.y); // still on the 45-degree ray
+    expect(Math.hypot(r.x, r.y)).toBeCloseTo(r.ropeLength);
+    expect(r.ropeLength).toBeLessThan(Math.hypot(100, 100));
+  });
+});
+
+describe('grapple reach is effectively infinite (사거리 무한)', () => {
+  it('RANGE and MAX_LENGTH comfortably exceed the arena diagonal', () => {
+    const diagonal = Math.hypot(ARENA.WIDTH, ARENA.HEIGHT);
+    expect(GRAPPLE.RANGE).toBeGreaterThan(diagonal);
+    expect(GRAPPLE.MAX_LENGTH).toBeGreaterThan(diagonal);
+    expect(GRAPPLE.INFINITE_REACH).toBeGreaterThan(diagonal);
   });
 });

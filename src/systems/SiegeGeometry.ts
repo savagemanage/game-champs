@@ -206,6 +206,54 @@ export function isTraversing(dashing: boolean, swinging: boolean): boolean {
 }
 
 /**
+ * Manual reel step along the wire (Q reel-in / E reel-out). The old model only
+ * shrank/grew the enforced rope LENGTH, so holding Q while slack (hero inside
+ * the rope circle) lowered a number with NO visible motion until it happened to
+ * go taut - which made reeling feel dead. This helper instead HAULS the hero
+ * along the rope: it moves the hero toward (reel-in) or away from (reel-out) the
+ * anchor by `speed * dt` and sets the enforced rope length to the resulting
+ * distance, so Q visibly pulls the hero in and E visibly feeds line out.
+ *
+ * The travel is clamped to [minLength, maxLength] from the anchor. Reeling in
+ * never overshoots past the anchor; reeling out never exceeds the max length.
+ * Returns the hero's new world position and the new rope length. Pure so the
+ * pull math is unit-tested without a Phaser body.
+ *
+ * @param heroX,heroY the hero's current world position.
+ * @param anchorX,anchorY the wire anchor's world position.
+ * @param reelIn true to haul toward the anchor, false to feed line outward.
+ * @param speed reel speed for this direction, px/s (REEL_IN_SPEED / REEL_OUT_SPEED).
+ * @param dt frame delta, seconds.
+ * @param minLength minimum enforced rope length (GRAPPLE.MIN_LENGTH).
+ * @param maxLength maximum enforced rope length (GRAPPLE.MAX_LENGTH).
+ */
+export function reelStep(
+  heroX: number,
+  heroY: number,
+  anchorX: number,
+  anchorY: number,
+  reelIn: boolean,
+  speed: number,
+  dt: number,
+  minLength: number,
+  maxLength: number,
+): { x: number; y: number; ropeLength: number } {
+  const rx = heroX - anchorX;
+  const ry = heroY - anchorY;
+  const dist = Math.hypot(rx, ry) || 1e-6;
+  const step = speed * dt;
+  const target = reelIn ? dist - step : dist + step;
+  const clamped = Math.max(minLength, Math.min(maxLength, target));
+  const nx = rx / dist;
+  const ny = ry / dist;
+  return {
+    x: anchorX + nx * clamped,
+    y: anchorY + ny * clamped,
+    ropeLength: clamped,
+  };
+}
+
+/**
  * Frontal-armor test in 2D: is an incoming hit landing within the giant's
  * frontal cone? A hit whose direction (from the giant toward the strike) lies
  * within `coneDeg` of the facing heading is "frontal" and gets reduced by the

@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { AudioKeys, type AudioKey } from '../config/AssetKeys';
 import { GAS, GRAPPLE } from '../config/PlayerConfig';
-import { isNapeHook, napeFlingAccel } from './SiegeGeometry';
+import { isNapeHook, napeFlingAccel, reelStep } from './SiegeGeometry';
 import { AudioManager } from './AudioManager';
 import type { Player } from '../entities/Player';
 import type { GasSystem } from './GasSystem';
@@ -333,15 +333,32 @@ export class GrappleSystem {
       );
     }
 
-    // --- reeling: change the enforced rope length ---
-    if (input.reelIn && !this.gas.isEmpty) {
+    // --- reeling: actively HAUL the hero along the wire ---
+    // Reeling doesn't merely shrink/grow the enforced rope length (which, while
+    // the hero was inside the rope circle, moved nothing visibly until it went
+    // taut). Instead we move the hero ALONG the rope toward the anchor (reel-in,
+    // Q) or away from it (reel-out, E) and set the enforced length to the new
+    // distance, so both directions produce clear motion. Skip while nape-hooked
+    // so the manual reel doesn't fight the automatic weak-point auto-reel above.
+    if (!this.napeHooked && (input.reelIn || input.reelOut) && !this.gas.isEmpty) {
       if (this.gas.drain(GAS.COST_REEL_PER_SEC, dtMs, nowMs) > 0) {
-        this.ropeLength = Math.max(GRAPPLE.MIN_LENGTH, this.ropeLength - GRAPPLE.REEL_IN_SPEED * dt);
+        const reelIn = input.reelIn;
+        const speed = reelIn ? GRAPPLE.REEL_IN_SPEED : GRAPPLE.REEL_OUT_SPEED;
+        const next = reelStep(
+          this.player.x,
+          this.player.y,
+          this.anchor.x,
+          this.anchor.y,
+          reelIn,
+          speed,
+          dt,
+          GRAPPLE.MIN_LENGTH,
+          GRAPPLE.MAX_LENGTH,
+        );
+        this.player.x = next.x;
+        this.player.y = next.y;
+        this.ropeLength = next.ropeLength;
         this.maybeWhoosh(nowMs);
-      }
-    } else if (input.reelOut) {
-      if (this.gas.drain(GAS.COST_REEL_PER_SEC, dtMs, nowMs) > 0) {
-        this.ropeLength = Math.min(GRAPPLE.MAX_LENGTH, this.ropeLength + GRAPPLE.REEL_OUT_SPEED * dt);
       }
     }
 

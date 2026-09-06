@@ -115,10 +115,26 @@ export const AIR = {
  * drift, and releasing keeps the built-up velocity for a satisfying fling.
  */
 export const GRAPPLE = {
-  /** Maximum distance a grapple can reach from the player to a surface, px. */
-  RANGE: 300,
-  /** Maximum rope length once attached (rope cannot stretch beyond this), px. */
-  MAX_LENGTH: 340,
+  /**
+   * Effectively-infinite reach constant, px. The ODM grapple's range is meant
+   * to be unlimited ("사거리는 무한"): the aim ray can anchor to a wall or giant
+   * at ANY distance and the wire never auto-detaches for being "too long". This
+   * is set comfortably larger than the arena diagonal (ARENA 1280x1280 -> ~1810
+   * px) so RANGE / MAX_LENGTH never limit reach in practice while remaining a
+   * finite, config-driven number (no special-casing of Infinity in the physics).
+   */
+  INFINITE_REACH: 4000,
+  /**
+   * Maximum distance a grapple can reach from the player to a surface, px.
+   * Set to INFINITE_REACH so the aim ray finds an anchor at any in-arena range.
+   */
+  RANGE: 4000,
+  /**
+   * Maximum rope length once attached (rope cannot stretch beyond this), px.
+   * Set to INFINITE_REACH so the wire never clamps reel-out and a moving giant
+   * can never drag the anchor "out of reach" and auto-detach in practice.
+   */
+  MAX_LENGTH: 4000,
   /** Minimum rope length when reeling all the way in, px. */
   MIN_LENGTH: 24,
   /** Speed the hook projectile travels from muzzle to anchor, px/s. */
