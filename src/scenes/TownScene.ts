@@ -124,6 +124,8 @@ export class TownScene extends Phaser.Scene {
   // per-visit widgets (created in create(), cleaned up on SHUTDOWN) so
   // re-entering the Town never touches destroyed objects (Town re-entry fix).
   private objectiveBanner?: Phaser.GameObjects.Container;
+  /** Heading line of the banner: '다음 목표 · <step label>'. */
+  private objectiveHeading?: Phaser.GameObjects.Text;
   private objectiveLabel?: Phaser.GameObjects.Text;
   private objectivePointer?: Phaser.GameObjects.Container;
   /** The objective id currently reflected in the banner/pointer, or null. */
@@ -169,6 +171,7 @@ export class TownScene extends Phaser.Scene {
     // references to the destroyed banner/pointer from a previous visit (the
     // same class of bug the resourceWidgets/markers reset guards against).
     this.objectiveBanner = undefined;
+    this.objectiveHeading = undefined;
     this.objectiveLabel = undefined;
     this.objectivePointer = undefined;
     this.currentObjectiveId = null;
@@ -220,6 +223,7 @@ export class TownScene extends Phaser.Scene {
       this.objectiveBanner?.destroy();
       this.objectivePointer?.destroy();
       this.objectiveBanner = undefined;
+      this.objectiveHeading = undefined;
       this.objectiveLabel = undefined;
       this.objectivePointer = undefined;
       this.saveNow();
@@ -785,36 +789,46 @@ export class TownScene extends Phaser.Scene {
    * pulsing ring + a bobbing downward arrow). Both start hidden; the per-frame
    * refresh shows/positions them from the ObjectiveSystem.
    *
-   * The banner sits in CLEAR space just above the bottom action bar, well below
-   * every HUD band (resource row, warmth y=60, output/FREEZING y=84, hint
-   * y=108) and centred within the HUD margins so it never collides with them.
+   * The banner sits in the CLEAR band directly below the HUD (the resource row,
+   * warmth strip y=60, output/FREEZING y=84, and hint y=108) and ABOVE the
+   * town's building sprites - the topmost of which, the Furnace, begins at
+   * y=186 (centre 250, 64px frame at scale 2.0). Placed at y=150 the ~44px
+   * strip (y=128..172) clears the hint band beneath (y=108) and never collides
+   * with the on-map building sprites or their overhead "Lv.N 필요" unlock
+   * labels lower down (which previously overlapped it at y=458). A solid dark
+   * backing keeps it legible above the town art. The banner now shows the
+   * objective's short LABEL as a heading with the longer instruction beneath,
+   * so a new player reads both "what" and "how" for the current step.
    */
   private buildObjectiveGuidance(): void {
     const M = TownScene.HUD_MARGIN;
-    // Banner band: a compact strip above the bottom action bar (bar centred at
-    // HEIGHT-30). Placed at y=482 so it clears the bar and sits well below the
-    // hint band at y=108 and the building sprites.
+    // Banner band: a compact two-line strip in the clear space just below the
+    // HUD hint band (y=108) and above the Furnace sprite (top edge y=186).
     const bannerW = CANVAS.WIDTH - M * 2 - 320; // leave room for side panels
-    const bannerH = 40;
+    const bannerH = 44;
     const bannerX = CANVAS.WIDTH / 2;
-    const bannerY = 458;
+    const bannerY = 150;
 
     const banner = this.add.container(0, 0).setDepth(40).setVisible(false);
     const bg = this.add
-      .rectangle(bannerX, bannerY, bannerW, bannerH, 0x0d1420, 0.82)
+      .rectangle(bannerX, bannerY, bannerW, bannerH, 0x0d1420, 0.9)
       .setOrigin(0.5)
       .setStrokeStyle(2, PALETTE.ACCENT, 0.9);
-    // Two-line layout: heading on top, instruction below, both fitting the
-    // 40px strip.
+    // Two-line layout: the "다음 목표 · <step label>" heading on top, the
+    // instruction below, both fitting the 44px strip. The heading surfaces the
+    // objective LABEL (previously defined + tested but never rendered) so the
+    // step's short title reads above its longer instruction.
     const heading = this.add
       .text(bannerX - bannerW / 2 + 14, bannerY - 11, tr('objective.title'), textStyle(12, { fontStyle: 'bold', color: PALETTE.ACCENT_CSS }))
-      .setOrigin(0, 0.5);
+      .setOrigin(0, 0.5)
+      .setShadow(0, 1, '#000000', 2, true, true);
     const instruction = this.add
-      .text(bannerX - bannerW / 2 + 14, bannerY + 9, '', textStyle(12, { color: PALETTE.FROST_CSS }))
+      .text(bannerX - bannerW / 2 + 14, bannerY + 10, '', textStyle(12, { color: PALETTE.FROST_CSS }))
       .setOrigin(0, 0.5)
       .setShadow(0, 1, '#000000', 2, true, true);
     banner.add([bg, heading, instruction]);
     this.objectiveBanner = banner;
+    this.objectiveHeading = heading;
     this.objectiveLabel = instruction;
 
     // The pointer/glow: a pulsing ring + a bobbing arrow, all original graphics.
@@ -841,7 +855,7 @@ export class TownScene extends Phaser.Scene {
    * already complete only ever sees the transient low-warmth advisory.
    */
   private refreshObjectiveGuidance(now: number): void {
-    if (!this.objectiveBanner || !this.objectivePointer || !this.objectiveLabel) return;
+    if (!this.objectiveBanner || !this.objectivePointer || !this.objectiveLabel || !this.objectiveHeading) return;
 
     const view = this.buildObjectiveView();
     const guidedDone = this.state.onboarding.guidedComplete;
@@ -880,6 +894,9 @@ export class TownScene extends Phaser.Scene {
     this.currentObjectiveId = objective.id;
 
     this.objectiveBanner.setVisible(true);
+    // Heading: the persistent title plus the current step's short LABEL, so the
+    // banner reads "다음 목표 · 용광로 올리기" with the instruction beneath.
+    this.objectiveHeading.setText(`${tr('objective.title')} · ${tr(objective.label)}`);
     this.objectiveLabel.setText(tr(objective.instruction));
 
     // Position the pointer over the target building's map slot (above its

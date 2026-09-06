@@ -136,7 +136,6 @@ export const STRINGS = {
     en: 'Warmth is low. Keep timber and coal stocked and upgrade the Furnace to burn fuel more efficiently.',
     ko: '온기가 낮습니다. 목재와 석탄을 채워 두고 용광로를 올려 연료를 더 효율적으로 태우세요.',
   },
-  'objective.done': { en: 'The core loop is yours. Well done!', ko: '기본 흐름을 익혔습니다. 훌륭해요!' },
 
   // Warmth (the signature frozen-survival mechanic).
   'warmth.label': { en: 'Warmth', ko: '온기' },
