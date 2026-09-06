@@ -61,7 +61,7 @@ export const STRINGS = {
   'town.settings': { en: 'Settings', ko: '설정' },
   'town.hint': { en: 'Tap a building to upgrade   R Research   H Heroes   Q Quests   B Battle   S Settings', ko: '건물을 눌러 업그레이드   R 연구   H 영웅   Q 임무   B 전투   S 설정' },
   'town.locked': { en: 'Locked', ko: '잠김' },
-  'town.buildable': { en: 'Build', ko: '건설 가능' },
+  'town.buildable': { en: 'Buildable', ko: '건설 가능' },
   'town.lockedReason': {
     en: 'Locked (needs Town Center Lv.{level})',
     ko: '잠김 (중앙 청사 Lv.{level} 필요)',

@@ -72,9 +72,10 @@ export class QuestPanel {
     const cx = CANVAS.WIDTH / 2;
     const cy = CANVAS.HEIGHT / 2;
     const panelW = 720;
-    // Grow toward the 540 canvas (centered at cy=270 -> top 10 / bottom 530)
-    // so all 8 two-line quest rows (incl. reward text) sit above Close.
-    const panelH = 520;
+    // Grow toward the 540 canvas (centered at cy=270 -> top 6 / bottom 534, a
+    // small margin off the canvas edges) so all 9 two-line quest rows (incl.
+    // the two-line reward text) sit fully inside with Close clear below them.
+    const panelH = 528;
 
     const backdrop = this.scene.add
       .rectangle(0, 0, CANVAS.WIDTH, CANVAS.HEIGHT, 0x000000, 0.55)
@@ -87,23 +88,25 @@ export class QuestPanel {
     panel.setInteractive();
     this.root.add(panel);
 
-    this.root.add(Menu.title(this.scene, cx, cy - panelH / 2 + 26, tr('quest.title'), 28));
+    this.root.add(Menu.title(this.scene, cx, cy - panelH / 2 + 24, tr('quest.title'), 28));
 
     this.summaryText = this.scene.add
-      .text(cx, cy - panelH / 2 + 52, '', textStyle(13, { color: PALETTE.SUCCESS_CSS, align: 'center' }))
+      .text(cx, cy - panelH / 2 + 46, '', textStyle(13, { color: PALETTE.SUCCESS_CSS, align: 'center' }))
       .setOrigin(0.5);
     this.root.add(this.summaryText);
 
     const left = cx - panelW / 2 + 30;
-    // Tightened from 50 so all 8 rows plus their reward text fit above Close.
-    const rowStep = 48;
-    let y = cy - panelH / 2 + 78;
+    // Tightened to 44 so all 9 rows plus their two-line reward text fit above
+    // Close: last row starts at 76 + 44*8 = 428, its reward wraps to ~468, and
+    // Close (centered at 510, ~44 tall -> top 488) stays clearly below.
+    const rowStep = 44;
+    let y = cy - panelH / 2 + 70;
     for (const quest of QUEST_ORDER) {
       this.buildQuestRow(quest, left, y, panelW - 60);
       y += rowStep;
     }
 
-    const close = Menu.button(this.scene, cx, cy + panelH / 2 - 26, tr('common.close'), () => this.setVisible(false), {
+    const close = Menu.button(this.scene, cx, cy + panelH / 2 - 24, tr('common.close'), () => this.setVisible(false), {
       width: 180,
     });
     this.root.add(close.container);
