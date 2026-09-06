@@ -27,13 +27,22 @@ export const TEXT_RESOLUTION = Math.max(
 );
 
 /**
- * Font stack for all UI text. Naming concrete, widely-shipped monospace faces
- * first gives a consistent, sharp glyph grid across platforms and only falls
- * back to the generic keyword last (a bare `monospace` often resolves to a
- * blurry platform default).
+ * Font stack for all UI text. The game is Korean-first (한국어), so the stack
+ * MUST lead with a Hangul-capable face or every Korean glyph renders as a tofu
+ * box (□) on environments without a Korean system font (headless Chromium, many
+ * user machines). We ship "GalmuriMono9" - a self-hosted pixel/bitmap monospace
+ * Korean webfont (SIL OFL-1.1, bundled under public/assets/fonts and declared
+ * via @font-face in index.html) - which covers all 11,172 modern Hangul
+ * syllables plus Latin/digits and matches the game's crisp retro monospace
+ * look. The Latin monospace faces stay after it as fallbacks (and would only be
+ * used for the brief window before the webfont loads; render is gated on
+ * document.fonts in main.ts). The generic `monospace` keyword is last.
+ *
+ * IMPORTANT: the leading family name here must match the @font-face
+ * `font-family` in index.html exactly (GalmuriMono9).
  */
 export const UI_FONT_FAMILY =
-  '"DejaVu Sans Mono", "Consolas", "Liberation Mono", "Menlo", "Courier New", monospace';
+  '"GalmuriMono9", "DejaVu Sans Mono", "Consolas", "Liberation Mono", "Menlo", "Courier New", monospace';
 
 /**
  * Build a monospace text style with the crisp text resolution baked in, using

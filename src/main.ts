@@ -72,5 +72,57 @@ const config: Phaser.Types.Core.GameConfig = {
   ],
 };
 
-// eslint-disable-next-line no-new
-new Phaser.Game(config);
+/**
+ * The UI is Korean-first and every glyph is drawn by Phaser to its own texture,
+ * with metrics cached on first draw. If Phaser boots before the bundled Hangul
+ * webfont (GalmuriMono9, declared via @font-face in index.html) is ready, those
+ * first frames rasterize Korean text with the Latin-only fallback as tofu boxes
+ * (□) and cache the wrong glyphs. So we WAIT for the font to load before
+ * constructing the game.
+ *
+ * We ask the FontFaceSet to load the exact family at a representative size with
+ * a Hangul sample ('한글') so the download is actually kicked off, then also
+ * await document.fonts.ready. A short timeout guarantees the game still boots
+ * (with the fallback stack) if the Font Loading API is unavailable or stalls,
+ * rather than leaving a blank screen.
+ */
+const FONT_FAMILY = 'GalmuriMono9';
+const FONT_SAMPLE = '한글';
+const FONT_TIMEOUT_MS = 3000;
+
+function startGame(): void {
+  // eslint-disable-next-line no-new
+  new Phaser.Game(config);
+}
+
+function whenFontReady(): Promise<void> {
+  const fonts = (document as Document & { fonts?: FontFaceSet }).fonts;
+  if (!fonts || typeof fonts.load !== 'function') {
+    return Promise.resolve();
+  }
+  // Load the font at the largest size the UI draws (the Title/brand at 32px) so
+  // its glyphs are available before the first text is rasterized.
+  const loads = ['16px', '32px'].map((size) =>
+    fonts.load(`${size} "${FONT_FAMILY}"`, FONT_SAMPLE).catch(() => undefined),
+  );
+  return Promise.all([Promise.all(loads), fonts.ready]).then(() => undefined);
+}
+
+function bootWhenFontReady(): void {
+  let started = false;
+  const boot = (): void => {
+    if (started) return;
+    started = true;
+    startGame();
+  };
+  // Never block the game forever on a stalled/absent font loader.
+  const timer = window.setTimeout(boot, FONT_TIMEOUT_MS);
+  whenFontReady()
+    .catch(() => undefined)
+    .then(() => {
+      window.clearTimeout(timer);
+      boot();
+    });
+}
+
+bootWhenFontReady();
