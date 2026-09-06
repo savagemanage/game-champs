@@ -7,6 +7,7 @@ import { QuestSystem } from './QuestSystem';
 import { ResearchSystem } from './ResearchSystem';
 import { ResourceStore } from './ResourceStore';
 import { TrainingQueue } from './TrainingQueue';
+import { WarmthSystem } from './WarmthSystem';
 
 /**
  * Current save-format version. Bump when the GameState shape changes.
@@ -27,11 +28,16 @@ import { TrainingQueue } from './TrainingQueue';
  *     read. A v1/v2/v3 save (no quests/counters) still loads: deserialize()
  *     default-constructs a fresh, empty QuestSystem and zeroes the counters
  *     when the fields are missing, exactly like the earlier migrations.
+ * v5: adds the `warmth` field (the keep's Hearth warmth scalar). A v1..v4 save
+ *     (no warmth) still loads: WarmthSystem.fromJSON default-constructs a
+ *     fully-WARM keep when the field is missing/malformed, so old saves migrate
+ *     forward to a warm start rather than a frozen one, exactly like the
+ *     earlier migrations.
  */
-export const SAVE_VERSION = 4;
+export const SAVE_VERSION = 5;
 
 /** Save versions this build can load and migrate forward from. */
-export const SUPPORTED_SAVE_VERSIONS: readonly number[] = [1, 2, 3, 4];
+export const SUPPORTED_SAVE_VERSIONS: readonly number[] = [1, 2, 3, 4, 5];
 
 /** Default localStorage key for the single save slot. */
 export const SAVE_KEY = 'kingdom-rise:save';
@@ -55,6 +61,7 @@ export interface GameSnapshot {
   research: ResearchSystem;
   heroes: HeroSystem;
   quests: QuestSystem;
+  warmth: WarmthSystem;
   waveCleared: number;
   /** Cumulative troops trained over the game's lifetime (a quest counter). */
   troopsTrained: number;
@@ -101,6 +108,7 @@ export class SaveManager {
       quests: snapshot.quests.toJSON(),
       troopsTrained: Math.max(0, Math.floor(snapshot.troopsTrained)),
       battlesWon: Math.max(0, Math.floor(snapshot.battlesWon)),
+      warmth: snapshot.warmth.toJSON(),
       lastSeenAt: now,
     };
   }
@@ -130,22 +138,12 @@ export class SaveManager {
     // default-constructs a fresh (nothing-claimed) log when missing/malformed,
     // and the counters default to 0, so the migration never crashes.
     const quests = QuestSystem.fromJSON(state.quests);
+    // v1..v4 saves omit `warmth`; WarmthSystem.fromJSON default-constructs a
+    // fully-warm keep when the field is missing/malformed, so old saves migrate
+    // forward to a warm start rather than a frozen one.
+    const warmth = WarmthSystem.fromJSON(state.warmth);
     const troopsTrained = Math.max(0, Math.floor(state.troopsTrained ?? 0));
     const battlesWon = Math.max(0, Math.floor(state.battlesWon ?? 0));
-
-    // Production multipliers applied to offline reconciliation:
-    //  - production:  research production techs AND the active economy hero
-    //                 both scale the rates (composed multiplicatively).
-    //  - storage:     raises the soft cap so offline gains can fill higher.
-    //  - offline eff: scales ECONOMY.OFFLINE_EFFICIENCY (>1 = more).
-    const prodMult = research.productionMultiplier() * heroes.economyMultiplier();
-    const capMult = research.storageMultiplier();
-    const eff = ECONOMY.OFFLINE_EFFICIENCY * research.offlineEfficiencyMultiplier();
-    const boost = (rates: ReturnType<BuildingSystem['productionRates']>): typeof rates => {
-      const out = ResourceStore.emptyBundle();
-      for (const res of RESOURCE_ORDER) out[res] = (rates[res] ?? 0) * prodMult;
-      return out;
-    };
 
     // Training that finished while away joins the army. (Trained troops do not
     // produce resources, so this ordering has no bearing on offline gains.)
@@ -166,30 +164,52 @@ export class SaveManager {
     // The instant, in epoch ms, at which the credited (capped) window begins.
     const windowStart = now - offlineSeconds * 1000;
 
-    // Upgrades that completed BEFORE the credited window began (possible when
-    // raw offline time exceeds the cap) were already at their new level for the
-    // whole credited window, so apply them up front.
-    buildings.update(windowStart);
+    // Static (window-constant) production multipliers applied to offline
+    // reconciliation:
+    //  - production:  research production techs AND the active economy hero
+    //                 scale the rates (composed multiplicatively). The Hearth
+    //                 WARMTH multiplier is applied SEPARATELY per step below,
+    //                 because warmth itself evolves across the window as the
+    //                 hearth burns / runs out of firewood.
+    //  - storage:     raises the soft cap so offline gains can fill higher.
+    //  - offline eff: scales ECONOMY.OFFLINE_EFFICIENCY (>1 = more).
+    const staticProdMult = research.productionMultiplier() * heroes.economyMultiplier();
+    const capMult = research.storageMultiplier();
+    const eff = ECONOMY.OFFLINE_EFFICIENCY * research.offlineEfficiencyMultiplier();
 
+    // Offline reconciliation as a fixed-step SIMULATION over the credited
+    // window, mirroring the live GameState.tick seam exactly: each step credits
+    // production (scaled by the current warmth multiplier) and THEN advances the
+    // Hearth (burning the firewood on hand, or decaying when cold). Stepping
+    // (rather than one big multiply) matters because warmth changes over the
+    // window - a keep whose woodpile runs dry mid-absence produces less for the
+    // rest of it, and a lumber mill's freshly produced wood is available to the
+    // hearth on the next step. Buildings are advanced each step so upgrades that
+    // finish mid-window raise the rates from that point on. Deterministic given
+    // the same inputs. Capped at MAX_OFFLINE_SECONDS so the step count is
+    // bounded.
+    const stepMs = ECONOMY.TICK_MS;
     const offlineGains = ResourceStore.emptyBundle();
     let cursor = windowStart;
-    // Sorted upgrade-completion instants strictly inside the credited window.
-    const boundaries = buildings
-      .pendingCompletions()
-      .filter((t) => t > windowStart && t < now)
-      .sort((a, b) => a - b);
-
-    for (const boundary of boundaries) {
-      // Credit production at the CURRENT (pre-completion) rates up to this
-      // boundary, then apply the completion so later segments use higher rates.
-      accumulate(offlineGains, resources.applyProduction(boost(buildings.productionRates()), boundary - cursor, eff, capMult));
-      buildings.update(boundary);
-      cursor = boundary;
+    // Apply upgrades that completed before the window began (over-cap case).
+    buildings.update(windowStart);
+    while (cursor < now) {
+      const stepEnd = Math.min(now, cursor + stepMs);
+      const dt = stepEnd - cursor;
+      const tcLevel = buildings.townCenterLevel;
+      const prodMult = staticProdMult * warmth.productionMultiplier(tcLevel);
+      const rates = buildings.productionRates();
+      const boosted = ResourceStore.emptyBundle();
+      for (const res of RESOURCE_ORDER) boosted[res] = (rates[res] ?? 0) * prodMult;
+      accumulate(offlineGains, resources.applyProduction(boosted, dt, eff, capMult));
+      // Advance the Hearth for this step (burns/decays; spends wood on hand).
+      warmth.tick(dt, tcLevel, resources);
+      // Apply any upgrade that completed within this step so the next step uses
+      // the higher rates / warmth ceiling.
+      buildings.update(stepEnd);
+      cursor = stepEnd;
     }
-    // Final segment: from the last boundary (or window start) to `now`.
-    accumulate(offlineGains, resources.applyProduction(boost(buildings.productionRates()), now - cursor, eff, capMult));
-    // Finish any upgrades whose timer elapsed exactly at/after `now` bookkeeping
-    // (also completes upgrades that ended before the capped window began).
+    // Final bookkeeping: finish any upgrade whose timer elapsed at/after `now`.
     buildings.update(now);
 
     return {
@@ -200,6 +220,7 @@ export class SaveManager {
         research,
         heroes,
         quests,
+        warmth,
         waveCleared: state.waveCleared ?? 0,
         troopsTrained,
         battlesWon,
@@ -219,6 +240,7 @@ export class SaveManager {
       research: new ResearchSystem(),
       heroes: new HeroSystem(),
       quests: new QuestSystem(),
+      warmth: new WarmthSystem(),
       waveCleared: 0,
       troopsTrained: 0,
       battlesWon: 0,

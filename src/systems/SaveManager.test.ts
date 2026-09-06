@@ -6,7 +6,8 @@ import { TrainingQueue } from './TrainingQueue';
 import { ResearchSystem } from './ResearchSystem';
 import { HeroSystem } from './HeroSystem';
 import { QuestSystem } from './QuestSystem';
-import { ECONOMY } from '../config/GameConfig';
+import { WarmthSystem } from './WarmthSystem';
+import { ECONOMY, WARMTH } from '../config/GameConfig';
 import { outputPerSec } from '../config/BuildingConfig';
 import { troopDef } from '../config/TroopConfig';
 
@@ -26,6 +27,7 @@ describe('SaveManager', () => {
     const research = new ResearchSystem();
     const heroes = new HeroSystem();
     const quests = new QuestSystem();
+    const warmth = new WarmthSystem();
     return {
       resources,
       buildings,
@@ -33,6 +35,7 @@ describe('SaveManager', () => {
       research,
       heroes,
       quests,
+      warmth,
       waveCleared: 5,
       troopsTrained: 0,
       battlesWon: 0,
@@ -322,18 +325,61 @@ describe('SaveManager', () => {
     const storage = memoryStorage();
     const mgr = new SaveManager(storage);
     const saveTime = 0;
-    mgr.save(snapshot(), saveTime);
+    // Stock enough firewood that the Hearth stays fully warm for the whole
+    // window (burn is 0.5 wood/s -> 1800 wood over 3600s), so the warmth
+    // production multiplier is exactly 1.0 and does not throttle these gains.
+    // This isolates the offline production math from the (separately tested)
+    // warmth throttle.
+    const snap = snapshot();
+    snap.resources.add({ wood: 5000 });
+    const woodBefore = snap.resources.get('wood');
+    // Start already AT the warmth ceiling for this TC level (L3 -> 140) so the
+    // keep is fully warm from the first step and the multiplier is exactly 1.0.
+    snap.warmth = new WarmthSystem(snap.warmth.maxWarmth(3));
+    mgr.save(snap, saveTime);
 
     const elapsedSec = 3600; // 1 hour, under the 8h cap
     const loaded = mgr.load(saveTime + elapsedSec * 1000);
     expect(loaded.offlineSeconds).toBe(elapsedSec);
 
-    // Only the level-2 farm produces (food). Expected = rate * seconds * efficiency.
+    // Only the level-2 farm produces (food). Warmth stayed full (mult 1.0), so
+    // expected = rate * seconds * efficiency, unchanged by the Hearth.
     const expectedFood = outputPerSec('farm', 2) * elapsedSec * ECONOMY.OFFLINE_EFFICIENCY;
     expect(loaded.offlineGains.food).toBeCloseTo(expectedFood, 4);
     expect(loaded.snapshot.resources.get('food')).toBeCloseTo(100 + expectedFood, 4);
     // Non-produced resources are unchanged.
     expect(loaded.snapshot.resources.get('stone')).toBe(300);
+    // The keep stayed fully warm and the woodpile was only drawn down by the
+    // hearth's firewood burn over the window (no wood producer here). At TC L3
+    // the burn is reduced by the fuel-efficiency factor.
+    const burned = new WarmthSystem().fuelPerSecond(3).wood * elapsedSec;
+    expect(loaded.snapshot.resources.get('wood')).toBeCloseTo(woodBefore - burned, 3);
+    expect(loaded.snapshot.warmth.warmth).toBe(loaded.snapshot.warmth.maxWarmth(3));
+  });
+
+  it('throttles offline production toward the floor when the woodpile runs dry', () => {
+    // Mirror of the above but WITHOUT enough firewood: the Hearth burns through
+    // the wood on hand, goes cold, warmth decays, and offline production is
+    // throttled below the full-warmth amount (but never to zero - it sinks
+    // toward the WARMTH_PRODUCTION_FLOOR). This proves the warmth throttle is
+    // wired into offline reconciliation, not just the live tick.
+    const storage = memoryStorage();
+    const mgr = new SaveManager(storage);
+    const snap = snapshot(); // farm L2 (food only), TC L3, modest wood
+    mgr.save(snap, 0);
+
+    const elapsedSec = 3600;
+    const loaded = mgr.load(elapsedSec * 1000);
+
+    const fullWarmthFood = outputPerSec('farm', 2) * elapsedSec * ECONOMY.OFFLINE_EFFICIENCY;
+    const floorFood = fullWarmthFood * WARMTH.WARMTH_PRODUCTION_FLOOR;
+    // Strictly less than full-warmth output (throttled) ...
+    expect(loaded.offlineGains.food).toBeLessThan(fullWarmthFood);
+    // ... but strictly above the hard floor (warmth started full, decayed over
+    // time), and comfortably positive.
+    expect(loaded.offlineGains.food).toBeGreaterThan(floorFood);
+    // The hearth ran cold: warmth ended at 0 after a long unfueled span.
+    expect(loaded.snapshot.warmth.warmth).toBe(0);
   });
 
   it('splits the offline window at an upgrade boundary rather than over-crediting', () => {
@@ -346,7 +392,10 @@ describe('SaveManager', () => {
     const t0 = 1_000_000;
     const windowSec = 1000;
     const boundaryOffset = 600; // seconds into the window the upgrade completes
-    const resources = new ResourceStore({ food: 0, wood: 0, stone: 0, gold: 0 });
+    // Ample firewood so the Hearth stays fully warm (mult 1.0) across the whole
+    // window - this test isolates the upgrade-boundary split from the warmth
+    // throttle (covered by its own tests).
+    const resources = new ResourceStore({ food: 0, wood: 5000, stone: 0, gold: 0 });
     const buildings = new BuildingSystem([
       { kind: 'town_center', level: 3, upgradeEndsAt: null },
       { kind: 'farm', level: 2, upgradeEndsAt: t0 + boundaryOffset * 1000 },
@@ -360,6 +409,9 @@ describe('SaveManager', () => {
         research: new ResearchSystem(),
         heroes: new HeroSystem(),
         quests: new QuestSystem(),
+        // Start at the warmth ceiling for TC L3 (140) so the keep is fully warm
+        // (mult 1.0) throughout - this test isolates the upgrade-boundary split.
+        warmth: new WarmthSystem(new WarmthSystem().maxWarmth(3)),
         waveCleared: 0,
         troopsTrained: 0,
         battlesWon: 0,

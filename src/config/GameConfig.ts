@@ -155,6 +155,72 @@ export const COMBAT = {
 } as const;
 
 /**
+ * HEARTH / KEEP WARMTH - a self-contained survival layer ported from the
+ * "Frosthold: Last Ember" prototype and re-themed for Kingdom Rise's medieval
+ * world. The keep's great Hearth (화롯불) must be kept burning: every tick it
+ * consumes firewood to sustain Warmth (온기). While there is wood to burn,
+ * warmth climbs toward its ceiling; when the woodpile runs dry the hearth goes
+ * cold and warmth decays, throttling idle production toward a floor (a chilled,
+ * demoralized town works slower) rather than stopping it outright.
+ *
+ * RE-THEME NOTE: the Frosthold original burned wood + coal. Kingdom Rise has no
+ * coal (its resources are food/wood/stone/gold), so the hearth burns WOOD ONLY
+ * - a single, intuitive firewood sink drawn from the same lumber economy. The
+ * warmth CEILING and fuel EFFICIENCY are tied to the existing central building,
+ * the TOWN CENTER (its level plays the role Frosthold's Furnace did), so no new
+ * building is required: raising the Town Center both warms a larger keep and
+ * makes every log burn longer.
+ *
+ * Numbers are balanced against the early economy (ECONOMY.START.wood = 400 and
+ * a lumber mill producing a few wood/sec): a base burn of 0.5 wood/sec is a
+ * meaningful but non-punishing sink - a town with any lumber income stays warm
+ * and at full output, while neglecting wood visibly (but not fatally) bites,
+ * sinking production toward WARMTH_PRODUCTION_FLOOR rather than to zero.
+ */
+export const WARMTH = {
+  /** Baseline maximum warmth at Town Center level 1. */
+  MAX_WARMTH: 100,
+  /** Extra maximum warmth granted per Town Center level above 1. */
+  MAX_WARMTH_PER_LEVEL: 20,
+  /**
+   * Base firewood burned per second at Town Center level 1 to sustain warmth.
+   * Wood-only (medieval hearth): the sole fuel is timber from the lumber
+   * economy. Higher Town Center levels burn LESS via FUEL_EFFICIENCY_PER_LEVEL
+   * (a grander keep gets more heat from every log).
+   */
+  FUEL_PER_SECOND: { wood: 0.5 },
+  /**
+   * Fractional reduction in fuel burn per Town Center level above 1 (e.g. 0.05
+   * = 5% cheaper per level). Clamped so burn never drops below FUEL_MIN_FACTOR
+   * of the base, keeping firewood always meaningful.
+   */
+  FUEL_EFFICIENCY_PER_LEVEL: 0.05,
+  /** Lower bound on the fuel-burn multiplier from efficiency (40% of base). */
+  FUEL_MIN_FACTOR: 0.4,
+  /** Warmth points gained per second while the hearth is fueled. */
+  WARMTH_GAIN_PER_SEC: 8,
+  /** Warmth points lost per second while the hearth is cold / unfueled. */
+  WARMTH_DECAY_PER_SEC: 5,
+  /**
+   * Production-penalty curve: at full warmth (ratio 1) production runs at 1.0x;
+   * at zero warmth it is throttled to WARMTH_PRODUCTION_FLOOR. In between the
+   * multiplier scales LINEARLY between the floor and 1.0 with the warmth ratio.
+   */
+  WARMTH_PRODUCTION_FLOOR: 0.25,
+} as const;
+
+/**
+ * Pure helper: the idle-production multiplier for a given warmth ratio
+ * (current warmth / max warmth, expected in [0,1] but clamped defensively).
+ * Linearly interpolates from WARMTH.WARMTH_PRODUCTION_FLOOR at ratio 0 to 1.0
+ * at ratio 1, so callers (WarmthSystem, tests, UI) share one curve definition.
+ */
+export function warmthProductionMultiplier(warmthRatio: number): number {
+  const ratio = Math.min(1, Math.max(0, warmthRatio));
+  return WARMTH.WARMTH_PRODUCTION_FLOOR + (1 - WARMTH.WARMTH_PRODUCTION_FLOOR) * ratio;
+}
+
+/**
  * The four resource kinds, as an ordered tuple so UI and iteration share one
  * canonical order. The ResourceKind union type is derived in src/types.
  */

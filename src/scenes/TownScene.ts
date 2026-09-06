@@ -63,6 +63,9 @@ export class TownScene extends Phaser.Scene {
   private resourceWidgets: ResourceWidget[] = [];
   private markers: BuildingMarker[] = [];
   private defenseLabel!: Phaser.GameObjects.Text;
+  private warmthLabel!: Phaser.GameObjects.Text;
+  private warmthBar!: ProgressBar;
+  private warmthWarning!: Phaser.GameObjects.Text;
 
   private trainingPanel!: TrainingPanel;
   private researchPanel!: ResearchPanel;
@@ -215,6 +218,21 @@ export class TownScene extends Phaser.Scene {
       .text(CANVAS.WIDTH - 12, 52, '', textStyle(13, { color: PALETTE.ACCENT_CSS, fontStyle: 'bold' }))
       .setOrigin(1, 0.5)
       .setDepth(5);
+
+    // Hearth WARMTH (온기) meter: the keep's central hearth must stay lit or
+    // production is throttled. A labelled bar sits top-left just under the
+    // resource bar, with a prominent low-warmth warning when the fire dies.
+    this.warmthLabel = this.add
+      .text(20, 52, '', textStyle(13, { color: PALETTE.ACCENT_CSS, fontStyle: 'bold' }))
+      .setOrigin(0, 0.5)
+      .setDepth(5);
+    this.warmthBar = Menu.progressBar(this, 150, 52, 120, 10, PALETTE.ACCENT);
+    this.warmthBar.container.setDepth(5);
+    this.warmthWarning = this.add
+      .text(150, 70, '', textStyle(11, { color: PALETTE.DANGER_CSS, fontStyle: 'bold' }))
+      .setOrigin(0, 0.5)
+      .setDepth(5)
+      .setVisible(false);
   }
 
   private refreshResourceBar(): void {
@@ -225,6 +243,28 @@ export class TownScene extends Phaser.Scene {
       w.rate.setText(rate > 0 ? tr('resource.perSecond', { amount: rate.toFixed(1) }) : '');
     }
     this.defenseLabel.setText(tr('town.defense', { value: Math.round(this.state.townDefense()) }));
+    this.refreshWarmth();
+  }
+
+  /**
+   * Update the Hearth warmth meter. The bar fills with the current warmth ratio
+   * and its colour shifts from warm accent -> danger as the fire dies; below a
+   * quarter warmth a legible warning tells the player to stock wood (the same
+   * "explain the state" care used for the Barracks / research locks).
+   */
+  private refreshWarmth(): void {
+    const ratio = this.state.warmthRatio();
+    const pct = Math.round(ratio * 100);
+    this.warmthLabel.setText(tr('town.warmth', { pct }));
+    this.warmthBar.setProgress(ratio);
+    const low = ratio < 0.35;
+    this.warmthBar.setFillColor(low ? PALETTE.DANGER : PALETTE.ACCENT);
+    this.warmthLabel.setColor(low ? PALETTE.DANGER_CSS : PALETTE.ACCENT_CSS);
+    if (low) {
+      this.warmthWarning.setText(tr('town.warmthLow')).setVisible(true);
+    } else {
+      this.warmthWarning.setVisible(false);
+    }
   }
 
   // ---- Bottom action bar ---------------------------------------------------

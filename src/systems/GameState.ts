@@ -8,6 +8,7 @@ import { QuestSystem } from './QuestSystem';
 import { ResearchSystem } from './ResearchSystem';
 import { ResourceStore } from './ResourceStore';
 import { TrainingQueue } from './TrainingQueue';
+import { WarmthSystem } from './WarmthSystem';
 import {
   SaveManager,
   browserStorage,
@@ -43,6 +44,7 @@ export class GameState {
   readonly research: ResearchSystem;
   readonly heroes: HeroSystem;
   readonly quests: QuestSystem;
+  readonly warmth: WarmthSystem;
   private _waveCleared: number;
   /** Cumulative troops trained over the game's lifetime (a quest counter). */
   private _troopsTrained: number;
@@ -66,6 +68,7 @@ export class GameState {
     this.research = result.snapshot.research;
     this.heroes = result.snapshot.heroes;
     this.quests = result.snapshot.quests;
+    this.warmth = result.snapshot.warmth;
     this._waveCleared = result.snapshot.waveCleared;
     this._troopsTrained = result.snapshot.troopsTrained;
     this._battlesWon = result.snapshot.battlesWon;
@@ -206,13 +209,33 @@ export class GameState {
   }
 
   /**
+   * The Hearth WARMTH production multiplier at the current Town Center level:
+   * 1.0 while the keep is fully warm, sinking toward WARMTH_PRODUCTION_FLOOR as
+   * warmth falls (a cold, demoralized town works slower). Composed into
+   * {@link economyMultiplier}.
+   */
+  warmthMultiplier(): number {
+    return this.warmth.productionMultiplier(this.buildings.townCenterLevel);
+  }
+
+  /** Current warmth as a ratio [0,1] of the max at the current Town Center level. */
+  warmthRatio(): number {
+    return this.warmth.warmthRatio(this.buildings.townCenterLevel);
+  }
+
+  /**
    * The COMPOSED economy/production multiplier: the research production techs
-   * multiplied by the active economy hero's bonus. Read at the live production
-   * seam ({@link tick}) and the offline reconciliation seam. Neutral (1) on a
-   * fresh game / no active economy hero.
+   * multiplied by the active economy hero's bonus AND the Hearth warmth
+   * multiplier. Read at the live production seam ({@link tick}) and the offline
+   * reconciliation seam. Neutral (1) on a fresh game with a fully-warm keep and
+   * no active economy hero; drops below 1 when warmth is low.
    */
   economyMultiplier(): number {
-    return this.research.productionMultiplier() * this.heroes.economyMultiplier();
+    return (
+      this.research.productionMultiplier() *
+      this.heroes.economyMultiplier() *
+      this.warmthMultiplier()
+    );
   }
 
   /** A serializable snapshot of the live systems for the save layer. */
@@ -224,6 +247,7 @@ export class GameState {
       research: this.research,
       heroes: this.heroes,
       quests: this.quests,
+      warmth: this.warmth,
       waveCleared: this._waveCleared,
       troopsTrained: this._troopsTrained,
       battlesWon: this._battlesWon,
@@ -243,14 +267,20 @@ export class GameState {
   } {
     if (deltaMs > 0) {
       // Live production seam: building rates are scaled by the COMPOSED economy
-      // multiplier (the research production techs multiplied by the active
-      // economy hero's bonus), and the storage soft cap is raised by the
-      // research storage multiplier. All default neutral on a fresh game.
+      // multiplier (the research production techs, the active economy hero's
+      // bonus, AND the Hearth warmth multiplier), and the storage soft cap is
+      // raised by the research storage multiplier. All default neutral on a
+      // fresh, fully-warm game.
       const rates = this.buildings.productionRates();
       const prodMult = this.economyMultiplier();
       const boosted = ResourceStore.emptyBundle();
       for (const res of RESOURCE_ORDER) boosted[res] = rates[res] * prodMult;
       this.resources.applyProduction(boosted, deltaMs, 1, this.research.storageMultiplier());
+      // Advance the Hearth AFTER crediting production, mirroring the offline
+      // reconciliation stepper: it burns the firewood on hand (including this
+      // tick's freshly produced wood) to sustain warmth, or decays when the
+      // woodpile is cold. This ties fuel -> warmth -> next tick's production.
+      this.warmth.tick(deltaMs, this.buildings.townCenterLevel, this.resources);
     }
     const buildingsDone = this.buildings.update(now);
     const trainingDone = this.training.advance(now);

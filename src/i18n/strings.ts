@@ -62,6 +62,13 @@ export const STRINGS = {
   'town.hint': { en: 'Tap a building to upgrade   R Research   H Heroes   Q Quests   B Battle   S Settings', ko: '건물을 눌러 업그레이드   R 연구   H 영웅   Q 임무   B 전투   S 설정' },
   'town.locked': { en: 'Locked', ko: '잠김' },
   'town.defense': { en: 'Town Defense: {value}', ko: '마을 방어력: {value}' },
+  // Hearth / Warmth (온기) survival layer.
+  'town.warmth': { en: 'Warmth: {pct}%', ko: '온기: {pct}%' },
+  'town.warmthLow': { en: 'Hearth dying! Stock wood', ko: '화롯불 꺼져감! 목재 확보' },
+  'town.warmthLowHint': {
+    en: 'The keep is going cold — production is slowing. Keep enough wood to feed the hearth.',
+    ko: '성이 식어 가고 있습니다 — 생산이 느려집니다. 화롯불을 지필 목재를 충분히 확보하세요.',
+  },
   'town.saved': { en: 'Saved', ko: '저장됨' },
   'town.onboarding': {
     en: 'Welcome! Your buildings gather resources over time. Tap the Town Center to upgrade it, raise a Farm for food, then train troops at the Barracks and march To Battle.',

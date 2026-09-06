@@ -176,6 +176,13 @@ export interface GameState {
    * OPTIONAL: defaults to 0 for saves predating the quests feature.
    */
   battlesWon?: number;
+  /**
+   * The keep's current Hearth warmth (온기) scalar. OPTIONAL for backward
+   * compatibility: saves predating the Hearth feature omit it, so the save
+   * layer treats a missing value as a fully-warm keep (a warm start), migrating
+   * old saves forward without penalty. Persisted as a plain number.
+   */
+  warmth?: number;
   /** Epoch ms of the last simulation update (drives offline reconciliation). */
   lastSeenAt: number;
 }

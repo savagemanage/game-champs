@@ -3,6 +3,7 @@ import { GameState } from './GameState';
 import { memoryStorage } from './SaveManager';
 import { TECH_DEFS } from '../config/ResearchConfig';
 import { QUEST_DEFS } from '../config/QuestConfig';
+import { WARMTH } from '../config/GameConfig';
 
 /**
  * GameState composition-seam tests.
@@ -131,6 +132,62 @@ describe('GameState composition seam', () => {
     expect(state.townDefense()).toBe(0);
     // townDefense is a straight passthrough to the aggregated building defense.
     expect(state.townDefense()).toBe(state.buildings.townDefense());
+  });
+
+  it('economyMultiplier composes the Hearth warmth factor (neutral when warm, throttled when cold)', () => {
+    const state = fresh();
+    // Fresh keep at TC L1 defaults to full warmth -> warmth factor 1.0 -> the
+    // composed economy multiplier is neutral.
+    expect(state.warmthRatio()).toBeCloseTo(1, 10);
+    expect(state.warmthMultiplier()).toBeCloseTo(1, 10);
+    expect(state.economyMultiplier()).toBe(1);
+
+    // Freeze the keep by ticking with no firewood on hand: warmth decays and
+    // the composed economy multiplier drops below 1 (a cold town works slower).
+    // Drain the store's wood first so the hearth cannot burn.
+    state.resources.subtract({ wood: state.resources.get('wood') });
+    // A long unfueled tick drains warmth to 0; production credited that tick is
+    // scaled by the (still non-zero, pre-decay) multiplier, but AFTER it the
+    // multiplier sits at the floor.
+    state.tick(NOW + 1_000_000, 1_000_000);
+    expect(state.warmthRatio()).toBe(0);
+    expect(state.warmthMultiplier()).toBeCloseTo(WARMTH.WARMTH_PRODUCTION_FLOOR, 10);
+    expect(state.economyMultiplier()).toBeCloseTo(WARMTH.WARMTH_PRODUCTION_FLOOR, 10);
+  });
+
+  it('a live tick burns firewood to sustain warmth and throttles production when cold', () => {
+    const state = fresh();
+    // Fund the farm upgrade with plenty of wood/stone/gold (kept well under the
+    // food storage cap so produced food has room to accrue).
+    state.resources.add({ wood: 5000, stone: 5000, gold: 5000 });
+    // Build a farm to L1 so there is a food producer with headroom under the cap.
+    const farm = state.buildings.startUpgrade('farm', state.resources, NOW);
+    expect(farm.ok).toBe(true);
+    state.buildings.update(NOW + state.buildings.nextUpgradeTimeMs('farm'));
+
+    // WARM case: with ample wood, one second of production is credited at the
+    // full warmth multiplier (1.0 at fresh TC L1). Warmth stays at max.
+    const warmFoodBefore = state.resources.get('food');
+    const warmWoodBefore = state.resources.get('wood');
+    state.tick(NOW + 1000, 1000);
+    const warmGain = state.resources.get('food') - warmFoodBefore;
+    expect(warmGain).toBeGreaterThan(0);
+    expect(state.warmthRatio()).toBeCloseTo(1, 10); // hearth stayed fueled
+    // The woodpile was drawn down by the hearth's firewood burn this tick.
+    expect(state.resources.get('wood')).toBeLessThan(warmWoodBefore);
+
+    // COLD case: drain all wood, then let warmth decay to the floor, and credit
+    // another second of production. It must be strictly less than the warm gain.
+    state.resources.subtract({ wood: state.resources.get('wood') });
+    state.tick(NOW + 2_000_000, 1_000_000 - 1000); // long unfueled span -> warmth 0
+    expect(state.warmthRatio()).toBe(0);
+    const coldFoodBefore = state.resources.get('food');
+    state.tick(NOW + 2_001_000, 1000);
+    const coldGain = state.resources.get('food') - coldFoodBefore;
+    expect(coldGain).toBeGreaterThan(0);
+    expect(coldGain).toBeLessThan(warmGain);
+    // At the floor the throttle is exactly WARMTH_PRODUCTION_FLOOR of the warm gain.
+    expect(coldGain).toBeCloseTo(warmGain * WARMTH.WARMTH_PRODUCTION_FLOOR, 6);
   });
 });
 
