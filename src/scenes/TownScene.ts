@@ -256,7 +256,9 @@ export class TownScene extends Phaser.Scene {
       this.resourceWidgets.push({ res, amount, rate });
     });
 
-    Menu.label(this, CANVAS.WIDTH / 2, 84, tr('town.hint'), 12, 0.55).setColor(PALETTE.MUTED_CSS);
+    // The gameplay hint sits in its own band BELOW the warmth strip (bar at
+    // y=60, efficiency readout at y=80) so the three HUD lines never overlap.
+    Menu.label(this, CANVAS.WIDTH / 2, 102, tr('town.hint'), 12, 0.55).setColor(PALETTE.MUTED_CSS);
 
     // Ember Sparks (premium) + survivor population readouts, top-right, just
     // under the resource bar so the expanded economy is always visible.
@@ -290,7 +292,9 @@ export class TownScene extends Phaser.Scene {
       .setOrigin(1, 0.5);
     const bar = Menu.progressBar(this, barX, barY, barW, 12, PALETTE.EMBER);
     const value = this.add.text(barX + barW + 12, barY, '', textStyle(12, { color: PALETTE.FROST_CSS })).setOrigin(0, 0.5);
-    const status = this.add.text(CANVAS.WIDTH / 2, barY + 16, '', textStyle(12, { fontStyle: 'bold' })).setOrigin(0.5);
+    // The efficiency / FREEZING readout sits in its own band just under the bar
+    // (barY=60 -> y=80), clear of both the bar above and the town.hint below.
+    const status = this.add.text(CANVAS.WIDTH / 2, barY + 20, '', textStyle(12, { fontStyle: 'bold' })).setOrigin(0.5);
 
     this.warmthWidgets = { bar, label, value, status };
   }
@@ -352,7 +356,11 @@ export class TownScene extends Phaser.Scene {
       return;
     }
     this.closeUpgradePanel();
-    const overlay = this.add.rectangle(0, 0, CANVAS.WIDTH, CANVAS.HEIGHT, 0x000000, 0.55).setOrigin(0, 0).setInteractive();
+    // A near-opaque backdrop fully dims the persistent Town HUD (resource bar,
+    // warmth strip, hint) so the menu's centered title never reads on top of
+    // that text; without it the 0.55 scrim let the HUD bleed through and the
+    // title collided with the warmth/hint band.
+    const overlay = this.add.rectangle(0, 0, CANVAS.WIDTH, CANVAS.HEIGHT, 0x000000, 0.86).setOrigin(0, 0).setInteractive();
     const container = this.add.container(0, 0).setDepth(75);
     container.add(overlay);
     overlay.on(Phaser.Input.Events.POINTER_DOWN, () => this.toggleHubMenu());
@@ -361,8 +369,9 @@ export class TownScene extends Phaser.Scene {
     const cellW = 200;
     const cellH = 120;
     const ox = CANVAS.WIDTH / 2 - ((cols - 1) * cellW) / 2;
-    const oy = CANVAS.HEIGHT / 2 - 90;
-    Menu.title(this, CANVAS.WIDTH / 2, oy - 90, tr('nav.menu'), 30).setColor(PALETTE.ACCENT_CSS);
+    const oy = CANVAS.HEIGHT / 2 - 60;
+    // Title sits well clear of the (now fully dimmed) HUD band above.
+    Menu.title(this, CANVAS.WIDTH / 2, oy - 78, tr('nav.menu'), 30).setColor(PALETTE.ACCENT_CSS);
     HUB_LINKS.forEach((link, i) => {
       const gx = ox + (i % cols) * cellW;
       const gy = oy + Math.floor(i / cols) * cellH;

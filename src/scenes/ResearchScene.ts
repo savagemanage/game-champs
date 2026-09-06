@@ -35,22 +35,27 @@ export class ResearchScene extends HubScene {
   }
 
   protected build(): void {
-    const colW = 190;
-    const startX = 40;
+    // The four branch columns are packed into the LEFT ~640px so the detail
+    // panel gets its own dedicated band on the right and never floats over the
+    // (rightmost, Development) column's interactive nodes.
+    const colW = 158;
+    const startX = 24;
+    const nodeW = 144;
     RESEARCH_BRANCH_ORDER.forEach((branch: ResearchBranch, ci) => {
       const x = startX + ci * colW;
       this.add.text(x, 60, tr(`research.branch.${branch}`), textStyle(16, { fontStyle: 'bold', color: PALETTE.ICE_CSS })).setOrigin(0, 0.5);
       nodesOfBranch(branch).forEach((id, ni) => {
         const y = 90 + ni * 44;
-        const btn = Menu.button(this, x + 80, y, trDyn(`research.${id}.name`), () => this.select(id), { width: 168, fontSize: 12, padY: 6 });
+        const btn = Menu.button(this, x + nodeW / 2, y, trDyn(`research.${id}.name`), () => this.select(id), { width: nodeW, fontSize: 12, padY: 6 });
         this.nodeButtons.push({ id, button: btn });
       });
     });
 
-    // Detail panel on the right.
-    const px = CANVAS.WIDTH - 150;
+    // Detail panel anchored in the reserved right band (its left edge clears
+    // the widest node column above). A solid panel body keeps it legible.
+    const px = CANVAS.WIDTH - 130;
     const py = CANVAS.HEIGHT / 2 + 10;
-    Menu.panel(this, px, py, 260, 300);
+    Menu.panel(this, px, py, 236, 300);
     this.detailTitle = this.add.text(px, py - 130, '', textStyle(18, { fontStyle: 'bold', align: 'center', wordWrap: { width: 230 } })).setOrigin(0.5, 0);
     this.detailDesc = this.add.text(px - 118, py - 80, '', textStyle(12, { color: PALETTE.MUTED_CSS, wordWrap: { width: 236 } })).setOrigin(0, 0);
     this.detailCost = this.add.text(px - 118, py + 6, '', textStyle(12, { color: PALETTE.TEXT_CSS, wordWrap: { width: 236 } })).setOrigin(0, 0);

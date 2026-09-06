@@ -124,7 +124,7 @@ export class GearScene extends HubScene {
     } else {
       const kind = this.currentCharmKind();
       const cost = this.state.gear.nextCharmCost(kind, 0);
-      this.charmButton.setText(`${tr(`gear.charm.${kind}`)} \u25B6`);
+      this.charmButton.setText(`${tr(`gear.charm.${kind}`)} >`);
       this.charmButton.setEnabled(this.canAfford(cost));
     }
   }

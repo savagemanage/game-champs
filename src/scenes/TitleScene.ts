@@ -57,7 +57,7 @@ export class TitleScene extends Phaser.Scene {
     // Compact language toggle in the top-right so players can switch language
     // straight from the front door without opening Settings. Reuses the
     // Settings ◀ value ▶ stepper feel and persists via the AudioManager.
-    this.buildLanguageToggle(CANVAS.WIDTH - 150, 36);
+    this.buildLanguageToggle(CANVAS.WIDTH - 170, 36);
 
     Menu.label(this, cx, CANVAS.HEIGHT * 0.94, tr('title.hint'), 14, 0.55);
 
@@ -96,10 +96,15 @@ export class TitleScene extends Phaser.Scene {
    */
   private buildLanguageToggle(x: number, y: number): void {
     const lang = AudioManager.get(this).getSettings().language;
-    Menu.label(this, x - 92, y, tr('settings.language'), 14, 0.7).setOrigin(0, 0.5);
-    this.add.text(x + 44, y, tr(`language.${lang}`), textStyle(16)).setOrigin(0.5);
-    Menu.button(this, x + 8, y, '\u25C0', () => this.stepLanguage(-1), { width: 34, fontSize: 14, padY: 6 });
-    Menu.button(this, x + 96, y, '\u25B6', () => this.stepLanguage(1), { width: 34, fontSize: 14, padY: 6 });
+    // Laid out strictly left-to-right so nothing overlaps:
+    //   [언어]  [<]  한국어  [>]
+    // The stepper glyphs use ASCII '<' / '>' (both in the bundled subset) so
+    // they always render; the arrow codepoints (U+25C0/U+25B6) are not in the
+    // font subset and rendered as tofu boxes here.
+    Menu.label(this, x - 96, y, tr('settings.language'), 14, 0.7).setOrigin(0, 0.5);
+    Menu.button(this, x - 20, y, '<', () => this.stepLanguage(-1), { width: 30, fontSize: 14, padY: 6 });
+    this.add.text(x + 60, y, tr(`language.${lang}`), textStyle(16)).setOrigin(0.5);
+    Menu.button(this, x + 140, y, '>', () => this.stepLanguage(1), { width: 30, fontSize: 14, padY: 6 });
   }
 
   /**

@@ -66,7 +66,10 @@ export class HeroScene extends HubScene {
       const portrait = this.add.image(0, 0, TextureKeys.HeroPortraits, HERO_PORTRAIT_FRAME[id]).setOrigin(0.5).setScale(2);
       portrait.setInteractive({ useHandCursor: true });
       portrait.on(Phaser.Input.Events.POINTER_DOWN, () => this.select(id));
-      const badge = this.add.text(0, 36, '', textStyle(11, { align: 'center' })).setOrigin(0.5);
+      // Wrap the caption to the cell so a wide status never bleeds into the
+      // neighbouring card. Anchored top-centre (origin 0.5,0) so multi-line
+      // captions grow downward into the cell's own gap, not sideways.
+      const badge = this.add.text(0, 34, '', textStyle(11, { align: 'center', wordWrap: { width: cellW - 8 } })).setOrigin(0.5, 0);
       container.add([portrait, badge]);
       this.tiles.push({ id, container, badge });
     });
@@ -116,7 +119,9 @@ export class HeroScene extends HubScene {
         badge.setText(`${tr('hero.level', { level: h.level })} ${tr('hero.stars', { stars: h.stars })}${isLead ? '\n\u2605LEAD' : ''}`).setColor(isLead ? PALETTE.ACCENT_CSS : PALETTE.TEXT_CSS);
       } else {
         const shards = this.state.heroes.shards(id);
-        badge.setText(shards > 0 ? tr('hero.shards', { count: shards }) : tr('hero.locked')).setColor(PALETTE.MUTED_CSS);
+        // Grid uses the compact 'lockedShort' caption; the full 'hero.locked'
+        // sentence is shown in the detail panel, where there is room for it.
+        badge.setText(shards > 0 ? tr('hero.shards', { count: shards }) : tr('hero.lockedShort')).setColor(PALETTE.MUTED_CSS);
       }
     }
   }

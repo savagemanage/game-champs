@@ -264,6 +264,8 @@ export const STRINGS = {
   'hero.setLead': { en: 'Set as Lead', ko: '지휘 지정' },
   'hero.maxStars': { en: 'MAX STARS', ko: '최대 승급' },
   'hero.locked': { en: 'Not yet recruited', ko: '아직 영입하지 않음' },
+  // Compact roster-grid caption (the full sentence above overflows a cell).
+  'hero.lockedShort': { en: 'Locked', ko: '미영입' },
   'hero.notEnoughShards': { en: 'Not enough shards', ko: '조각이 부족합니다' },
   'hero.bonusArmy': { en: 'Army Power +{pct}%', ko: '전투력 +{pct}%' },
   'hero.bonusEconomy': { en: 'Production +{pct}%', ko: '생산 +{pct}%' },
