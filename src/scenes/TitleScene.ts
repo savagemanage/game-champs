@@ -156,29 +156,34 @@ export class TitleScene extends Phaser.Scene {
   }
 
   /**
-   * First-run coach hint aimed at the primary START button: an animated pointer
-   * arrow to its right plus a Korean-first line ('여기를 눌러 시작하세요'). Shown only
-   * for a fresh save (tutorialSeen === false); returning players never see it.
+   * First-run coach hint aimed at the primary START button. Both the arrow and
+   * the Korean-first prompt line ('여기를 눌러 시작하세요') are stacked directly ABOVE
+   * the button and centred on the same canvas x as everything else, so the hint
+   * reinforces the centred layout instead of poking out toward the right margin
+   * (a side arrow at cx+176 used to add to a "leans right" feel). The arrow now
+   * points DOWN at the button and bobs vertically. Shown only for a fresh save
+   * (tutorialSeen === false); returning players never see it.
    */
   private spawnStartHint(cx: number, py: number): void {
-    // Bobbing arrow just right of the primary button, pointing left at it.
-    // Uses '←' (U+2190), which is in the bundled subset webfont's planned arrow
-    // set (U+2190..U+2193); the filled triangle '◀' (U+25C0) is NOT in the
-    // subset and would render as a missing-glyph box.
-    const arrow = this.add.text(cx + 176, py, '←', textStyle(30, { color: PALETTE.ACCENT_CSS })).setOrigin(0.5);
+    // Centred prompt line above the button.
+    const hint = this.add
+      .text(cx, py - 46, tr('title.startHint'), textStyle(16, { fontStyle: 'bold', color: PALETTE.ACCENT_CSS }))
+      .setOrigin(0.5);
+    this.tweens.add({ targets: hint, alpha: { from: 0.55, to: 1 }, duration: 720, yoyo: true, repeat: -1 });
+    // Bobbing arrow centred between the prompt and the button, pointing DOWN at
+    // it. Uses '↓' (U+2193), which is in the bundled subset webfont's arrow set
+    // (U+2190..U+2193); the filled triangle '▼' (U+25BC) is NOT in the subset
+    // and would render as a missing-glyph box. Centred on cx so it never pulls
+    // the eye off-centre.
+    const arrow = this.add.text(cx, py - 26, '↓', textStyle(24, { color: PALETTE.ACCENT_CSS })).setOrigin(0.5);
     this.tweens.add({
       targets: arrow,
-      x: cx + 162,
+      y: py - 20,
       duration: 620,
       yoyo: true,
       repeat: -1,
       ease: 'Sine.easeInOut',
     });
-    // Korean-first prompt line above the button.
-    const hint = this.add
-      .text(cx, py - 44, tr('title.startHint'), textStyle(16, { fontStyle: 'bold', color: PALETTE.ACCENT_CSS }))
-      .setOrigin(0.5);
-    this.tweens.add({ targets: hint, alpha: { from: 0.55, to: 1 }, duration: 720, yoyo: true, repeat: -1 });
   }
 
   private go(scene: string): void {

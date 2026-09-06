@@ -371,28 +371,40 @@ def build_backgrounds():
         x = (i * 97 + 13) % W
         y = (i * 53 + 7) % (H // 2)
         px(sky, x, y, (200, 210, 230, 160))
-    # distant building silhouettes across the horizon band
+    # distant building silhouettes across the horizon band.
+    # SYMMETRY: the skyline is the title/home backdrop, so its bright building
+    # mass must be balanced left/right. An off-centre tall/lit tower reads as
+    # the whole layout "leaning" to that side. We therefore generate buildings
+    # only for the LEFT half (up to the centre column) and MIRROR them onto the
+    # right half, guaranteeing the luminance is symmetric about x = W/2.
     horizon = int(H * 0.62)
+    mid = W // 2
     seed = 12345
     x = 0
     idx = 0
-    while x < W:
+    while x < mid:
         seed = (seed * 1103515245 + 12345) & 0x7FFFFFFF
         bw = 24 + (seed >> 5) % 46
         seed = (seed * 1103515245 + 12345) & 0x7FFFFFFF
         bh = 60 + (seed >> 5) % 180
         top = horizon - bh
         shade = lerp(BG_SKY, BG_HORIZON, 0.35 + 0.4 * ((idx % 3) / 2.0))
-        rect(sky, x, top, min(W - 1, x + bw - 1), horizon, shade)
+        # clamp the building to the left half so the mirror seam stays clean
+        right = min(mid - 1, x + bw - 1)
+        rect(sky, x, top, right, horizon, shade)
         # lit windows (teal / amber)
         for wy in range(top + 4, horizon - 3, 8):
-            for wx in range(x + 3, x + bw - 3, 7):
+            for wx in range(x + 3, min(mid - 1, x + bw - 3), 7):
                 seed = (seed * 1103515245 + 12345) & 0x7FFFFFFF
                 if (seed >> 6) % 5 == 0:
                     col = SQUAD if (seed >> 3) % 2 == 0 else ACCENT
                     px(sky, wx, wy, (col[0], col[1], col[2], 200))
         x += bw + 2
         idx += 1
+    # Mirror the left half onto the right half (columns [mid, W-1]) so the
+    # skyline is perfectly symmetric about the centre.
+    left_band = sky.crop((0, 0, mid, horizon + 1)).transpose(Image.FLIP_LEFT_RIGHT)
+    sky.paste(left_band, (W - mid, 0))
     # ground haze at the base
     for y in range(horizon, H):
         t = (y - horizon) / (H - horizon)
