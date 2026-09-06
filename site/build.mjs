@@ -68,13 +68,23 @@ function renderThumb(game, outDir) {
 
 function renderCard(game, outDir) {
   const badge =
-    game.status === 'wip' ? '\n            <span class="badge">work in progress</span>' : '';
+    game.status === 'wip' ? '\n              <span class="badge">work in progress</span>' : '';
   const titleKo = game.titleKo
     ? `\n            <span class="name-ko" lang="ko">${escapeHtml(game.titleKo)}</span>`
     : '';
-  const summary = game.summaryKo
-    ? `${escapeHtml(game.summary)}<br /><span lang="ko">${escapeHtml(game.summaryKo)}</span>`
-    : escapeHtml(game.summary);
+  // genre and summary may still be empty on a work-in-progress game; render
+  // nothing rather than an empty element.
+  const genre = game.genre
+    ? `\n            <span class="genre">${escapeHtml(game.genre)}</span>`
+    : '';
+  const summaryParts = [
+    game.summary ? escapeHtml(game.summary) : '',
+    game.summaryKo ? `<span lang="ko">${escapeHtml(game.summaryKo)}</span>` : '',
+  ].filter(Boolean);
+  const summary =
+    summaryParts.length > 0
+      ? `\n            <span class="summary">${summaryParts.join('<br />')}</span>`
+      : '';
 
   // Links are relative so the page works at any base path (the project Pages
   // subpath, a user site, or a local preview) without being regenerated.
@@ -84,9 +94,7 @@ function renderCard(game, outDir) {
           <span class="body">
             <span class="title-row">
               <span class="name">${escapeHtml(game.title)}</span>${badge}
-            </span>${titleKo}
-            <span class="genre">${escapeHtml(game.genre)}</span>
-            <span class="summary">${summary}</span>
+            </span>${titleKo}${genre}${summary}
           </span>
         </a>
       </li>`;

@@ -17,7 +17,15 @@ export const packagesDir = join(repoRoot, 'packages');
 /** Allowed `status` values, in the order games should be listed. */
 export const STATUSES = ['playable', 'wip', 'archived'];
 
-const REQUIRED_STRINGS = ['slug', 'title', 'genre', 'summary'];
+/** Must be present and non-empty on every game, whatever its status. */
+const REQUIRED_STRINGS = ['slug', 'title'];
+/**
+ * Must be present and non-empty once a game is listed as `playable`. A game
+ * still at `wip` may leave them empty: a freshly scaffolded package should
+ * build before anyone has written its copy, and an empty string is the honest
+ * value for something nobody has decided yet.
+ */
+const REQUIRED_WHEN_PLAYABLE = ['genre', 'summary'];
 const OPTIONAL_STRINGS = ['titleKo', 'summaryKo', 'thumbnail'];
 
 /**
@@ -36,6 +44,13 @@ function validate(meta, dir, metaPath) {
   for (const key of REQUIRED_STRINGS) {
     if (typeof meta[key] !== 'string' || meta[key].trim() === '') {
       problems.push(`"${key}" is required and must be a non-empty string`);
+    }
+  }
+  for (const key of REQUIRED_WHEN_PLAYABLE) {
+    if (typeof meta[key] !== 'string') {
+      problems.push(`"${key}" is required and must be a string (empty is allowed while status is not "playable")`);
+    } else if (meta[key].trim() === '' && meta.status === 'playable') {
+      problems.push(`"${key}" must be filled in before status is set to "playable"`);
     }
   }
   for (const key of OPTIONAL_STRINGS) {
