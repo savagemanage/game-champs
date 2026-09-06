@@ -34,6 +34,16 @@ export const TextureKeys = {
   CoalPit: 'b_coal_pit',
   IronMine: 'b_iron_mine',
   WarCamp: 'b_war_camp',
+  // FEAT-002 expanded city (art added in FEAT-006).
+  ShelterRow: 'b_shelter_row',
+  FrostVault: 'b_frost_vault',
+  ForgeHall: 'b_forge_hall',
+  EnvoyHall: 'b_envoy_hall',
+  WarmingWard: 'b_warming_ward',
+  EmberArchive: 'b_ember_archive',
+  InfantryYard: 'b_infantry_yard',
+  LancerYard: 'b_lancer_yard',
+  MarksmanRange: 'b_marksman_range',
 
   // Troop unit sprites (player-side).
   TroopTrapper: 'u_trapper',
@@ -44,9 +54,19 @@ export const TextureKeys = {
   EnemyFrostWolf: 'e_frost_wolf',
   EnemyRavager: 'e_ravager',
   EnemyFrostTitan: 'e_frost_titan',
+  // FEAT-005 Frostbeast / world-boss sprites (art added in FEAT-006).
+  EnemyRimeAlpha: 'e_rime_alpha',
+  EnemyGlacierBehemoth: 'e_glacier_behemoth',
+  EnemyHoarfrostWyrm: 'e_hoarfrost_wyrm',
 
-  // Resource icons (packed 16x16 sheet: food, wood, coal, iron).
+  // Hero portrait sheet (32x32 bust per roster hero, HERO_IDS order).
+  HeroPortraits: 'ui_hero_portraits',
+
+  // Resource icons (packed 16x16 sheet: food, wood, coal, iron, steel, spark).
   ResourceIcons: 'ui_resource_icons',
+  // Hub menu icons (16x16: hero, summon, campaign, research, gear, alliance,
+  // arena, quest).
+  MenuIcons: 'ui_menu_icons',
 
   // Backgrounds.
   BgSky: 'bg_sky',
@@ -75,6 +95,12 @@ export const AudioKeys = {
   Victory: 'sfx_victory',
   Defeat: 'sfx_defeat',
   MusicLoop: 'music_loop',
+  // FEAT-006 SFX for the expanded systems.
+  Summon: 'sfx_summon',
+  LevelUp: 'sfx_level_up',
+  ResearchComplete: 'sfx_research_complete',
+  BossHit: 'sfx_boss_hit',
+  QuestClaim: 'sfx_quest_claim',
 } as const;
 
 export type AudioKey = (typeof AudioKeys)[keyof typeof AudioKeys];
@@ -107,13 +133,29 @@ export const SHEETS: readonly SheetAsset[] = [
   { key: TextureKeys.CoalPit, url: 'assets/sprites/coal_pit.png', frame: { frameWidth: 48, frameHeight: 48 } },
   { key: TextureKeys.IronMine, url: 'assets/sprites/iron_mine.png', frame: { frameWidth: 48, frameHeight: 48 } },
   { key: TextureKeys.WarCamp, url: 'assets/sprites/war_camp.png', frame: { frameWidth: 48, frameHeight: 48 } },
+  // FEAT-002 expanded city (all 48x48 2-frame sheets).
+  { key: TextureKeys.ShelterRow, url: 'assets/sprites/shelter_row.png', frame: { frameWidth: 48, frameHeight: 48 } },
+  { key: TextureKeys.FrostVault, url: 'assets/sprites/frost_vault.png', frame: { frameWidth: 48, frameHeight: 48 } },
+  { key: TextureKeys.ForgeHall, url: 'assets/sprites/forge_hall.png', frame: { frameWidth: 48, frameHeight: 48 } },
+  { key: TextureKeys.EnvoyHall, url: 'assets/sprites/envoy_hall.png', frame: { frameWidth: 48, frameHeight: 48 } },
+  { key: TextureKeys.WarmingWard, url: 'assets/sprites/warming_ward.png', frame: { frameWidth: 48, frameHeight: 48 } },
+  { key: TextureKeys.EmberArchive, url: 'assets/sprites/ember_archive.png', frame: { frameWidth: 48, frameHeight: 48 } },
+  { key: TextureKeys.InfantryYard, url: 'assets/sprites/infantry_yard.png', frame: { frameWidth: 48, frameHeight: 48 } },
+  { key: TextureKeys.LancerYard, url: 'assets/sprites/lancer_yard.png', frame: { frameWidth: 48, frameHeight: 48 } },
+  { key: TextureKeys.MarksmanRange, url: 'assets/sprites/marksman_range.png', frame: { frameWidth: 48, frameHeight: 48 } },
   { key: TextureKeys.TroopTrapper, url: 'assets/sprites/troop_trapper.png', frame: { frameWidth: 24, frameHeight: 28 } },
   { key: TextureKeys.TroopMarksman, url: 'assets/sprites/troop_marksman.png', frame: { frameWidth: 24, frameHeight: 28 } },
   { key: TextureKeys.TroopVanguard, url: 'assets/sprites/troop_vanguard.png', frame: { frameWidth: 24, frameHeight: 28 } },
   { key: TextureKeys.EnemyFrostWolf, url: 'assets/sprites/enemy_frost_wolf.png', frame: { frameWidth: 24, frameHeight: 28 } },
   { key: TextureKeys.EnemyRavager, url: 'assets/sprites/enemy_ravager.png', frame: { frameWidth: 32, frameHeight: 36 } },
   { key: TextureKeys.EnemyFrostTitan, url: 'assets/sprites/enemy_frost_titan.png', frame: { frameWidth: 40, frameHeight: 32 } },
+  // FEAT-005 Frostbeast / world-boss sprites (larger frames).
+  { key: TextureKeys.EnemyRimeAlpha, url: 'assets/sprites/enemy_rime_alpha.png', frame: { frameWidth: 40, frameHeight: 36 } },
+  { key: TextureKeys.EnemyGlacierBehemoth, url: 'assets/sprites/enemy_glacier_behemoth.png', frame: { frameWidth: 56, frameHeight: 44 } },
+  { key: TextureKeys.EnemyHoarfrostWyrm, url: 'assets/sprites/enemy_hoarfrost_wyrm.png', frame: { frameWidth: 56, frameHeight: 44 } },
+  { key: TextureKeys.HeroPortraits, url: 'assets/sprites/hero_portraits.png', frame: { frameWidth: 32, frameHeight: 32 } },
   { key: TextureKeys.ResourceIcons, url: 'assets/ui/resource_icons.png', frame: { frameWidth: 16, frameHeight: 16 } },
+  { key: TextureKeys.MenuIcons, url: 'assets/ui/menu_icons.png', frame: { frameWidth: 16, frameHeight: 16 } },
   { key: TextureKeys.FxSpark, url: 'assets/fx/spark.png', frame: { frameWidth: 16, frameHeight: 16 } },
   { key: TextureKeys.FxDust, url: 'assets/fx/dust.png', frame: { frameWidth: 16, frameHeight: 16 } },
   { key: TextureKeys.UiIcons, url: 'assets/ui/icons.png', frame: { frameWidth: 16, frameHeight: 16 } },
@@ -138,6 +180,11 @@ export const AUDIO: readonly AudioAsset[] = [
   { key: AudioKeys.Victory, urls: ['assets/audio/victory.wav'] },
   { key: AudioKeys.Defeat, urls: ['assets/audio/defeat.wav'] },
   { key: AudioKeys.MusicLoop, urls: ['assets/audio/music_loop.wav'] },
+  { key: AudioKeys.Summon, urls: ['assets/audio/summon.wav'] },
+  { key: AudioKeys.LevelUp, urls: ['assets/audio/level_up.wav'] },
+  { key: AudioKeys.ResearchComplete, urls: ['assets/audio/research_complete.wav'] },
+  { key: AudioKeys.BossHit, urls: ['assets/audio/boss_hit.wav'] },
+  { key: AudioKeys.QuestClaim, urls: ['assets/audio/quest_claim.wav'] },
 ] as const;
 
 /**
@@ -151,6 +198,17 @@ export const BUILDING_TEXTURE_BY_KIND: Record<string, TextureKey> = {
   coal_pit: TextureKeys.CoalPit,
   iron_mine: TextureKeys.IronMine,
   war_camp: TextureKeys.WarCamp,
+  // FEAT-002 expanded city — dedicated art now registered (FEAT-006), so the
+  // TownScene render-skip for these kinds is now a no-op.
+  shelter_row: TextureKeys.ShelterRow,
+  frost_vault: TextureKeys.FrostVault,
+  forge_hall: TextureKeys.ForgeHall,
+  envoy_hall: TextureKeys.EnvoyHall,
+  warming_ward: TextureKeys.WarmingWard,
+  ember_archive: TextureKeys.EmberArchive,
+  infantry_yard: TextureKeys.InfantryYard,
+  lancer_yard: TextureKeys.LancerYard,
+  marksman_range: TextureKeys.MarksmanRange,
 };
 
 /** Maps a TroopKind value to its spritesheet texture key. */
@@ -160,10 +218,56 @@ export const TROOP_TEXTURE_BY_KIND: Record<string, TextureKey> = {
   vanguard: TextureKeys.TroopVanguard,
 };
 
-/** Maps a resource kind to its frame index in the packed resource-icon sheet. */
+/** Maps an EnemyKind value to its spritesheet texture key (bosses included). */
+export const ENEMY_TEXTURE_BY_KIND: Record<string, TextureKey> = {
+  frost_wolf: TextureKeys.EnemyFrostWolf,
+  ravager: TextureKeys.EnemyRavager,
+  frost_titan: TextureKeys.EnemyFrostTitan,
+  rime_alpha: TextureKeys.EnemyRimeAlpha,
+  glacier_behemoth: TextureKeys.EnemyGlacierBehemoth,
+  hoarfrost_wyrm: TextureKeys.EnemyHoarfrostWyrm,
+};
+
+/**
+ * Maps a resource kind to its frame index in the packed resource-icon sheet.
+ * Frames: food 0, wood 1, coal 2, iron 3, steel 4, plus the Ember Sparks
+ * premium currency at frame 5 (see SPARK_ICON_FRAME).
+ */
 export const RESOURCE_ICON_FRAME: Record<string, number> = {
   food: 0,
   wood: 1,
   coal: 2,
   iron: 3,
+  steel: 4,
 };
+
+/** Frame index of the Ember Sparks (premium currency) icon in the sheet. */
+export const SPARK_ICON_FRAME = 5;
+
+/** Hero-portrait frame index by hero id, in the packed HeroPortraits sheet. */
+export const HERO_PORTRAIT_FRAME: Record<string, number> = {
+  ember_warden: 0,
+  snow_picket: 1,
+  drift_runner: 2,
+  iron_bulwark: 3,
+  glacier_lance: 4,
+  frost_archer: 5,
+  aurora_sentinel: 6,
+  stormpike_rider: 7,
+  winters_eye: 8,
+  the_kindled_queen: 9,
+  wyrmspear_valdis: 10,
+  the_pale_marksman: 11,
+};
+
+/** Frame indices in the hub MenuIcons sheet, one per new screen. */
+export const MENU_ICON_FRAME = {
+  hero: 0,
+  summon: 1,
+  campaign: 2,
+  research: 3,
+  gear: 4,
+  alliance: 5,
+  arena: 6,
+  quest: 7,
+} as const;

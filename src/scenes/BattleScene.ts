@@ -99,7 +99,14 @@ export class BattleScene extends Phaser.Scene {
     }
 
     // Resolve the battle deterministically, then build the animation timeline.
-    this.result = CombatSystem.resolve(this.army, this.wave);
+    // The hold's research/gear battle modifiers and the standing army's troop
+    // tiers both feed the resolver, so investing in either genuinely helps.
+    this.result = CombatSystem.resolve(
+      this.army,
+      this.wave,
+      this.state.combatModifiers(),
+      this.state.armyTiers,
+    );
     this.timeline = buildTimeline(this.army, this.result, TIMELINE_STEPS);
 
     // HUD overlay with skip + speed controls.
@@ -296,7 +303,8 @@ export class BattleScene extends Phaser.Scene {
       this.state.recordWaveCleared(this.wave);
     }
     // On a win survivors < army (casualties), on a loss survivors are all zero.
-    this.state.setArmy(this.result.survivors);
+    // Pass the per-tier survivor breakdown so the tiered army stays accurate.
+    this.state.setArmy(this.result.survivors, this.result.survivorTiers);
     this.state.save(now);
   }
 

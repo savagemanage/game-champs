@@ -132,8 +132,10 @@ export class SettingsScene extends Phaser.Scene {
     const cx = CANVAS.WIDTH / 2;
     Menu.label(this, cx - 240, y, name, 18, 0.9).setOrigin(0, 0.5);
     this.add.text(cx + 120, y, initialValue, textStyle(18)).setOrigin(0.5);
-    Menu.button(this, cx + 40, y, '\u25C0', () => onStep(-1), { width: 44, fontSize: 18 });
-    Menu.button(this, cx + 200, y, '\u25B6', () => onStep(1), { width: 44, fontSize: 18 });
+    // ASCII '<' / '>' render from the bundled font subset; the arrow
+    // codepoints (U+25C0/U+25B6) are not subset and would show as tofu.
+    Menu.button(this, cx + 40, y, '<', () => onStep(-1), { width: 44, fontSize: 18 });
+    Menu.button(this, cx + 200, y, '>', () => onStep(1), { width: 44, fontSize: 18 });
   }
 
   private languageText(): string {

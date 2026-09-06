@@ -2,11 +2,16 @@ import {
   BUILDING_DEFS,
   BUILDING_ORDER,
   buildingDef,
+  hasRole,
+  housingCapacity,
   isProducer,
   outputPerSec,
+  protectedAmount,
+  steelThroughputPerSec,
   upgradeCost,
   upgradeTimeMs,
 } from '../config/BuildingConfig';
+import { REFINERY } from '../config/GameConfig';
 import type { BuildingKind, BuildingState, ResourceCost, Resources } from '../types';
 import { ResourceStore, type ProductionRates } from './ResourceStore';
 
@@ -157,6 +162,30 @@ export class BuildingSystem {
   }
 
   /**
+   * Bring an in-progress upgrade's completion forward by `ms` (alliance help).
+   * No-op when the building is idle. Returns the ms actually shaved off (capped
+   * so the timer never lands before "now-ish" is the caller's concern; we clamp
+   * the reduction to what remains so the timer can complete but not go
+   * negative). The upgrade itself completes on the next {@link update}.
+   */
+  reduceUpgradeTimer(kind: BuildingKind, ms: number, now: number): number {
+    const state = this._buildings.get(kind);
+    if (!state || state.upgradeEndsAt === null || ms <= 0) return 0;
+    const remaining = Math.max(0, state.upgradeEndsAt - now);
+    const shaved = Math.min(ms, remaining);
+    state.upgradeEndsAt -= shaved;
+    return shaved;
+  }
+
+  /** Any building kind currently upgrading (stable BUILDING_ORDER), or null. */
+  firstUpgrading(): BuildingKind | null {
+    for (const kind of BUILDING_ORDER) {
+      if (this.isUpgrading(kind)) return kind;
+    }
+    return null;
+  }
+
+  /**
    * Aggregate per-second production rates across all producer buildings at
    * their current levels. Fed to ResourceStore.applyProduction.
    */
@@ -170,6 +199,92 @@ export class BuildingSystem {
       rates[def.produces] += outputPerSec(kind, level);
     }
     return rates;
+  }
+
+  /**
+   * Total extra survivor housing across all Shelter Row (housing) buildings at
+   * their current levels. Consumed by PopulationSystem to derive the cap.
+   */
+  totalHousing(): number {
+    let total = 0;
+    for (const kind of BUILDING_ORDER) {
+      if (!hasRole(kind, 'housing')) continue;
+      total += housingCapacity(kind, this.level(kind));
+    }
+    return total;
+  }
+
+  /**
+   * The amount of `balance` of a single resource that the Frost Vault(s)
+   * shelter from raid loss at their current level. Sums across every storage
+   * building (there is normally one). Never exceeds the balance.
+   */
+  protectedStorage(balance: number): number {
+    let protectedTotal = 0;
+    for (const kind of BUILDING_ORDER) {
+      if (!hasRole(kind, 'storage')) continue;
+      protectedTotal += protectedAmount(kind, this.level(kind), balance);
+    }
+    return Math.min(Math.max(0, balance), protectedTotal);
+  }
+
+  /**
+   * Total producer LEVELS across the base (sum of every producer building's
+   * level). Multiplied by POPULATION.STAFF_PER_PRODUCER_LEVEL this is the number
+   * of survivors the base wants to be fully staffed.
+   */
+  totalProducerLevels(): number {
+    let sum = 0;
+    for (const kind of BUILDING_ORDER) {
+      if (!isProducer(kind)) continue;
+      sum += this.level(kind);
+    }
+    return sum;
+  }
+
+  /** Aggregate steel-per-second throughput across all refinery (Forge Hall) buildings. */
+  steelThroughput(): number {
+    let total = 0;
+    for (const kind of BUILDING_ORDER) {
+      if (!hasRole(kind, 'refinery')) continue;
+      total += steelThroughputPerSec(kind, this.level(kind));
+    }
+    return total;
+  }
+
+  /**
+   * Run the refinery for an elapsed `dtMs`: the Forge Hall(s) try to mint their
+   * combined steel throughput, each unit of steel consuming REFINERY inputs
+   * (iron + coal) from `store`. Output is limited by whichever is scarcer -
+   * throughput or affordable inputs - and further scaled by `efficiency`
+   * (1 live, ECONOMY.OFFLINE_EFFICIENCY * warmth offline), matching how idle
+   * production is credited. Returns the steel actually minted (already added to
+   * the store). Pure aside from mutating the passed store.
+   */
+  refineryConversion(store: ResourceStore, dtMs: number, efficiency = 1): number {
+    if (dtMs <= 0 || efficiency <= 0) return 0;
+    const throughput = this.steelThroughput();
+    if (throughput <= 0) return 0;
+
+    const seconds = dtMs / 1000;
+    // Steel the Forge Hall wants to mint this interval (before input limits).
+    const desired = throughput * seconds * efficiency;
+    if (desired <= 0) return 0;
+
+    // How many units of steel the current iron/coal stock can actually pay for.
+    const ironPer = REFINERY.INPUT_PER_STEEL.iron;
+    const coalPer = REFINERY.INPUT_PER_STEEL.coal;
+    const ironLimited = ironPer > 0 ? store.get('iron') / ironPer : Infinity;
+    const coalLimited = coalPer > 0 ? store.get('coal') / coalPer : Infinity;
+    const minted = Math.max(0, Math.min(desired, ironLimited, coalLimited));
+    if (minted <= 0) return 0;
+
+    // Clamp spend to the live balance so floating-point rounding can never
+    // leave the atomic `spend` short (which would mint steel without paying).
+    const ironCost = Math.min(minted * ironPer, store.get('iron'));
+    const coalCost = Math.min(minted * coalPer, store.get('coal'));
+    store.add({ iron: -ironCost, coal: -coalCost, steel: minted });
+    return minted;
   }
 
   /** Serialize the owned buildings to a plain array. */

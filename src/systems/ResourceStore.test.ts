@@ -30,29 +30,38 @@ describe('ResourceStore', () => {
   });
 
   it('accumulates idle production proportional to dt and rates', () => {
-    const store = new ResourceStore({ food: 0, wood: 0, coal: 0, iron: 0 });
+    const store = new ResourceStore({ food: 0, wood: 0, coal: 0, iron: 0, steel: 0 });
     // 2 food/sec for 10s = 20 food; 1 wood/sec for 10s = 10 wood.
-    const gained = store.applyProduction({ food: 2, wood: 1, coal: 0, iron: 0 }, 10_000);
+    const gained = store.applyProduction({ food: 2, wood: 1, coal: 0, iron: 0, steel: 0 }, 10_000);
     expect(gained.food).toBeCloseTo(20, 5);
     expect(store.get('food')).toBeCloseTo(20, 5);
     expect(store.get('wood')).toBeCloseTo(10, 5);
     // Doubling dt doubles the gain.
-    store.applyProduction({ food: 2, wood: 1, coal: 0, iron: 0 }, 20_000);
+    store.applyProduction({ food: 2, wood: 1, coal: 0, iron: 0, steel: 0 }, 20_000);
     expect(store.get('food')).toBeCloseTo(60, 5);
   });
 
   it('scales production by efficiency (offline) and credits nothing for zero dt', () => {
-    const store = new ResourceStore({ food: 0, wood: 0, coal: 0, iron: 0 });
-    store.applyProduction({ food: 10, wood: 0, coal: 0, iron: 0 }, 1000, 0.5);
+    const store = new ResourceStore({ food: 0, wood: 0, coal: 0, iron: 0, steel: 0 });
+    store.applyProduction({ food: 10, wood: 0, coal: 0, iron: 0, steel: 0 }, 1000, 0.5);
     expect(store.get('food')).toBeCloseTo(5, 5); // 10/sec * 1s * 0.5
     const before = store.get('food');
-    store.applyProduction({ food: 10, wood: 0, coal: 0, iron: 0 }, 0);
+    store.applyProduction({ food: 10, wood: 0, coal: 0, iron: 0, steel: 0 }, 0);
     expect(store.get('food')).toBe(before);
   });
 
-  it('round-trips through toJSON / fromJSON', () => {
-    const store = new ResourceStore({ food: 7, wood: 8, coal: 9, iron: 10 });
+  it('includes the refined steel resource in the empty bundle and round-trips it', () => {
+    // emptyBundle is derived from RESOURCE_ORDER, so steel is a first-class kind.
+    expect(ResourceStore.emptyBundle()).toEqual({ food: 0, wood: 0, coal: 0, iron: 0, steel: 0 });
+    const store = new ResourceStore({ food: 1, wood: 2, coal: 3, iron: 4, steel: 5 });
+    expect(store.get('steel')).toBe(5);
     const restored = ResourceStore.fromJSON(store.toJSON());
-    expect(restored.balances).toEqual({ food: 7, wood: 8, coal: 9, iron: 10 });
+    expect(restored.balances).toEqual({ food: 1, wood: 2, coal: 3, iron: 4, steel: 5 });
+  });
+
+  it('round-trips through toJSON / fromJSON', () => {
+    const store = new ResourceStore({ food: 7, wood: 8, coal: 9, iron: 10, steel: 11 });
+    const restored = ResourceStore.fromJSON(store.toJSON());
+    expect(restored.balances).toEqual({ food: 7, wood: 8, coal: 9, iron: 10, steel: 11 });
   });
 });

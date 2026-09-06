@@ -17,10 +17,14 @@ this repository:
 - Audio (SFX + music): [`tools/gen_audio.py`](../tools/gen_audio.py) (Python
   standard library synthesis — no samples, no third-party audio)
 
-Because everything is original, there are **no third-party downloads** to
-attribute. No CC0/CC-BY external assets were used. Should any external asset be
-added later, it must be CC0 or clearly redistribution-permitting FREE, and its
-file path, name, author, source URL, and license must be recorded below.
+Every **art and audio** asset is original. The **one** third-party asset is the
+Korean-capable UI web font (see the **Fonts** section below): the game is
+Korean-first, and bundling a Hangul-covering font makes text render correctly
+and identically on every browser/OS instead of relying on system fonts (which
+headless/CI browsers do not ship for CJK). It is redistributable under the SIL
+Open Font License 1.1 and is recorded in full below. Any external asset added
+later must be CC0 or clearly redistribution-permitting FREE, and its file path,
+name, author, source URL, and license must be recorded here.
 
 ## License
 
@@ -49,12 +53,25 @@ blues / whites / steel warmed by the Furnace's ember glow).
 | `sprites/coal_pit.png` | Coal Pit (produces coal — the Furnace's key fuel) | **Original** |
 | `sprites/iron_mine.png` | Iron Mine (produces iron) | **Original** |
 | `sprites/war_camp.png` | War Camp (trains troops) | **Original** |
+| `sprites/shelter_row.png` | Shelter Row — survivor housing (raises the population cap) | **Original** |
+| `sprites/frost_vault.png` | Frost Vault — fortified storehouse (shelters resources) | **Original** |
+| `sprites/forge_hall.png` | Forge Hall — steelworks refinery (iron + coal → steel) | **Original** |
+| `sprites/envoy_hall.png` | Envoy Hall — diplomacy / aid hub | **Original** |
+| `sprites/warming_ward.png` | Warming Ward — infirmary (wounded recover) | **Original** |
+| `sprites/ember_archive.png` | Ember Archive — research academy | **Original** |
+| `sprites/infantry_yard.png` | Infantry Yard — trains front-line infantry | **Original** |
+| `sprites/lancer_yard.png` | Lancer Yard — trains charging lancers | **Original** |
+| `sprites/marksman_range.png` | Marksman Range — trains ranged marksmen | **Original** |
 | `sprites/troop_trapper.png` | Trapper — front-line, anti-beast survivor | **Original** |
 | `sprites/troop_marksman.png` | Marksman — ranged crossbow survivor | **Original** |
 | `sprites/troop_vanguard.png` | Vanguard — elite frost-plate heavy | **Original** |
 | `sprites/enemy_frost_wolf.png` | Frost Wolf — fast basic attacker | **Original** |
 | `sprites/enemy_ravager.png` | Ravager — hulking ice-hardened raider | **Original** |
 | `sprites/enemy_frost_titan.png` | Frost Titan — massive ice-body siege beast | **Original** |
+| `sprites/enemy_rime_alpha.png` | Rimefang Alpha — world-boss pack-alpha wolf | **Original** |
+| `sprites/enemy_glacier_behemoth.png` | Glacier Behemoth — world-boss ice colossus | **Original** |
+| `sprites/enemy_hoarfrost_wyrm.png` | Hoarfrost Wyrm — apex world-boss ice-drake | **Original** |
+| `sprites/hero_portraits.png` | Hero portrait sheet — 12 class-flavoured, rarity-ringed busts (one per roster hero) | **Original** |
 
 ## Backgrounds — `public/assets/backgrounds/`
 
@@ -72,7 +89,8 @@ blues / whites / steel warmed by the Furnace's ember glow).
 | `ui/button.png` | 9-slice steel button | **Original** |
 | `ui/bar_frame.png` | Progress / warmth / health bar frame | **Original** |
 | `ui/icons.png` | HUD icon set (furnace ember, hourglass, sword, shield) | **Original** |
-| `ui/resource_icons.png` | Resource icon sheet (food, wood, coal, iron) | **Original** |
+| `ui/resource_icons.png` | Resource icon sheet (food, wood, coal, iron, steel, Ember Sparks) | **Original** |
+| `ui/menu_icons.png` | Hub menu icon sheet (hero, summon, expedition, research, gear, alliance, arena, quest) | **Original** |
 
 ## FX — `public/assets/fx/`
 
@@ -96,7 +114,58 @@ warmed by an ember-bright note where the moment calls for hope.
 | `audio/battle_hit.wav` | SFX — cold melee impact | **Original** |
 | `audio/victory.wav` | SFX — victory lift (the Ember holds) | **Original** |
 | `audio/defeat.wav` | SFX — defeat cadence over wind (the Ember gutters out) | **Original** |
+| `audio/summon.wav` | SFX — hero summon shimmer into a warm ember chord | **Original** |
+| `audio/level_up.wav` | SFX — hero level / star-up bloom | **Original** |
+| `audio/research_complete.wav` | SFX — research settles into place | **Original** |
+| `audio/boss_hit.wav` | SFX — heavy Frostbeast rally impact | **Original** |
+| `audio/quest_claim.wav` | SFX — quest / reward claim pip | **Original** |
 | `audio/music_loop.wav` | Music — looping frozen-survival ambient bed (A-minor pad + wind + ember-pulse, ~27 s) | **Original** |
+
+---
+
+## Fonts — `public/assets/fonts/`
+
+The UI is **Korean-first**. Phaser draws all text onto a canvas using whatever
+face the browser resolves, so without a Korean-capable font the Hangul renders
+as tofu (missing-glyph boxes) — most visibly in headless/CI browsers, which
+ship no CJK fonts. To make rendering deterministic we bundle a **subset** of a
+permissively-licensed Korean monospace font (the monospace face preserves the
+crisp glyph grid the UI was designed around).
+
+| File | Name | Author | Source | License |
+| --- | --- | --- | --- | --- |
+| `fonts/NanumGothicCoding-Regular.subset.woff2` | Nanum Gothic Coding (Regular, subset) | NHN Corporation | [google/fonts — ofl/nanumgothiccoding](https://github.com/google/fonts/tree/main/ofl/nanumgothiccoding) | SIL Open Font License 1.1 |
+| `fonts/NanumGothicCoding-Bold.subset.woff2` | Nanum Gothic Coding (Bold, subset) | NHN Corporation | [google/fonts — ofl/nanumgothiccoding](https://github.com/google/fonts/tree/main/ofl/nanumgothiccoding) | SIL Open Font License 1.1 |
+
+The bundled files are **subsets** built by [`tools/gen_fonts.py`](../tools/gen_fonts.py),
+containing only the glyphs used by the runtime string table
+(`src/i18n/strings.ts`) plus an ASCII/punctuation baseline, so each weight is a
+few tens of KB rather than ~2 MB. The SIL OFL 1.1 permits this bundling and
+subsetting (the reserved font name "Nanum" is unchanged and the font is not sold
+on its own). Re-run the generator whenever `strings.ts` gains new characters.
+
+---
+
+## Screenshots — `docs/screenshots/`
+
+The PNGs in [`docs/screenshots/`](../docs/screenshots/) are **screenshots of
+this game running** (a real production build driven in a headless browser),
+embedded in the README. They therefore contain only this project's own original
+art/UI plus Hangul rendered with the bundled SIL OFL 1.1 Korean font documented
+above — no third-party imagery. They are captured by
+[`tools/capture_screenshots.mjs`](../tools/capture_screenshots.mjs) and covered
+by the repository's Apache-2.0 license like the rest of the project.
+
+| File | Screen | Origin |
+| --- | --- | --- |
+| `docs/screenshots/title.png` | Title screen | **Original** (game screenshot) |
+| `docs/screenshots/town.png` | Town hub (Furnace, resource HUD, warmth bar) | **Original** (game screenshot) |
+| `docs/screenshots/command-menu.png` | Command menu (expanded-systems hub) | **Original** (game screenshot) |
+| `docs/screenshots/heroes.png` | Heroes roster | **Original** (game screenshot) |
+| `docs/screenshots/research.png` | Research tech tree | **Original** (game screenshot) |
+| `docs/screenshots/campaign.png` | Expedition campaign map | **Original** (game screenshot) |
+| `docs/screenshots/summon.png` | Summon (gacha) | **Original** (game screenshot) |
+| `docs/screenshots/training.png` | Troop training panel | **Original** (game screenshot) |
 
 ---
 
@@ -106,6 +175,13 @@ warmed by an ember-bright note where the moment calls for hope.
 pip install Pillow             # only dependency, for the sprite generator
 python3 tools/gen_sprites.py   # -> public/assets/{sprites,backgrounds,ui,fx}
 python3 tools/gen_audio.py     # -> public/assets/audio  (stdlib only)
+
+# UI font subsets (only needed when strings.ts gains new characters). Fetch the
+# OFL source TTFs from google/fonts first, then subset them:
+pip install fonttools brotli
+python3 tools/gen_fonts.py \
+    --regular NanumGothicCoding-Regular.ttf \
+    --bold NanumGothicCoding-Bold.ttf   # -> public/assets/fonts (subset woff2)
 ```
 
 Output is deterministic (the audio generator seeds its RNG), so regenerating

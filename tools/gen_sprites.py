@@ -369,6 +369,209 @@ def draw_war_camp(img, ox, oy, fw, fh, tier):
         px(img, ox + fw // 2, base - 3, EMBER)
 
 
+def draw_shelter_row(img, ox, oy, fw, fh, tier):
+    """Shelter Row - survivor housing. A row of small snow-topped cabins with
+    warm windows glowing against the cold (more windows lit at tier 1)."""
+    draw_ground_pad(img, ox, oy, fw, fh)
+    base = oy + fh - 6
+    roof = oy + fh - 20
+    # three joined cabins
+    for i, gx in enumerate(range(ox + 6, ox + fw - 10, 12)):
+        rect(img, gx, roof, gx + 10, base, WOOD)
+        rect(img, gx, roof, gx, base, WOOD_DK)
+        # snow-capped gable
+        for k in range(5):
+            rect(img, gx + k, roof - k, gx + 10 - k, roof - k, FUR_DK)
+        rect(img, gx, roof - 4, gx + 10, roof - 4, SNOW_LT)
+        # a warm window (lit on tier 1 or the middle cabin)
+        lit = tier == 1 or i == 1
+        px(img, gx + 4, base - 5, EMBER if lit else GLASS)
+        px(img, gx + 5, base - 5, EMBER_LT if lit else GLASS)
+    if tier == 1:
+        banner(img, ox + fw // 2 - 1, roof - 3, 6, FLAG)
+        # tidy chimney smoke-glow
+        px(img, ox + 9, roof - 6, EMBER)
+        px(img, ox + fw - 12, roof - 6, EMBER)
+
+
+def draw_frost_vault(img, ox, oy, fw, fh, tier):
+    """Frost Vault - fortified storehouse. A squat stone strongbox with a heavy
+    banded steel door and an ice-sheen; a padlock/seal marks it secure."""
+    draw_ground_pad(img, ox, oy, fw, fh)
+    top = oy + fh - 30
+    rect(img, ox + 8, top, ox + fw - 9, oy + fh - 6, STONE)
+    rect(img, ox + 8, top, ox + 8, oy + fh - 6, STONE_LT)
+    rect(img, ox + fw - 9, top, ox + fw - 9, oy + fh - 6, STONE_DK)
+    rect(img, ox + 8, top, ox + fw - 9, top, SNOW_LT)
+    # steel banding
+    for y in range(top + 4, oy + fh - 6, 6):
+        rect(img, ox + 8, y, ox + fw - 9, y, STEEL_DK)
+    # heavy vault door
+    cxc = ox + fw // 2
+    rect(img, cxc - 6, oy + fh - 22, cxc + 5, oy + fh - 6, STEEL)
+    rect(img, cxc - 6, oy + fh - 22, cxc + 5, oy + fh - 22, STEEL_HI)
+    rect(img, cxc - 6, oy + fh - 22, cxc - 6, oy + fh - 6, STEEL_DK)
+    # round lock boss with an ice glint
+    rect(img, cxc - 2, oy + fh - 15, cxc + 1, oy + fh - 12, STEEL_DK)
+    px(img, cxc - 1, oy + fh - 14, ICE)
+    if tier == 1:
+        # reinforced corner studs + a small ember seal above the door
+        for (sx, sy) in [(ox + 10, top + 3), (ox + fw - 11, top + 3)]:
+            px(img, sx, sy, STEEL_HI)
+        px(img, cxc, oy + fh - 24, EMBER)
+        px(img, cxc + 1, oy + fh - 24, EMBER_LT)
+
+
+def draw_forge_hall(img, ox, oy, fw, fh, tier):
+    """Forge Hall - steelworks refinery. A stone workshop with a tall smelter
+    stack venting ember-glow and a glowing crucible mouth (steel being poured)."""
+    draw_house_shell(img, ox, oy, fw, fh, STONE, STONE_DK, SLATE_DK, (30, 34, 42, 255), STONE_LT)
+    cxc = ox + fw // 2
+    base = oy + fh - 7
+    # smelter stack on the right venting glow
+    sx = ox + fw - 13
+    rect(img, sx, oy + 6, sx + 3, oy + fh // 2, STONE_DK)
+    rect(img, sx, oy + 6, sx + 3, oy + 6, SNOW_LT)
+    for i, y in enumerate(range(oy + 2, oy + 7)):
+        c = EMBER_LT if i % 2 == 0 else EMBER
+        rect(img, sx, y, sx + 3, y, c)
+    # glowing crucible / pour spout at the base
+    rect(img, cxc - 4, base - 5, cxc + 3, base, STEEL_DK)
+    rect(img, cxc - 3, base - 4, cxc + 2, base - 1, EMBER)
+    px(img, cxc - 1, base - 3, EMBER_CORE)
+    px(img, cxc, base - 3, STEEL_HI)  # a bright bead of molten steel
+    if tier == 1:
+        # a second glow vent + steel ingot stack out front
+        rect(img, ox + 7, base - 3, ox + 11, base, STEEL)
+        rect(img, ox + 8, base - 5, ox + 10, base - 3, IRON)
+        px(img, ox + 9, base - 5, STEEL_HI)
+        banner(img, ox + 8, oy + fh // 2 - 8, 7, FLAG)
+
+
+def draw_envoy_hall(img, ox, oy, fw, fh, tier):
+    """Envoy Hall - diplomacy hub. A tall hall with an arched doorway, twin
+    ember banners, and a raised pennant to signal other holds."""
+    draw_house_shell(img, ox, oy, fw, fh, STONE_LT, STONE, WOOD_DK, (40, 30, 20, 255), STONE_LT)
+    cxc = ox + fw // 2
+    base = oy + fh - 6
+    # arched double doors
+    rect(img, cxc - 4, oy + fh - 16, cxc + 3, base, WOOD)
+    rect(img, cxc - 4, oy + fh - 17, cxc + 3, oy + fh - 17, WOOD_LT)
+    px(img, cxc - 1, oy + fh - 11, EMBER)  # warm light within
+    # tall signal pennant from the roof peak
+    peak = oy + 6
+    rect(img, cxc, peak, cxc, oy + fh // 2, WOOD_DK)
+    rect(img, cxc + 1, peak, cxc + 4, peak + 4, FLAG)
+    px(img, cxc + 4, peak + 2, EMBER_LT)
+    if tier == 1:
+        banner(img, ox + 9, oy + fh // 2 - 7, 8, FLAG)
+        banner(img, ox + fw - 11, oy + fh // 2 - 7, 8, FLAG)
+        # a second, higher pennant (an important embassy)
+        rect(img, cxc - 4, peak + 1, cxc - 1, peak + 4, FLAG_ENEMY)
+
+
+def draw_warming_ward(img, ox, oy, fw, fh, tier):
+    """Warming Ward - infirmary. A cabin with a green-cross-free ORIGINAL relief
+    mark (an ember-in-a-ring 'mend' sigil) and cots glowing warm within."""
+    draw_house_shell(img, ox, oy, fw, fh, STONE_LT, STONE, FOOD_DK, (40, 60, 58, 255), SNOW_LT)
+    cxc = ox + fw // 2
+    base = oy + fh - 6
+    # an ORIGINAL 'mend' sigil: an open ring cradling an ember (NOT a red cross)
+    ring_y = oy + fh - 15
+    for a in range(0, 360, 40):
+        x = int(cxc + 4 * math.cos(math.radians(a)))
+        y = int(ring_y + 4 * math.sin(math.radians(a)))
+        px(img, x, y, FOOD)
+    px(img, cxc, ring_y, EMBER)
+    px(img, cxc, ring_y - 1, EMBER_LT)
+    # a warm cot window
+    rect(img, cxc - 6, base - 5, cxc - 3, base - 2, EMBER_DK)
+    px(img, cxc - 5, base - 4, EMBER)
+    if tier == 1:
+        rect(img, cxc + 3, base - 5, cxc + 6, base - 2, EMBER_DK)
+        px(img, cxc + 4, base - 4, EMBER)
+        banner(img, ox + fw // 2, oy + fh // 2 - 7, 6, FOOD)
+
+
+def draw_ember_archive(img, ox, oy, fw, fh, tier):
+    """Ember Archive - research academy. A study hall with a tall arched window,
+    shelves of scrolls, and a glowing lectern flame (knowledge kept warm)."""
+    draw_house_shell(img, ox, oy, fw, fh, STONE, STONE_DK, PARKA_TEAL_DK, (24, 60, 60, 255), STONE_LT)
+    cxc = ox + fw // 2
+    base = oy + fh - 6
+    # tall arched study window
+    rect(img, cxc - 3, oy + fh - 18, cxc + 2, base - 2, GLASS)
+    rect(img, cxc - 3, oy + fh - 18, cxc - 3, base - 2, STONE_DK)
+    rect(img, cxc + 2, oy + fh - 18, cxc + 2, base - 2, STONE_DK)
+    px(img, cxc - 1, oy + fh - 14, ICE)
+    # scroll shelves flanking
+    for gx in (ox + 8, ox + fw - 11):
+        for k in range(3):
+            rect(img, gx, base - 3 - k * 3, gx + 2, base - 2 - k * 3, WOOD_LT if k % 2 else FOOD)
+    # a lectern ember below the window (the archive's light)
+    px(img, cxc, base - 1, EMBER)
+    if tier == 1:
+        # an open book emblem on the gable + a brighter window
+        rect(img, cxc - 2, oy + fh // 2 - 6, cxc - 1, oy + fh // 2 - 3, SNOW_LT)
+        rect(img, cxc + 1, oy + fh // 2 - 6, cxc + 2, oy + fh // 2 - 3, SNOW_LT)
+        px(img, cxc, oy + fh // 2 - 5, EMBER)
+        rect(img, cxc - 3, oy + fh - 18, cxc + 2, oy + fh - 17, EMBER)
+
+
+def draw_yard(img, ox, oy, fw, fh, tier, weapon):
+    """Shared drill-yard shell for the three class training buildings. A palisade
+    yard with a training dummy + a class weapon on a rack; `weapon` selects the
+    silhouette (sword=infantry, spear=lancer, bow=marksman)."""
+    draw_house_shell(img, ox, oy, fw, fh, WOOD, WOOD_DK, STONE_DK, SLATE_DK, STONE)
+    cxc = ox + fw // 2
+    base = oy + fh - 7
+    # a straw/hide training dummy on a post
+    rect(img, ox + 9, base - 10, ox + 10, base, WOOD_DK)     # post
+    rect(img, ox + 7, base - 12, ox + 12, base - 7, FUR)      # body
+    px(img, ox + 9, base - 13, FUR_DK)                        # head knot
+    # a weapon rack on the right showing the class arm
+    rx = ox + fw - 12
+    rect(img, rx, base - 12, rx, base, WOOD_DK)
+    if weapon == "sword":
+        rect(img, rx + 3, base - 12, rx + 4, base - 2, STEEL)   # blade
+        rect(img, rx + 2, base - 4, rx + 5, base - 3, FUR)      # hilt
+        px(img, rx + 3, base - 13, STEEL_HI)
+    elif weapon == "spear":
+        rect(img, rx + 3, base - 14, rx + 3, base - 1, WOOD_LT)  # shaft
+        rect(img, rx + 2, base - 15, rx + 4, base - 13, STEEL_HI)  # head
+        px(img, rx + 4, base - 14, ICE)
+    elif weapon == "bow":
+        for i in range(6):
+            px(img, rx + 3 + (i % 2), base - 13 + i, STEEL)     # bow arc
+        rect(img, rx + 3, base - 13, rx + 3, base - 2, WOOD_LT)  # string line
+        px(img, rx + 5, base - 8, ICE)                          # nocked bolt
+    # a class banner over the gate
+    banner(img, cxc, oy + fh // 2 - 8, 7, FLAG)
+    if tier == 1:
+        banner(img, ox + 8, oy + fh // 2 - 6, 6, FLAG)
+        px(img, cxc, base - 1, EMBER)  # a lit brazier in the yard
+
+
+def draw_infantry_yard(img, ox, oy, fw, fh, tier):
+    """Infantry Yard - trains front-line infantry (sword on the rack)."""
+    draw_yard(img, ox, oy, fw, fh, tier, "sword")
+
+
+def draw_lancer_yard(img, ox, oy, fw, fh, tier):
+    """Lancer Yard - trains charging lancers (spear on the rack)."""
+    draw_yard(img, ox, oy, fw, fh, tier, "spear")
+
+
+def draw_marksman_range(img, ox, oy, fw, fh, tier):
+    """Marksman Range - trains ranged marksmen (bow on the rack + a target)."""
+    draw_yard(img, ox, oy, fw, fh, tier, "bow")
+    # a round target butt on the left of the yard
+    cx = ox + 10
+    cy = oy + fh - 12
+    px(img, cx, cy, SNOW_LT)
+    px(img, cx, cy - 1, EMBER)  # bullseye
+
+
 BUILDINGS = [
     ("furnace", 64, 64, draw_furnace),
     ("hunters_hut", 48, 48, draw_hunters_hut),
@@ -376,6 +579,16 @@ BUILDINGS = [
     ("coal_pit", 48, 48, draw_coal_pit),
     ("iron_mine", 48, 48, draw_iron_mine),
     ("war_camp", 48, 48, draw_war_camp),
+    # FEAT-006: the expanded FEAT-002 city, all original role-based art.
+    ("shelter_row", 48, 48, draw_shelter_row),
+    ("frost_vault", 48, 48, draw_frost_vault),
+    ("forge_hall", 48, 48, draw_forge_hall),
+    ("envoy_hall", 48, 48, draw_envoy_hall),
+    ("warming_ward", 48, 48, draw_warming_ward),
+    ("ember_archive", 48, 48, draw_ember_archive),
+    ("infantry_yard", 48, 48, draw_infantry_yard),
+    ("lancer_yard", 48, 48, draw_lancer_yard),
+    ("marksman_range", 48, 48, draw_marksman_range),
 ]
 
 
@@ -553,6 +766,120 @@ def draw_frost_titan(img, ox, oy, fw, fh, step):
         px(img, tx, oy + fh - 9, TITAN_LT)
 
 
+def draw_rime_alpha(img, ox, oy, fw, fh, step):
+    """Rimefang Alpha - a hulking pack-alpha wolf, bigger and frostier than a
+    common frost wolf, with a spined ruff and twin glowing eyes. 40x36 frame."""
+    ground = oy + fh - 1
+    cx = ox + fw // 2
+    swing = 1 if step == 1 else -1
+    body_top = oy + fh - 20
+    # heavy body
+    rect(img, cx - 10, body_top, cx + 10, oy + fh - 10, WOLF)
+    rect(img, cx - 10, oy + fh - 11, cx + 10, oy + fh - 10, WOLF_DK)
+    rect(img, cx - 10, body_top, cx + 10, body_top, WOLF_LT)
+    rect(img, cx + 3, body_top + 1, cx + 8, oy + fh - 12, WOLF_LT)  # haunch
+    # frost spines along the ruff/back
+    for sx in range(cx - 9, cx + 8, 4):
+        rect(img, sx, body_top - 3, sx + 1, body_top, TITAN_LT)
+    # four heavy legs
+    rect(img, cx - 9 + swing, oy + fh - 10, cx - 6 + swing, ground, WOLF_DK)
+    rect(img, cx + 6 - swing, oy + fh - 10, cx + 9 - swing, ground, WOLF_DK)
+    rect(img, cx - 3 - swing, oy + fh - 10, cx - 1, ground, WOLF)
+    rect(img, cx + 1 + swing, oy + fh - 10, cx + 3 + swing, ground, WOLF)
+    # big head lowered at the left
+    rect(img, cx - 15, body_top - 2, cx - 9, oy + fh - 11, WOLF)
+    rect(img, cx - 15, body_top - 2, cx - 15, oy + fh - 11, WOLF_LT)
+    rect(img, cx - 18, body_top + 1, cx - 15, body_top + 4, WOLF_DK)  # snout
+    # ears
+    px(img, cx - 13, body_top - 3, WOLF_DK)
+    px(img, cx - 10, body_top - 3, WOLF_DK)
+    # twin cold-fire eyes + bared fang
+    px(img, cx - 13, body_top + 1, GLOW_RED)
+    px(img, cx - 11, body_top + 1, GLOW_RED)
+    px(img, cx - 17, body_top + 4, SNOW_LT)  # frost fang
+    # frost-tipped tail
+    rect(img, cx + 10, body_top - 2, cx + 14, body_top + 1, WOLF)
+    px(img, cx + 14, body_top - 2, TITAN_LT)
+
+
+def draw_glacier_behemoth(img, ox, oy, fw, fh, step):
+    """Glacier Behemoth - a mountainous four-limbed ice colossus, far larger and
+    craggier than a frost titan, crowned with a jagged glacier ridge. 56x44."""
+    ground = oy + fh - 1
+    cx = ox + fw // 2
+    swing = 1 if step == 1 else -1
+    body_top = oy + fh - 28
+    # massive ice torso
+    rect(img, cx - 18, body_top, cx + 18, oy + fh - 10, TITAN)
+    rect(img, cx - 18, oy + fh - 11, cx + 18, oy + fh - 10, TITAN_DK)
+    rect(img, cx - 18, body_top, cx + 18, body_top, TITAN_LT)
+    # a glacier ridge/crown of tall ice shards
+    for i, sx in enumerate(range(cx - 15, cx + 16, 5)):
+        h = 6 if i % 2 == 0 else 4
+        rect(img, sx, body_top - h, sx + 1, body_top, TITAN_LT)
+        px(img, sx, body_top - h, SNOW_LT)
+    # cracked-ice highlights across the body
+    for (dx, dy) in [(-10, 6), (-2, 10), (6, 4), (12, 8), (0, 16), (-6, 14)]:
+        px(img, cx + dx, body_top + dy, TITAN_LT)
+    # four massive legs
+    rect(img, cx - 16 + swing, oy + fh - 10, cx - 11 + swing, ground, TITAN_DK)
+    rect(img, cx + 11 - swing, oy + fh - 10, cx + 16 - swing, ground, TITAN_DK)
+    rect(img, cx - 5 - swing, oy + fh - 10, cx - 1, ground, TITAN)
+    rect(img, cx + 1 + swing, oy + fh - 10, cx + 5 + swing, ground, TITAN)
+    # low head at the front-left
+    rect(img, cx - 24, body_top + 4, cx - 18, oy + fh - 11, TITAN)
+    rect(img, cx - 24, body_top + 4, cx - 24, oy + fh - 11, TITAN_LT)
+    # three cold eyes glaring
+    px(img, cx - 22, body_top + 7, GLOW_RED)
+    px(img, cx - 20, body_top + 7, GLOW_RED)
+    px(img, cx - 21, body_top + 9, GLOW_RED)
+    # a slab jaw of ice teeth
+    for tx in range(cx - 24, cx - 17, 2):
+        px(img, tx, oy + fh - 11, TITAN_LT)
+
+
+def draw_hoarfrost_wyrm(img, ox, oy, fw, fh, step):
+    """Hoarfrost Wyrm - a long serpentine ice-drake with a horned head, coiled
+    body segments, and tattered frost wings. The apex boss. 56x44 frame."""
+    ground = oy + fh - 1
+    cx = ox + fw // 2
+    swing = 1 if step == 1 else -1
+    mid = oy + fh - 22
+    # sinuous body: a chain of segments rising left-to-right
+    seg = [(-22, 8), (-15, 4), (-7, 2), (1, 3), (9, 6), (16, 9)]
+    for (dx, dy) in seg:
+        x = cx + dx
+        y = mid + dy
+        rect(img, x - 3, y - 3, x + 3, y + 3, RAVAGER)
+        rect(img, x - 3, y - 3, x + 3, y - 3, TITAN_LT)  # frost sheen on top
+        px(img, x, y, RAVAGER_DK)
+    # tattered frost wing rising from the mid-back
+    wx, wy = cx - 2, mid - 2
+    for i in range(8):
+        rect(img, wx + i, wy - i, wx + i + 1, wy - i + 3, ICE if i % 2 == 0 else ICE_DK)
+    px(img, wx + 7, wy - 7, SNOW_LT)
+    # horned head at the far left, low and lunging
+    hx = cx - 22
+    rect(img, hx - 6, mid + 4, hx, mid + 11, RAVAGER)
+    rect(img, hx - 6, mid + 4, hx - 6, mid + 11, TITAN_LT)
+    # two swept ice horns
+    px(img, hx - 5, mid + 2, TITAN_LT)
+    px(img, hx - 4, mid + 1, SNOW_LT)
+    px(img, hx - 2, mid + 2, TITAN_LT)
+    # a cold-glowing eye + a breath of frost
+    px(img, hx - 4, mid + 6, GLOW_RED)
+    swing_off = 1 if step == 1 else 0
+    for i in range(3):
+        px(img, hx - 7 - i, mid + 8 + swing_off, ICE)
+    # a whip-tail curling off the right
+    tx = cx + 19
+    rect(img, tx, mid + 9, tx + 4, mid + 10, RAVAGER_DK)
+    px(img, tx + 4, mid + 8, TITAN_LT)
+    # legs are vestigial: two small claws grounding the body
+    rect(img, cx - 6 + swing, oy + fh - 10, cx - 4 + swing, ground, RAVAGER_DK)
+    rect(img, cx + 6 - swing, oy + fh - 10, cx + 8 - swing, ground, RAVAGER_DK)
+
+
 def build_enemy(name, fw, fh, drawer):
     sheet = new(fw * 2, fh)
     for step in (0, 1):
@@ -562,6 +889,111 @@ def build_enemy(name, fw, fh, drawer):
     print(f"{name}.png", sheet.size)
 
 
+# ===========================================================================
+# HERO PORTRAITS: a 32x32 framed bust per roster hero, packed into one sheet in
+# HERO_IDS order (see src/types HERO_IDS). Each portrait is class-flavoured
+# (infantry helm / lancer hood + spear / marksman hood + arrow) with a rarity
+# accent ring, all original. The engine picks a frame by the hero's index.
+# ===========================================================================
+
+# Rarity accent colours (frame ring). Common->steel, Rare->ice, Epic->ember,
+# Legendary->bright ember-gold, matching the frozen palette.
+RARITY_ACCENT = {
+    "common": STONE_LT,
+    "rare": ICE,
+    "epic": EMBER,
+    "legendary": EMBER_LT,
+}
+
+# Per-class armour palette for the portrait bust.
+CLASS_ARMOR = {
+    "infantry": (PLATE, PLATE_DK),
+    "lancer": (PARKA_BLUE, PARKA_BLUE_DK),
+    "marksman": (PARKA_TEAL, PARKA_TEAL_DK),
+}
+
+# The roster in HERO_IDS order with (class, rarity). Mirrors HeroConfig; kept
+# here so the generator stays standalone (no TS import). Original heroes only.
+HERO_PORTRAITS = [
+    ("ember_warden", "infantry", "common"),
+    ("snow_picket", "marksman", "common"),
+    ("drift_runner", "lancer", "common"),
+    ("iron_bulwark", "infantry", "rare"),
+    ("glacier_lance", "lancer", "rare"),
+    ("frost_archer", "marksman", "rare"),
+    ("aurora_sentinel", "infantry", "epic"),
+    ("stormpike_rider", "lancer", "epic"),
+    ("winters_eye", "marksman", "epic"),
+    ("the_kindled_queen", "infantry", "legendary"),
+    ("wyrmspear_valdis", "lancer", "legendary"),
+    ("the_pale_marksman", "marksman", "legendary"),
+]
+
+
+def draw_hero_portrait(img, ox, oy, size, hero_class, rarity):
+    """One 32x32 hero bust: a rarity-ringed panel, a class-tinted shoulders +
+    hooded/helmed head, and a small class emblem. Deterministic + original."""
+    accent = RARITY_ACCENT[rarity]
+    armor, armor_dk = CLASS_ARMOR[hero_class]
+    x0, y0, x1, y1 = ox, oy, ox + size - 1, oy + size - 1
+    cx = ox + size // 2
+
+    # cold panel background with a subtle vertical gradient
+    for y in range(y0, y1 + 1):
+        t = (y - y0) / max(1, size - 1)
+        rect(img, x0, y, x1, y, lerp((26, 34, 48, 255), (18, 24, 34, 255), t))
+    # rarity accent frame (2px)
+    rect(img, x0, y0, x1, y0 + 1, accent)
+    rect(img, x0, y1 - 1, x1, y1, accent)
+    rect(img, x0, y0, x0 + 1, y1, accent)
+    rect(img, x1 - 1, y0, x1, y1, accent)
+
+    # shoulders / bust
+    rect(img, ox + 7, oy + size - 9, ox + size - 8, oy + size - 3, armor)
+    rect(img, ox + 7, oy + size - 9, ox + 8, oy + size - 3, armor_dk)
+    rect(img, ox + size - 9, oy + size - 9, ox + size - 8, oy + size - 3, armor_dk)
+    rect(img, ox + 7, oy + size - 9, ox + size - 8, oy + size - 9, FUR_LT)  # fur collar
+
+    # head (cold-flushed skin)
+    rect(img, cx - 3, oy + 10, cx + 2, oy + size - 9, SKIN)
+    px(img, cx + 1, oy + size - 12, MOUTH)
+    # eyes catch the accent
+    px(img, cx - 2, oy + 14, accent)
+    px(img, cx + 1, oy + 14, accent)
+
+    if hero_class == "infantry":
+        # frost-plate helm with a visor slit + ember plume
+        rect(img, cx - 4, oy + 8, cx + 3, oy + 12, PLATE)
+        rect(img, cx - 4, oy + 8, cx + 3, oy + 8, STEEL_HI)
+        rect(img, cx - 3, oy + 13, cx + 2, oy + 13, PLATE_DK)  # visor
+        rect(img, cx - 1, oy + 5, cx, oy + 8, EMBER)           # plume
+    elif hero_class == "lancer":
+        # fur hood + a spear tip crossing the corner
+        rect(img, cx - 4, oy + 8, cx + 3, oy + 10, FUR)
+        px(img, cx - 4, oy + 10, FUR_DK)
+        px(img, cx + 3, oy + 10, FUR_DK)
+        rect(img, ox + size - 8, oy + 5, ox + size - 7, oy + 16, WOOD_LT)  # shaft
+        rect(img, ox + size - 9, oy + 4, ox + size - 6, oy + 6, STEEL_HI)  # head
+    elif hero_class == "marksman":
+        # hood + a fletched arrow across the corner
+        rect(img, cx - 4, oy + 8, cx + 3, oy + 10, PARKA_TEAL_DK)
+        px(img, cx - 4, oy + 10, armor_dk)
+        px(img, cx + 3, oy + 10, armor_dk)
+        for i in range(5):
+            px(img, ox + size - 6 - i, oy + 6 + i, WOOD_LT)  # shaft
+        px(img, ox + size - 6, oy + 6, STEEL_HI)             # tip
+        px(img, ox + size - 11, oy + 11, FOOD)               # fletch
+
+
+def build_hero_portraits():
+    size = 32
+    sheet = new(size * len(HERO_PORTRAITS), size)
+    for i, (_id, hero_class, rarity) in enumerate(HERO_PORTRAITS):
+        draw_hero_portrait(sheet, i * size, 0, size, hero_class, rarity)
+    save(sheet, os.path.join(SPR, "hero_portraits.png"))
+    print("hero_portraits.png", sheet.size, f"({len(HERO_PORTRAITS)} frames)")
+
+
 def build_all_characters():
     build_survivor("troop_trapper", 24, 28, dict(kind="trapper", parka=PARKA_BLUE, parka_dk=PARKA_BLUE_DK))
     build_survivor("troop_marksman", 24, 28, dict(kind="marksman", parka=PARKA_TEAL, parka_dk=PARKA_TEAL_DK))
@@ -569,6 +1001,11 @@ def build_all_characters():
     build_enemy("enemy_frost_wolf", 24, 28, draw_frost_wolf)
     build_enemy("enemy_ravager", 32, 36, draw_ravager)
     build_enemy("enemy_frost_titan", 40, 32, draw_frost_titan)
+    # FEAT-006: world-boss / Frostbeast art (FEAT-005 kinds). Larger frames.
+    build_enemy("enemy_rime_alpha", 40, 36, draw_rime_alpha)
+    build_enemy("enemy_glacier_behemoth", 56, 44, draw_glacier_behemoth)
+    build_enemy("enemy_hoarfrost_wyrm", 56, 44, draw_hoarfrost_wyrm)
+    build_hero_portraits()
 
 
 # ===========================================================================
@@ -773,9 +1210,10 @@ def build_ui():
     px(icons, ox + 7, 7, EMBER)
     save(icons, os.path.join(UI, "icons.png"))
 
-    # resource icon sheet: 16x16 x 4, frame order food, wood, COAL, IRON
-    # (must match RESOURCE_ICON_FRAME food:0 wood:1 coal:2 iron:3).
-    res = new(ts * 4, ts)
+    # resource icon sheet: 16x16 x 6, frame order food, wood, COAL, IRON, STEEL,
+    # SPARK (must match RESOURCE_ICON_FRAME food:0 wood:1 coal:2 iron:3 steel:4
+    # and the Ember Sparks premium icon at frame 5).
+    res = new(ts * 6, ts)
     # food (preserved rations: a wrapped bundle / haunch on a hook)
     rect(res, 4, 6, 11, 12, FOOD)
     rect(res, 4, 6, 11, 6, FOOD_DK)
@@ -803,8 +1241,91 @@ def build_ui():
     rect(res, ox + 3, 12, ox + 12, 12, IRON_DK)
     rect(res, ox + 5, 6, ox + 10, 8, IRON)     # stacked top ingot
     rect(res, ox + 5, 6, ox + 10, 6, STEEL_HI)
+    # steel (refined blued alloy ingot with a bright sheen — distinct from iron)
+    ox = 4 * ts
+    STEEL_RES = (143, 166, 201, 255)     # PALETTE.STEEL_RES (blued alloy)
+    STEEL_RES_HI = (198, 214, 240, 255)
+    STEEL_RES_DK = (96, 116, 150, 255)
+    rect(res, ox + 3, 8, ox + 12, 12, STEEL_RES)
+    rect(res, ox + 3, 8, ox + 12, 8, STEEL_RES_HI)
+    rect(res, ox + 3, 12, ox + 12, 12, STEEL_RES_DK)
+    rect(res, ox + 5, 5, ox + 10, 8, STEEL_RES)   # stacked top ingot
+    rect(res, ox + 5, 5, ox + 10, 5, STEEL_RES_HI)
+    px(res, ox + 7, 6, (255, 255, 255, 255))      # bright specular glint
+    # spark (Ember Sparks premium: a warm four-point gleam / gem)
+    ox = 5 * ts
+    SPARK = (255, 210, 122, 255)         # PALETTE.SPARK
+    rect(res, ox + 7, 3, ox + 8, 12, SPARK)       # vertical ray
+    rect(res, ox + 3, 7, ox + 12, 8, SPARK)       # horizontal ray
+    px(res, ox + 6, 6, EMBER_LT)                  # diagonal glimmers
+    px(res, ox + 9, 6, EMBER_LT)
+    px(res, ox + 6, 9, EMBER_LT)
+    px(res, ox + 9, 9, EMBER_LT)
+    rect(res, ox + 7, 7, ox + 8, 8, EMBER_CORE)   # hot core
     save(res, os.path.join(UI, "resource_icons.png"))
-    print("ui: panel.png button.png bar_frame.png icons.png resource_icons.png")
+
+    # menu icon sheet: 16x16 x 8 for the new hub screens, frame order
+    # hero, summon, campaign, research, gear, alliance, arena, quest.
+    # (matches MENU_ICON_FRAME in AssetKeys.ts). Simple, legible glyphs.
+    menu = new(ts * 8, ts)
+    # 0 hero: a helmed bust
+    rect(menu, 5, 9, 10, 13, PLATE)
+    rect(menu, 6, 4, 9, 9, PLATE)
+    rect(menu, 6, 4, 9, 4, STEEL_HI)
+    px(menu, 7, 3, EMBER)                # plume
+    px(menu, 6, 6, ICE); px(menu, 9, 6, ICE)
+    # 1 summon: a four-point star burst
+    ox = ts
+    rect(menu, ox + 7, 3, ox + 8, 13, EMBER_LT)
+    rect(menu, ox + 3, 7, ox + 13, 8, EMBER_LT)
+    px(menu, ox + 7, 7, EMBER_CORE); px(menu, ox + 8, 8, EMBER_CORE)
+    px(menu, ox + 5, 5, EMBER); px(menu, ox + 10, 10, EMBER)
+    # 2 campaign: a map flag on a hill
+    ox = 2 * ts
+    for i in range(5):
+        rect(menu, ox + 3, 12 - i, ox + 12 - i, 12 - i, SNOW_LT if i == 0 else SNOW_DK)
+    rect(menu, ox + 9, 3, ox + 9, 9, WOOD_DK)     # pole
+    rect(menu, ox + 6, 3, ox + 9, 6, FLAG)        # pennant
+    # 3 research: an open book
+    ox = 3 * ts
+    rect(menu, ox + 3, 5, ox + 7, 12, SNOW_LT)
+    rect(menu, ox + 9, 5, ox + 13, 12, SNOW_LT)
+    rect(menu, ox + 7, 4, ox + 9, 12, WOOD)       # spine
+    for k in (7, 9, 11):
+        rect(menu, ox + 3, k, ox + 6, k, ICE_DK)
+        rect(menu, ox + 10, k, ox + 13, k, ICE_DK)
+    # 4 gear: a chestplate/coat
+    ox = 4 * ts
+    rect(menu, ox + 5, 4, ox + 10, 13, STEEL)
+    rect(menu, ox + 5, 4, ox + 10, 4, STEEL_HI)
+    rect(menu, ox + 3, 5, ox + 5, 8, STEEL_DK)    # shoulder
+    rect(menu, ox + 10, 5, ox + 12, 8, STEEL_DK)
+    px(menu, ox + 7, 8, EMBER)                    # emblem
+    # 5 alliance: a shield-and-handshake (two clasped bars)
+    ox = 5 * ts
+    rect(menu, ox + 4, 4, ox + 11, 9, FLAG)
+    rect(menu, ox + 5, 9, ox + 10, 11, FLAG)
+    px(menu, ox + 7, 12, FLAG)
+    rect(menu, ox + 6, 6, ox + 9, 7, EMBER_CORE)  # clasp
+    # 6 arena: two crossed swords
+    ox = 6 * ts
+    for i in range(9):
+        px(menu, ox + 3 + i, 12 - i, STEEL)
+        px(menu, ox + 12 - i, 12 - i, STEEL)
+    px(menu, ox + 4, 12, FUR); px(menu, ox + 11, 12, FUR)
+    # 7 quest: a checklist / scroll with a tick
+    ox = 7 * ts
+    rect(menu, ox + 4, 3, ox + 12, 13, SNOW_LT)
+    rect(menu, ox + 4, 3, ox + 12, 3, ICE_DK)
+    for k in (6, 9):
+        rect(menu, ox + 6, k, ox + 11, k, STONE_DK)
+    TICK = (122, 208, 160, 255)          # PALETTE.SUCCESS (a green tick)
+    px(menu, ox + 6, 12, TICK)
+    px(menu, ox + 7, 13, TICK)
+    px(menu, ox + 8, 12, TICK)
+    px(menu, ox + 9, 11, TICK)
+    save(menu, os.path.join(UI, "menu_icons.png"))
+    print("ui: panel.png button.png bar_frame.png icons.png resource_icons.png menu_icons.png")
 
 
 if __name__ == "__main__":

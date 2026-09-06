@@ -1,19 +1,12 @@
 import Phaser from 'phaser';
 import { PALETTE } from '../config/GameConfig';
-import { TextureKeys, AudioKeys, TROOP_TEXTURE_BY_KIND, type TextureKey } from '../config/AssetKeys';
+import { TextureKeys, AudioKeys, TROOP_TEXTURE_BY_KIND, ENEMY_TEXTURE_BY_KIND } from '../config/AssetKeys';
 import { troopDef, ENEMY_DEFS } from '../config/TroopConfig';
 import { AudioManager } from '../systems/AudioManager';
 import type { EnemyKind, TroopKind, UnitStats } from '../types';
 
 /** Which side of the field a battler fights for. */
 export type Side = 'friendly' | 'enemy';
-
-/** Texture key for each enemy kind (mirrors the sprite registry). */
-const ENEMY_TEXTURE_BY_KIND: Record<EnemyKind, TextureKey> = {
-  frost_wolf: TextureKeys.EnemyFrostWolf,
-  ravager: TextureKeys.EnemyRavager,
-  frost_titan: TextureKeys.EnemyFrostTitan,
-};
 
 /**
  * Battler - one animated combatant sprite (a soldier or a Frozen Horde beast)

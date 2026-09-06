@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { CombatSystem } from './CombatSystem';
+import { combineModifiers } from '../config/StatModifiers';
 import { waveReward } from '../config/WaveConfig';
-import type { Army } from '../types';
+import type { Army, StatModifiers } from '../types';
 
 /**
  * Unit tests for the deterministic combat resolver: clear win, clear loss, and a
@@ -117,5 +118,107 @@ describe('CombatSystem', () => {
     const marksmanEff = CombatSystem.effectiveArmyPower(army({ marksman: marksmen }), wave);
     const vanguardEff = CombatSystem.effectiveArmyPower(army({ vanguard: vanguardsEqualRaw }), wave);
     expect(marksmanEff).toBeGreaterThan(vanguardEff);
+  });
+
+  // --- FEAT-005: StatModifiers consumption (triangle + army/class bonuses) ---
+
+  const mods = (m: Partial<StatModifiers>): StatModifiers => combineModifiers(m);
+
+  it('army-wide battle modifiers raise effective power (and stay deterministic)', () => {
+    const a = army({ vanguard: 12 });
+    const base = CombatSystem.effectiveArmyPower(a, 3);
+    const buffed = CombatSystem.effectiveArmyPower(a, 3, mods({ troopAttack: 0.5 }));
+    // +50% attack -> armyBattleMultiplier 1.5 -> exactly 1.5x effective power.
+    expect(buffed).toBeCloseTo(base * 1.5, 6);
+    // Determinism: identical inputs, identical output.
+    expect(CombatSystem.effectiveArmyPower(a, 3, mods({ troopAttack: 0.5 }))).toBe(buffed);
+  });
+
+  it('per-class bonuses only lift the matching class', () => {
+    const wave = 3;
+    // vanguard = infantry class; a lancer bonus must NOT change its power, but an
+    // infantry bonus must.
+    const vanguards = army({ vanguard: 10 });
+    const base = CombatSystem.effectiveArmyPower(vanguards, wave);
+    const lancerBuffed = CombatSystem.effectiveArmyPower(vanguards, wave, mods({ lancerBonus: 0.5 }));
+    const infantryBuffed = CombatSystem.effectiveArmyPower(
+      vanguards,
+      wave,
+      mods({ infantryBonus: 0.5 }),
+    );
+    expect(lancerBuffed).toBeCloseTo(base, 6);
+    expect(infantryBuffed).toBeCloseTo(base * 1.5, 6);
+  });
+
+  it('modifiers can turn a loss into a win at the same army/wave', () => {
+    const wave = 6;
+    // The LARGEST marksman army that still LOSES this wave with no modifiers.
+    let n = 1;
+    while (!CombatSystem.resolve(army({ marksman: n }), wave).win) n++;
+    const loseCount = n - 1;
+    expect(loseCount).toBeGreaterThanOrEqual(1);
+    const loseArmy = army({ marksman: loseCount });
+    const lost = CombatSystem.resolve(loseArmy, wave);
+    expect(lost.win).toBe(false);
+
+    // A large all-round buff should flip that exact army into a win.
+    const won = CombatSystem.resolve(loseArmy, wave, mods({ troopAttack: 3, marksmanBonus: 1 }));
+    expect(won.win).toBe(true);
+    expect(won.armyPower).toBeGreaterThan(lost.armyPower);
+  });
+
+  it('armyPower (matchup-neutral) also honors modifiers', () => {
+    const a = army({ trapper: 8 });
+    const base = CombatSystem.armyPower(a);
+    const buffed = CombatSystem.armyPower(a, mods({ troopAttack: 0.25 }));
+    // trapper = lancer class; a lancer bonus stacks with the army-wide one.
+    const classBuffed = CombatSystem.armyPower(a, mods({ troopAttack: 0.25, lancerBonus: 0.1 }));
+    expect(buffed).toBeCloseTo(base * 1.25, 6);
+    expect(classBuffed).toBeCloseTo(base * 1.25 * 1.1, 6);
+  });
+
+  // --- troop TIERS (review v1): tiered army fields stronger units ------------
+
+  it('a higher-tier army fields strictly more effective power', () => {
+    const a = army({ vanguard: 10 });
+    const base = CombatSystem.effectiveArmyPower(a, 3);
+    // Same counts, but every vanguard is tier 3 -> strictly more power.
+    const tiered = CombatSystem.effectiveArmyPower(a, 3, undefined, { vanguard: { 3: 10 } });
+    expect(tiered).toBeGreaterThan(base);
+    // Determinism holds with tiers supplied.
+    expect(CombatSystem.effectiveArmyPower(a, 3, undefined, { vanguard: { 3: 10 } })).toBe(tiered);
+  });
+
+  it('armyPower respects a partial tier breakdown (remainder defaults to tier 1)', () => {
+    const a = army({ trapper: 10 });
+    const allT1 = CombatSystem.armyPower(a);
+    // 4 are tier 2, the remaining 6 default to tier 1.
+    const mixed = CombatSystem.armyPower(a, undefined, { trapper: { 2: 4 } });
+    expect(mixed).toBeGreaterThan(allT1);
+  });
+
+  it('tiers can turn a losing army into a winning one at the same counts/wave', () => {
+    const wave = 6;
+    // Largest marksman army that still LOSES at tier 1.
+    let n = 1;
+    while (!CombatSystem.resolve(army({ marksman: n }), wave).win) n++;
+    const loseCount = n - 1;
+    expect(loseCount).toBeGreaterThanOrEqual(1);
+    const a = army({ marksman: loseCount });
+    expect(CombatSystem.resolve(a, wave).win).toBe(false);
+    // The SAME army, but every unit at the top tier, wins.
+    const won = CombatSystem.resolve(a, wave, undefined, { marksman: { 4: loseCount } });
+    expect(won.win).toBe(true);
+    // Survivors are reported at their tier so the standing army keeps the tier.
+    expect(won.survivorTiers.marksman?.[4]).toBeGreaterThan(0);
+  });
+
+  it('resolves the new Frostbeast escort kinds in late waves', () => {
+    // Wave 15 now includes a glacier behemoth escort; its wave power is far
+    // above an early wave, and a strong marksman-led army can still clear it.
+    expect(CombatSystem.wavePower(15)).toBeGreaterThan(CombatSystem.wavePower(9));
+    const huge = army({ marksman: 400, vanguard: 200 });
+    const result = CombatSystem.resolve(huge, 15, mods({ troopAttack: 1 }));
+    expect(result.win).toBe(true);
   });
 });

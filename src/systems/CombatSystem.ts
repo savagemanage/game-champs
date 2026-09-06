@@ -1,12 +1,18 @@
 import {
+  armyBattleMultiplier,
+  classBattleMultiplier,
+  emptyModifiers,
+} from '../config/StatModifiers';
+import {
   ENEMY_DEFS,
   TROOP_ORDER,
   enemyPower,
-  troopDef,
+  troopClass,
+  troopTierPower,
   troopVsEnemyMultiplier,
 } from '../config/TroopConfig';
 import { waveComposition, waveReward } from '../config/WaveConfig';
-import type { Army, ResourceCost, TroopKind } from '../types';
+import type { Army, ArmyTiers, ResourceCost, StatModifiers, TroopKind } from '../types';
 
 /** The result of resolving a single battle. */
 export interface CombatResult {
@@ -16,6 +22,12 @@ export interface CombatResult {
   wave: number;
   /** Surviving player troops (only meaningful on a win; all-zero on a loss). */
   survivors: Army;
+  /**
+   * Surviving player troops broken down BY TIER (kind -> tier -> count), so the
+   * town's tiered army can be updated after a battle without losing tier
+   * information. Casualties are taken proportionally within each kind.
+   */
+  survivorTiers: ArmyTiers;
   /** Player troops lost in the battle. */
   casualties: Army;
   /** Resource reward paid out (empty bundle on a loss). */
@@ -27,39 +39,56 @@ export interface CombatResult {
 }
 
 /**
+ * The battle modifiers a resolve/effective-power call applies. Optional
+ * everywhere so the resolver stays a pure function of `(army, wave)` by default
+ * (all existing call-sites and tests keep working with no modifiers), while
+ * GameState can thread the combined research + gear + hero bundle in so combat
+ * genuinely scales with progression. Bundling this in the config layer keeps
+ * CombatSystem free of any systems import.
+ */
+export type BattleModifiers = StatModifiers;
+
+/**
  * CombatSystem - a pure, DETERMINISTIC battle resolver.
  *
  * Given the player's standing army and a wave number, it computes total
  * effective power on each side (from the per-unit stats in TroopConfig and the
  * composition in WaveConfig), decides win/lose, and distributes casualties.
  *
- * Determinism: the outcome is a pure function of `(army, wave)`. There is no
- * Math.random. A seed is accepted for future variability but the default
- * resolution is fully reproducible, so unit tests are stable.
+ * Determinism: the outcome is a pure function of `(army, wave, modifiers)`.
+ * There is no Math.random, so unit tests are stable.
  *
- * Composition matters: each troop kind's power is scaled by the soft-RPS
- * {@link troopVsEnemyMultiplier} counter against the wave's enemy roles
- * (weighted by each enemy role's share of the wave power). Fielding the troop
- * that counters a wave's dominant enemy is worth more than an equal-cost
- * off-counter stack, so army mix changes outcomes. The comparison stays a pure,
- * deterministic function of `(army, wave)`.
- *
- * Casualty model: the loser is wiped out; the winner loses troops in proportion
- * to how close the fight was (a lopsided win costs almost nothing, a squeaker
- * costs a large share). Losses are distributed across troop kinds in proportion
- * to how many of each the army fielded.
+ * Two things scale a stack's effective power:
+ *   1. the Infantry > Lancer > Marksman TRIANGLE — each troop kind's power is
+ *      multiplied by the wave-power-weighted average of its soft-RPS
+ *      {@link troopVsEnemyMultiplier} against every enemy role in the wave, so
+ *      fielding the class that counters a wave's dominant enemy is worth more
+ *      than an equal-cost off-counter stack, and
+ *   2. the combined {@link StatModifiers} bundle — army-wide attack/hp/defense
+ *      via {@link armyBattleMultiplier} and per-class (infantry/lancer/marksman)
+ *      bonuses via {@link classBattleMultiplier}, so research, gear and hero
+ *      bonuses make troops hit harder without changing the deterministic shape.
  */
 export class CombatSystem {
   /**
-   * Raw total power of an army bundle, IGNORING matchups. Sums each troop
-   * kind's `count * troopPower`. Pure and monotonic in troop counts. Used for
-   * coarse sizing/UI; the battle decision uses {@link effectiveArmyPower}.
+   * Raw total power of an army bundle, IGNORING matchups but INCLUDING the
+   * optional battle modifiers (army-wide + per-class). Sums each troop kind's
+   * `count * troopPower * armyMult * classMult`. Pure and monotonic in troop
+   * counts. Used for coarse sizing/UI and campaign validation; the wave battle
+   * decision uses {@link effectiveArmyPower}.
    */
-  static armyPower(army: Army): number {
+  static armyPower(army: Army, modifiers?: BattleModifiers, tiers?: ArmyTiers): number {
+    const mods = modifiers ?? emptyModifiers();
+    const armyMult = armyBattleMultiplier(mods);
     let total = 0;
     for (const kind of TROOP_ORDER) {
       const count = Math.max(0, Math.floor(army[kind] ?? 0));
-      if (count > 0) total += count * troopUnitPower(kind);
+      if (count > 0) {
+        // The tier-weighted per-unit power (higher-tier units are stronger); a
+        // missing tier breakdown falls back to tier 1 for the whole kind.
+        const perKind = tieredKindPower(kind, count, tiers);
+        total += perKind * armyMult * classBattleMultiplier(mods, troopClass(kind));
+      }
     }
     return total;
   }
@@ -67,12 +96,20 @@ export class CombatSystem {
   /**
    * Composition-aware effective power of `army` against wave `n`. Each troop
    * kind's raw power is multiplied by the wave-power-weighted average of its
-   * soft-RPS counter multiplier against every enemy role in the wave. This is
-   * the value the resolver compares against {@link wavePower}, so a stack that
-   * counters the wave's dominant enemy outperforms an equal raw-power stack
-   * that does not. Pure and deterministic.
+   * soft-RPS counter multiplier against every enemy role in the wave AND by the
+   * optional battle modifiers (army-wide + per-class). This is the value the
+   * resolver compares against {@link wavePower}, so a stack that counters the
+   * wave's dominant enemy — and one buffed by research/gear/heroes —
+   * outperforms an equal raw-power stack that is not. Pure and deterministic.
    */
-  static effectiveArmyPower(army: Army, n: number): number {
+  static effectiveArmyPower(
+    army: Army,
+    n: number,
+    modifiers?: BattleModifiers,
+    tiers?: ArmyTiers,
+  ): number {
+    const mods = modifiers ?? emptyModifiers();
+    const armyMult = armyBattleMultiplier(mods);
     const composition = waveComposition(n);
     // Wave power share per enemy kind (weights for the average multiplier).
     let waveTotal = 0;
@@ -87,7 +124,8 @@ export class CombatSystem {
     for (const kind of TROOP_ORDER) {
       const count = Math.max(0, Math.floor(army[kind] ?? 0));
       if (count <= 0) continue;
-      const raw = count * troopUnitPower(kind);
+      const classMult = classBattleMultiplier(mods, troopClass(kind));
+      const raw = tieredKindPower(kind, count, tiers) * armyMult * classMult;
       if (waveTotal <= 0) {
         // No wave to counter (empty/degenerate): matchups are neutral.
         total += raw;
@@ -114,17 +152,24 @@ export class CombatSystem {
   /**
    * Resolve a battle of `army` against wave `wave`. Deterministic. Returns a
    * full {@link CombatResult}. The army passed in is NOT mutated; the caller
-   * applies survivors/reward from the result.
+   * applies survivors/reward from the result. Optional `modifiers` scale the
+   * player's effective power (research + gear + hero battle bonuses).
    */
-  static resolve(army: Army, wave: number): CombatResult {
-    // The decision uses COMPOSITION-AWARE effective power (matchups applied),
-    // reported as `armyPower` so the HUD/result reflect what actually decided
-    // the battle. `wavePower` is the raw enemy total to beat.
-    const armyPower = CombatSystem.effectiveArmyPower(army, wave);
+  static resolve(
+    army: Army,
+    wave: number,
+    modifiers?: BattleModifiers,
+    tiers?: ArmyTiers,
+  ): CombatResult {
+    // The decision uses COMPOSITION-AWARE effective power (matchups + modifiers
+    // + troop tiers applied), reported as `armyPower` so the HUD/result reflect
+    // what actually decided the battle. `wavePower` is the raw enemy total.
+    const armyPower = CombatSystem.effectiveArmyPower(army, wave, modifiers, tiers);
     const wavePower = CombatSystem.wavePower(wave);
 
     const casualties: Army = { trapper: 0, marksman: 0, vanguard: 0 };
     const survivors: Army = { trapper: 0, marksman: 0, vanguard: 0 };
+    const survivorTiers: ArmyTiers = {};
 
     const win = armyPower >= wavePower && armyPower > 0;
 
@@ -137,6 +182,7 @@ export class CombatSystem {
         win: false,
         wave: Math.max(1, Math.floor(wave)),
         survivors,
+        survivorTiers,
         casualties,
         reward: {},
         armyPower,
@@ -156,12 +202,17 @@ export class CombatSystem {
       if (lossFraction > 0 && lost >= count) lost = count - 1;
       casualties[kind] = lost;
       survivors[kind] = count - lost;
+      // Distribute the survivors back across the kind's tiers proportionally,
+      // so the standing tiered army keeps its higher-tier units where possible.
+      const perTierSurv = distributeSurvivors(kind, count, survivors[kind], tiers);
+      if (Object.keys(perTierSurv).length > 0) survivorTiers[kind] = perTierSurv;
     }
 
     return {
       win: true,
       wave: Math.max(1, Math.floor(wave)),
       survivors,
+      survivorTiers,
       casualties,
       reward: waveReward(wave),
       armyPower,
@@ -171,13 +222,67 @@ export class CombatSystem {
 }
 
 /**
- * Per-unit power used by the resolver. Kept module-local (re-derived from the
- * troop's stat block) so CombatSystem does not need to import troopPower under a
- * different name; identical formula shape to TroopConfig.troopPower.
+ * The total power of `count` units of a kind, respecting the per-tier
+ * breakdown when supplied: each tier's units contribute {@link troopTierPower}
+ * at that tier. A missing/short breakdown lands the remaining units at tier 1,
+ * so the tier-blind callers (all existing tests) behave exactly as before.
  */
-function troopUnitPower(kind: TroopKind): number {
-  const s = troopDef(kind).stats;
-  return s.attack * s.attackSpeed + s.hp * 0.25;
+function tieredKindPower(kind: TroopKind, count: number, tiers?: ArmyTiers): number {
+  const perTier = tiers?.[kind];
+  if (!perTier) return count * troopTierPower(kind, 1);
+  let power = 0;
+  let accounted = 0;
+  for (const [tierStr, n] of Object.entries(perTier)) {
+    const c = Math.max(0, Math.floor(n ?? 0));
+    if (c <= 0) continue;
+    power += c * troopTierPower(kind, Number(tierStr));
+    accounted += c;
+  }
+  // Any units not covered by the breakdown default to tier 1.
+  const remainder = Math.max(0, count - accounted);
+  if (remainder > 0) power += remainder * troopTierPower(kind, 1);
+  return power;
+}
+
+/**
+ * Distribute `survivorCount` survivors of a kind back across the tiers it was
+ * fielded at (proportionally, floored, remainder to the highest tiers so strong
+ * units are preferentially kept). Falls back to a single tier-1 bucket when no
+ * breakdown is supplied.
+ */
+function distributeSurvivors(
+  kind: TroopKind,
+  originalCount: number,
+  survivorCount: number,
+  tiers?: ArmyTiers,
+): Record<number, number> {
+  const out: Record<number, number> = {};
+  if (survivorCount <= 0) return out;
+  const perTier = tiers?.[kind];
+  if (!perTier || originalCount <= 0) {
+    out[1] = survivorCount;
+    return out;
+  }
+  const entries = Object.entries(perTier)
+    .map(([t, n]) => [Number(t), Math.max(0, Math.floor(n ?? 0))] as [number, number])
+    .filter(([, n]) => n > 0)
+    .sort((a, b) => b[0] - a[0]); // highest tier first
+  let assigned = 0;
+  for (const [tier, n] of entries) {
+    const share = Math.floor((n / originalCount) * survivorCount);
+    if (share > 0) {
+      out[tier] = share;
+      assigned += share;
+    }
+  }
+  // Remainder (from flooring) goes to the highest tiers first.
+  let remainder = survivorCount - assigned;
+  for (const [tier] of entries) {
+    if (remainder <= 0) break;
+    out[tier] = (out[tier] ?? 0) + 1;
+    remainder--;
+  }
+  return out;
 }
 
 // Re-export for callers that want the enemy stat table alongside combat logic.

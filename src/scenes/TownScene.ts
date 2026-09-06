@@ -1,14 +1,28 @@
 import Phaser from 'phaser';
-import { SceneKeys, PALETTE, CANVAS, RESOURCE_ORDER } from '../config/GameConfig';
-import { TextureKeys, AudioKeys, BUILDING_TEXTURE_BY_KIND, RESOURCE_ICON_FRAME } from '../config/AssetKeys';
+import { SceneKeys, PALETTE, CANVAS, RESOURCE_ORDER, type SceneKey } from '../config/GameConfig';
+import { TextureKeys, AudioKeys, BUILDING_TEXTURE_BY_KIND, RESOURCE_ICON_FRAME, SPARK_ICON_FRAME, MENU_ICON_FRAME } from '../config/AssetKeys';
 import { BUILDING_ORDER, buildingDef, isProducer } from '../config/BuildingConfig';
 import type { BuildingKind, ResourceKind } from '../types';
 import { AudioManager } from '../systems/AudioManager';
 import { GameState } from '../systems/GameState';
 import { Menu, type MenuButton, type ProgressBar } from '../ui/Menu';
 import { TrainingPanel } from '../ui/TrainingPanel';
+import { PopulationPanel } from '../ui/PopulationPanel';
 import { textStyle } from '../ui/UiText';
 import { tr } from '../i18n/i18n';
+import type { TrKey } from '../i18n/strings';
+
+/** The Town hub's links to the FEAT-006 system screens. */
+const HUB_LINKS: { key: keyof typeof MENU_ICON_FRAME; scene: SceneKey; label: TrKey }[] = [
+  { key: 'hero', scene: SceneKeys.Hero, label: 'nav.hero' },
+  { key: 'summon', scene: SceneKeys.Summon, label: 'nav.summon' },
+  { key: 'campaign', scene: SceneKeys.Campaign, label: 'nav.campaign' },
+  { key: 'research', scene: SceneKeys.Research, label: 'nav.research' },
+  { key: 'gear', scene: SceneKeys.Gear, label: 'nav.gear' },
+  { key: 'alliance', scene: SceneKeys.Alliance, label: 'nav.alliance' },
+  { key: 'arena', scene: SceneKeys.Arena, label: 'nav.arena' },
+  { key: 'quest', scene: SceneKeys.Quests, label: 'nav.quests' },
+];
 
 /**
  * Format a NET offline resource delta for the "while away" banner. The amount
@@ -30,6 +44,18 @@ const BUILDING_LAYOUT: Record<BuildingKind, { x: number; y: number; scale: numbe
   coal_pit: { x: 170, y: 400, scale: 1.8 },
   iron_mine: { x: 790, y: 400, scale: 1.8 },
   war_camp: { x: 480, y: 420, scale: 1.9 },
+  // FEAT-002 expanded city. Positions are laid out for when the art feature
+  // adds their sprites; until a texture exists they are not rendered (the
+  // buildBuildings loop skips any kind without a registered texture).
+  shelter_row: { x: 330, y: 400, scale: 1.7 },
+  frost_vault: { x: 620, y: 400, scale: 1.7 },
+  forge_hall: { x: 380, y: 250, scale: 1.7 },
+  envoy_hall: { x: 580, y: 250, scale: 1.7 },
+  warming_ward: { x: 250, y: 470, scale: 1.6 },
+  ember_archive: { x: 710, y: 470, scale: 1.6 },
+  infantry_yard: { x: 400, y: 470, scale: 1.6 },
+  lancer_yard: { x: 480, y: 480, scale: 1.6 },
+  marksman_range: { x: 560, y: 470, scale: 1.6 },
 };
 
 /** Per-resource live widgets in the top bar. */
@@ -79,6 +105,10 @@ export class TownScene extends Phaser.Scene {
   private warmthWidgets!: WarmthWidgets;
 
   private trainingPanel!: TrainingPanel;
+  private populationPanel!: PopulationPanel;
+  private hubMenu?: Phaser.GameObjects.Container;
+  private sparksText!: Phaser.GameObjects.Text;
+  private populationText!: Phaser.GameObjects.Text;
 
   // Upgrade panel widgets (rebuilt per selected building).
   private upgradePanel!: Phaser.GameObjects.Container;
@@ -100,6 +130,19 @@ export class TownScene extends Phaser.Scene {
     this.state = GameState.get();
     this.audio = AudioManager.get(this);
 
+    // Phaser REUSES the scene instance across scene.start() restarts, so these
+    // per-widget arrays are only initialized once (at construction) and would
+    // otherwise retain references to the Text/Image objects from a previous
+    // visit - which were destroyed on shutdown. Re-entering the Town (e.g. from
+    // a hub screen) then rebuilt fresh widgets while the stale destroyed ones
+    // lingered in the arrays; the per-frame refresh loops later called setText/
+    // setColor on those destroyed objects, whose backing canvas is null, which
+    // threw inside update() and silently killed the whole render loop (the
+    // screen froze on a ~85% black fade that never cleared). Reset them here so
+    // every entry starts from a clean slate.
+    this.resourceWidgets = [];
+    this.markers = [];
+
     this.cameras.main.setBackgroundColor(PALETTE.BG_SKY_CSS);
     Menu.fadeIn(this);
 
@@ -113,10 +156,12 @@ export class TownScene extends Phaser.Scene {
     this.buildUpgradePanel();
 
     this.trainingPanel = new TrainingPanel(this, this.state);
+    this.populationPanel = new PopulationPanel(this, this.state);
 
     // Keyboard shortcuts.
     this.input.keyboard?.on('keydown-B', () => this.goBattle());
     this.input.keyboard?.on('keydown-S', () => this.openSettings());
+    this.input.keyboard?.on('keydown-P', () => this.openPopulation());
     this.input.keyboard?.on('keydown-ESC', () => this.closeUpgradePanel());
 
     this.audio.playMusic(AudioKeys.MusicLoop);
@@ -150,6 +195,7 @@ export class TownScene extends Phaser.Scene {
     this.refreshBuildingBadges();
     this.refreshUpgradePanel(now);
     this.trainingPanel.update();
+    this.populationPanel.update();
   }
 
   // ---- Buildings -----------------------------------------------------------
@@ -158,6 +204,10 @@ export class TownScene extends Phaser.Scene {
     for (const kind of BUILDING_ORDER) {
       const layout = BUILDING_LAYOUT[kind];
       const tex = BUILDING_TEXTURE_BY_KIND[kind];
+      // The expanded FEAT-002 city has no sprites yet (art lands in a later
+      // feature); skip any building whose texture is not registered so the
+      // town renders cleanly while its economy/city logic is already live.
+      if (!tex) continue;
       const sprite = this.add
         .image(layout.x, layout.y, tex, 0)
         .setScale(layout.scale)
@@ -206,7 +256,23 @@ export class TownScene extends Phaser.Scene {
       this.resourceWidgets.push({ res, amount, rate });
     });
 
-    Menu.label(this, CANVAS.WIDTH / 2, 84, tr('town.hint'), 12, 0.55).setColor(PALETTE.MUTED_CSS);
+    // The gameplay hint sits in its own band BELOW the warmth strip (bar at
+    // y=60, efficiency readout at y=80) so the three HUD lines never overlap.
+    Menu.label(this, CANVAS.WIDTH / 2, 102, tr('town.hint'), 12, 0.55).setColor(PALETTE.MUTED_CSS);
+
+    // Ember Sparks (premium) + survivor population readouts, top-right, just
+    // under the resource bar so the expanded economy is always visible.
+    this.add.image(CANVAS.WIDTH - 250, 62, TextureKeys.ResourceIcons, SPARK_ICON_FRAME).setOrigin(0.5).setScale(1.2);
+    this.sparksText = this.add.text(CANVAS.WIDTH - 238, 62, '', textStyle(13, { fontStyle: 'bold', color: PALETTE.SPARK_CSS })).setOrigin(0, 0.5);
+    // The survivor readout doubles as the entry point to the workforce panel
+    // (assign / recruit / recall), so the population mechanic is playable.
+    this.populationText = this.add
+      .text(CANVAS.WIDTH - 20, 62, '', textStyle(13, { color: PALETTE.FROST_CSS }))
+      .setOrigin(1, 0.5)
+      .setInteractive({ useHandCursor: true });
+    this.populationText.on(Phaser.Input.Events.POINTER_OVER, () => this.populationText.setColor(PALETTE.ACCENT_CSS));
+    this.populationText.on(Phaser.Input.Events.POINTER_OUT, () => this.populationText.setColor(PALETTE.FROST_CSS));
+    this.populationText.on(Phaser.Input.Events.POINTER_DOWN, () => this.openPopulation());
   }
 
   // ---- Warmth HUD ----------------------------------------------------------
@@ -226,7 +292,9 @@ export class TownScene extends Phaser.Scene {
       .setOrigin(1, 0.5);
     const bar = Menu.progressBar(this, barX, barY, barW, 12, PALETTE.EMBER);
     const value = this.add.text(barX + barW + 12, barY, '', textStyle(12, { color: PALETTE.FROST_CSS })).setOrigin(0, 0.5);
-    const status = this.add.text(CANVAS.WIDTH / 2, barY + 16, '', textStyle(12, { fontStyle: 'bold' })).setOrigin(0.5);
+    // The efficiency / FREEZING readout sits in its own band just under the bar
+    // (barY=60 -> y=80), clear of both the bar above and the town.hint below.
+    const status = this.add.text(CANVAS.WIDTH / 2, barY + 20, '', textStyle(12, { fontStyle: 'bold' })).setOrigin(0.5);
 
     this.warmthWidgets = { bar, label, value, status };
   }
@@ -259,15 +327,66 @@ export class TownScene extends Phaser.Scene {
       const rate = rates[w.res];
       w.rate.setText(rate > 0 ? tr('resource.perSecond', { amount: rate.toFixed(1) }) : '');
     }
+    this.sparksText.setText(String(Math.floor(this.state.premium.sparks)));
+    const pop = this.state.population;
+    const cap = pop.housingCap(this.state.buildings.totalHousing());
+    this.populationText.setText(`${tr('population.label')} ${tr('population.value', { total: Math.floor(pop.total), cap: Math.floor(cap) })}`);
   }
 
   // ---- Bottom action bar ---------------------------------------------------
 
   private buildBottomBar(): void {
     const y = CANVAS.HEIGHT - 30;
-    Menu.button(this, 120, y, tr('town.training'), () => this.openTraining(), { width: 180 });
-    Menu.button(this, CANVAS.WIDTH / 2, y, tr('town.battle'), () => this.goBattle(), { width: 180, accent: PALETTE.DANGER });
+    Menu.button(this, 100, y, tr('town.training'), () => this.openTraining(), { width: 150 });
+    Menu.button(this, 260, y, tr('nav.menu'), () => this.toggleHubMenu(), { width: 150, accent: PALETTE.ICE });
+    Menu.button(this, CANVAS.WIDTH / 2, y, tr('town.battle'), () => this.goBattle(), { width: 160, accent: PALETTE.DANGER });
     Menu.button(this, CANVAS.WIDTH - 120, y, tr('town.settings'), () => this.openSettings(), { width: 180 });
+  }
+
+  /**
+   * The FEAT-006 hub menu: a dismissible overlay of the eight system screens
+   * (Heroes, Summon, Expedition, Research, Chief Gear, Pact & Rally, Arena,
+   * Duties) reached from the Town hub, each an icon + label routing to its
+   * scene. Mirrors the existing Town->Battle/Settings navigation.
+   */
+  private toggleHubMenu(): void {
+    if (this.hubMenu) {
+      this.hubMenu.destroy();
+      this.hubMenu = undefined;
+      return;
+    }
+    this.closeUpgradePanel();
+    // A near-opaque backdrop fully dims the persistent Town HUD (resource bar,
+    // warmth strip, hint) so the menu's centered title never reads on top of
+    // that text; without it the 0.55 scrim let the HUD bleed through and the
+    // title collided with the warmth/hint band.
+    const overlay = this.add.rectangle(0, 0, CANVAS.WIDTH, CANVAS.HEIGHT, 0x000000, 0.86).setOrigin(0, 0).setInteractive();
+    const container = this.add.container(0, 0).setDepth(75);
+    container.add(overlay);
+    overlay.on(Phaser.Input.Events.POINTER_DOWN, () => this.toggleHubMenu());
+
+    const cols = 4;
+    const cellW = 200;
+    const cellH = 120;
+    const ox = CANVAS.WIDTH / 2 - ((cols - 1) * cellW) / 2;
+    const oy = CANVAS.HEIGHT / 2 - 60;
+    // Title sits well clear of the (now fully dimmed) HUD band above.
+    Menu.title(this, CANVAS.WIDTH / 2, oy - 78, tr('nav.menu'), 30).setColor(PALETTE.ACCENT_CSS);
+    HUB_LINKS.forEach((link, i) => {
+      const gx = ox + (i % cols) * cellW;
+      const gy = oy + Math.floor(i / cols) * cellH;
+      const icon = this.add.image(gx, gy - 22, TextureKeys.MenuIcons, MENU_ICON_FRAME[link.key]).setScale(2.5);
+      const btn = Menu.button(this, gx, gy + 22, tr(link.label), () => this.openHub(link.scene), { width: 176, fontSize: 15 });
+      container.add([icon, btn.container]);
+    });
+    const close = Menu.button(this, CANVAS.WIDTH / 2, oy + 200, tr('nav.close'), () => this.toggleHubMenu(), { width: 200, fontSize: 15 });
+    container.add(close.container);
+    this.hubMenu = container;
+  }
+
+  private openHub(scene: SceneKey): void {
+    this.saveNow();
+    Menu.fadeTo(this, () => this.scene.start(scene));
   }
 
   // ---- Upgrade panel -------------------------------------------------------
@@ -428,6 +547,11 @@ export class TownScene extends Phaser.Scene {
   private openTraining(): void {
     this.closeUpgradePanel();
     this.trainingPanel.toggle();
+  }
+
+  private openPopulation(): void {
+    this.closeUpgradePanel();
+    this.populationPanel.toggle();
   }
 
   private goBattle(): void {

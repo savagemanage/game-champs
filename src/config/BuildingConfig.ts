@@ -12,8 +12,18 @@
  * unit-test them without Phaser.
  */
 
-import { BUILDINGS } from './GameConfig';
+import { BUILDINGS, POPULATION, REFINERY, WAREHOUSE } from './GameConfig';
 import type { BuildingKind, ProducerKind, ResourceCost, ResourceKind } from '../types';
+
+/**
+ * Special (non-idle-producer) roles a building can carry. A building may be a
+ * plain producer (`produces` set), or carry one of these roles that the systems
+ * layer treats specially: `housing` (Shelter Row raises the population cap),
+ * `storage` (Frost Vault shelters resources), or `refinery` (Forge Hall
+ * converts raw inputs into refined steel). Roles are additive to the base
+ * cost/time curves; the capacity math lives in the pure helpers below.
+ */
+export type BuildingRole = 'housing' | 'storage' | 'refinery';
 
 /** Static definition for a single building kind. */
 export interface BuildingDef {
@@ -24,6 +34,8 @@ export interface BuildingDef {
   baseOutputPerSec: number;
   /** For producers: which resource this building generates (undefined otherwise). */
   produces?: ResourceKind;
+  /** Special non-producer role, if any (housing / storage / refinery). */
+  role?: BuildingRole;
   /**
    * Minimum Furnace level required to build/own this building AT ALL. The
    * Furnace itself is always buildable (0). This is the hard prerequisite;
@@ -88,16 +100,106 @@ export const BUILDING_DEFS: Record<BuildingKind, BuildingDef> = {
     requiresFurnaceLevel: 2,
     maxLevel: BUILDINGS.MAX_LEVEL,
   },
+
+  // --- FEAT-002 expanded city (all original names / roles) ---
+
+  // Shelter Row: survivor housing. Raises the population cap (see housingCapacity).
+  shelter_row: {
+    kind: 'shelter_row',
+    baseCost: { wood: 120, food: 80 },
+    baseOutputPerSec: 0,
+    role: 'housing',
+    requiresFurnaceLevel: 1,
+    maxLevel: BUILDINGS.MAX_LEVEL,
+  },
+  // Frost Vault: shelters a fraction of every stockpile from raid loss.
+  frost_vault: {
+    kind: 'frost_vault',
+    baseCost: { wood: 140, iron: 40 },
+    baseOutputPerSec: 0,
+    role: 'storage',
+    requiresFurnaceLevel: 2,
+    maxLevel: BUILDINGS.MAX_LEVEL,
+  },
+  // Forge Hall: steelworks refinery, converts iron + coal into refined steel.
+  forge_hall: {
+    kind: 'forge_hall',
+    baseCost: { iron: 120, coal: 120 },
+    baseOutputPerSec: 0,
+    role: 'refinery',
+    requiresFurnaceLevel: 3,
+    maxLevel: BUILDINGS.MAX_LEVEL,
+  },
+  // Envoy Hall: diplomacy / help hub (support building, no idle output).
+  envoy_hall: {
+    kind: 'envoy_hall',
+    baseCost: { wood: 160, food: 120 },
+    baseOutputPerSec: 0,
+    requiresFurnaceLevel: 2,
+    maxLevel: BUILDINGS.MAX_LEVEL,
+  },
+  // Warming Ward: recovers wounded survivors (support building, no idle output).
+  warming_ward: {
+    kind: 'warming_ward',
+    baseCost: { food: 160, coal: 80 },
+    baseOutputPerSec: 0,
+    requiresFurnaceLevel: 2,
+    maxLevel: BUILDINGS.MAX_LEVEL,
+  },
+  // Ember Archive: research / academy building (support building, no idle output).
+  ember_archive: {
+    kind: 'ember_archive',
+    baseCost: { wood: 200, iron: 80 },
+    baseOutputPerSec: 0,
+    requiresFurnaceLevel: 3,
+    maxLevel: BUILDINGS.MAX_LEVEL,
+  },
+  // Class training yards (FEAT-004 will train troops from these).
+  infantry_yard: {
+    kind: 'infantry_yard',
+    baseCost: { wood: 180, iron: 60 },
+    baseOutputPerSec: 0,
+    requiresFurnaceLevel: 2,
+    maxLevel: BUILDINGS.MAX_LEVEL,
+  },
+  lancer_yard: {
+    kind: 'lancer_yard',
+    baseCost: { wood: 180, iron: 80 },
+    baseOutputPerSec: 0,
+    requiresFurnaceLevel: 3,
+    maxLevel: BUILDINGS.MAX_LEVEL,
+  },
+  marksman_range: {
+    kind: 'marksman_range',
+    baseCost: { wood: 200, iron: 100 },
+    baseOutputPerSec: 0,
+    requiresFurnaceLevel: 4,
+    maxLevel: BUILDINGS.MAX_LEVEL,
+  },
 };
 
-/** All building kinds, in a stable display/iteration order. */
+/**
+ * All building kinds, in a stable display/iteration order laid out by tier:
+ * the Furnace, the raw producers, then the FEAT-002 support city (housing,
+ * storage, refinery, diplomacy, infirmary, research) and finally the military
+ * buildings (war camp + the three class yards).
+ */
 export const BUILDING_ORDER: readonly BuildingKind[] = [
   'furnace',
   'hunters_hut',
   'sawmill',
   'coal_pit',
   'iron_mine',
+  'shelter_row',
+  'frost_vault',
+  'forge_hall',
+  'envoy_hall',
+  'warming_ward',
+  'ember_archive',
   'war_camp',
+  'infantry_yard',
+  'lancer_yard',
+  'marksman_range',
 ] as const;
 
 /** Lookup a building definition (never undefined for a valid kind). */
@@ -146,4 +248,51 @@ export function outputPerSec(kind: BuildingKind, level: number): number {
   const def = BUILDING_DEFS[kind];
   if (def.baseOutputPerSec <= 0 || level <= 0) return 0;
   return def.baseOutputPerSec * Math.pow(BUILDINGS.OUTPUT_GROWTH, level - 1);
+}
+
+/** True when the building carries the given special role at its definition. */
+export function hasRole(kind: BuildingKind, role: BuildingRole): boolean {
+  return BUILDING_DEFS[kind].role === role;
+}
+
+/**
+ * Extra housing capacity contributed by a Shelter Row (`housing` role) at a
+ * given level. Non-housing buildings and level 0 contribute nothing. Grows
+ * linearly with level from POPULATION.HOUSING_PER_LEVEL so each new level houses
+ * a predictable number of survivors.
+ */
+export function housingCapacity(kind: BuildingKind, level: number): number {
+  if (!hasRole(kind, 'housing') || level <= 0) return 0;
+  return POPULATION.HOUSING_PER_LEVEL * level;
+}
+
+/**
+ * The protected fraction of a stockpile a Frost Vault (`storage` role) shelters
+ * at a given level. Rises from WAREHOUSE.BASE_PROTECTED_FRACTION by
+ * PROTECTED_FRACTION_PER_LEVEL per level, capped at MAX_PROTECTED_FRACTION. A
+ * non-storage building or level 0 protects nothing.
+ */
+export function protectedFraction(kind: BuildingKind, level: number): number {
+  if (!hasRole(kind, 'storage') || level <= 0) return 0;
+  const frac =
+    WAREHOUSE.BASE_PROTECTED_FRACTION + WAREHOUSE.PROTECTED_FRACTION_PER_LEVEL * (level - 1);
+  return Math.min(WAREHOUSE.MAX_PROTECTED_FRACTION, frac);
+}
+
+/**
+ * The absolute amount of a `balance` sheltered from loss given a storage
+ * building's level (never more than the balance itself).
+ */
+export function protectedAmount(kind: BuildingKind, level: number, balance: number): number {
+  return Math.max(0, balance) * protectedFraction(kind, level);
+}
+
+/**
+ * Steel a Forge Hall (`refinery` role) can mint per second at a given level,
+ * before input constraints. Grows geometrically by OUTPUT_GROWTH per level from
+ * REFINERY.BASE_STEEL_PER_SEC. A non-refinery building or level 0 mints nothing.
+ */
+export function steelThroughputPerSec(kind: BuildingKind, level: number): number {
+  if (!hasRole(kind, 'refinery') || level <= 0) return 0;
+  return REFINERY.BASE_STEEL_PER_SEC * Math.pow(BUILDINGS.OUTPUT_GROWTH, level - 1);
 }

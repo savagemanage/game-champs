@@ -11,17 +11,39 @@
  * combat stats and the counter matrix.
  */
 
-import type { EnemyKind, ResourceCost, TroopKind, UnitStats } from '../types';
+import { TROOP_TIERS } from './GameConfig';
+import type { EnemyKind, ResourceCost, TroopClass, TroopKind, UnitStats } from '../types';
 
 /** Static definition for a trainable troop. */
 export interface TroopDef {
   kind: TroopKind;
-  /** Resource cost to train ONE unit. */
+  /** Resource cost to train ONE unit (tier-1 baseline; tiers scale it). */
   cost: ResourceCost;
-  /** Milliseconds to train ONE unit. */
+  /** Milliseconds to train ONE unit (tier-1 baseline; tiers scale it). */
   trainTimeMs: number;
-  /** Combat stat block. */
+  /** Combat stat block (tier-1 baseline; tiers scale it). */
   stats: UnitStats;
+}
+
+/**
+ * Each concrete militia {@link TroopKind} maps to exactly one WOS-style combat
+ * {@link TroopClass}, forming the Infantry > Lancer > Marksman > Infantry
+ * triangle:
+ *   - vanguard -> infantry (durable front-line tank),
+ *   - trapper  -> lancer   (fast, snaring skirmish/charge role),
+ *   - marksman -> marksman (ranged).
+ * The soft-RPS {@link TROOP_COUNTER} matrix already encodes the triangle at the
+ * kind level; this mapping lets research/gear buff a class (all its kinds).
+ */
+export const TROOP_CLASS: Record<TroopKind, TroopClass> = {
+  vanguard: 'infantry',
+  trapper: 'lancer',
+  marksman: 'marksman',
+};
+
+/** The class a troop kind belongs to. */
+export function troopClass(kind: TroopKind): TroopClass {
+  return TROOP_CLASS[kind];
 }
 
 /** The trainable troop roster. */
@@ -83,6 +105,13 @@ export const ENEMY_ROLE: Record<EnemyKind, TroopKind> = {
   frost_wolf: 'trapper',
   ravager: 'vanguard',
   frost_titan: 'vanguard',
+  // --- FEAT-005 Frostbeast / world-boss kinds (rally targets) ---
+  // rime_alpha: a fast pack-alpha — a lancer-role skirmisher (trapper analogue).
+  rime_alpha: 'trapper',
+  // glacier_behemoth: an armoured bulwark — an infantry-role tank (vanguard analogue).
+  glacier_behemoth: 'vanguard',
+  // hoarfrost_wyrm: the apex world-boss — a ranged devastator (marksman analogue).
+  hoarfrost_wyrm: 'marksman',
 };
 
 /**
@@ -94,11 +123,22 @@ export function troopVsEnemyMultiplier(troop: TroopKind, enemy: EnemyKind): numb
   return TROOP_COUNTER[troop][ENEMY_ROLE[enemy]];
 }
 
+/** The WOS-style combat class each enemy kind fights as (via its troop role). */
+export function enemyClass(enemy: EnemyKind): TroopClass {
+  return TROOP_CLASS[ENEMY_ROLE[enemy]];
+}
+
 /** Frozen Horde enemy stat blocks (used by CombatSystem via WaveConfig composition). */
 export const ENEMY_DEFS: Record<EnemyKind, UnitStats> = {
   frost_wolf: { hp: 50, attack: 9, attackSpeed: 1.0, speed: 65, range: 24 },
   ravager: { hp: 130, attack: 18, attackSpeed: 0.7, speed: 45, range: 26 },
   frost_titan: { hp: 260, attack: 30, attackSpeed: 0.5, speed: 35, range: 30 },
+  // FEAT-005 Frostbeast / world-boss stat blocks: far higher hp than wave mobs
+  // (they are depleted across MANY rally attempts, not one battle) with heavy
+  // attack, so their per-unit power dwarfs a standard enemy.
+  rime_alpha: { hp: 900, attack: 55, attackSpeed: 1.1, speed: 70, range: 26 },
+  glacier_behemoth: { hp: 2400, attack: 90, attackSpeed: 0.6, speed: 30, range: 32 },
+  hoarfrost_wyrm: { hp: 6000, attack: 140, attackSpeed: 0.8, speed: 40, range: 160 },
 };
 
 /**
@@ -115,4 +155,75 @@ export function troopPower(kind: TroopKind): number {
 export function enemyPower(kind: EnemyKind): number {
   const s = ENEMY_DEFS[kind];
   return s.attack * s.attackSpeed + s.hp * 0.25;
+}
+
+// --- FEAT-004: troop TIERS (T1..Tn), research-gated -------------------------
+
+/** Clamp a requested tier into the valid [1, MAX_TIER] range. */
+function clampTier(tier: number): number {
+  return Math.min(TROOP_TIERS.MAX_TIER, Math.max(1, Math.floor(tier)));
+}
+
+/**
+ * The combat stat block of a troop KIND at a given TIER. Tier 1 is the TroopDef
+ * baseline; each higher tier multiplies attack/hp/attackSpeed by
+ * TROOP_TIERS.STAT_GROWTH per tier above 1 (movement/range stay flat so tiers
+ * feel like stronger versions of the same role, not new units). Pure + monotonic.
+ */
+export function troopTierStats(kind: TroopKind, tier: number): UnitStats {
+  const base = TROOP_DEFS[kind].stats;
+  const t = clampTier(tier);
+  const factor = Math.pow(TROOP_TIERS.STAT_GROWTH, t - 1);
+  return {
+    hp: base.hp * factor,
+    attack: base.attack * factor,
+    attackSpeed: base.attackSpeed * factor,
+    speed: base.speed,
+    range: base.range,
+  };
+}
+
+/**
+ * The training cost of ONE unit of a troop kind at a given tier: the baseline
+ * cost scaled by TROOP_TIERS.COST_GROWTH per tier above 1 (rounded up). Pure.
+ */
+export function troopTierCost(kind: TroopKind, tier: number): ResourceCost {
+  const t = clampTier(tier);
+  const factor = Math.pow(TROOP_TIERS.COST_GROWTH, t - 1);
+  const out: ResourceCost = {};
+  for (const [res, amount] of Object.entries(TROOP_DEFS[kind].cost) as [
+    keyof ResourceCost,
+    number,
+  ][]) {
+    if (typeof amount === 'number') out[res] = Math.ceil(amount * factor);
+  }
+  return out;
+}
+
+/**
+ * The training time (ms) of ONE unit at a given tier: the baseline train time
+ * scaled by TROOP_TIERS.TIME_GROWTH per tier above 1. Pure + monotonic.
+ */
+export function troopTierTrainTimeMs(kind: TroopKind, tier: number): number {
+  const t = clampTier(tier);
+  return TROOP_DEFS[kind].trainTimeMs * Math.pow(TROOP_TIERS.TIME_GROWTH, t - 1);
+}
+
+/**
+ * The effective combat "power" of a troop kind at a given tier, same shape as
+ * {@link troopPower} but on the tier-scaled stats. Pure + monotonic in tier so
+ * a higher-tier unit is always stronger.
+ */
+export function troopTierPower(kind: TroopKind, tier: number): number {
+  const s = troopTierStats(kind, tier);
+  return s.attack * s.attackSpeed + s.hp * 0.25;
+}
+
+/**
+ * The current MAX trainable troop tier given the research-unlocked ceiling.
+ * Tier 1 is always trainable; `researchMaxTier` (from ResearchSystem) raises
+ * it, clamped to TROOP_TIERS.MAX_TIER. Pure so training UI / tests share it.
+ */
+export function maxTrainableTier(researchMaxTier: number): number {
+  return clampTier(Math.max(1, Math.floor(researchMaxTier)));
 }

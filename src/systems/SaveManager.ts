@@ -1,17 +1,57 @@
-import { ECONOMY } from '../config/GameConfig';
-import type { Army, GameState, TroopKind } from '../types';
+import { ECONOMY, POPULATION, RESOURCE_ORDER } from '../config/GameConfig';
+import { combineModifiers, economyMultiplierFor } from '../config/StatModifiers';
+import type { Army, GameState, StatModifiers, TroopKind } from '../types';
+import { AllianceSystem } from './AllianceSystem';
+import { ArenaSystem } from './ArenaSystem';
 import { BuildingSystem } from './BuildingSystem';
+import { CampaignSystem } from './CampaignSystem';
+import { GearSystem } from './GearSystem';
+import { HeroRoster } from './HeroRoster';
+import { PopulationSystem } from './PopulationSystem';
+import { PremiumWallet } from './PremiumWallet';
+import { QuestSystem } from './QuestSystem';
+import { RallySystem } from './RallySystem';
+import { ResearchSystem } from './ResearchSystem';
 import { ResourceStore } from './ResourceStore';
+import { SummonSystem } from './SummonSystem';
 import { TrainingQueue } from './TrainingQueue';
+import { VipSystem } from './VipSystem';
 import { WarmthSystem, type WarmthTickResult } from './WarmthSystem';
 
 /**
- * Current save-format version. Bump when GameState shape changes. Version 2 is
- * the Frosthold re-theme (new resource/building/troop/enemy vocabulary), so a
- * legacy version-1 'kingdom-rise' save is treated as a version mismatch and
- * falls back to a fresh frozen settlement rather than mis-mapping old kinds.
+ * Current save-format version. Bump when GameState shape changes.
+ *
+ * - v1: the legacy 'kingdom-rise' medieval theme.
+ * - v2: the Frosthold re-theme (frozen resource/building/troop/enemy
+ *   vocabulary + warmth).
+ * - v3: the FEAT-002 economy/city expansion - refined `steel` resource, Ember
+ *   Sparks premium currency, survivor population, and the enlarged building
+ *   roster (Shelter Row / Frost Vault / Forge Hall / Envoy Hall / Warming Ward
+ *   / Ember Archive / class yards).
+ *
+ * - v4: the FEAT-003 hero + summon + campaign layer - the collectible hero
+ *   roster (levels/stars/skills/shards + lead picks), the deterministic summon
+ *   gacha (pity state), and staged campaign progress.
+ *
+ * - v5: the FEAT-004 research + chief-gear + troop-tier layer - the multi-branch
+ *   research tech tree (completed + in-progress nodes), forgeable chief gear
+ *   with socketed charms, and research-gated troop tiers.
+ *
+ * - v6: the FEAT-005 endgame + retention layer - world-boss / Frostbeast
+ *   rallies (per-boss HP depletion + tiered rewards), a simulated arena/PvP
+ *   ladder (rank + record + seed), a simulated NPC alliance (help charges +
+ *   tech contribution), daily/growth quests + a time-boxed events framework,
+ *   and VIP levels.
+ *
+ * - v7: the review-round wiring that makes troop TIERS live - training batches
+ *   (`trainingQueue[].tier`) and the standing army (`armyTiers`) now carry a
+ *   tier dimension, so a research-unlocked higher tier actually raises trained
+ *   troop cost / stats / power.
+ *
+ * A save with any older version is treated as a mismatch and falls back to a
+ * fresh frozen settlement rather than mis-mapping old kinds.
  */
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 7;
 
 /** Default localStorage key for the single save slot (Frosthold namespace). */
 export const SAVE_KEY = 'frosthold:save';
@@ -33,6 +73,18 @@ export interface GameSnapshot {
   buildings: BuildingSystem;
   training: TrainingQueue;
   warmth: WarmthSystem;
+  population: PopulationSystem;
+  premium: PremiumWallet;
+  heroes: HeroRoster;
+  summon: SummonSystem;
+  campaign: CampaignSystem;
+  research: ResearchSystem;
+  gear: GearSystem;
+  rally: RallySystem;
+  arena: ArenaSystem;
+  alliance: AllianceSystem;
+  quests: QuestSystem;
+  vip: VipSystem;
   waveCleared: number;
 }
 
@@ -72,9 +124,22 @@ export class SaveManager {
     return {
       version: SAVE_VERSION,
       resources: snapshot.resources.toJSON(),
+      premiumCurrency: snapshot.premium.toJSON(),
+      population: snapshot.population.toJSON(),
+      heroes: snapshot.heroes.toJSON(),
+      summon: snapshot.summon.toJSON(),
+      campaign: snapshot.campaign.toJSON(),
+      research: snapshot.research.toJSON(),
+      gear: snapshot.gear.toJSON(),
+      rally: snapshot.rally.toJSON(),
+      arena: snapshot.arena.toJSON(),
+      alliance: snapshot.alliance.toJSON(),
+      quests: snapshot.quests.toJSON(),
+      vip: snapshot.vip.toJSON(),
       warmth: snapshot.warmth.toJSON(),
       buildings: snapshot.buildings.toJSON(),
       army: snapshot.training.army,
+      armyTiers: snapshot.training.armyTiers,
       trainingQueue: snapshot.training.toJSON(),
       waveCleared: snapshot.waveCleared,
       lastSeenAt: now,
@@ -91,9 +156,35 @@ export class SaveManager {
   static deserialize(state: GameState, now: number): LoadResult {
     const resources = ResourceStore.fromJSON(state.resources);
     const buildings = BuildingSystem.fromJSON(state.buildings);
-    const training = TrainingQueue.fromJSON(state.trainingQueue, normalizeArmy(state.army));
+    const training = TrainingQueue.fromJSON(
+      state.trainingQueue,
+      normalizeArmy(state.army),
+      state.armyTiers,
+    );
     // A legacy / warmth-less save (undefined) restores to full warmth.
     const warmth = WarmthSystem.fromJSON(state.warmth);
+    // The survivor workforce + premium wallet (both tolerate missing fields).
+    const population = PopulationSystem.fromJSON(state.population);
+    const premium = PremiumWallet.fromJSON(state.premiumCurrency);
+    // Hero roster, summon (gacha) state, and campaign progress (all tolerate
+    // missing fields so a partial / older-shaped save loads gracefully).
+    const heroes = HeroRoster.fromJSON(state.heroes);
+    const summon = SummonSystem.fromJSON(state.summon);
+    const campaign = CampaignSystem.fromJSON(state.campaign);
+    // Research tech tree + chief gear (both tolerate missing fields).
+    const research = ResearchSystem.fromJSON(state.research);
+    const gear = GearSystem.fromJSON(state.gear);
+    // FEAT-005 endgame layer: rallies, arena, alliance, quests, VIP (all
+    // tolerate missing fields so a partial / older-shaped save loads gracefully).
+    const rally = RallySystem.fromJSON(state.rally);
+    const arena = ArenaSystem.fromJSON(state.arena);
+    const alliance = AllianceSystem.fromJSON(state.alliance);
+    const quests = QuestSystem.fromJSON(state.quests);
+    const vip = VipSystem.fromJSON(state.vip);
+
+    // Complete any research whose timer elapsed while away (one-at-a-time; a
+    // single advance resolves the active node if its clock passed).
+    research.advance(now);
 
     // Training that finished while away joins the army. (Trained troops do not
     // produce resources, so this ordering has no bearing on offline gains.)
@@ -119,6 +210,17 @@ export class SaveManager {
     // whole credited window, so apply them up front.
     buildings.update(windowStart);
 
+    // The combined economy modifiers (research + gear + heroes + alliance-tech +
+    // VIP) scale offline idle output the same way the live tick does, so offline
+    // and live agree.
+    const mods = combineModifiers(
+      research.modifiers(),
+      gear.modifiers(),
+      heroEconomyBundle(heroes),
+      alliance.modifiers(),
+      vip.modifiers(),
+    );
+
     const offlineGains = ResourceStore.emptyBundle();
     let cursor = windowStart;
     // Sorted upgrade-completion instants strictly inside the credited window.
@@ -128,42 +230,36 @@ export class SaveManager {
       .sort((a, b) => a - b);
 
     for (const boundary of boundaries) {
-      // Advance warmth over the segment (burning fuel from the store at the
-      // current Furnace level) BEFORE production, mirroring the live tick order.
-      // Deduct any fuel actually burned so `offlineGains` reflects the NET
-      // wood/coal change (production credited minus furnace burn), matching the
-      // authoritative store balance the player actually returns to.
-      deductFuel(offlineGains, warmth.tick(boundary - cursor, buildings.furnaceLevel, resources));
-      // Credit production at the CURRENT (pre-completion) rates up to this
-      // boundary, scaled by the warmth-derived multiplier, then apply the
-      // completion so later segments use higher rates.
-      accumulate(
-        offlineGains,
-        resources.applyProduction(
-          buildings.productionRates(),
-          boundary - cursor,
-          ECONOMY.OFFLINE_EFFICIENCY * warmth.productionMultiplier(buildings.furnaceLevel),
-        ),
-      );
+      creditSegment(boundary - cursor, resources, buildings, warmth, population, premium, mods, offlineGains);
       buildings.update(boundary);
       cursor = boundary;
     }
     // Final segment: from the last boundary (or window start) to `now`.
-    deductFuel(offlineGains, warmth.tick(now - cursor, buildings.furnaceLevel, resources));
-    accumulate(
-      offlineGains,
-      resources.applyProduction(
-        buildings.productionRates(),
-        now - cursor,
-        ECONOMY.OFFLINE_EFFICIENCY * warmth.productionMultiplier(buildings.furnaceLevel),
-      ),
-    );
+    creditSegment(now - cursor, resources, buildings, warmth, population, premium, mods, offlineGains);
     // Finish any upgrades whose timer elapsed exactly at/after `now` bookkeeping
     // (also completes upgrades that ended before the capped window began).
     buildings.update(now);
 
     return {
-      snapshot: { resources, buildings, training, warmth, waveCleared: state.waveCleared ?? 0 },
+      snapshot: {
+        resources,
+        buildings,
+        training,
+        warmth,
+        population,
+        premium,
+        heroes,
+        summon,
+        campaign,
+        research,
+        gear,
+        rally,
+        arena,
+        alliance,
+        quests,
+        vip,
+        waveCleared: state.waveCleared ?? 0,
+      },
       loaded: true,
       offlineSeconds,
       offlineGains,
@@ -177,6 +273,18 @@ export class SaveManager {
       buildings: new BuildingSystem(),
       training: new TrainingQueue(),
       warmth: new WarmthSystem(),
+      population: new PopulationSystem(),
+      premium: new PremiumWallet(),
+      heroes: new HeroRoster(),
+      summon: new SummonSystem(),
+      campaign: new CampaignSystem(),
+      research: new ResearchSystem(),
+      gear: new GearSystem(),
+      rally: new RallySystem(),
+      arena: new ArenaSystem(),
+      alliance: new AllianceSystem(),
+      quests: new QuestSystem(),
+      vip: new VipSystem(),
       waveCleared: 0,
     };
   }
@@ -224,6 +332,73 @@ export class SaveManager {
   clear(): void {
     this.storage.removeItem(this.key);
   }
+}
+
+/**
+ * Credit ONE offline sub-segment of length `dtMs` at the rates currently in
+ * effect, mirroring the live GameState.tick order so offline and live play
+ * agree: advance warmth (burning fuel), grow the survivor workforce, credit
+ * idle production scaled by warmth x population multipliers, run the Forge Hall
+ * refinery over the same window/efficiency, and drip premium Ember Sparks. The
+ * fuel burned is netted out of `offlineGains` (as elsewhere) so the reported
+ * wood/coal is the honest net change. `steel` accrues into offlineGains via the
+ * refinery's minted output. Mutates the passed systems + `offlineGains`.
+ */
+function creditSegment(
+  dtMs: number,
+  resources: ResourceStore,
+  buildings: BuildingSystem,
+  warmth: WarmthSystem,
+  population: PopulationSystem,
+  premium: PremiumWallet,
+  mods: StatModifiers,
+  offlineGains: ReturnType<ResourceStore['toJSON']>,
+): void {
+  if (dtMs <= 0) return;
+  const furnaceLevel = buildings.furnaceLevel;
+  const extraHousing = buildings.totalHousing();
+
+  // Warmth first (burns fuel); net that fuel out of the reported gains.
+  deductFuel(offlineGains, warmth.tick(dtMs, furnaceLevel, resources));
+  // Grow the workforce over the segment so later segments are better staffed.
+  population.tick(dtMs, extraHousing);
+
+  const warmthMult = warmth.productionMultiplier(furnaceLevel);
+  const popMult = population.outputMultiplier(
+    warmth.warmthRatio(furnaceLevel),
+    extraHousing,
+    buildings.totalProducerLevels() * POPULATION.STAFF_PER_PRODUCER_LEVEL,
+  );
+  const baseEfficiency = ECONOMY.OFFLINE_EFFICIENCY * warmthMult * popMult;
+
+  // Pre-scale the per-second rates by each resource's combined economy
+  // multiplier (research + gear + heroes), then credit at the base efficiency,
+  // exactly mirroring the live GameState.tick.
+  const rates = buildings.productionRates();
+  for (const res of RESOURCE_ORDER) {
+    rates[res] *= economyMultiplierFor(mods, res);
+  }
+  accumulate(offlineGains, resources.applyProduction(rates, dtMs, baseEfficiency));
+  // Refine iron + coal into steel over the same window at the same efficiency
+  // (plus the steel-specific economy multiplier); fold minted steel into gains.
+  offlineGains.steel += buildings.refineryConversion(
+    resources,
+    dtMs,
+    baseEfficiency * economyMultiplierFor(mods, 'steel'),
+  );
+  // Premium sparks drip while the Furnace is lit (warmth-independent, offline-scaled).
+  premium.drip(dtMs, furnaceLevel, ECONOMY.OFFLINE_EFFICIENCY);
+}
+
+/**
+ * Adapt the HeroRoster's aggregate economy bonus into a partial modifier bundle
+ * (its `economy` fraction becomes the all-producer `economyOutput`), mirroring
+ * GameState's hero adapter so offline reconciliation applies the SAME combined
+ * economy multiplier as live play. The heroes' army bonus is battle-only and
+ * does not affect idle production, so it is intentionally omitted here.
+ */
+function heroEconomyBundle(heroes: HeroRoster): Partial<StatModifiers> {
+  return { economyOutput: heroes.bonuses().economy };
 }
 
 /** Add every resource in `src` into `dst` in place (both full bundles). */
