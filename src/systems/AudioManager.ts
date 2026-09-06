@@ -1,37 +1,11 @@
 import Phaser from 'phaser';
 import { AudioKeys, type AudioKey } from '../config/AssetKeys';
-import { LANGUAGES, type Language } from '../i18n/strings';
 import { setLanguage } from '../i18n/i18n';
+import { clamp01, loadSettings, persistSettings, type GameSettings } from './SettingsStore';
 
-/**
- * Persisted audio + UI settings. Master/SFX/music volumes are [0..1]
- * multipliers; the language is mirrored into the i18n runtime so the whole
- * game reads one source of truth for both sound and locale.
- */
-export interface GameSettings {
-  masterVolume: number;
-  sfxVolume: number;
-  musicVolume: number;
-  /** Active UI language ('ko' | 'en'); mirrored into the i18n runtime. */
-  language: Language;
-}
-
-const STORAGE_KEY = 'kingdom-rise:settings:v1';
-
-const DEFAULTS: GameSettings = {
-  masterVolume: 0.8,
-  sfxVolume: 0.9,
-  musicVolume: 0.5,
-  // Kingdom Rise is Korean-first, matching the i18n runtime default.
-  language: 'ko',
-};
-
-/** Clamp a value into [0..1], falling back to a default if not finite. */
-function clamp01(v: unknown, fallback: number): number {
-  const n = typeof v === 'number' ? v : Number(v);
-  if (!Number.isFinite(n)) return fallback;
-  return Phaser.Math.Clamp(n, 0, 1);
-}
+// Re-exported so existing importers (SettingsScene, etc.) keep their import
+// site `../systems/AudioManager` unchanged.
+export type { GameSettings } from './SettingsStore';
 
 /**
  * AudioManager - the single owner of sound in Kingdom Rise.
@@ -57,7 +31,7 @@ export class AudioManager {
 
   private constructor(game: Phaser.Game) {
     this.sound = game.sound;
-    this.settings = AudioManager.load();
+    this.settings = loadSettings();
     // Phaser master volume tracks our master slider directly.
     this.sound.volume = this.settings.masterVolume;
     // Mirror the persisted language into the i18n runtime at startup.
@@ -70,25 +44,6 @@ export class AudioManager {
       AudioManager.instance = new AudioManager(scene.game);
     }
     return AudioManager.instance;
-  }
-
-  /** Read the persisted settings (or the defaults). */
-  private static load(): GameSettings {
-    try {
-      const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null;
-      if (!raw) return { ...DEFAULTS };
-      const parsed = JSON.parse(raw) as Partial<GameSettings>;
-      const language: Language =
-        parsed.language && LANGUAGES.includes(parsed.language) ? parsed.language : DEFAULTS.language;
-      return {
-        masterVolume: clamp01(parsed.masterVolume, DEFAULTS.masterVolume),
-        sfxVolume: clamp01(parsed.sfxVolume, DEFAULTS.sfxVolume),
-        musicVolume: clamp01(parsed.musicVolume, DEFAULTS.musicVolume),
-        language,
-      };
-    } catch {
-      return { ...DEFAULTS };
-    }
   }
 
   /** Current settings snapshot (read-only copy). */
@@ -119,13 +74,7 @@ export class AudioManager {
   }
 
   private persist(): void {
-    try {
-      if (typeof localStorage !== 'undefined') {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(this.settings));
-      }
-    } catch {
-      /* storage unavailable (private mode / quota) - non-fatal, keep in memory. */
-    }
+    persistSettings(this.settings);
   }
 
   /**

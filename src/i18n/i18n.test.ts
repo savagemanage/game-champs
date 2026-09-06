@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { tr, setLanguage, getLanguage } from './i18n';
+import { tr, setLanguage, getLanguage, detectBrowserLanguage } from './i18n';
 import { STRINGS } from './strings';
 
 /**
@@ -63,5 +63,33 @@ describe('i18n tr()', () => {
       expect(entry.en, `en missing for ${key}`).toBeTruthy();
       expect(entry.ko, `ko missing for ${key}`).toBeTruthy();
     }
+  });
+});
+
+describe('detectBrowserLanguage()', () => {
+  it('returns ko for a Korean primary locale', () => {
+    expect(detectBrowserLanguage({ language: 'ko-KR', languages: ['ko-KR', 'en-US'] })).toBe('ko');
+    expect(detectBrowserLanguage({ language: 'ko' })).toBe('ko');
+    // Case-insensitive.
+    expect(detectBrowserLanguage({ language: 'KO-kr' })).toBe('ko');
+  });
+
+  it('returns ko when Korean appears anywhere in the preferred locales', () => {
+    expect(detectBrowserLanguage({ language: 'en-US', languages: ['en-US', 'ko-KR'] })).toBe('ko');
+  });
+
+  it('returns en for a non-Korean locale', () => {
+    expect(detectBrowserLanguage({ language: 'en-US', languages: ['en-US'] })).toBe('en');
+    expect(detectBrowserLanguage({ language: 'ja-JP' })).toBe('en');
+    expect(detectBrowserLanguage({ language: 'fr' })).toBe('en');
+  });
+
+  it('falls back to ko when detection is impossible (Korean-first)', () => {
+    // No navigator (node/test environment).
+    expect(detectBrowserLanguage()).toBe('ko');
+    expect(detectBrowserLanguage(undefined)).toBe('ko');
+    // Empty / unusable locales.
+    expect(detectBrowserLanguage({})).toBe('ko');
+    expect(detectBrowserLanguage({ language: '', languages: [] })).toBe('ko');
   });
 });

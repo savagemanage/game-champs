@@ -1,3 +1,196 @@
+<a id="korean"></a>
+
+**[한국어](#korean) · [English](#english)**
+
+# 킹덤 라이즈 (Kingdom Rise)
+
+오리지널 세계관의 2D 픽셀아트 **중세 전략 / 방치형** 브라우저 게임입니다. 작은
+정착지를 키워 나가세요. 자원 건물이 시간이 지날수록 **식량·목재·석재·금화**를
+자동으로 생산하고, 중앙의 **중앙 청사(Town Center)** 레벨이 다른 모든 건물의
+업그레이드 한계를 결정합니다. 병력은 병영에서 시간이 걸리는 **훈련 대기열**로
+양성하며, 주기적으로 몰려오는 **침략자 웨이브**를 애니메이션으로 연출되는
+결정론적 전투로 막아내야 합니다. 진행 상황은 `localStorage`에 저장되며, 자리를
+비운 동안의 방치 수익도 다시 접속할 때 정산됩니다. UI는 **한국어 우선**이며
+영어도 지원합니다.
+
+> **오리지널 창작물 / IP 경계.** 킹덤 라이즈는 기지 건설 / 방치형 왕국 장르에서
+> *영감을 받은* **오리지널** 게임입니다. 모든 이름, 세계관, 아트, 오디오는 이
+> 프로젝트의 순수 창작물입니다. "Kingshot"(또는 그 밖의 어떤 제3자) 이름,
+> 캐릭터, 세력, 스토리, 스프라이트도 사용하지 않습니다. 전체 에셋 출처는
+> [`assets/CREDITS.md`](assets/CREDITS.md)를 참고하세요.
+>
+> 저장소 슬러그와 GitHub Pages 경로(`game-kingshot`,
+> `savagemanage.github.io/game-kingshot`)는 이 프로젝트가 오마주하는 장르를
+> 나타내는 **배포 식별자**일 뿐, 게임 브랜드의 일부가 아닙니다. 빌드에 담긴 그
+> 무엇도(게임 내 제목 "Kingdom Rise / 킹덤 라이즈", 세계관, 병종·적 이름, 아트,
+> 오디오) 제3자 IP를 사용하지 않습니다. 슬러그는 고정된 배포 대상이며 의도적으로
+> 그대로 둡니다.
+
+**라이브 빌드 플레이:** <https://savagemanage.github.io/game-kingshot/>
+
+## 기술 스택
+
+- [Phaser 3](https://phaser.io/) — 2D 게임 프레임워크 (아케이드 물리, WebAudio)
+- [TypeScript](https://www.typescriptlang.org/) — strict 모드, 타입이 지정된 소스
+- [Vite](https://vitejs.dev/) — 개발 서버 + 프로덕션 번들링
+- [Vitest](https://vitest.dev/) — 순수 로직 시스템에 대한 유닛 테스트
+- 모든 에셋은 [`tools/`](tools/)의 Python 스크립트가 생성한 오리지널 창작물
+  (픽셀아트는 Pillow, SFX/음악은 표준 라이브러리 합성)
+
+논리 해상도는 선명한 **960×540** 픽셀 캔버스로, 최근접 이웃(nearest-neighbour)
+렌더링으로 창 크기에 맞춰 확대됩니다.
+
+## 시작하기
+
+**Node 22 이상**이 필요합니다 (GitHub Pages 배포 워크플로가 빌드에 사용하는
+버전과 동일합니다. [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)
+참고).
+
+```bash
+npm install       # 의존성 설치
+npm run dev       # Vite 개발 서버 시작 (핫 리로드)
+npm run build     # 타입 체크 + dist/로 프로덕션 빌드
+npm run preview   # 프로덕션 빌드를 로컬에서 미리보기
+npm run typecheck # 타입 체크만 실행 (tsc --noEmit)
+npm run test      # vitest 유닛 테스트 실행
+```
+
+Vite가 출력하는 개발 서버 주소(기본값 <http://localhost:5173>)를 열어 주세요.
+
+## 플레이 방법
+
+게임 전체를 마우스만으로 플레이할 수 있으며, 일부 키보드 단축키가 화면의 버튼을
+대체합니다.
+
+| 입력                 | 동작                                                          |
+| -------------------- | ------------------------------------------------------------- |
+| **건물 클릭**        | 업그레이드 패널 열기 (레벨, 다음 비용/시간, 업그레이드)        |
+| **병영 / 병영 버튼** | 병력 훈련 패널 열기                                           |
+| `B`                  | **전투로** 진군 (마을에서)                                    |
+| `S`                  | **설정** 열기 (타이틀 또는 마을에서)                          |
+| `L`                  | 언어 전환 (타이틀 화면의 언어 토글과 동일)                    |
+| `Esc`                | 열린 패널 닫기 / 전투 애니메이션 건너뛰기                     |
+| `Space`              | 플레이/이어하기 (타이틀) · **마을로** 복귀 (게임 오버)        |
+| `R`                  | 전투 **재도전** (게임 오버)                                   |
+
+### 핵심 루프
+
+1. **수집 (방치).** 농장·제재소·채석장·광산이 시간이 지날수록 식량·목재·석재·
+   금화를 생산합니다. 탭을 닫아 두어도 마찬가지이며, 자리를 비운 시간은 다시
+   접속할 때 (상한과 배율이 적용되어) 정산되고 무엇을 모았는지 요약이 표시됩니다.
+2. **업그레이드.** 모든 건물은 기하급수적으로 늘어나는 비용과 건설 타이머를 두고
+   업그레이드됩니다. **중앙 청사** 레벨이 다른 모든 건물의 레벨 상한을 정하므로,
+   진행의 중추가 됩니다.
+3. **훈련.** 병영에서 **창병·궁병·기사**를 묶음 단위로 대기열에 넣으면, 각 묶음이
+   훈련 시간이 지난 뒤 완성되어 보유 병력에 합류합니다.
+4. **전투.** 병력을 전투로 보내 점점 강해지는 침략자 웨이브(**침략자·광전사·공성
+   망치**)를 막아냅니다. 결과는 전투 시스템이 결정론적으로 계산한 뒤 애니메이션
+   으로 연출됩니다. 승리하면 자원 보상을 얻고 웨이브 진행이 올라가며, 패배하면
+   병력은 잃지만 마을은 건재합니다. 전투 HUD의 **건너뛰기**와 **속도**로 진행
+   속도를 조절할 수 있습니다.
+5. **더 어렵게, 반복.** 웨이브를 하나 격파할 때마다 다음 웨이브의 난이도가
+   올라갑니다. 마지막으로 설정된 웨이브를 격파하면 전체 캠페인 승리입니다.
+
+**설정**에서는 전체 / 효과음 / 음악 볼륨 슬라이더와 언어 토글(한국어 / English)을
+제공하며 모두 `localStorage`에 저장됩니다. 또한 두 번 눌러 확인하는 **진행
+초기화** 옵션으로 저장을 지우고 새 왕국을 시작할 수 있습니다.
+
+> **언어 설정 (한국어 / English).** 게임은 **한국어 우선**입니다. 저장된 설정이
+> 없는 첫 실행에서는 브라우저 언어를 자동 감지합니다. 브라우저의 선호 언어가
+> `ko`로 시작하면 한국어로, 그 외에는 영어로 시작하며, 감지할 수 없을 때는
+> 한국어로 되돌아갑니다. 한 번이라도 언어를 직접 고르면 그 선택이 저장되어 이후
+> 항상 우선합니다. 언어는 **타이틀 화면 우측 상단의 토글**(◀ 한국어 ▶)이나
+> **설정** 화면에서 언제든 바꿀 수 있으며, 모든 라벨이 즉시 전환됩니다.
+
+## 저장 / 지속성
+
+게임은 15초 주기와 주요 행동(업그레이드, 전투, 탭 이탈) 시점에 `localStorage`로
+자동 저장됩니다. 저장 데이터에는 **버전**이 있어, 손상·부재·구버전 저장은
+충돌하지 않고 새 게임으로 안전하게 되돌아갑니다. 자리를 비운 동안 쌓인 방치
+생산량은 로드 시 정산됩니다(최대 오프라인 시간 상한과 오프라인 효율 배율 적용).
+
+## 프로젝트 구조
+
+```
+src/
+  main.ts          Phaser.Game 부트스트랩 + 씬 목록
+  config/          설정 기반 튜닝 값 (Game/Building/Troop/Wave) + 에셋/씬 키
+  scenes/          Boot, Preload, Title, Town, Battle, GameOver, Settings
+  entities/        Battler (애니메이션되는 단일 전투 유닛)
+  systems/         순수 로직 시스템: ResourceStore, BuildingSystem, TrainingQueue,
+                   CombatSystem, CasualtyTimeline, SaveManager, GameState + AudioManager,
+                   SettingsStore
+  ui/              공용 픽셀 UI 헬퍼: Menu, TrainingPanel, BattleHud, UiText
+  types/           공용 횡단 타입
+  i18n/            한국어 우선 KO/EN 문자열 테이블 + 소형 런타임
+public/assets/     오리지널 스프라이트, 배경, UI, FX, 오디오
+tools/             에셋 생성기 (gen_sprites.py, gen_audio.py)
+```
+
+`systems/`의 클래스에는 **Phaser 의존성이 없어서**, 자원 계산, 업그레이드 비용
+공식, 훈련 대기열 타이밍, 전투 계산, 저장 직렬화, 그리고 설정 로드(브라우저 언어
+자동 감지 포함)가 모두 빠른 `vitest` 유닛 테스트(`src/**/*.test.ts`)로
+검증됩니다.
+
+## 에셋 재생성
+
+모든 아트와 오디오는 [`tools/`](tools/)의 Python 스크립트가 만든 오리지널
+창작물입니다. 재생성하려면:
+
+```bash
+python3 -m pip install --user Pillow   # 스프라이트 생성기의 유일한 의존성
+python3 tools/gen_sprites.py           # -> public/assets/{sprites,backgrounds,ui,fx}
+python3 tools/gen_audio.py             # -> public/assets/audio  (표준 라이브러리만 사용)
+```
+
+생성된 에셋은 저장소에 커밋되어 있습니다(Phaser가 런타임에 `public/assets/`에서
+로드). 출력은 결정론적이므로 재생성해도 바이트 단위로 동일한 파일이 나옵니다.
+전체 파일별 출처는 [`assets/CREDITS.md`](assets/CREDITS.md)에 있습니다.
+
+## 배포 (GitHub Pages)
+
+프로덕션 빌드는 Vite `base`를 `/game-kingshot/`로 설정하여 프로젝트 페이지 경로
+아래에서 에셋 URL이 올바르게 해석되도록 합니다.
+
+### 자동 (GitHub Actions — 권장)
+
+`main`에 푸시하면
+[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)이 실행되어
+`npm ci && npm run build`를 수행하고, `dist/`를 Pages 아티팩트로 업로드한 뒤
+`actions/deploy-pages`로 게시합니다. 저장소에서 한 번
+**Settings → Pages → Build and deployment → Source: GitHub Actions**를 설정해
+두면, `main`에 푸시할 때마다 <https://savagemanage.github.io/game-kingshot/>로
+재배포됩니다.
+
+### 수동 (`npm run build` + `gh-pages` 대체)
+
+직접 게시하고 싶거나 Actions를 사용할 수 없을 때:
+
+```bash
+npm run build                     # dist/ 생성
+npx gh-pages -d dist              # dist/를 gh-pages 브랜치로 푸시
+```
+
+그런 다음 **Settings → Pages → Source: Deploy from a branch → `gh-pages` /
+root**를 설정하세요. 사이트는 동일한
+<https://savagemanage.github.io/game-kingshot/> 주소로 제공됩니다.
+
+## 크레딧
+
+모든 아트와 오디오는 이 프로젝트의 오리지널 창작물이며 [`tools/`](tools/)의
+스크립트로 생성됩니다. 전체 파일별 출처와 라이선스는
+[`assets/CREDITS.md`](assets/CREDITS.md)에 기록되어 있습니다.
+
+## 라이선스
+
+Apache-2.0. [LICENSE](LICENSE)를 참고하세요.
+
+---
+
+<a id="english"></a>
+
+**[한국어](#korean) · [English](#english)**
+
 # Kingdom Rise (킹덤 라이즈)
 
 An original-world 2D pixel-art **medieval strategy / idle** browser game. Grow a
@@ -108,7 +301,8 @@ src/
   scenes/          Boot, Preload, Title, Town, Battle, GameOver, Settings
   entities/        Battler (a single animated combat unit)
   systems/         Pure-logic systems: ResourceStore, BuildingSystem, TrainingQueue,
-                   CombatSystem, CasualtyTimeline, SaveManager, GameState + AudioManager
+                   CombatSystem, CasualtyTimeline, SaveManager, GameState + AudioManager,
+                   SettingsStore
   ui/              Shared pixel-UI helpers: Menu, TrainingPanel, BattleHud, UiText
   types/           Shared cross-cutting types
   i18n/            Korean-first KO/EN string table + tiny runtime

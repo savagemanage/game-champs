@@ -5,6 +5,8 @@ import { AudioManager } from '../systems/AudioManager';
 import { GameState } from '../systems/GameState';
 import { Menu } from '../ui/Menu';
 import { tr } from '../i18n/i18n';
+import { LANGUAGES } from '../i18n/strings';
+import { textStyle } from '../ui/UiText';
 
 /**
  * TitleScene - the front door. Renders the layered pixel backdrop, the game
@@ -52,11 +54,18 @@ export class TitleScene extends Phaser.Scene {
       Menu.button(this, cx, CANVAS.HEIGHT * 0.78, tr('title.settings'), () => this.openSettings(), { width: 260 });
     }
 
+    // Compact language toggle in the top-right so players can switch language
+    // straight from the front door without opening Settings. Reuses the
+    // Settings ◀ value ▶ stepper feel and persists via the AudioManager.
+    this.buildLanguageToggle(CANVAS.WIDTH - 150, 36);
+
     Menu.label(this, cx, CANVAS.HEIGHT * 0.94, tr('title.hint'), 14, 0.55);
 
     // Keyboard shortcuts mirror the buttons.
     this.input.keyboard?.on('keydown-SPACE', () => this.enterTown(false));
     this.input.keyboard?.on('keydown-S', () => this.openSettings());
+    // L cycles the language, mirroring the on-screen toggle.
+    this.input.keyboard?.on('keydown-L', () => this.stepLanguage(1));
 
     // Start the music bed. The browser may hold audio locked until the first
     // gesture, so retry on the first pointer press.
@@ -78,5 +87,34 @@ export class TitleScene extends Phaser.Scene {
 
   private openSettings(): void {
     Menu.fadeTo(this, () => this.scene.start(SceneKeys.Settings));
+  }
+
+  /**
+   * A compact language toggle: a small label, a prev button, the current
+   * language name, and a next button, centered on (x, y). Mirrors the Settings
+   * stepper so the front-door control feels identical.
+   */
+  private buildLanguageToggle(x: number, y: number): void {
+    const lang = AudioManager.get(this).getSettings().language;
+    Menu.label(this, x - 92, y, tr('settings.language'), 14, 0.7).setOrigin(0, 0.5);
+    this.add.text(x + 44, y, tr(`language.${lang}`), textStyle(16)).setOrigin(0.5);
+    Menu.button(this, x + 8, y, '\u25C0', () => this.stepLanguage(-1), { width: 34, fontSize: 14, padY: 6 });
+    Menu.button(this, x + 96, y, '\u25B6', () => this.stepLanguage(1), { width: 34, fontSize: 14, padY: 6 });
+  }
+
+  /**
+   * Cycle the UI language, persist + mirror it through the AudioManager, then
+   * restart the scene so every Title label re-renders in the new language.
+   */
+  private stepLanguage(dir: -1 | 1): void {
+    const audio = AudioManager.get(this);
+    const current = audio.getSettings().language;
+    const len = LANGUAGES.length;
+    const idx = LANGUAGES.indexOf(current);
+    const next = LANGUAGES[(((idx + dir) % len) + len) % len];
+    if (next === current) return;
+    // updateSettings persists AND mirrors into the i18n runtime via setLanguage.
+    audio.updateSettings({ language: next });
+    Menu.fadeTo(this, () => this.scene.restart());
   }
 }

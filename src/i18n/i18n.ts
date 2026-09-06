@@ -44,6 +44,34 @@ export function subscribe(fn: (lang: Language) => void): () => void {
 }
 
 /**
+ * Derive an initial {@link Language} from a browser-like navigator object.
+ *
+ * Used only on FIRST RUN, when the player has never chosen (and persisted) a
+ * language. If any of the navigator's preferred locales starts with `ko`
+ * (case-insensitively) the game opens in Korean; any other locale opens in
+ * English. Korean is the fallback when detection is impossible (no navigator,
+ * empty locales, e.g. the node/test environment), keeping Kingdom Rise
+ * Korean-first.
+ *
+ * The navigator-like object is passed in so this stays a pure, unit-testable
+ * function; production callers pass the real `navigator` (guarded with
+ * `typeof navigator !== 'undefined'`).
+ */
+export function detectBrowserLanguage(
+  nav?: { language?: string; languages?: readonly string[] },
+): Language {
+  if (!nav) return 'ko';
+  const candidates: string[] = [];
+  if (Array.isArray(nav.languages)) candidates.push(...nav.languages);
+  if (typeof nav.language === 'string') candidates.push(nav.language);
+  for (const locale of candidates) {
+    if (typeof locale === 'string' && locale.toLowerCase().startsWith('ko')) return 'ko';
+  }
+  // A usable locale that is not Korean -> English; otherwise Korean fallback.
+  return candidates.some((l) => typeof l === 'string' && l.length > 0) ? 'en' : 'ko';
+}
+
+/**
  * Look up a translated string for the active language, substituting any
  * `{name}` placeholders from `params`. Falls back to the English rendering when
  * the active-language value is missing/empty, so a partially-translated table
