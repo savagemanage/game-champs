@@ -70,6 +70,8 @@ interface BuildingMarker {
   kind: BuildingKind;
   sprite: Phaser.GameObjects.Image;
   levelBadge: Phaser.GameObjects.Text;
+  /** Dark backing chip sized to the badge text for legibility over the town art. */
+  badgeChip: Phaser.GameObjects.Rectangle;
 }
 
 /** Live warmth readout widgets in the HUD. */
@@ -224,11 +226,24 @@ export class TownScene extends Phaser.Scene {
       sprite.on(Phaser.Input.Events.POINTER_OUT, () => sprite.clearTint());
       sprite.on(Phaser.Input.Events.POINTER_DOWN, () => this.selectBuilding(kind));
 
+      // Sit the label a fixed gap ABOVE the sprite's real top edge (its
+      // display height varies per building), never over the sprite body, so
+      // tall pieces like the Furnace chimney no longer occlude it. A dark
+      // backing chip + hard shadow keep it legible over the bright snowfield,
+      // and a high depth lifts every label above ALL sprites so a neighbouring
+      // building never draws on top of an adjacent label.
+      const badgeY = layout.y - sprite.displayHeight / 2 - 12;
+      const badgeChip = this.add
+        .rectangle(layout.x, badgeY, 10, 16, 0x0d1420, 0.72)
+        .setOrigin(0.5)
+        .setDepth(20);
       const levelBadge = this.add
-        .text(layout.x, layout.y - 34 * layout.scale * 0.5 - 10, '', textStyle(13, { color: PALETTE.ACCENT_CSS, fontStyle: 'bold' }))
-        .setOrigin(0.5);
+        .text(layout.x, badgeY, '', textStyle(12, { color: PALETTE.ACCENT_CSS, fontStyle: 'bold' }))
+        .setOrigin(0.5)
+        .setDepth(21)
+        .setShadow(0, 1, '#000000', 2, true, true);
 
-      this.markers.push({ kind, sprite, levelBadge });
+      this.markers.push({ kind, sprite, levelBadge, badgeChip });
     }
   }
 
@@ -240,12 +255,17 @@ export class TownScene extends Phaser.Scene {
       const frame = level >= 2 ? 1 : 0;
       if (marker.sprite.frame.name !== String(frame)) marker.sprite.setFrame(frame);
       if (level <= 0) {
-        marker.levelBadge.setText(tr('town.locked')).setColor(PALETTE.MUTED_CSS);
+        // Locked reads in the bright frost tone (not the low-contrast muted
+        // grey) so it stays legible against both the chip and the town art.
+        marker.levelBadge.setText(tr('town.locked')).setColor(PALETTE.FROST_CSS);
         marker.sprite.setAlpha(0.5);
       } else {
         marker.levelBadge.setText(tr('building.level', { level })).setColor(upgrading ? PALETTE.SUCCESS_CSS : PALETTE.ACCENT_CSS);
         marker.sprite.setAlpha(1);
       }
+      // Grow the backing chip to hug the current label so the dark plate always
+      // frames the text (level/locked strings differ in width).
+      marker.badgeChip.setSize(Math.ceil(marker.levelBadge.width) + 8, Math.ceil(marker.levelBadge.height) + 4);
     }
   }
 
@@ -296,10 +316,25 @@ export class TownScene extends Phaser.Scene {
       );
     }
 
+    // A semi-transparent dark backing strip sits behind the warmth-status band
+    // (Output/FREEZING at y=84) and the gameplay hint (y=108) so both read at
+    // high contrast against the bright/variable town backdrop instead of nearly
+    // disappearing into it. It spans just those two lines and stays clear of the
+    // warmth bar (y=60) so the three HUD bands remain visually distinct.
+    this.add
+      .rectangle(CANVAS.WIDTH / 2, 96, 460, 46, 0x0d1420, 0.62)
+      .setOrigin(0.5)
+      .setStrokeStyle(1, PALETTE.STONE_DARK, 0.6);
+
     // The gameplay hint sits in its own band well BELOW the warmth strip (bar
     // at y=60, efficiency readout at y=84) so the three HUD lines are clearly
-    // separated into their own vertical bands and never overlap.
-    Menu.label(this, CANVAS.WIDTH / 2, 108, tr('town.hint'), 12, 0.55).setColor(PALETTE.MUTED_CSS);
+    // separated into their own vertical bands and never overlap. It renders in
+    // the bright frost tone with a hard dark shadow so it stays legible over the
+    // backing strip and the town art beneath it.
+    this.add
+      .text(CANVAS.WIDTH / 2, 108, tr('town.hint'), textStyle(12, { color: PALETTE.FROST_CSS }))
+      .setOrigin(0.5)
+      .setShadow(0, 1, '#000000', 2, true, true);
 
     // Ember Sparks (premium) + survivor population readouts on a SECOND HUD row
     // (y=62) just under the resource bar. Both share the outer margin M: the
@@ -338,7 +373,10 @@ export class TownScene extends Phaser.Scene {
     // The efficiency / FREEZING readout sits in its OWN vertical band clearly
     // below the bar (barY=60 -> y=84) and clearly above the town.hint band
     // (y=108), so the three HUD lines never crowd or overlap each other.
-    const status = this.add.text(CANVAS.WIDTH / 2, barY + 24, '', textStyle(12, { fontStyle: 'bold' })).setOrigin(0.5);
+    const status = this.add
+      .text(CANVAS.WIDTH / 2, barY + 24, '', textStyle(12, { fontStyle: 'bold' }))
+      .setOrigin(0.5)
+      .setShadow(0, 1, '#000000', 2, true, true);
 
     this.warmthWidgets = { bar, label, value, status };
   }
@@ -360,7 +398,7 @@ export class TownScene extends Phaser.Scene {
     if (ratio <= 0.25) {
       w.status.setText(tr('warmth.freezing')).setColor(PALETTE.DANGER_CSS).setVisible(true);
     } else {
-      w.status.setText(tr('warmth.output', { pct })).setColor(pct >= 100 ? PALETTE.SUCCESS_CSS : PALETTE.MUTED_CSS).setVisible(true);
+      w.status.setText(tr('warmth.output', { pct })).setColor(pct >= 100 ? PALETTE.SUCCESS_CSS : PALETTE.FROST_CSS).setVisible(true);
     }
   }
 

@@ -11,6 +11,7 @@ import { buildTimeline, type BattleTimeline } from '../systems/CasualtyTimeline'
 import { Battler } from '../entities/Battler';
 import { BattleHud } from '../ui/BattleHud';
 import { Menu } from '../ui/Menu';
+import { textStyle } from '../ui/UiText';
 import { tr } from '../i18n/i18n';
 import type { GameOverData } from './GameOverScene';
 
@@ -92,7 +93,15 @@ export class BattleScene extends Phaser.Scene {
     // Guard: no army to send. Show a hint and bounce back to Town.
     if (this.armyTotal(this.army) <= 0) {
       Menu.title(this, cx, CANVAS.HEIGHT * 0.4, tr('battle.title'), 44);
-      Menu.label(this, cx, CANVAS.HEIGHT * 0.54, tr('battle.noTroops'), 20, 1).setColor(PALETTE.DANGER_CSS);
+      // The "train troops first" hint sits on a framed panel with a bright,
+      // hard-shadowed fill so it reads clearly against the light battle
+      // backdrop instead of nearly vanishing into it.
+      const msgY = CANVAS.HEIGHT * 0.54;
+      Menu.panel(this, cx, msgY, 460, 56, 0.9);
+      this.add
+        .text(cx, msgY, tr('battle.noTroops'), textStyle(20, { color: PALETTE.FROST_CSS, fontStyle: 'bold', align: 'center' }))
+        .setOrigin(0.5)
+        .setShadow(0, 2, '#000000', 3, true, true);
       Menu.button(this, cx, CANVAS.HEIGHT * 0.72, tr('common.back'), () => this.goTown(), { width: 220 });
       this.input.keyboard?.on('keydown-ESC', () => this.goTown());
       return;

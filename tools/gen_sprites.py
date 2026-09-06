@@ -1087,24 +1087,35 @@ def build_backgrounds():
     for (sx, sy, sw) in [(60, 200, 40), (180, 230, 60), (300, 210, 50), (120, 250, 30)]:
         rect(battle, sx, sy, sx + sw, sy + 3, ICE_DK)
     # the hold's defended wall on the right (frost-worn stone + ice sheen)
-    wx = W - 70
-    rect(battle, wx, horizon - 60, W - 1, H - 1, STONE)
-    for y in range(horizon - 60, H, 14):
-        rect(battle, wx, y, W - 1, y, STONE_DK)
-    for x in range(wx, W, 22):
-        rect(battle, x, horizon - 60, x, H - 1, STONE_DK)
-    rect(battle, wx, horizon - 60, wx, H - 1, STONE_LT)
-    for x in range(wx, W, 22):        # crenellations, snow-capped
-        rect(battle, x, horizon - 64, x + 10, horizon - 60, STONE)
-        rect(battle, x, horizon - 64, x + 10, horizon - 64, SNOW_LT)
+    # Build it as a self-contained bastion that sits fully INSIDE the frame:
+    # the block stops a few px short of the right edge with its own shadowed
+    # right face (and a sliver of ground/sky beyond it) so the wall reads as a
+    # solid structure standing in the scene rather than a sprite sliced off the
+    # canvas edge. Left face is highlit, right face shadowed, crenellations and
+    # gate are laid out WITHIN [wx, wex] so nothing overruns the edge.
+    wx = W - 76          # wall left face
+    wex = W - 8          # wall right face (leaves an 8px margin to the edge)
+    wtop = horizon - 56  # wall top (grounded lower than before so it doesn't float)
+    rect(battle, wx, wtop, wex, H - 1, STONE)
+    for y in range(wtop, H, 14):      # horizontal masonry courses
+        rect(battle, wx, y, wex, y, STONE_DK)
+    for x in range(wx, wex, 22):      # vertical block seams
+        rect(battle, x, wtop, x, H - 1, STONE_DK)
+    rect(battle, wx, wtop, wx, H - 1, STONE_LT)   # lit left face
+    rect(battle, wex, wtop, wex, H - 1, STONE_DK) # shadowed right face -> reads as depth, not a cut
+    # crenellations, snow-capped, kept within [wx, wex]
+    for x in range(wx, wex - 9, 22):
+        rect(battle, x, wtop - 4, x + 10, wtop, STONE)
+        rect(battle, x, wtop - 4, x + 10, wtop - 4, SNOW_LT)
     # icicles hanging from the wall top
-    for x in range(wx, W, 6):
-        px(battle, x, horizon - 59, ICE)
-    # a timber gate glowing warm from within the hold
-    rect(battle, W - 34, horizon - 6, W - 12, H - 1, WOOD_DK)
-    rect(battle, W - 34, horizon - 6, W - 12, horizon - 4, WOOD)
-    rect(battle, W - 26, horizon + 2, W - 20, horizon + 14, EMBER_DK)
-    px(battle, W - 23, horizon + 8, EMBER)
+    for x in range(wx, wex, 6):
+        px(battle, x, wtop + 1, ICE)
+    # a timber gate glowing warm from within the hold, CENTERED on the wall
+    gcx = (wx + wex) // 2
+    rect(battle, gcx - 11, horizon - 6, gcx + 11, H - 1, WOOD_DK)
+    rect(battle, gcx - 11, horizon - 6, gcx + 11, horizon - 4, WOOD)
+    rect(battle, gcx - 3, horizon + 2, gcx + 3, horizon + 14, EMBER_DK)
+    px(battle, gcx, horizon + 8, EMBER)
     save(battle, os.path.join(BG, "battle.png"))
     print("backgrounds: sky.png town.png battle.png", (W, H))
 
