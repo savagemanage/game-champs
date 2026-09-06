@@ -37,7 +37,29 @@ export class PreloadScene extends Phaser.Scene {
   }
 
   create(): void {
+    this.applyPixelArtFiltering();
     this.scene.start(SceneKeys.Title);
+  }
+
+  /**
+   * Keep the pixel-art sprites/UI crisp WITHOUT pixelating the whole canvas.
+   *
+   * The game no longer sets `pixelArt: true` (which forced NEAREST filtering
+   * globally AND `image-rendering: pixelated` on the canvas), because that
+   * nearest-neighbour-resampled the whole canvas - including the Phaser Text
+   * layer - at the fractional Scale.FIT display scale, smearing/breaking small
+   * Korean text. Instead the canvas now composites/scales SMOOTHLY (bilinear),
+   * which keeps the high-resolution text sharp, and we restore crisp pixel art
+   * by setting NEAREST filtering PER-TEXTURE on the loaded spritesheets and
+   * single images here. Text glyph textures are drawn separately (at
+   * TEXT_RESOLUTION) and are unaffected by this.
+   */
+  private applyPixelArtFiltering(): void {
+    for (const { key } of [...SHEETS, ...IMAGES]) {
+      if (this.textures.exists(key)) {
+        this.textures.get(key).setFilter(Phaser.Textures.FilterMode.NEAREST);
+      }
+    }
   }
 
   /** A simple pixel-styled loading bar wired to the loader progress events. */

@@ -59,9 +59,17 @@
         align-items: center;
         justify-content: center;
       }
-      #game canvas {
-        image-rendering: pixelated;
-      }
+      /*
+        The canvas is scaled by Phaser's Scale.FIT to the viewport, which is
+        almost always a NON-INTEGER factor (e.g. 0.75x on a narrow phone). We
+        deliberately do NOT set `image-rendering: pixelated` here: nearest-
+        neighbour resampling of a fractionally scaled canvas smears/breaks the
+        Phaser Text glyphs (dense Hangul strokes become blurry and mis-aligned).
+        Letting the browser scale the canvas with its default SMOOTH (bilinear)
+        interpolation keeps the high-resolution text crisp at every size. Pixel-
+        art sprites stay crisp via per-texture NEAREST filtering (PreloadScene),
+        not by pixelating the whole canvas.
+      */
     </style>
   </head>
   <body>

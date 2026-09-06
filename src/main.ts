@@ -31,14 +31,34 @@ import { SeasonScene } from './scenes/SeasonScene';
  * (until then the Home nav guards those hops with a scene-existence check).
  *
  * The canvas is a portrait 540x960 design resolution, scaled to fit while
- * centred, with nearest-neighbour pixel-art upscaling.
+ * centred.
+ *
+ * TEXT-CRISPNESS: the config deliberately does NOT set `pixelArt: true` and
+ * does NOT force `image-rendering: pixelated` on the canvas (that CSS rule was
+ * removed from index.html too). Under Scale.FIT the 540x960 canvas is almost
+ * always displayed at a NON-INTEGER scale (e.g. 0.75x on a narrow phone, 1.04x
+ * on a slightly wider one). With nearest-neighbour canvas scaling, that
+ * fractional resample smears/breaks every Phaser Text glyph - dense Hangul
+ * strokes turn blurry, broken, and visually mis-centred. Letting the browser
+ * scale the canvas with SMOOTH (bilinear) interpolation instead keeps the
+ * high-resolution text (see TEXT_RESOLUTION in src/ui/UiText.ts, which
+ * rasterizes glyphs at >=3x and scales up with devicePixelRatio) sharp at every
+ * viewport size and DPR. The pixel-art world/UI sprites are kept crisp by
+ * applying NEAREST filtering PER-TEXTURE in PreloadScene, not by pixelating the
+ * whole canvas.
  */
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
   parent: 'game',
   backgroundColor: PALETTE.BG_SKY_CSS,
-  pixelArt: true,
-  roundPixels: true,
+  render: {
+    // Smooth (bilinear) canvas scaling: no `image-rendering: pixelated`, so the
+    // fractional Scale.FIT resample does NOT nearest-neighbour-crush the text.
+    antialias: true,
+    // Do NOT snap draw positions to integers: on a fractionally scaled canvas
+    // rounding shifts centred labels off-centre by up to half a logical pixel.
+    roundPixels: false,
+  },
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,

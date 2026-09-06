@@ -4,24 +4,26 @@ import { PALETTE } from '../config/GameConfig';
 /**
  * UiText - crisp-text strategy for the UI/HUD/menu layer.
  *
- * The game renders at a low logical resolution (540x960) and is upscaled with
- * nearest-neighbour (Scale.FIT + pixelArt), which crushes small text. Text uses
- * a self-hosted vector Hangul webfont (see UI_FONT_FAMILY) so glyph outlines
- * stay legible at small sizes, and to keep them sharp we render Phaser Text at a
- * higher DPI via the `resolution`
- * style property: the glyph texture is rasterized at `resolution` times the
- * logical size, so it stays crisp when the canvas is scaled up and on high-DPI
- * displays. This does NOT change roundPixels or the world pixel-art scale; it
- * only sharpens text.
+ * The game renders at a low logical resolution (540x960) and is scaled to the
+ * viewport with Scale.FIT, almost always at a NON-INTEGER factor. The canvas is
+ * scaled SMOOTHLY (bilinear) - `pixelArt` is off and `image-rendering:
+ * pixelated` is NOT applied - so this high-resolution text stays sharp rather
+ * than being nearest-neighbour-crushed by the fractional resample. Text uses a
+ * self-hosted vector Hangul webfont (see UI_FONT_FAMILY) so glyph outlines stay
+ * legible at small sizes, and to keep them sharp we render Phaser Text at a
+ * higher DPI via the `resolution` style property: the glyph texture is
+ * rasterized at `resolution` times the logical size, so it stays crisp when the
+ * canvas is scaled up and on high-DPI displays. The world pixel-art sprites are
+ * kept crisp separately via per-texture NEAREST filtering in PreloadScene.
  */
 
 /**
  * Text resolution multiplier. Text is rasterized to its OWN glyph texture at
- * `resolution` times the logical size, independently of the world's
- * nearest-neighbour pixel-art upscale. We scale with the device pixel ratio
- * and floor at 3x so HUD/menu glyphs stay crisp even on 1x monitors that get
- * Scale.FIT-upscaled well past 1x. The world art stays pixel-art; only text
- * sharpens.
+ * `resolution` times the logical size, independently of the world's per-texture
+ * NEAREST pixel-art filtering. We scale with the device pixel ratio and floor
+ * at 3x so HUD/menu glyphs stay crisp on both 1x monitors (where Scale.FIT can
+ * fractionally up/down-scale the canvas) and HiDPI displays. The world art
+ * stays pixel-art; only text sharpens.
  */
 export const TEXT_RESOLUTION = Math.max(
   3,
