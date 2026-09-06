@@ -14,15 +14,15 @@ are away. The UI is **Korean-first** (한국어), with English available.
 > other third-party) names, characters, factions, story, or sprites. See
 > [`assets/CREDITS.md`](assets/CREDITS.md) for full asset provenance.
 >
-> The repository slug and GitHub Pages path (`kingshot-web`,
-> `savagemanage.github.io/kingshot-web`) are only a **deployment identifier**
+> The repository slug and GitHub Pages path (`game-kingshot`,
+> `savagemanage.github.io/game-kingshot`) are only a **deployment identifier**
 > describing the genre this project is a homage to; they are not part of the
 > game's brand. Nothing shipped in the build (the in-game title "Kingdom Rise /
 > 킹덤 라이즈", the lore, the troop/enemy names, the art, and the audio) uses any
 > third-party IP. The slug is a fixed deployment target and is intentionally
 > left unchanged.
 
-**Play the live build:** <https://savagemanage.github.io/kingshot-web/>
+**Play the live build:** <https://savagemanage.github.io/game-kingshot/>
 
 ## Tech stack
 
@@ -137,7 +137,7 @@ files. Full per-file provenance is in [`assets/CREDITS.md`](assets/CREDITS.md).
 
 ## Deployment (GitHub Pages)
 
-The production build sets the Vite `base` to `/kingshot-web/` so asset URLs
+The production build sets the Vite `base` to `/game-kingshot/` so asset URLs
 resolve under the project-pages path.
 
 ### Automatic (GitHub Actions — recommended)
@@ -146,7 +146,7 @@ Pushes to `main` trigger [`.github/workflows/deploy.yml`](.github/workflows/depl
 which runs `npm ci && npm run build`, uploads `dist/` as a Pages artifact, and
 publishes it with `actions/deploy-pages`. Enable **Settings → Pages → Build and
 deployment → Source: GitHub Actions** on the repository once, and every push to
-`main` redeploys to <https://savagemanage.github.io/kingshot-web/>.
+`main` redeploys to <https://savagemanage.github.io/game-kingshot/>.
 
 ### Manual (`npm run build` + `gh-pages` fallback)
 
@@ -158,7 +158,7 @@ npx gh-pages -d dist              # push dist/ to the gh-pages branch
 ```
 
 Then set **Settings → Pages → Source: Deploy from a branch → `gh-pages` / root**.
-The site serves at the same <https://savagemanage.github.io/kingshot-web/> URL.
+The site serves at the same <https://savagemanage.github.io/game-kingshot/> URL.
 
 ## Credits
 

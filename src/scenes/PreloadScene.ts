@@ -9,7 +9,7 @@ import { tr } from '../i18n/i18n';
  * bar while the queue drains, then advances to the Title scene.
  *
  * All URLs are built with assetPath() so files in public/ resolve under the
- * Vite base path ('/kingshot-web/' in production, '/' in dev).
+ * Vite base path ('/game-kingshot/' in production, '/' in dev).
  */
 export class PreloadScene extends Phaser.Scene {
   constructor() {

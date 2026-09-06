@@ -1,10 +1,10 @@
 import { defineConfig } from 'vite';
 
-// GitHub project pages are served from https://savagemanage.github.io/kingshot-web/
-// so production assets must resolve under the '/kingshot-web/' base path.
+// GitHub project pages are served from https://savagemanage.github.io/game-kingshot/
+// so production assets must resolve under the '/game-kingshot/' base path.
 // During local dev we use '/' so the Vite dev server serves from the root.
 export default defineConfig(({ command }) => ({
-  base: command === 'build' ? '/kingshot-web/' : '/',
+  base: command === 'build' ? '/game-kingshot/' : '/',
   build: {
     outDir: 'dist',
     assetsDir: 'assets',
