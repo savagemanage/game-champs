@@ -388,6 +388,22 @@ export const STRINGS = {
   'league.alliance.ai7': { en: 'Crimson Vow', ko: '진홍 맹세' },
   'league.alliance.ai8': { en: 'Silent Vanguard', ko: '침묵의 선봉' },
 
+  // Home / base-hub shell + bottom navigation (FEAT-005).
+  'home.title': { en: 'BASE CAMP', ko: '베이스 캠프' },
+  'home.welcome': { en: 'Command your survival base, commander.', ko: '생존 기지를 지휘하세요, 사령관.' },
+  'home.offlineGains': { en: 'Offline production collected', ko: '오프라인 생산량 수령 완료' },
+  'home.buildComplete': { en: 'Construction complete', ko: '건설 완료' },
+  'home.plotEmpty': { en: 'Empty plot', ko: '빈 부지' },
+  'home.buildingLevel': { en: 'Lv {level}', ko: '{level}레벨' },
+  'home.comingSoon': { en: 'Coming soon', ko: '준비 중' },
+  'nav.base': { en: 'Base', ko: '기지' },
+  'nav.heroes': { en: 'Heroes', ko: '영웅' },
+  'nav.campaign': { en: 'Campaign', ko: '전역' },
+  'nav.missions': { en: 'Missions', ko: '임무' },
+  'nav.season': { en: 'Season', ko: '시즌' },
+  'nav.falcon': { en: 'Falcon Rescue', ko: '팔콘 구조대' },
+  'nav.hint': { en: 'Tap a tab to open that command.', ko: '탭을 눌러 해당 지휘 화면을 여세요.' },
+
   // Save / load feedback.
   'save.saved': { en: 'Saved', ko: '저장됨' },
   'save.loaded': { en: 'Progress loaded', ko: '진행 불러옴' },

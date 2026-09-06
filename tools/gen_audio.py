@@ -185,6 +185,86 @@ def sfx_defeat():
     write_wav("defeat.wav", s)
 
 
+# --- FEAT-005 SFX: base/meta + battle + shell interactions -----------------
+def sfx_recruit():
+    # hero recruit: a bright two-note "arrival" chime + shimmer (gacha reveal)
+    random.seed(50001)
+    s = seq(
+        tone(659.25, 0.10, 0.32, tri),    # E5
+        tone(880.00, 0.20, 0.40, tri),    # A5
+    )
+    s = mix(s, sweep(1200, 2000, 0.30, 0.12, tri))
+    write_wav("recruit.wav", s)
+
+
+def sfx_upgrade_complete():
+    # building/upgrade complete: a solid rising "construction done" thunk + ding
+    random.seed(50002)
+    s = mix(
+        sweep(180, 360, 0.16, 0.34, square),   # rising machine thunk
+        noise(0.10, 0.16, 0.4, attack=0.001, release=0.6),
+    )
+    s = seq(s, tone(783.99, 0.18, 0.36, tri))  # confirming ding (G5)
+    write_wav("upgrade_complete.wav", s)
+
+
+def sfx_battle_hit():
+    # combat impact: sharper metallic hit distinct from the runner's soft hit
+    random.seed(50003)
+    s = mix(
+        sweep(420, 120, 0.10, 0.5, square),
+        noise(0.07, 0.34, 0.6, attack=0.001, release=0.4),
+    )
+    write_wav("battle_hit.wav", s)
+
+
+def sfx_battle_win():
+    # battle victory: brisk ascending major arpeggio (C-E-G-C) synth brass
+    random.seed(50004)
+    s = seq(
+        tone(523.25, 0.10, 0.34, saw),
+        tone(659.25, 0.10, 0.34, saw),
+        tone(783.99, 0.10, 0.34, saw),
+        tone(1046.50, 0.28, 0.42, saw),
+    )
+    s = mix(s, sweep(260, 520, 0.6, 0.10, square))
+    write_wav("battle_win.wav", s)
+
+
+def sfx_battle_lose():
+    # battle loss: short descending minor sting (softer than run defeat)
+    random.seed(50005)
+    s = seq(
+        tone(392.00, 0.16, 0.34, tri),    # G4
+        tone(311.13, 0.16, 0.34, tri),    # Eb4
+        tone(233.08, 0.34, 0.38, saw),    # Bb3
+    )
+    s = mix(s, noise(0.4, 0.10, 0.08, attack=0.01, release=0.5))
+    write_wav("battle_lose.wav", s)
+
+
+def sfx_tab_switch():
+    # bottom-nav tab switch: a soft muted low-to-mid blip, gentler than ui_click
+    random.seed(50006)
+    s = mix(
+        sweep(360, 620, 0.06, 0.26, tri),
+        noise(0.02, 0.10, 0.7, attack=0.001, release=0.5),
+    )
+    write_wav("tab_switch.wav", s)
+
+
+def sfx_reward():
+    # reward / claim: cheerful coin-y triad sparkle (mission/season claim)
+    random.seed(50007)
+    s = seq(
+        tone(784.00, 0.07, 0.30, tri),
+        tone(988.00, 0.07, 0.30, tri),
+        tone(1174.66, 0.16, 0.36, tri),
+    )
+    s = mix(s, sweep(1400, 2200, 0.24, 0.10, tri))
+    write_wav("reward.wav", s)
+
+
 # --------------------------------------------------------------------------
 # MUSIC: a seamless looping driving survival-synth groove. Steady four-on-the-
 # floor kick, off-beat hats, a pulsing bass line, and a minor-key synth pad +
@@ -292,5 +372,18 @@ if __name__ == "__main__":
     sfx_level_up()
     sfx_victory()
     sfx_defeat()
+    # music_loop() runs here (before the FEAT-005 SFX) so it consumes the exact
+    # same RNG stream position as when it was first committed -> no churn on the
+    # existing music_loop.wav. The FEAT-005 SFX below each reseed independently
+    # so their output never depends on ordering.
     music_loop()
+    # FEAT-005 SFX (base/meta + battle + shell nav). Each reseeds for order-
+    # independent determinism.
+    sfx_recruit()
+    sfx_upgrade_complete()
+    sfx_battle_hit()
+    sfx_battle_win()
+    sfx_battle_lose()
+    sfx_tab_switch()
+    sfx_reward()
     print("\nAll original LAST SQUAD audio synthesized (WAV, 22.05kHz mono).")

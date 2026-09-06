@@ -504,10 +504,29 @@ export const SceneKeys = {
   Boot: 'BootScene',
   Preload: 'PreloadScene',
   Title: 'TitleScene',
+  /** Base-hub landing screen (FEAT-005): persistent bottom-nav shell. */
+  Home: 'HomeScene',
   Run: 'RunScene',
   Results: 'ResultsScene',
   Upgrade: 'UpgradeScene',
   Settings: 'SettingsScene',
+  /**
+   * Meta-system scenes reached from the HomeScene bottom-nav. These are built
+   * in FEAT-006 (Base / Heroes management panels) and FEAT-007 (Campaign,
+   * Missions/Season, animated battle view). Their keys are declared here so the
+   * nav can target them by name; HomeScene guards with a scene-existence check
+   * (see HomeScene.navTo) so tapping a not-yet-registered tab is a safe no-op
+   * until the owning feature registers the scene in src/main.ts.
+   *
+   * FEAT-006 MUST register scenes with keys: Base, Heroes.
+   * FEAT-007 MUST register scenes with keys: Campaign, Missions, Season, Battle.
+   */
+  Base: 'BaseScene',
+  Heroes: 'HeroesScene',
+  Campaign: 'CampaignScene',
+  Missions: 'MissionsScene',
+  Season: 'SeasonScene',
+  Battle: 'BattleScene',
 } as const;
 
 export type SceneKey = (typeof SceneKeys)[keyof typeof SceneKeys];

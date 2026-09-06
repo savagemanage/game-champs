@@ -23,6 +23,26 @@
  *   muzzle/hit/sparkle 64x16 sheet -> 4 frames of 16x16
  *   panel.png         24x24 (9-slice), button.png 24x16 (9-slice),
  *   bar_frame.png     64x12, icons.png 64x16 -> 4 frames of 16x16
+ *
+ * FEAT-005 base/meta + shell-nav art (frame sizes MUST match gen_sprites.py):
+ *   buildings.png     144x24 sheet -> 6 frames of 24x24 (BUILDING_ORDER:
+ *                     hq, tech_center, parade_ground, hospital, barracks,
+ *                     drone_center)
+ *   resources.png     64x16 sheet -> 4 frames of 16x16 (RESOURCE_ORDER:
+ *                     rations, steel, fuel, circuitry)
+ *   hero_portraits.png 288x32 sheet -> 9 frames of 32x32, row-major
+ *                     HERO_TYPES x HERO_ROLES (tank/missile/aircraft x
+ *                     dealer/tank/support): frame = typeIndex*3 + roleIndex
+ *   grade_frames.png  96x32 sheet -> 3 frames of 32x32 (HERO_GRADES:
+ *                     UR, SSR, SR) - transparent overlay for a portrait
+ *   type_badges.png   48x16 sheet -> 3 frames of 16x16 (HERO_TYPES order)
+ *   role_badges.png   48x16 sheet -> 3 frames of 16x16 (HERO_ROLES order)
+ *   nav_icons.png     120x20 sheet -> 6 frames of 20x20 (NAV order:
+ *                     base, heroes, campaign, missions, season, falcon)
+ *   star.png          16x16 single image (hero star-tier pip)
+ *   medal.png         16x16 single image (season/league medal)
+ *   tab_bar.png       24x24 (9-slice) bottom-nav bar frame
+ *   battle.png        540x720 single image (campaign/league battle backdrop)
  */
 
 /** Prefix a public/ asset path with the Vite base URL. */
@@ -67,6 +87,19 @@ export const TextureKeys = {
   UiButton: 'ui_button',
   UiBarFrame: 'ui_bar_frame',
   UiIcons: 'ui_icons',
+
+  // FEAT-005 base/meta + shell-nav art.
+  Buildings: 'ui_buildings',
+  Resources: 'ui_resources',
+  HeroPortraits: 'hero_portraits',
+  GradeFrames: 'ui_grade_frames',
+  TypeBadges: 'ui_type_badges',
+  RoleBadges: 'ui_role_badges',
+  NavIcons: 'ui_nav_icons',
+  UiStar: 'ui_star',
+  UiMedal: 'ui_medal',
+  UiTabBar: 'ui_tab_bar',
+  BgBattle: 'bg_battle',
 } as const;
 
 export type TextureKey = (typeof TextureKeys)[keyof typeof TextureKeys];
@@ -81,6 +114,15 @@ export const AudioKeys = {
   Victory: 'sfx_victory',
   Defeat: 'sfx_defeat',
   MusicLoop: 'music_loop',
+
+  // FEAT-005 SFX (base/meta + battle + shell nav).
+  Recruit: 'sfx_recruit',
+  UpgradeComplete: 'sfx_upgrade_complete',
+  BattleHit: 'sfx_battle_hit',
+  BattleWin: 'sfx_battle_win',
+  BattleLose: 'sfx_battle_lose',
+  TabSwitch: 'sfx_tab_switch',
+  Reward: 'sfx_reward',
 } as const;
 
 export type AudioKey = (typeof AudioKeys)[keyof typeof AudioKeys];
@@ -115,6 +157,14 @@ export const SHEETS: readonly SheetAsset[] = [
   { key: TextureKeys.FxHit, url: 'assets/fx/hit.png', frame: { frameWidth: 16, frameHeight: 16 } },
   { key: TextureKeys.FxSparkle, url: 'assets/fx/sparkle.png', frame: { frameWidth: 16, frameHeight: 16 } },
   { key: TextureKeys.UiIcons, url: 'assets/ui/icons.png', frame: { frameWidth: 16, frameHeight: 16 } },
+  // FEAT-005 sheets.
+  { key: TextureKeys.Buildings, url: 'assets/ui/buildings.png', frame: { frameWidth: 24, frameHeight: 24 } },
+  { key: TextureKeys.Resources, url: 'assets/ui/resources.png', frame: { frameWidth: 16, frameHeight: 16 } },
+  { key: TextureKeys.HeroPortraits, url: 'assets/sprites/hero_portraits.png', frame: { frameWidth: 32, frameHeight: 32 } },
+  { key: TextureKeys.GradeFrames, url: 'assets/ui/grade_frames.png', frame: { frameWidth: 32, frameHeight: 32 } },
+  { key: TextureKeys.TypeBadges, url: 'assets/ui/type_badges.png', frame: { frameWidth: 16, frameHeight: 16 } },
+  { key: TextureKeys.RoleBadges, url: 'assets/ui/role_badges.png', frame: { frameWidth: 16, frameHeight: 16 } },
+  { key: TextureKeys.NavIcons, url: 'assets/ui/nav_icons.png', frame: { frameWidth: 20, frameHeight: 20 } },
 ] as const;
 
 /** Plain single-frame images (gate panel, backgrounds, 9-slice UI). */
@@ -125,6 +175,11 @@ export const IMAGES: readonly ImageAsset[] = [
   { key: TextureKeys.UiPanel, url: 'assets/ui/panel.png' },
   { key: TextureKeys.UiButton, url: 'assets/ui/button.png' },
   { key: TextureKeys.UiBarFrame, url: 'assets/ui/bar_frame.png' },
+  // FEAT-005 single images.
+  { key: TextureKeys.UiStar, url: 'assets/ui/star.png' },
+  { key: TextureKeys.UiMedal, url: 'assets/ui/medal.png' },
+  { key: TextureKeys.UiTabBar, url: 'assets/ui/tab_bar.png' },
+  { key: TextureKeys.BgBattle, url: 'assets/backgrounds/battle.png' },
 ] as const;
 
 /** Audio assets (WAV plays natively in all evergreen browsers + Phaser WebAudio). */
@@ -137,6 +192,14 @@ export const AUDIO: readonly AudioAsset[] = [
   { key: AudioKeys.Victory, urls: ['assets/audio/victory.wav'] },
   { key: AudioKeys.Defeat, urls: ['assets/audio/defeat.wav'] },
   { key: AudioKeys.MusicLoop, urls: ['assets/audio/music_loop.wav'] },
+  // FEAT-005 SFX.
+  { key: AudioKeys.Recruit, urls: ['assets/audio/recruit.wav'] },
+  { key: AudioKeys.UpgradeComplete, urls: ['assets/audio/upgrade_complete.wav'] },
+  { key: AudioKeys.BattleHit, urls: ['assets/audio/battle_hit.wav'] },
+  { key: AudioKeys.BattleWin, urls: ['assets/audio/battle_win.wav'] },
+  { key: AudioKeys.BattleLose, urls: ['assets/audio/battle_lose.wav'] },
+  { key: AudioKeys.TabSwitch, urls: ['assets/audio/tab_switch.wav'] },
+  { key: AudioKeys.Reward, urls: ['assets/audio/reward.wav'] },
 ] as const;
 
 /**
@@ -164,3 +227,87 @@ export const HUD_ICON_FRAME = {
 } as const;
 
 export type HudIconName = keyof typeof HUD_ICON_FRAME;
+
+/**
+ * Frame index into buildings.png (24x24) by building id, in BUILDING_ORDER as
+ * emitted by tools/gen_sprites.py. The FEAT-006 Base scene uses this to pick a
+ * building icon.
+ */
+export const BUILDING_ICON_FRAME = {
+  hq: 0,
+  tech_center: 1,
+  parade_ground: 2,
+  hospital: 3,
+  barracks: 4,
+  drone_center: 5,
+} as const;
+
+/**
+ * Frame index into resources.png (16x16) by resource id, in RESOURCE_ORDER as
+ * emitted by tools/gen_sprites.py.
+ */
+export const RESOURCE_ICON_FRAME = {
+  rations: 0,
+  steel: 1,
+  fuel: 2,
+  circuitry: 3,
+} as const;
+
+/**
+ * Frame index into type_badges.png (16x16) by hero type, in HERO_TYPES order.
+ */
+export const TYPE_BADGE_FRAME = {
+  tank: 0,
+  missile: 1,
+  aircraft: 2,
+} as const;
+
+/**
+ * Frame index into role_badges.png (16x16) by hero role, in HERO_ROLES order.
+ */
+export const ROLE_BADGE_FRAME = {
+  dealer: 0,
+  tank: 1,
+  support: 2,
+} as const;
+
+/**
+ * Frame index into grade_frames.png (32x32) by hero grade, in HERO_GRADES order.
+ */
+export const GRADE_FRAME_FRAME = {
+  UR: 0,
+  SSR: 1,
+  SR: 2,
+} as const;
+
+/**
+ * Compute the hero_portraits.png (32x32) frame index for a type x role pair.
+ * The sheet is row-major HERO_TYPES x HERO_ROLES (tank/missile/aircraft x
+ * dealer/tank/support), so frame = typeIndex * 3 + roleIndex.
+ */
+export const HERO_PORTRAIT_TYPE_INDEX = {
+  tank: 0,
+  missile: 1,
+  aircraft: 2,
+} as const;
+
+export const HERO_PORTRAIT_ROLE_INDEX = {
+  dealer: 0,
+  tank: 1,
+  support: 2,
+} as const;
+
+/**
+ * The bottom-nav tabs, in the frame order emitted into nav_icons.png. Each maps
+ * to its 20x20 sheet frame index. 'falcon' is the gate-runner mini-game.
+ */
+export const NAV_ICON_FRAME = {
+  base: 0,
+  heroes: 1,
+  campaign: 2,
+  missions: 3,
+  season: 4,
+  falcon: 5,
+} as const;
+
+export type NavIconName = keyof typeof NAV_ICON_FRAME;

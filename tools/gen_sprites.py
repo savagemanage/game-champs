@@ -82,6 +82,16 @@ OUTLINE = (14, 17, 22, 255)       # near-BG_SKY dark outline
 DARK = (18, 20, 26, 255)
 
 
+# Ordered id tuples mirrored from GameConfig.ts (kept in sync by hand). The
+# generator emits sheet frames in exactly these orders so AssetKeys.ts frame
+# indices line up with the pure-logic config.
+BUILDING_ORDER = ("hq", "tech_center", "parade_ground", "hospital", "barracks", "drone_center")
+RESOURCE_ORDER = ("rations", "steel", "fuel", "circuitry")
+HERO_TYPES = ("tank", "missile", "aircraft")
+HERO_ROLES = ("dealer", "tank", "support")
+HERO_GRADES = ("UR", "SSR", "SR")
+
+
 def new(w, h):
     return Image.new("RGBA", (w, h), T)
 
@@ -569,6 +579,582 @@ def build_ui():
     print("ui: panel.png button.png bar_frame.png icons.png")
 
 
+# ===========================================================================
+# BASE / META ART (FEAT-005): building icons, resource icons, hero portraits
+# by type x role with grade frames, type/role badges, a battle stage backdrop,
+# and the bottom-nav / tab UI kit (tab bar, star, medal). All ORIGINAL and
+# role-based; deterministic (no RNG). Frame sizes are documented in
+# src/config/AssetKeys.ts and MUST match the sizes emitted here.
+# ===========================================================================
+
+# Resource accent colours (original, cohesive with PALETTE). Ordered to match
+# RESOURCE_ORDER in GameConfig.ts: rations, steel, fuel, circuitry.
+RATIONS = (198, 156, 92, 255)      # ration-tin bronze/khaki
+RATIONS_DK = (150, 112, 60, 255)
+STEEL_RES = (170, 182, 196, 255)   # steel ingot grey
+STEEL_RES_DK = (112, 124, 138, 255)
+FUEL = (214, 150, 70, 255)         # fuel amber
+FUEL_DK = (150, 96, 40, 255)
+CIRCUIT = (96, 196, 168, 255)      # circuitry teal-green
+CIRCUIT_DK = (52, 132, 112, 255)
+
+# Grade frame colours (UR gold, SSR purple, SR steel-blue).
+GRADE_UR = (255, 207, 74, 255)
+GRADE_UR_DK = (199, 154, 42, 255)
+GRADE_SSR = (177, 72, 216, 255)
+GRADE_SSR_DK = (122, 47, 148, 255)
+GRADE_SR = (110, 150, 200, 255)
+GRADE_SR_DK = (66, 96, 140, 255)
+
+
+# ---------------------------------------------------------------------------
+# BUILDING ICONS: a 24x24-per-frame sheet, one frame per building in
+# BUILDING_ORDER: hq, tech_center, parade_ground, hospital, barracks,
+# drone_center. Each is an original flat/isometric-lite structure silhouette on
+# a rounded tile, distinguished by shape + an accent motif.
+# ---------------------------------------------------------------------------
+def _tile(img, ox, oy, s, base, edge):
+    """Rounded dark plot tile the building sits on."""
+    rect(img, ox + 2, oy + 2, ox + s - 3, oy + s - 3, base)
+    rect(img, ox + 2, oy + 2, ox + s - 3, oy + 2, edge)          # top hi
+    rect(img, ox + 2, oy + s - 3, ox + s - 3, oy + s - 3, DARK)  # bottom sh
+    # clip the four corners for a rounded look
+    for (cx0, cy0) in [(ox + 2, oy + 2), (ox + s - 3, oy + 2),
+                       (ox + 2, oy + s - 3), (ox + s - 3, oy + s - 3)]:
+        px(img, cx0, cy0, T)
+
+
+def draw_building(img, ox, oy, s, kind):
+    base = PANEL
+    edge = GEAR_LT
+    _tile(img, ox, oy, s, base, edge)
+    cx = ox + s // 2
+
+    if kind == "hq":
+        # central command tower with a squad-teal beacon + flag
+        rect(img, cx - 5, oy + 8, cx + 4, oy + 20, GEAR)
+        rect(img, cx - 5, oy + 8, cx - 5, oy + 20, GEAR_LT)
+        rect(img, cx + 4, oy + 8, cx + 4, oy + 20, DARK)
+        for wy in range(oy + 11, oy + 19, 3):
+            rect(img, cx - 3, wy, cx + 2, wy, SQUAD_DARK)
+        rect(img, cx - 1, oy + 4, cx, oy + 8, STEEL_DK)      # mast
+        rect(img, cx, oy + 4, cx + 4, oy + 6, SQUAD)         # flag
+        px(img, cx - 1, oy + 3, ACCENT)                      # beacon
+
+    elif kind == "tech_center":
+        # domed research lab with a circuitry dish
+        rect(img, cx - 5, oy + 12, cx + 4, oy + 20, GEAR)
+        for yy in range(oy + 8, oy + 12):
+            w = (yy - (oy + 8)) + 2
+            rect(img, cx - w, yy, cx - 1 + w, yy, GEAR_LT)   # dome
+        rect(img, cx - 2, oy + 9, cx + 1, oy + 11, CIRCUIT)  # window glow
+        rect(img, cx + 3, oy + 5, cx + 5, oy + 9, STEEL_DK)  # dish arm
+        rect(img, cx + 4, oy + 4, cx + 6, oy + 6, CIRCUIT)   # dish
+
+    elif kind == "parade_ground":
+        # open training yard: fenced field with marching lane markers
+        rect(img, cx - 6, oy + 9, cx + 5, oy + 20, ROAD)
+        rect(img, cx - 6, oy + 9, cx + 5, oy + 9, GATE_GOOD)  # top rail
+        rect(img, cx - 6, oy + 20, cx + 5, oy + 20, DARK)
+        for lx in range(cx - 4, cx + 5, 3):
+            for ly in range(oy + 11, oy + 20, 2):
+                px(img, lx, ly, LANE_LINE)
+        rect(img, cx - 1, oy + 6, cx, oy + 9, STEEL_DK)      # flagpole
+        rect(img, cx, oy + 6, cx + 3, oy + 8, SQUAD)         # banner
+
+    elif kind == "hospital":
+        # aid station with a white/green cross
+        rect(img, cx - 5, oy + 8, cx + 4, oy + 20, STEEL_RES)
+        rect(img, cx - 5, oy + 8, cx - 5, oy + 20, STEEL_HI)
+        rect(img, cx + 4, oy + 8, cx + 4, oy + 20, STEEL_RES_DK)
+        rect(img, cx - 1, oy + 10, cx, oy + 18, GATE_GOOD)   # cross V
+        rect(img, cx - 4, oy + 13, cx + 3, oy + 14, GATE_GOOD)  # cross H
+
+    elif kind == "barracks":
+        # long quonset hut with a door + steel roof ridges
+        for yy in range(oy + 9, oy + 13):
+            w = 7 - (yy - (oy + 9))
+            rect(img, cx - w, yy, cx - 1 + w, yy, STEEL_DK)  # arched roof
+        rect(img, cx - 6, oy + 13, cx + 5, oy + 20, GEAR)
+        rect(img, cx - 1, oy + 15, cx, oy + 20, GEAR_LT)     # door
+        rect(img, cx - 5, oy + 15, cx - 3, oy + 17, STEEL_RES)  # window
+        rect(img, cx + 2, oy + 15, cx + 4, oy + 17, STEEL_RES)
+
+    elif kind == "drone_center":
+        # landing pad with a rising quad-drone
+        rect(img, cx - 6, oy + 16, cx + 5, oy + 20, ROAD_DARK)
+        rect(img, cx - 3, oy + 17, cx + 2, oy + 19, ACCENT)  # pad "H"
+        rect(img, cx - 1, oy + 17, cx, oy + 19, ROAD_DARK)
+        rect(img, cx - 4, oy + 10, cx + 3, oy + 11, STEEL_DK)  # drone arms
+        rect(img, cx - 1, oy + 9, cx, oy + 12, GEAR_LT)      # body
+        px(img, cx, oy + 10, FUEL)                            # rotor lights
+        for rx in (cx - 5, cx + 4):
+            px(img, rx, oy + 9, SQUAD)
+
+
+def build_buildings():
+    s, n = 24, len(BUILDING_ORDER)
+    sheet = new(s * n, s)
+    for i, kind in enumerate(BUILDING_ORDER):
+        draw_building(sheet, i * s, 0, s, kind)
+    save(sheet, os.path.join(UI, "buildings.png"))
+    print("ui/buildings.png", sheet.size, list(BUILDING_ORDER))
+
+
+# ---------------------------------------------------------------------------
+# RESOURCE ICONS: 16x16-per-frame sheet, one frame per resource in
+# RESOURCE_ORDER: rations, steel, fuel, circuitry.
+# ---------------------------------------------------------------------------
+def draw_resource(img, ox, oy, kind):
+    cx, cy = ox + 8, 8
+    if kind == "rations":
+        # ration tin / crate
+        rect(img, ox + 3, oy + 5, ox + 12, oy + 13, RATIONS)
+        rect(img, ox + 3, oy + 5, ox + 12, oy + 5, (238, 206, 150, 255))
+        rect(img, ox + 3, oy + 13, ox + 12, oy + 13, RATIONS_DK)
+        rect(img, ox + 3, oy + 8, ox + 12, oy + 9, RATIONS_DK)   # label band
+        px(img, ox + 7, oy + 8, ACCENT)
+        px(img, ox + 8, oy + 9, ACCENT)
+    elif kind == "steel":
+        # stacked steel ingots
+        rect(img, ox + 3, oy + 9, ox + 12, oy + 12, STEEL_RES)
+        rect(img, ox + 3, oy + 9, ox + 12, oy + 9, STEEL_HI)
+        rect(img, ox + 3, oy + 12, ox + 12, oy + 12, STEEL_RES_DK)
+        rect(img, ox + 5, oy + 5, ox + 10, oy + 8, STEEL_RES)
+        rect(img, ox + 5, oy + 5, ox + 10, oy + 5, STEEL_HI)
+        rect(img, ox + 5, oy + 8, ox + 10, oy + 8, STEEL_RES_DK)
+    elif kind == "fuel":
+        # fuel canister with a spout + flame accent
+        rect(img, ox + 4, oy + 5, ox + 11, oy + 13, FUEL)
+        rect(img, ox + 4, oy + 5, ox + 4, oy + 13, (238, 182, 104, 255))
+        rect(img, ox + 11, oy + 5, ox + 11, oy + 13, FUEL_DK)
+        rect(img, ox + 5, oy + 3, ox + 7, oy + 5, FUEL_DK)       # spout
+        rect(img, ox + 7, oy + 7, ox + 8, oy + 11, FUEL_DK)      # seam
+        px(img, ox + 9, oy + 8, MUZZLE)
+    elif kind == "circuitry":
+        # circuit chip with legs + trace
+        rect(img, ox + 4, oy + 5, ox + 11, oy + 12, CIRCUIT_DK)
+        rect(img, ox + 5, oy + 6, ox + 10, oy + 11, CIRCUIT)
+        for lx in range(ox + 5, ox + 11, 2):
+            px(img, lx, oy + 4, STEEL_DK)                        # top legs
+            px(img, lx, oy + 13, STEEL_DK)                       # bottom legs
+        rect(img, ox + 6, oy + 8, ox + 9, oy + 8, CIRCUIT_DK)    # trace
+        px(img, ox + 8, oy + 7, TEXT)
+
+
+def build_resources():
+    s, n = 16, len(RESOURCE_ORDER)
+    sheet = new(s * n, s)
+    for i, kind in enumerate(RESOURCE_ORDER):
+        draw_resource(sheet, i * s, 0, kind)
+    sheet = outline_alpha(sheet)
+    save(sheet, os.path.join(UI, "resources.png"))
+    print("ui/resources.png", sheet.size, list(RESOURCE_ORDER))
+
+
+# ---------------------------------------------------------------------------
+# HERO PORTRAITS: a 32x32-per-frame sheet of 9 frames = 3 TYPES x 3 ROLES, laid
+# out row-major in HERO_TYPES x HERO_ROLES order (tank/missile/aircraft x
+# dealer/tank/support). Each portrait is an ORIGINAL helmeted trooper bust whose
+# TYPE sets the palette + a type emblem, and whose ROLE sets the silhouette
+# (dealer = visor + shoulder cannon, tank = heavy pauldrons + faceplate,
+# support = headset + medic satchel). No third-party likeness.
+# ---------------------------------------------------------------------------
+HERO_TYPE_COLORS = {
+    "tank": (108, 132, 156, 255),      # steel-blue armour
+    "missile": (196, 96, 84, 255),     # warm rust-red
+    "aircraft": (96, 168, 176, 255),   # sky teal
+}
+HERO_TYPE_COLORS_DK = {
+    "tank": (66, 84, 104, 255),
+    "missile": (132, 58, 50, 255),
+    "aircraft": (56, 108, 116, 255),
+}
+
+
+def draw_hero_portrait(img, ox, oy, s, htype, role):
+    body = HERO_TYPE_COLORS[htype]
+    body_dk = HERO_TYPE_COLORS_DK[htype]
+    cx = ox + s // 2
+    # backdrop vignette (dark, type-tinted)
+    for y in range(s):
+        t = y / s
+        c = lerp(PANEL, body_dk, 0.25 + 0.25 * t)
+        rect(img, ox + 2, oy + y, ox + s - 3, oy + y, (c[0], c[1], c[2], 255))
+
+    # shoulders / chest armour
+    rect(img, cx - 9, oy + 24, cx + 8, oy + s - 3, body)
+    rect(img, cx - 9, oy + 24, cx - 9, oy + s - 3, body_dk)
+    rect(img, cx + 8, oy + 24, cx + 8, oy + s - 3, body_dk)
+    rect(img, cx - 4, oy + 26, cx + 3, oy + 28, SQUAD)          # collar accent
+
+    # head + helmet
+    rect(img, cx - 5, oy + 9, cx + 4, oy + 22, SKIN)
+    rect(img, cx - 5, oy + 9, cx + 4, oy + 13, body)            # helmet
+    rect(img, cx - 5, oy + 9, cx + 4, oy + 9, body_dk)
+    rect(img, cx - 5, oy + 13, cx + 4, oy + 13, body_dk)        # brim
+    # eyes
+    px(img, cx - 3, oy + 16, DARK)
+    px(img, cx + 2, oy + 16, DARK)
+
+    # ROLE silhouette overlays.
+    if role == "dealer":
+        # combat visor + shoulder-mounted cannon (offense)
+        rect(img, cx - 5, oy + 15, cx + 4, oy + 16, ENEMY)     # glowing visor
+        rect(img, cx + 6, oy + 20, cx + 10, oy + 22, STEEL_DK) # cannon barrel
+        rect(img, cx + 8, oy + 19, cx + 10, oy + 23, GEAR)     # mount
+    elif role == "tank":
+        # heavy pauldrons + faceplate (defense)
+        rect(img, cx - 12, oy + 24, cx - 8, oy + 30, STEEL_DK)  # L pauldron
+        rect(img, cx + 8, oy + 24, cx + 12, oy + 30, STEEL_DK)  # R pauldron
+        rect(img, cx - 12, oy + 24, cx - 8, oy + 25, STEEL)
+        rect(img, cx + 8, oy + 24, cx + 12, oy + 25, STEEL)
+        rect(img, cx - 4, oy + 17, cx + 3, oy + 19, STEEL_DK)   # faceplate
+    else:  # support
+        # headset + medic satchel with a green cross (utility)
+        rect(img, cx - 6, oy + 12, cx - 5, oy + 18, ACCENT)     # headset band
+        rect(img, cx - 7, oy + 16, cx - 5, oy + 18, ACCENT)     # earcup
+        rect(img, cx + 4, oy + 12, cx + 5, oy + 15, STEEL_DK)   # mic boom
+        rect(img, cx + 6, oy + 26, cx + 10, oy + s - 4, STEEL_RES)  # satchel
+        rect(img, cx + 7, oy + 28, cx + 8, oy + 31, GATE_GOOD)  # cross V
+        rect(img, cx + 6, oy + 29, cx + 9, oy + 30, GATE_GOOD)  # cross H
+
+    # TYPE emblem chip (top-left corner badge motif).
+    ex, ey = ox + 4, oy + 4
+    if htype == "tank":
+        rect(img, ex, ey, ex + 5, ey + 4, STEEL_DK)            # hull
+        rect(img, ex + 1, ey - 1, ex + 4, ey - 1, STEEL)       # turret
+        rect(img, ex + 4, ey - 1, ex + 7, ey, STEEL_DK)        # barrel
+    elif htype == "missile":
+        rect(img, ex + 2, ey, ex + 3, ey + 5, ENEMY)           # missile body
+        px(img, ex + 2, ey - 1, ENEMY_DARK)                    # nose
+        px(img, ex + 3, ey - 1, ENEMY_DARK)
+        rect(img, ex + 1, ey + 4, ex + 4, ey + 5, MUZZLE)      # exhaust
+    else:  # aircraft
+        rect(img, ex, ey + 2, ex + 6, ey + 3, body)            # wings
+        rect(img, ex + 2, ey, ex + 3, ey + 5, body_dk)         # fuselage
+
+    # thin frame edge
+    rect(img, ox + 2, oy + 2, ox + s - 3, oy + 2, (c[0], c[1], c[2], 255))
+
+
+def build_hero_portraits():
+    s = 32
+    frames = len(HERO_TYPES) * len(HERO_ROLES)
+    sheet = new(s * frames, s)
+    fi = 0
+    for htype in HERO_TYPES:
+        for role in HERO_ROLES:
+            draw_hero_portrait(sheet, fi * s, 0, s, htype, role)
+            fi += 1
+    save(sheet, os.path.join(SPR, "hero_portraits.png"))
+    print("sprites/hero_portraits.png", sheet.size,
+          [t + "/" + r for t in HERO_TYPES for r in HERO_ROLES])
+
+
+# ---------------------------------------------------------------------------
+# GRADE FRAMES: 32x32-per-frame sheet of 3 transparent frames (UR/SSR/SR) to
+# overlay on a 32x32 hero portrait. Corner brackets + a coloured border in the
+# grade colour, drawn onto transparency so the portrait shows through.
+# ---------------------------------------------------------------------------
+GRADE_FRAME_COLORS = {
+    "UR": (GRADE_UR, GRADE_UR_DK),
+    "SSR": (GRADE_SSR, GRADE_SSR_DK),
+    "SR": (GRADE_SR, GRADE_SR_DK),
+}
+
+
+def draw_grade_frame(img, ox, oy, s, grade):
+    col, dk = GRADE_FRAME_COLORS[grade]
+    # 1px border
+    rect(img, ox + 1, oy + 1, ox + s - 2, oy + 1, col)
+    rect(img, ox + 1, oy + s - 2, ox + s - 2, oy + s - 2, dk)
+    rect(img, ox + 1, oy + 1, ox + 1, oy + s - 2, col)
+    rect(img, ox + s - 2, oy + 1, ox + s - 2, oy + s - 2, dk)
+    # bold corner brackets (grade emphasis)
+    L = 7
+    for (bx, by, dx, dy) in [(ox + 1, oy + 1, 1, 1), (ox + s - 2, oy + 1, -1, 1),
+                             (ox + 1, oy + s - 2, 1, -1), (ox + s - 2, oy + s - 2, -1, -1)]:
+        for i in range(L):
+            px(img, bx + dx * i, by, col)
+            px(img, bx, by + dy * i, col)
+            px(img, bx + dx * i, by + dy, dk)
+            px(img, bx + dx, by + dy * i, dk)
+
+
+def build_grade_frames():
+    s, n = 32, len(HERO_GRADES)
+    sheet = new(s * n, s)
+    for i, grade in enumerate(HERO_GRADES):
+        draw_grade_frame(sheet, i * s, 0, s, grade)
+    save(sheet, os.path.join(UI, "grade_frames.png"))
+    print("ui/grade_frames.png", sheet.size, list(HERO_GRADES))
+
+
+# ---------------------------------------------------------------------------
+# TYPE BADGES: 16x16-per-frame sheet in HERO_TYPES order (tank/missile/aircraft)
+# ---------------------------------------------------------------------------
+def draw_type_badge(img, ox, oy, htype):
+    col = HERO_TYPE_COLORS[htype]
+    dk = HERO_TYPE_COLORS_DK[htype]
+    cx, cy = ox + 8, oy + 8
+    # coin backdrop
+    for dy in range(-6, 7):
+        for dx in range(-6, 7):
+            d = dx * dx + dy * dy
+            if d <= 36:
+                px(img, cx + dx, cy + dy, dk if d > 25 else col)
+    if htype == "tank":
+        rect(img, cx - 4, cy, cx + 3, cy + 3, STEEL_DK)
+        rect(img, cx - 3, cy - 2, cx + 1, cy - 1, STEEL)
+        rect(img, cx + 1, cy - 2, cx + 5, cy - 1, STEEL_DK)   # barrel
+    elif htype == "missile":
+        rect(img, cx - 1, cy - 4, cx, cy + 3, TEXT)
+        px(img, cx - 1, cy - 5, STEEL_HI)
+        px(img, cx, cy - 5, STEEL_HI)
+        rect(img, cx - 2, cy + 3, cx + 1, cy + 4, MUZZLE)     # exhaust
+    else:  # aircraft
+        rect(img, cx - 5, cy, cx + 4, cy + 1, TEXT)           # wings
+        rect(img, cx - 1, cy - 3, cx, cy + 4, STEEL_HI)       # fuselage
+
+
+def build_type_badges():
+    s, n = 16, len(HERO_TYPES)
+    sheet = new(s * n, s)
+    for i, htype in enumerate(HERO_TYPES):
+        draw_type_badge(sheet, i * s, 0, htype)
+    sheet = outline_alpha(sheet)
+    save(sheet, os.path.join(UI, "type_badges.png"))
+    print("ui/type_badges.png", sheet.size, list(HERO_TYPES))
+
+
+# ---------------------------------------------------------------------------
+# ROLE BADGES: 16x16-per-frame sheet in HERO_ROLES order (dealer/tank/support)
+# ---------------------------------------------------------------------------
+ROLE_BADGE_COLORS = {
+    "dealer": (ENEMY, ENEMY_DARK),      # offense red
+    "tank": (STEEL_RES, STEEL_RES_DK),  # defense steel
+    "support": (GATE_GOOD, (46, 150, 74, 255)),  # utility green
+}
+
+
+def draw_role_badge(img, ox, oy, role):
+    col, dk = ROLE_BADGE_COLORS[role]
+    cx, cy = ox + 8, oy + 8
+    for dy in range(-6, 7):
+        for dx in range(-6, 7):
+            d = dx * dx + dy * dy
+            if d <= 36:
+                px(img, cx + dx, cy + dy, dk if d > 25 else col)
+    if role == "dealer":
+        # crosshair
+        rect(img, cx - 4, cy, cx + 4, cy, DARK)
+        rect(img, cx, cy - 4, cx, cy + 4, DARK)
+        px(img, cx, cy, TEXT)
+    elif role == "tank":
+        # shield
+        rect(img, cx - 3, cy - 4, cx + 3, cy - 4, DARK)
+        rect(img, cx - 3, cy - 4, cx - 3, cy + 1, DARK)
+        rect(img, cx + 3, cy - 4, cx + 3, cy + 1, DARK)
+        rect(img, cx - 2, cy + 2, cx + 2, cy + 3, DARK)
+        px(img, cx, cy + 4, DARK)
+    else:  # support
+        # medical cross
+        rect(img, cx - 1, cy - 4, cx, cy + 4, DARK)
+        rect(img, cx - 4, cy - 1, cx + 4, cy, DARK)
+
+
+def build_role_badges():
+    s, n = 16, len(HERO_ROLES)
+    sheet = new(s * n, s)
+    for i, role in enumerate(HERO_ROLES):
+        draw_role_badge(sheet, i * s, 0, role)
+    sheet = outline_alpha(sheet)
+    save(sheet, os.path.join(UI, "role_badges.png"))
+    print("ui/role_badges.png", sheet.size, list(HERO_ROLES))
+
+
+# ---------------------------------------------------------------------------
+# NAV ICONS: 20x20-per-frame sheet for the bottom-nav tabs, in a fixed order:
+# base, heroes, campaign, missions, season, falcon (mini-game). Simple, legible
+# monochrome-ish glyphs tinted at runtime.
+# ---------------------------------------------------------------------------
+NAV_ICON_ORDER = ["base", "heroes", "campaign", "missions", "season", "falcon"]
+
+
+def draw_nav_icon(img, ox, oy, s, kind):
+    cx, cy = ox + s // 2, oy + s // 2
+    c = TEXT
+    if kind == "base":
+        # little factory/base with a chimney
+        rect(img, ox + 4, oy + 10, ox + 15, oy + 16, c)
+        rect(img, ox + 6, oy + 6, ox + 8, oy + 10, c)         # chimney
+        rect(img, ox + 6, oy + 12, ox + 8, oy + 14, PANEL)    # window
+        rect(img, ox + 11, oy + 12, ox + 13, oy + 14, PANEL)
+    elif kind == "heroes":
+        # helmeted head + shoulders bust
+        rect(img, ox + 7, oy + 4, ox + 12, oy + 9, c)         # head
+        rect(img, ox + 7, oy + 4, ox + 12, oy + 5, c)         # helmet top
+        rect(img, ox + 5, oy + 11, ox + 14, oy + 16, c)       # shoulders
+        rect(img, ox + 9, oy + 6, ox + 10, oy + 7, PANEL)     # visor slit
+    elif kind == "campaign":
+        # crossed-swords / battle chevrons
+        rect(img, ox + 4, oy + 14, ox + 15, oy + 15, c)
+        for i in range(5):
+            px(img, ox + 6 + i, oy + 12 - i, c)
+            px(img, ox + 13 - i, oy + 12 - i, c)
+        px(img, ox + 9, oy + 5, c)
+        px(img, ox + 10, oy + 5, c)
+    elif kind == "missions":
+        # checklist / clipboard
+        rect(img, ox + 5, oy + 4, ox + 14, oy + 16, c)
+        rect(img, ox + 6, oy + 5, ox + 13, oy + 15, PANEL)
+        for ly in (oy + 7, oy + 10, oy + 13):
+            rect(img, ox + 7, ly, ox + 8, ly, c)              # check
+            rect(img, ox + 10, ly, ox + 12, ly, c)            # line
+    elif kind == "season":
+        # laurel / battle-pass star crest
+        rect(img, ox + 9, oy + 4, ox + 10, oy + 15, c)
+        rect(img, ox + 4, oy + 9, ox + 15, oy + 10, c)
+        px(img, ox + 6, oy + 6, c)
+        px(img, ox + 13, oy + 6, c)
+        px(img, ox + 6, oy + 13, c)
+        px(img, ox + 13, oy + 13, c)
+    else:  # falcon (mini-game): a swooping bird chevron
+        rect(img, ox + 3, oy + 9, ox + 9, oy + 10, c)         # L wing
+        rect(img, ox + 10, oy + 9, ox + 16, oy + 10, c)       # R wing
+        rect(img, ox + 8, oy + 8, ox + 11, oy + 13, c)        # body
+        px(img, ox + 9, oy + 6, c)                            # head
+        px(img, ox + 10, oy + 6, c)
+
+
+def build_nav_icons():
+    s, n = 20, len(NAV_ICON_ORDER)
+    sheet = new(s * n, s)
+    for i, kind in enumerate(NAV_ICON_ORDER):
+        draw_nav_icon(sheet, i * s, 0, s, kind)
+    save(sheet, os.path.join(UI, "nav_icons.png"))
+    print("ui/nav_icons.png", sheet.size, list(NAV_ICON_ORDER))
+
+
+# ---------------------------------------------------------------------------
+# STAR + MEDAL: two small standalone 16x16 icons for hero star-tiers and
+# season/league medals.
+# ---------------------------------------------------------------------------
+def build_star():
+    s = 16
+    img = new(s, s)
+    cx, cy = 8, 8
+    # 5-point star via a radial spike function (deterministic pixel shape)
+    for dy in range(-6, 7):
+        for dx in range(-6, 7):
+            ang = math.atan2(dy, dx)
+            r = math.hypot(dx, dy)
+            spike = 5.5 + 1.5 * math.cos(5 * ang - math.pi / 2)
+            if r <= spike * 0.72:
+                col = COIN if r < spike * 0.5 else COIN_DK
+                px(img, cx + dx, cy + dy, col)
+    px(img, cx, cy - 3, (255, 255, 255, 255))
+    img = outline_alpha(img)
+    save(img, os.path.join(UI, "star.png"))
+    print("ui/star.png", img.size)
+
+
+def build_medal():
+    s = 16
+    img = new(s, s)
+    cx = 8
+    # ribbon
+    rect(img, cx - 3, 1, cx - 1, 6, ENEMY)
+    rect(img, cx + 1, 1, cx + 3, 6, SQUAD)
+    # medallion
+    for dy in range(-5, 6):
+        for dx in range(-5, 6):
+            d = dx * dx + dy * dy
+            if d <= 25:
+                px(img, cx + dx, 10 + dy, COIN_DK if d > 16 else COIN)
+    # engraved star
+    px(img, cx, 8, TEXT)
+    px(img, cx, 12, TEXT)
+    px(img, cx - 2, 10, TEXT)
+    px(img, cx + 2, 10, TEXT)
+    px(img, cx, 10, ACCENT)
+    img = outline_alpha(img)
+    save(img, os.path.join(UI, "medal.png"))
+    print("ui/medal.png", img.size)
+
+
+# ---------------------------------------------------------------------------
+# TAB BAR: a 24x24 9-slice frame for the persistent bottom-nav bar background,
+# darker + flatter than the panel so nav sits visually below content.
+# ---------------------------------------------------------------------------
+def build_tab_bar():
+    p = new(24, 24)
+    rect(p, 0, 0, 23, 23, (ROAD_DARK[0], ROAD_DARK[1], ROAD_DARK[2], 245))
+    rect(p, 0, 0, 23, 1, GEAR_LT)          # top rail highlight
+    rect(p, 0, 2, 23, 2, SQUAD_DARK)       # thin accent line under the rail
+    rect(p, 0, 23, 23, 23, DARK)
+    rect(p, 0, 0, 0, 23, GEAR)
+    rect(p, 23, 0, 23, 23, DARK)
+    save(p, os.path.join(UI, "tab_bar.png"))
+    print("ui/tab_bar.png", p.size)
+
+
+# ---------------------------------------------------------------------------
+# BATTLE / STAGE BACKGROUND: a 540x720 static backdrop for the campaign / league
+# battle view - a war-torn horizon with a raised platform the two teams face off
+# on. Distinct from the runner road so battle scenes read differently.
+# ---------------------------------------------------------------------------
+def build_battle_bg():
+    W, H = 540, 720
+    img = new(W, H)
+    smoke_low = (58, 44, 52, 255)
+    ground_far = (46, 40, 36, 255)
+    # sky gradient (smoky dusk)
+    for y in range(H):
+        t = y / H
+        img_col = lerp(BG_SKY, smoke_low, min(1.0, t * 1.3))
+        rect(img, 0, y, W - 1, y, img_col)
+    # distant smoke plumes (deterministic)
+    for i in range(6):
+        bx = 40 + i * 88
+        top = 120 + (i * 53 % 90)
+        for y in range(top, int(H * 0.5)):
+            wob = int(10 * math.sin((y + i * 40) / 26.0))
+            a = int(60 * (1 - (y - top) / (H * 0.5 - top)))
+            rect(img, bx + wob - 6, y, bx + wob + 6, y, (40, 40, 46, max(0, a)))
+    # horizon ridge line of ruined structures
+    horizon = int(H * 0.52)
+    x = 0
+    idx = 0
+    seed = 987654321
+    while x < W:
+        seed = (seed * 1103515245 + 12345) & 0x7FFFFFFF
+        bw = 30 + (seed >> 6) % 40
+        seed = (seed * 1103515245 + 12345) & 0x7FFFFFFF
+        bh = 40 + (seed >> 6) % 90
+        shade = lerp(BG_HORIZON, ROAD_DARK, 0.3 + 0.3 * ((idx % 3) / 2.0))
+        rect(img, x, horizon - bh, min(W - 1, x + bw - 1), horizon, shade)
+        x += bw + 3
+        idx += 1
+    # ground: cracked battlefield earth
+    for y in range(horizon, H):
+        t = (y - horizon) / (H - horizon)
+        rect(img, 0, y, W - 1, y, lerp(ROAD_DARK, ground_far, t))
+    # a raised centre platform where the squads stand
+    py0 = int(H * 0.66)
+    rect(img, 40, py0, W - 41, H - 40, ROAD)
+    rect(img, 40, py0, W - 41, py0 + 3, LANE_LINE)
+    rect(img, 40, H - 42, W - 41, H - 40, DARK)
+    # platform seams
+    for sx in range(80, W - 40, 90):
+        rect(img, sx, py0 + 6, sx, H - 44, lerp(ROAD, ROAD_DARK, 0.5))
+    # centre divider line separating attacker / defender halves
+    rect(img, W // 2 - 1, py0 + 4, W // 2, H - 46, lerp(ROAD, ACCENT, 0.3))
+    img.save(os.path.join(BG, "battle.png"))
+    print("backgrounds/battle.png", img.size)
+
+
 if __name__ == "__main__":
     build_soldier()
     build_enemy("enemy_walker", lean=False)
@@ -578,4 +1164,16 @@ if __name__ == "__main__":
     build_backgrounds()
     build_fx()
     build_ui()
+    # FEAT-005: base/meta art + nav UI kit.
+    build_buildings()
+    build_resources()
+    build_hero_portraits()
+    build_grade_frames()
+    build_type_badges()
+    build_role_badges()
+    build_nav_icons()
+    build_star()
+    build_medal()
+    build_tab_bar()
+    build_battle_bg()
     print("\nAll original LAST SQUAD pixel-art assets generated.")

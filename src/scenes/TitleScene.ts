@@ -52,10 +52,12 @@ export class TitleScene extends Phaser.Scene {
     );
     Menu.label(this, cx, CANVAS.HEIGHT * 0.31 + 24, tr('title.bestScore', { score: meta.bestScore }), 15, 0.75);
 
-    // Primary actions.
+    // Primary actions. The primary action now enters the base-hub HomeScene;
+    // the Falcon Rescue mini-game (the gate-runner Run) stays reachable from the
+    // Home bottom-nav and via the direct SPACE/ENTER shortcut below.
     let y = CANVAS.HEIGHT * 0.46;
     const step = 66;
-    Menu.button(this, cx, y, tr('title.play'), () => this.startRun(), { width: 260, fontSize: 24, accent: PALETTE.SQUAD });
+    Menu.button(this, cx, y, tr('title.play'), () => this.enterHome(), { width: 260, fontSize: 24, accent: PALETTE.SQUAD });
     y += step;
     Menu.button(this, cx, y, tr('title.upgrades'), () => this.go(SceneKeys.Upgrade), { width: 260 });
     y += step;
@@ -67,8 +69,8 @@ export class TitleScene extends Phaser.Scene {
 
     // Keyboard shortcuts.
     const kb = this.input.keyboard;
-    kb?.on('keydown-SPACE', () => this.startRun());
-    kb?.on('keydown-ENTER', () => this.startRun());
+    kb?.on('keydown-SPACE', () => this.enterHome());
+    kb?.on('keydown-ENTER', () => this.enterHome());
     kb?.on('keydown-U', () => this.go(SceneKeys.Upgrade));
     kb?.on('keydown-H', () => this.toggleHowTo());
     kb?.on('keydown-S', () => this.go(SceneKeys.Settings));
@@ -100,9 +102,10 @@ export class TitleScene extends Phaser.Scene {
     }
   }
 
-  private startRun(): void {
+  /** Enter the base-hub HomeScene (the new primary action). */
+  private enterHome(): void {
     AudioManager.get(this).playSfx(AudioKeys.UiClick, 0.8);
-    Menu.fadeTo(this, () => this.scene.start(SceneKeys.Run));
+    Menu.fadeTo(this, () => this.scene.start(SceneKeys.Home));
   }
 
   private go(scene: string): void {
