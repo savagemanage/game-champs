@@ -227,3 +227,12 @@ initials, the battle is drawn entirely with Phaser shapes/tweens, and all sound 
 synthesized at runtime with the Web Audio API. The audio engine degrades to a no-op in
 headless/test environments where `AudioContext` is unavailable, so builds and unit tests
 stay green.
+
+---
+
+## License
+
+This project is licensed under the **Apache License 2.0**. See the [LICENSE](./LICENSE) file
+for the full text.
+
+© 2026 Janghoon Lee
