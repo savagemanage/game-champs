@@ -4,11 +4,16 @@ import { BuildingSystem } from './BuildingSystem';
 import { ResourceStore } from './ResourceStore';
 import { TrainingQueue } from './TrainingQueue';
 
-/** Current save-format version. Bump when GameState shape changes. */
-export const SAVE_VERSION = 1;
+/**
+ * Current save-format version. Bump when GameState shape changes. Version 2 is
+ * the Frosthold re-theme (new resource/building/troop/enemy vocabulary), so a
+ * legacy version-1 'kingdom-rise' save is treated as a version mismatch and
+ * falls back to a fresh frozen settlement rather than mis-mapping old kinds.
+ */
+export const SAVE_VERSION = 2;
 
-/** Default localStorage key for the single save slot. */
-export const SAVE_KEY = 'kingdom-rise:save';
+/** Default localStorage key for the single save slot (Frosthold namespace). */
+export const SAVE_KEY = 'frosthold:save';
 
 /**
  * Minimal synchronous key/value storage. `window.localStorage` satisfies this,
@@ -90,7 +95,7 @@ export class SaveManager {
     // would over-pay for the pre-upgrade portion. So we split the window at
     // each upgrade-completion boundary and credit each sub-segment at the rates
     // in effect during it, advancing buildings segment by segment. The result
-    // is that a farm that hit L3 one minute before you return is paid at L2 for
+    // is that a hut that hit L3 one minute before you return is paid at L2 for
     // the earlier hours and L3 only for that final minute.
     const lastSeen = state.lastSeenAt ?? now;
     const rawSeconds = Math.max(0, (now - lastSeen) / 1000);
@@ -132,7 +137,7 @@ export class SaveManager {
     };
   }
 
-  /** A brand-new game snapshot (fresh stockpile, level-1 Town Center, empty queue). */
+  /** A brand-new game snapshot (fresh stockpile, level-1 Furnace, empty queue). */
   static freshGame(): GameSnapshot {
     return {
       resources: new ResourceStore(),
@@ -199,7 +204,7 @@ function accumulate(
 
 /** Coerce a possibly-partial army object into a full, non-negative integer Army. */
 function normalizeArmy(army: Partial<Army> | undefined): Army {
-  const out: Army = { spearman: 0, archer: 0, knight: 0 };
+  const out: Army = { trapper: 0, marksman: 0, vanguard: 0 };
   if (army) {
     for (const kind of Object.keys(out) as TroopKind[]) {
       out[kind] = Math.max(0, Math.floor(army[kind] ?? 0));

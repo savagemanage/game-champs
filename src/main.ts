@@ -9,7 +9,7 @@ import { GameOverScene } from './scenes/GameOverScene';
 import { SettingsScene } from './scenes/SettingsScene';
 
 /**
- * Phaser bootstrap for Kingdom Rise.
+ * Phaser bootstrap for Frosthold: Last Ember.
  *
  * Scene flow: Boot -> Preload (loads the generated art/audio) -> Title -> Town
  * (the idle front end) with Settings and Battle reachable from the town. The

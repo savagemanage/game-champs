@@ -21,7 +21,7 @@ export interface UpgradeCheck {
  * BuildingSystem - owned buildings, their levels, and the upgrade lifecycle.
  *
  * Pure logic (no Phaser). It owns a set of {@link BuildingState}s keyed by kind,
- * enforces the Town-Center level gate and per-building prerequisites, checks
+ * enforces the Furnace level gate and per-building prerequisites, checks
  * affordability against a {@link ResourceStore}, runs time-based upgrades, and
  * exposes the aggregate per-second production rates the ResourceStore consumes.
  * Serializable to/from `BuildingState[]`.
@@ -41,8 +41,8 @@ export class BuildingSystem {
         }
       }
     } else {
-      // Fresh game: a level-1 Town Center is standing, everything else unbuilt.
-      this._buildings.set('town_center', { kind: 'town_center', level: 1, upgradeEndsAt: null });
+      // Fresh game: a level-1 Furnace is lit, everything else unbuilt.
+      this._buildings.set('furnace', { kind: 'furnace', level: 1, upgradeEndsAt: null });
     }
   }
 
@@ -51,9 +51,9 @@ export class BuildingSystem {
     return this._buildings.get(kind)?.level ?? 0;
   }
 
-  /** The current Town Center level (0 if somehow absent). */
-  get townCenterLevel(): number {
-    return this.level('town_center');
+  /** The current Furnace level (0 if somehow absent). Gates every other building. */
+  get furnaceLevel(): number {
+    return this.level('furnace');
   }
 
   /** True while a building has an upgrade in progress. */
@@ -78,9 +78,9 @@ export class BuildingSystem {
 
   /**
    * Whether an upgrade of `kind` may be STARTED right now against `store`.
-   * Checks (in order): not already upgrading, below max level, Town-Center gate
-   * (both the hard `requiresTownCenterLevel` and the "may not exceed TC level"
-   * rule for non-Town-Center buildings), and affordability.
+   * Checks (in order): not already upgrading, below max level, Furnace gate
+   * (both the hard `requiresFurnaceLevel` and the "may not exceed Furnace level"
+   * rule for non-Furnace buildings), and affordability.
    */
   canUpgrade(kind: BuildingKind, store: ResourceStore): UpgradeCheck {
     const def = buildingDef(kind);
@@ -89,14 +89,14 @@ export class BuildingSystem {
     if (this.isUpgrading(kind)) return { ok: false, reason: 'busy' };
     if (level >= def.maxLevel) return { ok: false, reason: 'max_level' };
 
-    if (kind === 'town_center') {
-      // Town Center is only gated by its own max level (checked above).
+    if (kind === 'furnace') {
+      // The Furnace is only gated by its own max level (checked above).
     } else {
-      const tc = this.townCenterLevel;
-      // Hard prerequisite: enough Town Center level to own this at all.
-      if (tc < def.requiresTownCenterLevel) return { ok: false, reason: 'prereq' };
-      // Soft gate: a building's level may never exceed the Town Center's.
-      if (level >= tc) return { ok: false, reason: 'prereq' };
+      const furnace = this.furnaceLevel;
+      // Hard prerequisite: enough Furnace level to own this at all.
+      if (furnace < def.requiresFurnaceLevel) return { ok: false, reason: 'prereq' };
+      // Soft gate: a building's level may never exceed the Furnace's.
+      if (level >= furnace) return { ok: false, reason: 'prereq' };
     }
 
     if (!store.canAfford(this.nextUpgradeCost(kind))) return { ok: false, reason: 'cost' };
@@ -151,9 +151,9 @@ export class BuildingSystem {
     return out;
   }
 
-  /** Whether the Barracks is built (level >= 1), gating troop training. */
-  get hasBarracks(): boolean {
-    return this.level('barracks') >= 1;
+  /** Whether the War Camp is built (level >= 1), gating troop training. */
+  get hasWarCamp(): boolean {
+    return this.level('war_camp') >= 1;
   }
 
   /**

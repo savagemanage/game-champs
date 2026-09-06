@@ -6,7 +6,7 @@ import { ResourceStore } from './ResourceStore';
 /** Outcome of attempting to enqueue a training batch. */
 export interface EnqueueCheck {
   ok: boolean;
-  reason?: 'no_barracks' | 'queue_full' | 'bad_count' | 'batch_too_large' | 'cost';
+  reason?: 'no_war_camp' | 'queue_full' | 'bad_count' | 'batch_too_large' | 'cost';
 }
 
 /**
@@ -18,8 +18,8 @@ export interface EnqueueCheck {
  * into the standing {@link Army} tally and drops fully-completed batches.
  *
  * Costs are charged UP FRONT at enqueue time (so the resources are committed),
- * checked against a {@link ResourceStore}. Requires a built Barracks (the caller
- * passes `hasBarracks` from BuildingSystem). Serializable to/from TrainingOrder[].
+ * checked against a {@link ResourceStore}. Requires a built War Camp (the caller
+ * passes `hasWarCamp` from BuildingSystem). Serializable to/from TrainingOrder[].
  */
 export class TrainingQueue {
   private _queue: TrainingOrder[];
@@ -27,7 +27,7 @@ export class TrainingQueue {
 
   constructor(queue?: TrainingOrder[], army?: Partial<Army>) {
     this._queue = queue ? queue.map((o) => ({ ...o })) : [];
-    this._army = { spearman: 0, archer: 0, knight: 0 };
+    this._army = { trapper: 0, marksman: 0, vanguard: 0 };
     if (army) {
       for (const kind of Object.keys(this._army) as TroopKind[]) {
         this._army[kind] = Math.max(0, Math.floor(army[kind] ?? 0));
@@ -73,7 +73,7 @@ export class TrainingQueue {
    * batch completes at `now + (timeAlreadyQueued) + count * trainTimeMs`; i.e.
    * it starts only after everything ahead of it finishes.
    *
-   * `hasBarracks` must be true (Barracks prerequisite). Fails without charging
+   * `hasWarCamp` must be true (War Camp prerequisite). Fails without charging
    * if any check fails.
    */
   enqueue(
@@ -81,9 +81,9 @@ export class TrainingQueue {
     count: number,
     store: ResourceStore,
     now: number,
-    hasBarracks: boolean,
+    hasWarCamp: boolean,
   ): EnqueueCheck {
-    if (!hasBarracks) return { ok: false, reason: 'no_barracks' };
+    if (!hasWarCamp) return { ok: false, reason: 'no_war_camp' };
     if (!Number.isFinite(count) || count <= 0) return { ok: false, reason: 'bad_count' };
     count = Math.floor(count);
     if (count > TRAINING.MAX_BATCH) return { ok: false, reason: 'batch_too_large' };

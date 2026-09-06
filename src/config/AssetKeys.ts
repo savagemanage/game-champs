@@ -28,24 +28,24 @@ export interface FrameConfig {
 /** Texture (image / spritesheet) keys. */
 export const TextureKeys = {
   // Buildings (each is a 2-tier sheet: worn -> upgraded look).
-  TownCenter: 'b_town_center',
-  Farm: 'b_farm',
-  LumberMill: 'b_lumber_mill',
-  Quarry: 'b_quarry',
-  Mine: 'b_mine',
-  Barracks: 'b_barracks',
+  Furnace: 'b_furnace',
+  HuntersHut: 'b_hunters_hut',
+  Sawmill: 'b_sawmill',
+  CoalPit: 'b_coal_pit',
+  IronMine: 'b_iron_mine',
+  WarCamp: 'b_war_camp',
 
   // Troop unit sprites (player-side).
-  TroopSpearman: 'u_spearman',
-  TroopArcher: 'u_archer',
-  TroopKnight: 'u_knight',
+  TroopTrapper: 'u_trapper',
+  TroopMarksman: 'u_marksman',
+  TroopVanguard: 'u_vanguard',
 
-  // Enemy raider sprites (battle).
-  EnemyRaider: 'e_raider',
-  EnemyBrute: 'e_brute',
-  EnemyRam: 'e_ram',
+  // Frozen Horde enemy sprites (battle).
+  EnemyFrostWolf: 'e_frost_wolf',
+  EnemyRavager: 'e_ravager',
+  EnemyFrostTitan: 'e_frost_titan',
 
-  // Resource icons (packed 16x16 sheet: food, wood, stone, gold).
+  // Resource icons (packed 16x16 sheet: food, wood, coal, iron).
   ResourceIcons: 'ui_resource_icons',
 
   // Backgrounds.
@@ -101,18 +101,18 @@ export interface AudioAsset {
  * tools/gen_sprites.py exactly. Each building sheet has 2 frames (tier 0/1).
  */
 export const SHEETS: readonly SheetAsset[] = [
-  { key: TextureKeys.TownCenter, url: 'assets/sprites/town_center.png', frame: { frameWidth: 64, frameHeight: 64 } },
-  { key: TextureKeys.Farm, url: 'assets/sprites/farm.png', frame: { frameWidth: 48, frameHeight: 48 } },
-  { key: TextureKeys.LumberMill, url: 'assets/sprites/lumber_mill.png', frame: { frameWidth: 48, frameHeight: 48 } },
-  { key: TextureKeys.Quarry, url: 'assets/sprites/quarry.png', frame: { frameWidth: 48, frameHeight: 48 } },
-  { key: TextureKeys.Mine, url: 'assets/sprites/mine.png', frame: { frameWidth: 48, frameHeight: 48 } },
-  { key: TextureKeys.Barracks, url: 'assets/sprites/barracks.png', frame: { frameWidth: 48, frameHeight: 48 } },
-  { key: TextureKeys.TroopSpearman, url: 'assets/sprites/troop_spearman.png', frame: { frameWidth: 24, frameHeight: 28 } },
-  { key: TextureKeys.TroopArcher, url: 'assets/sprites/troop_archer.png', frame: { frameWidth: 24, frameHeight: 28 } },
-  { key: TextureKeys.TroopKnight, url: 'assets/sprites/troop_knight.png', frame: { frameWidth: 24, frameHeight: 28 } },
-  { key: TextureKeys.EnemyRaider, url: 'assets/sprites/enemy_raider.png', frame: { frameWidth: 24, frameHeight: 28 } },
-  { key: TextureKeys.EnemyBrute, url: 'assets/sprites/enemy_brute.png', frame: { frameWidth: 32, frameHeight: 36 } },
-  { key: TextureKeys.EnemyRam, url: 'assets/sprites/enemy_ram.png', frame: { frameWidth: 40, frameHeight: 32 } },
+  { key: TextureKeys.Furnace, url: 'assets/sprites/furnace.png', frame: { frameWidth: 64, frameHeight: 64 } },
+  { key: TextureKeys.HuntersHut, url: 'assets/sprites/hunters_hut.png', frame: { frameWidth: 48, frameHeight: 48 } },
+  { key: TextureKeys.Sawmill, url: 'assets/sprites/sawmill.png', frame: { frameWidth: 48, frameHeight: 48 } },
+  { key: TextureKeys.CoalPit, url: 'assets/sprites/coal_pit.png', frame: { frameWidth: 48, frameHeight: 48 } },
+  { key: TextureKeys.IronMine, url: 'assets/sprites/iron_mine.png', frame: { frameWidth: 48, frameHeight: 48 } },
+  { key: TextureKeys.WarCamp, url: 'assets/sprites/war_camp.png', frame: { frameWidth: 48, frameHeight: 48 } },
+  { key: TextureKeys.TroopTrapper, url: 'assets/sprites/troop_trapper.png', frame: { frameWidth: 24, frameHeight: 28 } },
+  { key: TextureKeys.TroopMarksman, url: 'assets/sprites/troop_marksman.png', frame: { frameWidth: 24, frameHeight: 28 } },
+  { key: TextureKeys.TroopVanguard, url: 'assets/sprites/troop_vanguard.png', frame: { frameWidth: 24, frameHeight: 28 } },
+  { key: TextureKeys.EnemyFrostWolf, url: 'assets/sprites/enemy_frost_wolf.png', frame: { frameWidth: 24, frameHeight: 28 } },
+  { key: TextureKeys.EnemyRavager, url: 'assets/sprites/enemy_ravager.png', frame: { frameWidth: 32, frameHeight: 36 } },
+  { key: TextureKeys.EnemyFrostTitan, url: 'assets/sprites/enemy_frost_titan.png', frame: { frameWidth: 40, frameHeight: 32 } },
   { key: TextureKeys.ResourceIcons, url: 'assets/ui/resource_icons.png', frame: { frameWidth: 16, frameHeight: 16 } },
   { key: TextureKeys.FxSpark, url: 'assets/fx/spark.png', frame: { frameWidth: 16, frameHeight: 16 } },
   { key: TextureKeys.FxDust, url: 'assets/fx/dust.png', frame: { frameWidth: 16, frameHeight: 16 } },
@@ -145,25 +145,25 @@ export const AUDIO: readonly AudioAsset[] = [
  * feature consumes this so the roster stays in sync with the config.
  */
 export const BUILDING_TEXTURE_BY_KIND: Record<string, TextureKey> = {
-  town_center: TextureKeys.TownCenter,
-  farm: TextureKeys.Farm,
-  lumber_mill: TextureKeys.LumberMill,
-  quarry: TextureKeys.Quarry,
-  mine: TextureKeys.Mine,
-  barracks: TextureKeys.Barracks,
+  furnace: TextureKeys.Furnace,
+  hunters_hut: TextureKeys.HuntersHut,
+  sawmill: TextureKeys.Sawmill,
+  coal_pit: TextureKeys.CoalPit,
+  iron_mine: TextureKeys.IronMine,
+  war_camp: TextureKeys.WarCamp,
 };
 
 /** Maps a TroopKind value to its spritesheet texture key. */
 export const TROOP_TEXTURE_BY_KIND: Record<string, TextureKey> = {
-  spearman: TextureKeys.TroopSpearman,
-  archer: TextureKeys.TroopArcher,
-  knight: TextureKeys.TroopKnight,
+  trapper: TextureKeys.TroopTrapper,
+  marksman: TextureKeys.TroopMarksman,
+  vanguard: TextureKeys.TroopVanguard,
 };
 
 /** Maps a resource kind to its frame index in the packed resource-icon sheet. */
 export const RESOURCE_ICON_FRAME: Record<string, number> = {
   food: 0,
   wood: 1,
-  stone: 2,
-  gold: 3,
+  coal: 2,
+  iron: 3,
 };

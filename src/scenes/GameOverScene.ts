@@ -28,8 +28,8 @@ export interface GameOverData {
  * GameOverScene - the post-battle result overlay.
  *
  * Reuses the {@link Menu} pixel-UI helpers to present the battle outcome over a
- * dimmed battle backdrop: a VICTORY / DEFEAT (or full-campaign KINGDOM
- * TRIUMPHANT) headline, the reward or casualty summary, and the running waves
+ * dimmed battle backdrop: a VICTORY / DEFEAT (or full-campaign THE HOLD
+ * ENDURES) headline, the reward or casualty summary, and the running waves
  * cleared. It never mutates state itself - BattleScene has already applied the
  * reward / casualties and persisted through GameState before starting this
  * scene - so this is a pure presentational end-cap with two exits:
@@ -59,7 +59,7 @@ export class GameOverScene extends Phaser.Scene {
     let headlineColor: string;
     if (data.fullVictory) {
       headline = tr('result.fullVictory');
-      headlineColor = PALETTE.GOLD_CSS;
+      headlineColor = PALETTE.ACCENT_CSS;
     } else if (data.win) {
       headline = tr('result.victory');
       headlineColor = PALETTE.SUCCESS_CSS;
@@ -83,8 +83,8 @@ export class GameOverScene extends Phaser.Scene {
         tr('result.rewardLine', {
           food: data.reward.food ?? 0,
           wood: data.reward.wood ?? 0,
-          stone: data.reward.stone ?? 0,
-          gold: data.reward.gold ?? 0,
+          coal: data.reward.coal ?? 0,
+          iron: data.reward.iron ?? 0,
         }),
       );
       lines.push(tr('result.survivors', { count: data.survivors }));
@@ -102,7 +102,7 @@ export class GameOverScene extends Phaser.Scene {
     // back into battle. A defeat wipes the army (survivors === 0), so re-entering
     // BattleScene would just bounce off its empty-army guard back to Town - a
     // dead button. In that case we instead offer "Train Troops" (routes to the
-    // Town, where the Barracks/training lives) so the action the player is given
+    // Town, where the War Camp/training lives) so the action the player is given
     // can actually be accomplished. Retry is also suppressed on a full-campaign
     // victory (there is no next wave).
     const btnY = CANVAS.HEIGHT / 2 + 110;

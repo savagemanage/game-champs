@@ -10,14 +10,14 @@ export type Side = 'friendly' | 'enemy';
 
 /** Texture key for each enemy kind (mirrors the sprite registry). */
 const ENEMY_TEXTURE_BY_KIND: Record<EnemyKind, TextureKey> = {
-  raider: TextureKeys.EnemyRaider,
-  brute: TextureKeys.EnemyBrute,
-  ram: TextureKeys.EnemyRam,
+  frost_wolf: TextureKeys.EnemyFrostWolf,
+  ravager: TextureKeys.EnemyRavager,
+  frost_titan: TextureKeys.EnemyFrostTitan,
 };
 
 /**
- * Battler - one animated combatant sprite (a troop or a raider) on the battle
- * field, with a small floating HP bar.
+ * Battler - one animated combatant sprite (a soldier or a Frozen Horde beast)
+ * on the battle field, with a small floating HP bar.
  *
  * A Battler is PURELY a visualization: it holds a display `hp` for its bar and
  * plays march / attack / hit / death animations, but the battle's OUTCOME is

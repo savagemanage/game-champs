@@ -23,7 +23,7 @@ export interface SettingsData {
  * language is mirrored into the i18n runtime. Switching the language rebuilds
  * the scene (scene.restart, preserving returnTo) so every visible label flips
  * language immediately. Reset clears the save through {@link GameState} and
- * returns to the Title with a fresh kingdom. Mirrors wirework's SettingsScene.
+ * returns to the Title with a fresh hold. Mirrors wirework's SettingsScene.
  */
 export class SettingsScene extends Phaser.Scene {
   private audioMgr!: AudioManager;

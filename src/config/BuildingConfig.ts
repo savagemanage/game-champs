@@ -1,11 +1,11 @@
 /**
- * BuildingConfig - the per-building tuning table for Kingdom Rise.
+ * BuildingConfig - the per-building tuning table for Frosthold: Last Ember.
  *
  * GameConfig.ts holds the shared *curve* parameters (geometric cost/output
- * growth, base build seconds, max level, Town-Center gating). This module holds
- * the per-building *base* numbers those curves are applied to: what a building
- * costs at level 1, how much a producer outputs at level 1, and how the Town
- * Center gates the rest of the roster.
+ * growth, base build seconds, max level, Furnace gating). This module holds the
+ * per-building *base* numbers those curves are applied to: what a building
+ * costs at level 1, how much a producer outputs at level 1, and how the Furnace
+ * (the settlement's Ember) gates the rest of the roster.
  *
  * All formulas are pure functions of `(kind, level)` so the economy, building,
  * and save systems can compute costs / outputs / timings deterministically and
@@ -25,78 +25,79 @@ export interface BuildingDef {
   /** For producers: which resource this building generates (undefined otherwise). */
   produces?: ResourceKind;
   /**
-   * Minimum Town Center level required to build/own this building AT ALL. The
-   * Town Center itself is always buildable (0). This is the hard prerequisite;
-   * separately, a non-Town-Center building may never exceed the current Town
-   * Center level (enforced in BuildingSystem).
+   * Minimum Furnace level required to build/own this building AT ALL. The
+   * Furnace itself is always buildable (0). This is the hard prerequisite;
+   * separately, a non-Furnace building may never exceed the current Furnace
+   * level (enforced in BuildingSystem).
    */
-  requiresTownCenterLevel: number;
+  requiresFurnaceLevel: number;
   /** Highest level this building can reach (defaults to the global MAX_LEVEL). */
   maxLevel: number;
 }
 
 /**
  * The building roster. Producer outputs are balanced so early food/wood flow
- * faster than the scarcer stone/gold. The Barracks produces nothing but unlocks
- * troop training; the Town Center produces nothing but raises the level cap.
+ * faster than the scarcer coal/iron. The War Camp produces nothing but unlocks
+ * troop training; the Furnace produces nothing but keeps the Ember burning and
+ * raises the level cap of everything else.
  */
 export const BUILDING_DEFS: Record<BuildingKind, BuildingDef> = {
-  town_center: {
-    kind: 'town_center',
-    baseCost: { wood: 100, stone: 60 },
+  furnace: {
+    kind: 'furnace',
+    baseCost: { wood: 100, coal: 60 },
     baseOutputPerSec: 0,
-    requiresTownCenterLevel: 0,
+    requiresFurnaceLevel: 0,
     maxLevel: BUILDINGS.MAX_LEVEL,
   },
-  farm: {
-    kind: 'farm',
+  hunters_hut: {
+    kind: 'hunters_hut',
     baseCost: { wood: 40, food: 20 },
     baseOutputPerSec: 2.0,
     produces: 'food',
-    requiresTownCenterLevel: 1,
+    requiresFurnaceLevel: 1,
     maxLevel: BUILDINGS.MAX_LEVEL,
   },
-  lumber_mill: {
-    kind: 'lumber_mill',
-    baseCost: { food: 40, stone: 20 },
+  sawmill: {
+    kind: 'sawmill',
+    baseCost: { food: 40, coal: 20 },
     baseOutputPerSec: 1.6,
     produces: 'wood',
-    requiresTownCenterLevel: 1,
+    requiresFurnaceLevel: 1,
     maxLevel: BUILDINGS.MAX_LEVEL,
   },
-  quarry: {
-    kind: 'quarry',
+  coal_pit: {
+    kind: 'coal_pit',
     baseCost: { wood: 80, food: 40 },
     baseOutputPerSec: 1.0,
-    produces: 'stone',
-    requiresTownCenterLevel: 2,
+    produces: 'coal',
+    requiresFurnaceLevel: 2,
     maxLevel: BUILDINGS.MAX_LEVEL,
   },
-  mine: {
-    kind: 'mine',
-    baseCost: { wood: 120, stone: 80 },
+  iron_mine: {
+    kind: 'iron_mine',
+    baseCost: { wood: 120, coal: 80 },
     baseOutputPerSec: 0.5,
-    produces: 'gold',
-    requiresTownCenterLevel: 3,
+    produces: 'iron',
+    requiresFurnaceLevel: 3,
     maxLevel: BUILDINGS.MAX_LEVEL,
   },
-  barracks: {
-    kind: 'barracks',
-    baseCost: { wood: 150, stone: 100 },
+  war_camp: {
+    kind: 'war_camp',
+    baseCost: { wood: 150, coal: 100 },
     baseOutputPerSec: 0,
-    requiresTownCenterLevel: 2,
+    requiresFurnaceLevel: 2,
     maxLevel: BUILDINGS.MAX_LEVEL,
   },
 };
 
 /** All building kinds, in a stable display/iteration order. */
 export const BUILDING_ORDER: readonly BuildingKind[] = [
-  'town_center',
-  'farm',
-  'lumber_mill',
-  'quarry',
-  'mine',
-  'barracks',
+  'furnace',
+  'hunters_hut',
+  'sawmill',
+  'coal_pit',
+  'iron_mine',
+  'war_camp',
 ] as const;
 
 /** Lookup a building definition (never undefined for a valid kind). */

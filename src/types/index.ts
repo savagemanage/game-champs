@@ -1,15 +1,18 @@
 /**
- * Shared cross-cutting types for Kingdom Rise.
+ * Shared cross-cutting types for Frosthold: Last Ember.
  *
  * These are the vocabulary the later features (economy, buildings, training,
- * combat, save/load) all import so their contracts line up. Nothing here
- * depends on Phaser, so the pure-logic systems and their unit tests can import
- * these freely.
+ * combat, save/load, warmth) all import so their contracts line up. Nothing
+ * here depends on Phaser, so the pure-logic systems and their unit tests can
+ * import these freely.
  */
 
 import { RESOURCE_ORDER } from '../config/GameConfig';
 
-/** The four resource kinds. Derived from the canonical RESOURCE_ORDER tuple. */
+/**
+ * The four resource kinds of the frozen settlement (rations, timber, coal,
+ * iron). Derived from the canonical RESOURCE_ORDER tuple.
+ */
 export type ResourceKind = (typeof RESOURCE_ORDER)[number];
 
 /** A full resource bundle: an amount for every resource kind. */
@@ -18,26 +21,26 @@ export type Resources = Record<ResourceKind, number>;
 /** A partial cost/reward bundle (missing kinds are treated as 0). */
 export type ResourceCost = Partial<Resources>;
 
-/** The buildable structure kinds. `town_center` gates the level cap of the rest. */
+/** The buildable structure kinds. `furnace` (the Ember) gates the level cap of the rest. */
 export type BuildingKind =
-  | 'town_center'
-  | 'farm'
-  | 'lumber_mill'
-  | 'quarry'
-  | 'mine'
-  | 'barracks';
+  | 'furnace'
+  | 'hunters_hut'
+  | 'sawmill'
+  | 'coal_pit'
+  | 'iron_mine'
+  | 'war_camp';
 
 /** Producer buildings map to the single resource they generate. */
-export type ProducerKind = Exclude<BuildingKind, 'town_center' | 'barracks'>;
+export type ProducerKind = Exclude<BuildingKind, 'furnace' | 'war_camp'>;
 
-/** The trainable troop kinds. */
-export type TroopKind = 'spearman' | 'archer' | 'knight';
+/** The trainable troop kinds (survivor militia roles). */
+export type TroopKind = 'trapper' | 'marksman' | 'vanguard';
 
 /** A standing army: a count for every troop kind. */
 export type Army = Record<TroopKind, number>;
 
-/** The enemy raider kinds faced in battle. */
-export type EnemyKind = 'raider' | 'brute' | 'ram';
+/** The Frozen Horde enemy kinds faced in battle. */
+export type EnemyKind = 'frost_wolf' | 'ravager' | 'frost_titan';
 
 /** A combatant's shared stat block (troops and enemies both use this shape). */
 export interface UnitStats {
@@ -69,7 +72,12 @@ export interface TrainingOrder {
 
 /** The complete persisted game state (serialized to localStorage by the save feature). */
 export interface GameState {
-  /** Save-format version so future migrations can be detected. */
+  /**
+   * Save-format version so future migrations can be detected. Bumped to 2 for
+   * the Frosthold re-theme (new resource/building/troop/enemy vocabulary), so
+   * legacy medieval saves are detected as a version mismatch and fall back to a
+   * fresh frozen settlement rather than mis-mapping.
+   */
   version: number;
   resources: Resources;
   buildings: BuildingState[];

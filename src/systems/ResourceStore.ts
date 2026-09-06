@@ -7,7 +7,7 @@ export type ProductionRates = Resources;
 /**
  * ResourceStore - the four resource stockpiles plus the idle-production math.
  *
- * Pure logic (no Phaser): it holds `food/wood/stone/gold` balances, supports
+ * Pure logic (no Phaser): it holds `food/wood/coal/iron` balances, supports
  * affordability-checked spending, and can credit passive production for an
  * elapsed `dt` given the current per-second production rates (which
  * BuildingSystem derives from BuildingConfig). Serializable to/from a plain
@@ -26,7 +26,7 @@ export class ResourceStore {
 
   /** A zeroed resource bundle. */
   static emptyBundle(): Resources {
-    return { food: 0, wood: 0, stone: 0, gold: 0 };
+    return { food: 0, wood: 0, coal: 0, iron: 0 };
   }
 
   /** Current amount of a single resource. */

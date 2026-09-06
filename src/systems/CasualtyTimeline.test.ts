@@ -12,13 +12,13 @@ import type { Army } from '../types';
  * sequence must be monotonic, and the enemy side must end at zero on a win.
  */
 describe('CasualtyTimeline', () => {
-  const army = (a: Partial<Army>): Army => ({ spearman: 0, archer: 0, knight: 0, ...a });
+  const army = (a: Partial<Army>): Army => ({ trapper: 0, marksman: 0, vanguard: 0, ...a });
 
   const startEnemyTotal = (wave: number): number =>
     waveComposition(wave).reduce((s, e) => s + e.count, 0);
 
   it('ends exactly on the CombatSystem survivors for a win', () => {
-    const a = army({ knight: 50 });
+    const a = army({ vanguard: 50 });
     const result = CombatSystem.resolve(a, 1);
     expect(result.win).toBe(true);
 
@@ -32,7 +32,7 @@ describe('CasualtyTimeline', () => {
   });
 
   it('ends with the army wiped and the wave still standing on a loss', () => {
-    const a = army({ spearman: 1 });
+    const a = army({ trapper: 1 });
     const result = CombatSystem.resolve(a, 8);
     expect(result.win).toBe(false);
 
@@ -46,7 +46,7 @@ describe('CasualtyTimeline', () => {
   });
 
   it('starts at the full army vs the full wave composition', () => {
-    const a = army({ spearman: 10, archer: 5 });
+    const a = army({ trapper: 10, marksman: 5 });
     const result = CombatSystem.resolve(a, 4);
     const tl = buildTimeline(a, result, 6);
     expect(friendlyTotal(tl.start)).toBe(15);
@@ -54,7 +54,7 @@ describe('CasualtyTimeline', () => {
   });
 
   it('is monotonically non-increasing on both sides', () => {
-    const a = army({ knight: 30, spearman: 20 });
+    const a = army({ vanguard: 30, trapper: 20 });
     const result = CombatSystem.resolve(a, 5);
     const tl = buildTimeline(a, result, 10);
 
@@ -71,7 +71,7 @@ describe('CasualtyTimeline', () => {
   });
 
   it('clamps the step count to at least one', () => {
-    const a = army({ knight: 10 });
+    const a = army({ vanguard: 10 });
     const result = CombatSystem.resolve(a, 1);
     const tl = buildTimeline(a, result, 0);
     expect(tl.steps.length).toBe(1);
@@ -81,10 +81,10 @@ describe('CasualtyTimeline', () => {
   });
 
   it('mirrors the win flag from the result', () => {
-    const a = army({ knight: 50 });
+    const a = army({ vanguard: 50 });
     const win = CombatSystem.resolve(a, 1);
-    const loss = CombatSystem.resolve(army({ spearman: 1 }), 9);
+    const loss = CombatSystem.resolve(army({ trapper: 1 }), 9);
     expect(buildTimeline(a, win).win).toBe(true);
-    expect(buildTimeline(army({ spearman: 1 }), loss).win).toBe(false);
+    expect(buildTimeline(army({ trapper: 1 }), loss).win).toBe(false);
   });
 });
