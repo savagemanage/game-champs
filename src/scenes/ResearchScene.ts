@@ -35,12 +35,18 @@ export class ResearchScene extends HubScene {
   }
 
   protected build(): void {
-    // The four branch columns are packed into the LEFT ~640px so the detail
-    // panel gets its own dedicated band on the right and never floats over the
-    // (rightmost, Development) column's interactive nodes.
-    const colW = 158;
-    const startX = 24;
-    const nodeW = 144;
+    // Symmetric horizontal framing at 960x540: a single outer margin M sets the
+    // left edge of the leftmost column AND the right edge of the detail panel to
+    // 960-M, with an even gutter between the four-column block and the panel so
+    // there is no hollow band in the middle. The columns are widened to fill the
+    // reclaimed space while the panel still clears the rightmost node column.
+    const M = 24;
+    const panelW = 236;
+    const px = CANVAS.WIDTH - M - panelW / 2; // panel right edge = 960 - M
+    const gutter = 32;
+    const nodeW = 152;
+    const colW = 164;
+    const startX = M;
     RESEARCH_BRANCH_ORDER.forEach((branch: ResearchBranch, ci) => {
       const x = startX + ci * colW;
       this.add.text(x, 60, tr(`research.branch.${branch}`), textStyle(16, { fontStyle: 'bold', color: PALETTE.ICE_CSS })).setOrigin(0, 0.5);
@@ -50,12 +56,14 @@ export class ResearchScene extends HubScene {
         this.nodeButtons.push({ id, button: btn });
       });
     });
+    // Sanity: the rightmost node column must clear the panel's left edge by the
+    // gutter (columns block right edge + gutter = panel left edge).
+    void (startX + 3 * colW + nodeW + gutter);
 
     // Detail panel anchored in the reserved right band (its left edge clears
     // the widest node column above). A solid panel body keeps it legible.
-    const px = CANVAS.WIDTH - 130;
     const py = CANVAS.HEIGHT / 2 + 10;
-    Menu.panel(this, px, py, 236, 300);
+    Menu.panel(this, px, py, panelW, 300);
     this.detailTitle = this.add.text(px, py - 130, '', textStyle(18, { fontStyle: 'bold', align: 'center', wordWrap: { width: 230 } })).setOrigin(0.5, 0);
     this.detailDesc = this.add.text(px - 118, py - 80, '', textStyle(12, { color: PALETTE.MUTED_CSS, wordWrap: { width: 236 } })).setOrigin(0, 0);
     this.detailCost = this.add.text(px - 118, py + 6, '', textStyle(12, { color: PALETTE.TEXT_CSS, wordWrap: { width: 236 } })).setOrigin(0, 0);

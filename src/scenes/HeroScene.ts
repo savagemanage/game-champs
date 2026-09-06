@@ -50,14 +50,24 @@ export class HeroScene extends HubScene {
   }
 
   protected build(): void {
+    // Symmetric horizontal framing at 960x540: one outer margin M sets the grid's
+    // visual left edge AND the detail panel's right edge (960 - M). The grid's
+    // columns are spread to fill the reclaimed left band with an even gutter to
+    // the panel, so the roster and panel no longer leave a lopsided margin.
+    const M = 24;
+    const panelW = 380;
+    const px = CANVAS.WIDTH - M - panelW / 2; // panel right edge = 960 - M
+
     // A Summon shortcut, top-right under the currency bar.
     Menu.button(this, CANVAS.WIDTH - 90, 66, tr('summon.title'), () => this.goSummon(), { width: 150, fontSize: 14, padY: 6 });
 
-    // Roster grid (6 columns) on the left.
+    // Roster grid (4 columns) on the left. The portrait is drawn at scale 2, so
+    // its half-width is ~32px; anchoring the first column centre at M + 32 puts
+    // the grid's visual left edge exactly at the outer margin M.
     const cols = 4;
-    const cellW = 96;
+    const cellW = 140;
     const cellH = 92;
-    const ox = 70;
+    const ox = M + 32;
     const oy = 120;
     HERO_IDS.forEach((id, i) => {
       const gx = ox + (i % cols) * cellW;
@@ -74,10 +84,9 @@ export class HeroScene extends HubScene {
       this.tiles.push({ id, container, badge });
     });
 
-    // Detail panel on the right.
-    const px = CANVAS.WIDTH - 210;
+    // Detail panel on the right (px computed above so its right edge = 960 - M).
     const py = CANVAS.HEIGHT / 2 + 16;
-    Menu.panel(this, px, py, 380, 340);
+    Menu.panel(this, px, py, panelW, 340);
     this.add.image(px - 150, py - 120, TextureKeys.HeroPortraits, 0).setScale(2.4).setName('detailPortrait');
     this.detailName = this.add.text(px - 110, py - 140, '', textStyle(18, { fontStyle: 'bold', wordWrap: { width: 250 } })).setOrigin(0, 0);
     this.detailInfo = this.add.text(px - 170, py - 70, '', textStyle(13, { color: PALETTE.TEXT_CSS, wordWrap: { width: 340 }, lineSpacing: 4 })).setOrigin(0, 0);

@@ -40,17 +40,25 @@ export class AllianceScene extends HubScene {
   }
 
   protected build(): void {
+    // Symmetric horizontal framing at 960x540: one outer margin M sets the left
+    // Pact panel's left edge (M) and the right rally column's right edge (960-M),
+    // so the two-column layout carries even outer margins.
+    const M = 24;
+    const leftPanelW = 360;
+    const lx = M + leftPanelW / 2; // left panel left edge = M
+    const rightPanelW = 320;
+    const rx = CANVAS.WIDTH - M - rightPanelW / 2; // right panel right edge = 960 - M
+
     // --- Left: the Pact (members, help, tech) ---
-    Menu.panel(this, 210, 190, 360, 240);
-    this.add.text(210, 90, tr('alliance.members', { count: ALLIANCE.MEMBER_COUNT }), textStyle(15, { align: 'center', color: PALETTE.ICE_CSS })).setOrigin(0.5);
-    this.helpText = this.add.text(210, 130, '', textStyle(14, { align: 'center' })).setOrigin(0.5);
-    this.helpButton = Menu.button(this, 210, 168, tr('alliance.help'), () => this.doHelp(), { width: 240, fontSize: 14 });
-    this.techText = this.add.text(210, 214, '', textStyle(14, { align: 'center', color: PALETTE.ACCENT_CSS })).setOrigin(0.5);
-    this.techPointsText = this.add.text(210, 238, '', textStyle(12, { align: 'center', color: PALETTE.MUTED_CSS })).setOrigin(0.5);
-    this.contributeButton = Menu.button(this, 210, 278, tr('alliance.contribute'), () => this.doContribute(), { width: 240, fontSize: 14 });
+    Menu.panel(this, lx, 190, leftPanelW, 240);
+    this.add.text(lx, 90, tr('alliance.members', { count: ALLIANCE.MEMBER_COUNT }), textStyle(15, { align: 'center', color: PALETTE.ICE_CSS })).setOrigin(0.5);
+    this.helpText = this.add.text(lx, 130, '', textStyle(14, { align: 'center' })).setOrigin(0.5);
+    this.helpButton = Menu.button(this, lx, 168, tr('alliance.help'), () => this.doHelp(), { width: 240, fontSize: 14 });
+    this.techText = this.add.text(lx, 214, '', textStyle(14, { align: 'center', color: PALETTE.ACCENT_CSS })).setOrigin(0.5);
+    this.techPointsText = this.add.text(lx, 238, '', textStyle(12, { align: 'center', color: PALETTE.MUTED_CSS })).setOrigin(0.5);
+    this.contributeButton = Menu.button(this, lx, 278, tr('alliance.contribute'), () => this.doContribute(), { width: 240, fontSize: 14 });
 
     // --- Right: Frostbeast rallies ---
-    const rx = CANVAS.WIDTH - 250;
     this.add.text(rx, 82, tr('rally.title'), textStyle(15, { align: 'center', color: PALETTE.EMBER_CSS })).setOrigin(0.5);
     RALLY_BOSSES.forEach((b, i) => {
       const btn = Menu.button(this, rx, 116 + i * 40, trDyn(`enemy.${b.id}`), () => this.selectBoss(b.id), { width: 260, fontSize: 13, padY: 6 });

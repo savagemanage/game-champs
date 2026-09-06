@@ -34,15 +34,20 @@ export class GearScene extends HubScene {
   }
 
   protected build(): void {
+    // Symmetric horizontal framing at 960x540: one outer margin M sets the slot
+    // list's left edge AND the detail panel's right edge (960 - M).
+    const M = 24;
+    const slotW = 240;
+    const panelW = 380;
+    const px = CANVAS.WIDTH - M - panelW / 2; // panel right edge = 960 - M
     GEAR_SLOT_ORDER.forEach((slot, i) => {
       const y = 90 + i * 52;
-      const button = Menu.button(this, 150, y, tr(`gear.slot.${slot}`), () => this.select(slot), { width: 240, fontSize: 14 });
+      const button = Menu.button(this, M + slotW / 2, y, tr(`gear.slot.${slot}`), () => this.select(slot), { width: slotW, fontSize: 14 });
       this.slotButtons.push({ slot, button });
     });
 
-    const px = CANVAS.WIDTH - 220;
     const py = CANVAS.HEIGHT / 2 + 8;
-    Menu.panel(this, px, py, 380, 320);
+    Menu.panel(this, px, py, panelW, 320);
     this.detailTitle = this.add.text(px, py - 140, '', textStyle(20, { fontStyle: 'bold', align: 'center', wordWrap: { width: 350 } })).setOrigin(0.5, 0);
     this.detailBody = this.add.text(px - 170, py - 96, '', textStyle(13, { color: PALETTE.TEXT_CSS, wordWrap: { width: 340 }, lineSpacing: 4 })).setOrigin(0, 0);
     this.detailStatus = this.add.text(px, py + 60, '', textStyle(12, { align: 'center', wordWrap: { width: 340 } })).setOrigin(0.5, 0);

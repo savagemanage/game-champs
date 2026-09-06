@@ -49,10 +49,14 @@ export class CampaignScene extends HubScene {
       this.nodes.push({ id: stage.id, container, label });
     });
 
-    // Detail panel.
-    const px = CANVAS.WIDTH - 190;
+    // Detail panel, right edge held at the same outer margin M as the stage
+    // trail's left edge (the leftmost node label sits ~M from the left), so the
+    // screen's outer margins match at 960x540.
+    const M = 24;
+    const panelW = 340;
+    const px = CANVAS.WIDTH - M - panelW / 2; // panel right edge = 960 - M
     const py = CANVAS.HEIGHT / 2 + 6;
-    Menu.panel(this, px, py, 340, 330);
+    Menu.panel(this, px, py, panelW, 330);
     this.detailTitle = this.add.text(px, py - 148, '', textStyle(18, { fontStyle: 'bold', align: 'center', wordWrap: { width: 310 } })).setOrigin(0.5, 0);
     this.detailBlurb = this.add.text(px - 150, py - 96, '', textStyle(12, { color: PALETTE.MUTED_CSS, wordWrap: { width: 300 }, lineSpacing: 3 })).setOrigin(0, 0);
     this.detailPower = this.add.text(px, py + 20, '', textStyle(13, { align: 'center', color: PALETTE.ICE_CSS })).setOrigin(0.5, 0);
@@ -96,7 +100,7 @@ export class CampaignScene extends HubScene {
     // Enemy preview icons.
     for (const icon of this.enemyIcons) icon.destroy();
     this.enemyIcons = [];
-    const px = CANVAS.WIDTH - 190;
+    const px = CANVAS.WIDTH - 24 - 340 / 2; // matches the detail panel centre in build()
     const py = CANVAS.HEIGHT / 2 - 34;
     let ex = px - 120;
     for (const e of stage.enemies) {
