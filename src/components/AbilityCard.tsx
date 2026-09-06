@@ -1,10 +1,16 @@
 import { useTranslation } from 'react-i18next';
 import type { Ability } from '../data/champions';
+import { abilitySvgFor } from '../game/render/abilityIcons';
 
 interface AbilityCardProps {
   ability: Ability;
   /** Accent color used for the slot badge, typically the champion's color. */
   accentColor?: string;
+  /**
+   * Owning champion id, used to resolve the flavored SVG skill icon. When
+   * omitted the icon falls back to the ability's behavior glyph.
+   */
+  championId?: string;
 }
 
 /**
@@ -15,10 +21,16 @@ interface AbilityCardProps {
 export default function AbilityCard({
   ability,
   accentColor = 'var(--color-gold)',
+  championId,
 }: AbilityCardProps) {
   const { t } = useTranslation();
   const isPassive = ability.slot === 'P';
   const slotLabel = isPassive ? t('ability.passive') : t(`slot.${ability.slot}`);
+  const iconSvg = abilitySvgFor(
+    championId ?? '',
+    ability.slot,
+    ability.behavior,
+  );
 
   return (
     <article className="ability-card" data-slot={ability.slot}>
@@ -28,7 +40,11 @@ export default function AbilityCard({
           style={{ borderColor: accentColor, color: accentColor }}
           aria-hidden="true"
         >
-          {t(`slot.${ability.slot}`)}
+          <span
+            className="ability-card__icon"
+            dangerouslySetInnerHTML={{ __html: iconSvg }}
+          />
+          <span className="ability-card__slot-key">{t(`slot.${ability.slot}`)}</span>
         </span>
         <div className="ability-card__titles">
           <h4 className="ability-card__name">{t(ability.nameKey)}</h4>

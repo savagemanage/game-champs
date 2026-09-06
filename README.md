@@ -20,7 +20,7 @@ and deployed to **GitHub Pages**.
 
 - **Vite 5** – dev server and production bundler
 - **React 18** + **TypeScript** (strict mode) – UI shell, screens, and HUD overlay
-- **Phaser 3** – the real-time battle scene, rendered as a **low-res procedural pixel-art 2.5D sprite view**: the top-down world is drawn with a dimetric ("2:1 isometric") projection as a diamond ground, and every entity (champions, minions, structures, epic monsters) is a depth-sorted **ground-shadow + raised billboard** sprite. Sprites are drawn as **chunky, hard-edged pixel art from a small derived palette** into a tiny offscreen buffer, baked once into a GPU texture with `generateTexture`, cached by key, and scaled up with **nearest-neighbor** (Phaser `render: { pixelArt: true, roundPixels: true, antialias: false }`), so there are still **no image assets**. Combat has deliberate **game feel / juice ('타격감')** — hit-flash, importance-scaled screen shake, cosmetic knockback/recoil, squash-and-stretch, impact spark particles, juicy damage-number popups, and a brief kill slow-mo — all driven off tweens/timers/camera so the deterministic simulation is never touched
+- **Phaser 3** – the real-time battle scene, rendered as a **smooth vector-art 2.5D sprite view**: the top-down world is drawn with a dimetric ("2:1 isometric") projection as a diamond ground, and every entity (champions, minions, structures, epic monsters) is a depth-sorted **ground-shadow + raised billboard** sprite. Each sprite is authored as **real illustrated SVG art built from TEXT strings** (`src/game/render/svgArt.ts`, pure and unit-tested) using a small palette derived from the entity's accent + team rim, rasterized **once** to a cached GPU texture and drawn smoothly (Phaser `render: { antialias: true, roundPixels: false }`), so there are still **no binary image assets** (SVG is text). SVG decode is async, so each texture first registers a correctly-sized transparent placeholder and is refreshed in place when the vector art finishes decoding; a headless guard keeps jsdom tests/build green. Combat has deliberate **game feel / juice ('타격감')** — hit-flash, importance-scaled screen shake, cosmetic knockback/recoil, squash-and-stretch, impact spark particles, juicy damage-number popups, and a brief kill slow-mo — all driven off tweens/timers/camera so the deterministic simulation is never touched
 - **react-i18next** (+ `i18next-browser-languagedetector`) – Korean and English locales with a persisted language toggle
 - **Web Audio API** – 100% procedural sound effects (no binary audio files)
 - **Vitest** + **@testing-library/react** – unit tests for pure game logic, i18n parity, and components
@@ -34,7 +34,8 @@ and the **Phaser rendering layer**. Phaser only draws/bakes sprites and calls th
 helpers; it never owns the math. This keeps every formula testable in plain node/jsdom
 without a canvas. Even the 2.5D projection math is pure: the dimetric transform lives in
 `src/game/rift/iso.ts` and is exhaustively unit-tested, while the Phaser-side sprite factory
-(`src/game/render/sprites.ts`) only turns those pure descriptions into baked textures.
+(`src/game/render/sprites.ts`) only rasterizes the pure SVG strings from `svgArt.ts` into
+cached textures.
 
 Pure, unit-tested modules:
 
@@ -194,7 +195,7 @@ src/
   App.tsx                       # app shell + router (menu | mode | select | battle | result)
   main.tsx                      # React entry: imports i18n + global styles
   components/
-    AbilityCard.tsx             # ability tooltip card
+    AbilityCard.tsx             # ability tooltip card (inline SVG skill icon from abilityIcons.ts)
     ChampionCard.tsx            # roster tile (CSS-art portrait)
     LanguageToggle.tsx          # ko/en segmented switch
     SettingsPanel.tsx           # localized settings + help modal (keybinds incl. B, audio, language)
@@ -214,7 +215,9 @@ src/
     PhaserGame.tsx              # mounts a single Phaser.Game, StrictMode-safe
     scenes/BattleScene.ts       # the Rift scene: renders the 2.5D map + routes math through rift/
     render/
-      sprites.ts                # Phaser-side sprite factory: bakes procedural pixel-art billboard textures (generateTexture), cached
+      svgArt.ts                 # pure, Phaser-free SVG-markup builders for entities + combat/skill VFX (accent-driven), unit-tested
+      sprites.ts                # Phaser-side sprite factory: rasterizes svgArt strings ONCE into cached textures (placeholder->refresh, headless-guarded)
+      abilityIcons.ts           # pure inline-DOM SVG skill-icon builders for the HUD ability bar + champion-select, unit-tested
       palette.ts                # pure limited-palette color math (accent -> 5-tone ramp), unit-tested
       juice.ts                  # pure combat-juice math (hit importance, shake, knockback, sparks, popups), unit-tested
     rift/                       # pure, unit-tested Summoner's Rift modules
@@ -232,31 +235,57 @@ src/
 
 ## Notes on assets and audio
 
-There are **no binary art or audio assets** — none. Champion portraits are CSS gradients with
-initials, all sound effects are synthesized at runtime with the Web Audio API, and every
-battle sprite is drawn from code. No PNGs, atlases, or spritesheets are loaded or committed.
+There are **no binary art or audio assets** — none. Every visual is authored as **text**: the
+in-canvas battle art is **SVG vector markup built from TypeScript strings**, HUD skill icons are
+**inline DOM SVG**, champion portraits are CSS gradients with initials, and all sound effects are
+synthesized at runtime with the Web Audio API. No PNGs, JPGs, atlases, or spritesheets are loaded
+or committed — SVG is text, not a binary asset.
 
-### Low-res procedural pixel-art rendering
+### SVG vector-art rendering
 
-The battle renders as a deliberate **low-res, procedural pixel-art 2.5D sprite scene** with no
-image files. The top-down world is projected onto a dimetric ("2:1 isometric") plane so the
-square map reads as a diamond ground, and each entity is drawn as a **ground-shadow ellipse
-plus a raised, upright billboard** sprite, depth-sorted so whatever is nearer the viewer draws
-on top (see `src/game/rift/iso.ts`).
+The battle renders as a **smooth, vector-illustrated 2.5D sprite scene** with no image files. The
+top-down world is projected onto a dimetric ("2:1 isometric") plane so the square map reads as a
+diamond ground, and each entity is drawn as a **ground-shadow ellipse plus a raised, upright
+billboard** sprite, depth-sorted so whatever is nearer the viewer draws on top (see
+`src/game/rift/iso.ts`).
 
-Every sprite texture is **generated procedurally at runtime** as chunky pixel art:
+Every entity is authored as **real illustrated SVG art, expressed as text**:
 
-- The factory in `src/game/render/sprites.ts` draws each champion / minion / structure / epic
-  monster as **hard-edged, blocky pixels** into a tiny offscreen buffer, then bakes it into a
-  GPU texture via `generateTexture` and **caches** it by entity type / team / variant, so a
-  texture is created a single time and reused by many lightweight billboard `Image`s.
-- Colors come from a **small, limited palette** derived from one accent color: the pure helper
-  in `src/game/render/palette.ts` turns an accent + team-rim color into a fixed five-tone ramp
-  (hard outline → shadow → base → light → team rim), so every sprite reads as a
-  limited-palette retro asset regardless of champion or team.
-- Phaser is configured for **nearest-neighbor** upscaling (`render: { pixelArt: true,
-  roundPixels: true, antialias: false }` in `src/game/PhaserGame.tsx`), so the small baked
-  textures scale up into crisp, aliased pixels instead of blurring.
+- The pure, Phaser-free builders in `src/game/render/svgArt.ts` produce an **SVG markup string**
+  (with soft gradient shading) for each champion / minion / structure / epic monster, plus the
+  combat/skill VFX. Because they are plain string/geometry helpers with no Phaser dependency, they
+  are directly **unit-tested** (`svgArt.test.ts`).
+- The factory in `src/game/render/sprites.ts` **rasterizes each SVG string ONCE** into a GPU
+  texture and **caches** it by entity type / team / variant, so a texture is decoded a single time
+  and reused by many lightweight billboard `Image`s. Because SVG decode is **async**, `ensure`
+  first registers a correctly-sized transparent **placeholder** texture (so billboards are anchored
+  and depth-sorted immediately) and **refreshes it in place** when the vector art finishes decoding.
+  A **headless guard** (mirroring `audio.ts`) skips rasterization when a real `<canvas>`/`Image`
+  SVG decode is unavailable (jsdom), so unit tests and the build stay green.
+- Colors come from a **small, limited palette** derived from one accent color: the pure helper in
+  `src/game/render/palette.ts` turns an accent + team-rim color into a fixed five-tone ramp
+  (outline → shadow → base → light → team rim), emitted as `#rrggbb` SVG fills so every figure stays
+  distinct by champion and keeps the ally/enemy rim tell.
+- Phaser is configured for **smooth antialiased vector rendering** (`render: { antialias: true,
+  roundPixels: false }` in `src/game/PhaserGame.tsx`) — the previous nearest-neighbor pixel-art
+  config (`pixelArt: true`) is gone — so the baked vector textures scale up crisply under
+  `Scale.FIT` instead of turning blocky.
+
+### SVG skill icons
+
+The **QWER ability bar** and **champion-select** ability cards render **inline DOM SVG** skill
+icons (not bare `Q`/`W`/`E`/`R` letters) built by the pure, unit-tested
+`src/game/render/abilityIcons.ts` (`abilitySvgFor`), consumed by `src/game/BattleHud.tsx` and
+`src/components/AbilityCard.tsx`. The slot letter remains as a small label/fallback.
+
+### SVG combat and skill effects
+
+Combat and skill effects — projectiles, beams, AoE telegraph rings, cast flares, heals, dash
+streaks, and death bursts — are also **SVG-baked VFX textures** (`vfxArt` in `svgArt.ts`, baked and
+cached by kind + color via `SpriteFactory.ensureVfx` in `sprites.ts`), drawn as transient
+billboards and animated with the existing tweens. Like the entity art, each VFX texture is
+rasterized once and reused, and the VFX remain **cosmetic-only** — they never touch the
+deterministic simulation.
 
 ### Combat juice ('타격감')
 

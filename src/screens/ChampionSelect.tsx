@@ -146,6 +146,7 @@ export default function ChampionSelect({
                       key={ability.slot}
                       ability={ability}
                       accentColor={selected.accentColor}
+                      championId={selected.id}
                     />
                   ))}
                 </div>

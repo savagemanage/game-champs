@@ -51,6 +51,7 @@ import {
   DEFAULT_PROJECTION,
 } from '../rift/iso';
 import { SpriteFactory, type SpriteSize } from '../render/sprites';
+import type { VfxKind } from '../render/svgArt';
 import {
   classifyHit,
   shakeForHit,
@@ -495,6 +496,9 @@ export default class BattleScene extends Phaser.Scene {
     }
     const img = this.add.image(screen.x, screen.y - heightPx, key);
     img.setOrigin(0.5, 1 - (size.height - size.footY) / size.height);
+    // The backing texture is baked at RASTER_SCALE density; pin the on-screen
+    // size to the intrinsic SpriteSize so it renders 1:1 (crisp downsample).
+    img.setDisplaySize(size.width, size.height);
     img.setDepth(depthFor(worldPos, heightPx / HEIGHT_SCALE, DEFAULT_PROJECTION));
   }
 
@@ -608,6 +612,10 @@ export default class BattleScene extends Phaser.Scene {
     const img = this.add.image(0, 0, key);
     // Anchor the sprite's foot at the container origin (0,0).
     img.setOrigin(0.5, size.footY / size.height);
+    // The backing texture is baked at RASTER_SCALE density for crispness; pin
+    // the on-screen size to the intrinsic SpriteSize so it renders 1:1 and
+    // Phaser downsamples the denser texture at draw time.
+    img.setDisplaySize(size.width, size.height);
     img.setPosition(0, 0);
     return img;
   }
@@ -1135,6 +1143,8 @@ export default class BattleScene extends Phaser.Scene {
     if (effect.heal > 0) {
       const healed = applyHeal(caster.unit, effect.heal);
       this.floatingDamage(caster.unit.pos, healed, 0x3ad16a, '+');
+      // Cosmetic SVG heal sparkle over the healed caster.
+      this.pulse(caster.container, 0x3ad16a);
     }
     if (effect.buffDuration > 0 && effect.damage === 0 && effect.heal === 0) {
       this.pulse(caster.container, color);
@@ -1414,20 +1424,23 @@ export default class BattleScene extends Phaser.Scene {
    */
   private impactSparks(rawPos: Vec2, color: number, importance: HitImportance) {
     const p = project(rawPos);
+    // COUNT stays driven by the pure juice math so this remains cosmetic and
+    // matches sparkCountForHit exactly; only the LOOK is upgraded to baked SVG
+    // shard bursts (cached by color) instead of plain rectangles.
     const count = sparkCountForHit(importance);
     const spread = importance === 'big' ? 26 : importance === 'ult' ? 22 : 16;
-    const size = importance === 'big' ? 4 : importance === 'chip' ? 2 : 3;
+    const size = importance === 'big' ? 12 : importance === 'chip' ? 6 : 9;
     for (let i = 0; i < count; i += 1) {
       const angle = (Math.PI * 2 * i) / count + Math.random() * 0.6;
       const dist = spread * (0.5 + Math.random() * 0.6);
-      const spark = this.add.rectangle(p.x, p.y - 6, size, size, i % 3 === 0 ? 0xffffff : color);
-      spark.setDepth(VFX_DEPTH);
+      const spark = this.vfxImage('impact', i % 3 === 0 ? 0xffffff : color, p.x, p.y - 6, size);
       this.tweens.add({
         targets: spark,
         x: p.x + Math.cos(angle) * dist,
         y: p.y - 6 + Math.sin(angle) * dist * 0.6,
         alpha: 0,
-        scale: 0.2,
+        scaleX: spark.scaleX * 0.2,
+        scaleY: spark.scaleY * 0.2,
         duration: 220 + Math.random() * 160,
         ease: 'Cubic.easeOut',
         onComplete: () => spark.destroy(),
@@ -1508,18 +1521,40 @@ export default class BattleScene extends Phaser.Scene {
     });
   }
 
+  /**
+   * Create a transient VFX billboard from a baked SVG texture (rasterized once
+   * and cached by kind+color via {@link SpriteFactory.ensureVfx}). Returns the
+   * Image already placed at (x, y), centered, pinned to {@link VFX_DEPTH} and
+   * scaled to `displayW` on-screen pixels (height follows the texture aspect,
+   * or is overridden by `displayH`). Callers tween it and destroy it, exactly
+   * as with the old primitive VFX. Kept COSMETIC-ONLY.
+   */
+  private vfxImage(
+    kind: VfxKind,
+    color: number,
+    x: number,
+    y: number,
+    displayW: number,
+    displayH?: number,
+  ): Phaser.GameObjects.Image {
+    const { key, size } = this.sprites.ensureVfx(kind, color);
+    const img = this.add.image(x, y, key);
+    img.setOrigin(0.5, 0.5);
+    img.setDisplaySize(displayW, displayH ?? displayW * (size.height / size.width));
+    img.setDepth(VFX_DEPTH);
+    return img;
+  }
+
   private deathBurst(entity: Entity, color: number) {
     const p = project(entity.unit.pos);
-    const ring = this.add.circle(p.x, p.y, 10, color, 0.5);
-    ring.setStrokeStyle(2, 0xffffff, 0.8);
-    ring.setDepth(VFX_DEPTH);
+    const burst = this.vfxImage('death', color, p.x, p.y, 26);
     this.tweens.add({
-      targets: ring,
-      scale: 2.2,
+      targets: burst,
+      scale: burst.scale * 2.2,
       alpha: 0,
       duration: 400,
       ease: 'Cubic.easeOut',
-      onComplete: () => ring.destroy(),
+      onComplete: () => burst.destroy(),
     });
   }
 
@@ -1530,25 +1565,38 @@ export default class BattleScene extends Phaser.Scene {
   private drawProjectile(rawFrom: Vec2, rawTo: Vec2, color: number) {
     const from = project(rawFrom);
     const to = project(rawTo);
-    const dot = this.add.circle(from.x, from.y - CHAMPION_HEIGHT_PX * 0.5, 4, color);
-    dot.setDepth(VFX_DEPTH);
+    const fy = from.y - CHAMPION_HEIGHT_PX * 0.5;
+    const ty = to.y - CHAMPION_HEIGHT_PX * 0.5;
+    // A glowing SVG orb-with-trail Image, rotated to face its travel direction
+    // (the art points +x), tweened from->to over the same 180ms.
+    const bolt = this.vfxImage('projectile', color, from.x, fy, 22);
+    bolt.setRotation(Math.atan2(ty - fy, to.x - from.x));
     this.tweens.add({
-      targets: dot,
+      targets: bolt,
       x: to.x,
-      y: to.y - CHAMPION_HEIGHT_PX * 0.5,
+      y: ty,
       duration: 180,
-      onComplete: () => dot.destroy(),
+      onComplete: () => bolt.destroy(),
     });
   }
 
   private drawBeam(rawFrom: Vec2, rawTo: Vec2, color: number) {
     const from = project(rawFrom);
     const to = project(rawTo);
-    const line = this.add.line(0, 0, from.x, from.y - TURRET_HEIGHT_PX * 0.5, to.x, to.y - CHAMPION_HEIGHT_PX * 0.5, color, 0.8);
-    line.setOrigin(0, 0);
-    line.setLineWidth(1.5);
-    line.setDepth(VFX_DEPTH);
-    this.tweens.add({ targets: line, alpha: 0, duration: 200, onComplete: () => line.destroy() });
+    const fx = from.x;
+    const fy = from.y - TURRET_HEIGHT_PX * 0.5;
+    const tx = to.x;
+    const ty = to.y - CHAMPION_HEIGHT_PX * 0.5;
+    // A tapered SVG streak stretched to span from->to, anchored at the source
+    // and rotated toward the target, fading over the same ~200ms.
+    const len = Math.max(6, Math.hypot(tx - fx, ty - fy));
+    const { key } = this.sprites.ensureVfx('beam', color);
+    const beam = this.add.image(fx, fy, key);
+    beam.setOrigin(0, 0.5);
+    beam.setDisplaySize(len, 8);
+    beam.setRotation(Math.atan2(ty - fy, tx - fx));
+    beam.setDepth(VFX_DEPTH);
+    this.tweens.add({ targets: beam, alpha: 0, duration: 200, onComplete: () => beam.destroy() });
   }
 
   /**
@@ -1565,61 +1613,86 @@ export default class BattleScene extends Phaser.Scene {
     const down = project({ x: rawCenter.x, y: rawCenter.y + radius });
     const rx = Math.hypot(right.x - center.x, right.y - center.y);
     const ry = Math.hypot(down.x - center.x, down.y - center.y);
-    const ellipse = this.add.ellipse(center.x, center.y, Math.max(6, rx + ry), Math.max(4, (rx + ry) * 0.5), color, 0.28);
-    ellipse.setStrokeStyle(2, color, 0.85);
-    ellipse.setDepth(VFX_DEPTH);
+    // Overlay a baked SVG telegraph-ring texture squashed to the SAME rx/ry so
+    // the ability reach still reads correctly in the dimetric view. The ring
+    // texture is a square viewBox, so display width = 2*rx, height = 2*ry.
+    const { key } = this.sprites.ensureVfx('aoeRing', color);
+    const ring = this.add.image(center.x, center.y, key);
+    ring.setOrigin(0.5, 0.5);
+    ring.setDisplaySize(Math.max(6, rx * 2), Math.max(4, ry * 2));
+    ring.setDepth(VFX_DEPTH);
     this.tweens.add({
-      targets: ellipse,
+      targets: ring,
       alpha: 0,
-      scale: 1.12,
+      scaleX: ring.scaleX * 1.12,
+      scaleY: ring.scaleY * 1.12,
       duration: 400,
-      onComplete: () => ellipse.destroy(),
+      onComplete: () => ring.destroy(),
     });
   }
 
   private drawDashTrail(rawFrom: Vec2, rawTo: Vec2, color: number) {
     const from = project(rawFrom);
     const to = project(rawTo);
-    const line = this.add.line(0, 0, from.x, from.y - CHAMPION_HEIGHT_PX * 0.5, to.x, to.y - CHAMPION_HEIGHT_PX * 0.5, color, 0.6);
-    line.setOrigin(0, 0);
-    line.setLineWidth(5);
-    line.setDepth(VFX_DEPTH);
-    this.tweens.add({ targets: line, alpha: 0, duration: 280, onComplete: () => line.destroy() });
+    const fx = from.x;
+    const fy = from.y - CHAMPION_HEIGHT_PX * 0.5;
+    const tx = to.x;
+    const ty = to.y - CHAMPION_HEIGHT_PX * 0.5;
+    // A thick SVG streak spanning the dash path, fading over the same ~280ms.
+    const len = Math.max(6, Math.hypot(tx - fx, ty - fy));
+    const { key } = this.sprites.ensureVfx('beam', color);
+    const streak = this.add.image(fx, fy, key);
+    streak.setOrigin(0, 0.5);
+    streak.setDisplaySize(len, 14);
+    streak.setRotation(Math.atan2(ty - fy, tx - fx));
+    streak.setAlpha(0.8);
+    streak.setDepth(VFX_DEPTH);
+    this.tweens.add({ targets: streak, alpha: 0, duration: 280, onComplete: () => streak.destroy() });
   }
 
   private pulse(container: Phaser.GameObjects.Container, color: number) {
-    const ring = this.add.circle(container.x, container.y, 20, color, 0.4);
-    ring.setDepth(VFX_DEPTH);
-    this.tweens.add({ targets: ring, scale: 1.6, alpha: 0, duration: 380, onComplete: () => ring.destroy() });
+    // A soft SVG heal sparkle expanding and fading over the same ~380ms.
+    const ring = this.vfxImage('heal', color, container.x, container.y, 36);
+    ring.setAlpha(0.9);
+    this.tweens.add({
+      targets: ring,
+      scaleX: ring.scaleX * 1.6,
+      scaleY: ring.scaleY * 1.6,
+      alpha: 0,
+      duration: 380,
+      onComplete: () => ring.destroy(),
+    });
   }
 
   private castFlare(caster: Entity, color: number, ultimate: boolean) {
     const p = project(caster.unit.pos);
     const y = p.y - caster.heightPx * 0.5;
-    const ring = this.add.circle(p.x, y, ultimate ? 16 : 12, color, 0);
-    ring.setStrokeStyle(ultimate ? 3 : 2, color, 0.9);
-    ring.setDepth(VFX_DEPTH);
+    // A radiant SVG burst; ultimates flare larger and add the camera shake.
+    const flare = this.vfxImage('castFlare', color, p.x, y, ultimate ? 30 : 22);
+    flare.setAlpha(0.95);
     this.tweens.add({
-      targets: ring,
-      scale: ultimate ? 2.6 : 1.8,
+      targets: flare,
+      scaleX: flare.scaleX * (ultimate ? 2.6 : 1.8),
+      scaleY: flare.scaleY * (ultimate ? 2.6 : 1.8),
       alpha: 0,
       duration: ultimate ? 500 : 300,
       ease: 'Cubic.easeOut',
-      onComplete: () => ring.destroy(),
+      onComplete: () => flare.destroy(),
     });
     if (ultimate) this.shake(0.006);
   }
 
   private stunSpin(entity: Entity, color: number) {
     const p = project(entity.unit.pos);
-    const star = this.add.text(p.x, p.y - entity.heightPx - 8, '\u2726', {
-      fontFamily: 'sans-serif',
-      fontSize: '14px',
-      color: `#${color.toString(16).padStart(6, '0')}`,
+    // SVG orbiting-stars sprite spinning above the entity over the same ~600ms.
+    const stars = this.vfxImage('stun', color, p.x, p.y - entity.heightPx - 8, 24);
+    this.tweens.add({
+      targets: stars,
+      angle: 360,
+      alpha: 0,
+      duration: 600,
+      onComplete: () => stars.destroy(),
     });
-    star.setOrigin(0.5);
-    star.setDepth(VFX_DEPTH);
-    this.tweens.add({ targets: star, angle: 360, alpha: 0, duration: 600, onComplete: () => star.destroy() });
   }
 
   // ---- HUD + win/lose ------------------------------------------------------

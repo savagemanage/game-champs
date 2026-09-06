@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
 import { battleStore } from './battleStore';
 import { getChampionById } from '../data/champions';
+import { abilitySvgFor } from './render/abilityIcons';
 
 interface BattleHudProps {
   /** Open the item shop (also bound to the `B` key by the battle screen). */
@@ -149,13 +150,23 @@ export default function BattleHud({ onOpenShop }: BattleHudProps) {
         <div className="battle-hud__abilities">
           {state.abilities.map((ability, index) => {
             const def = player.abilities[index];
+            const iconSvg = abilitySvgFor(
+              player.id,
+              ability.slot,
+              def ? def.behavior : 'skillshot',
+            );
             return (
               <div
                 key={ability.slot}
                 className={`battle-ability${ability.ready ? ' is-ready' : ' is-cooling'}`}
-                style={{ borderColor: player.accentColor }}
+                style={{ borderColor: player.accentColor, color: player.accentColor }}
                 title={def ? t(def.nameKey) : ability.slot}
               >
+                <span
+                  className="battle-ability__icon"
+                  aria-hidden="true"
+                  dangerouslySetInnerHTML={{ __html: iconSvg }}
+                />
                 <span className="battle-ability__key">{t(`slot.${ability.slot}`)}</span>
                 {!ability.ready && (
                   <>
