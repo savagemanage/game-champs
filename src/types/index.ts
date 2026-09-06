@@ -69,6 +69,22 @@ export type ProducerKind = Exclude<
 /** The trainable troop kinds (survivor militia roles). */
 export type TroopKind = 'trapper' | 'marksman' | 'vanguard';
 
+/**
+ * The three WOS-style combat CLASSES that form the Infantry > Lancer >
+ * Marksman > Infantry rock-paper-scissors triangle. Distinct from
+ * {@link TroopKind} (the concrete militia rosters) and {@link HeroClass} (hero
+ * flavour) so the vocabularies can diverge; TroopConfig maps each troop kind to
+ * exactly one class (infantry = front tank, lancer = charge, marksman = ranged).
+ */
+export type TroopClass = 'infantry' | 'lancer' | 'marksman';
+
+/**
+ * A troop TIER (T1..Tn). Higher tiers cost more and field stronger stats; the
+ * highest trainable tier is gated by completed research (FEAT-004). Tiers are
+ * 1-indexed so `1` is always the baseline militia.
+ */
+export type TroopTier = number;
+
 /** A standing army: a count for every troop kind. */
 export type Army = Record<TroopKind, number>;
 
@@ -205,15 +221,127 @@ export interface CampaignState {
   claimed: string[];
 }
 
+// --- FEAT-004: research tech tree, chief gear + charms, troop tiers ----------
+
+/**
+ * The four original research BRANCHES, mirroring the genre's tech-tree split:
+ * economy (idle output / build speed), battle (troop combat stats), survival
+ * (warmth / population resilience), and development (higher troop tiers +
+ * meta unlocks). Derived-from-tuple so config/UI iterate one canonical order.
+ */
+export const RESEARCH_BRANCH_ORDER = [
+  'economy',
+  'battle',
+  'survival',
+  'development',
+] as const;
+export type ResearchBranch = (typeof RESEARCH_BRANCH_ORDER)[number];
+
+/**
+ * The persisted research state: the set of completed node ids and the single
+ * in-progress node (WOS runs ONE research at a time on a timer). `startedAt` /
+ * `endsAt` are epoch ms so the timer reconciles across sessions like buildings.
+ */
+export interface ResearchState {
+  /** Node ids whose research has fully completed (bonuses are permanent). */
+  completed: string[];
+  /** The node currently being researched, or null when the lab is idle. */
+  active: { nodeId: string; endsAt: number } | null;
+}
+
+/**
+ * The original chief-gear SLOTS. Six equipment pieces (all original names) each
+ * carry a level (0 = not forged) and one socketed charm. Derived-from-tuple so
+ * config/UI/state share one canonical order.
+ */
+export const GEAR_SLOT_ORDER = [
+  'coat',
+  'gloves',
+  'boots',
+  'belt',
+  'helm',
+  'emblem',
+] as const;
+export type GearSlot = (typeof GEAR_SLOT_ORDER)[number];
+
+/**
+ * The original charm KINDS that socket into gear for extra bonuses. Each charm
+ * kind leans into one axis of the shared modifier bundle. Derived-from-tuple.
+ */
+export const CHARM_KIND_ORDER = ['warfare', 'bulwark', 'harvest'] as const;
+export type CharmKind = (typeof CHARM_KIND_ORDER)[number];
+
+/** A single equipped charm: its kind + its upgrade level (0 = empty socket). */
+export interface EquippedCharm {
+  kind: CharmKind;
+  level: number;
+}
+
+/** The persisted state of one gear slot: its level + the charm socketed in it. */
+export interface GearSlotState {
+  level: number;
+  charm: EquippedCharm | null;
+}
+
+/** The persisted chief-gear state: per-slot level + socketed charm. */
+export interface GearState {
+  slots: Partial<Record<GearSlot, GearSlotState>>;
+}
+
+/**
+ * The ONE shared stat-modifier bundle every progression source (research, gear,
+ * heroes) contributes to and a pure combiner sums. All values are ADDITIVE
+ * FRACTIONS (0.10 = +10%) unless the name says `Flat`. GameState combines the
+ * contributions and consumes the result: economy fields scale idle producer
+ * output + build speed; battle fields scale troop / combat power.
+ *
+ * Kept deliberately flat (no nesting) so summing is a trivial key-wise add and
+ * a missing key defaults to 0. The per-class battle bonuses let a source buff
+ * one leg of the Infantry/Lancer/Marksman triangle specifically.
+ */
+export interface StatModifiers {
+  // --- Economy ---
+  /** +% to ALL producer output (food/wood/coal/iron/steel alike). */
+  economyOutput: number;
+  /** +% to food (rations) output specifically. */
+  foodOutput: number;
+  /** +% to wood (timber) output specifically. */
+  woodOutput: number;
+  /** +% to coal output specifically. */
+  coalOutput: number;
+  /** +% to iron output specifically. */
+  ironOutput: number;
+  /** +% to steel refinery output specifically. */
+  steelOutput: number;
+  /** Build-time REDUCTION as a fraction (0.10 = builds 10% faster). */
+  buildSpeed: number;
+
+  // --- Battle (army-wide) ---
+  /** +% to all troop attack. */
+  troopAttack: number;
+  /** +% to all troop hp. */
+  troopHp: number;
+  /** +% to all troop defense (a general survivability lever). */
+  troopDefense: number;
+
+  // --- Battle (per class) ---
+  /** +% combat power for the infantry class specifically. */
+  infantryBonus: number;
+  /** +% combat power for the lancer class specifically. */
+  lancerBonus: number;
+  /** +% combat power for the marksman class specifically. */
+  marksmanBonus: number;
+}
+
 /** The complete persisted game state (serialized to localStorage by the save feature). */
 export interface GameState {
   /**
-   * Save-format version so future migrations can be detected. Bumped to 4 for
-   * the FEAT-003 hero + summon + campaign layer (collectible heroes, gacha pity
-   * state, and staged campaign progress) on top of the v3 economy/city
-   * expansion. Older saves (v1 medieval, v2 pre-expansion, v3 pre-heroes) are
-   * detected as a version mismatch and fall back to a fresh frozen settlement
-   * rather than mis-mapping.
+   * Save-format version so future migrations can be detected. Bumped to 5 for
+   * the FEAT-004 research + chief-gear + troop-tier layer (a multi-branch tech
+   * tree, forgeable gear with socketed charms, and research-gated troop tiers)
+   * on top of the v4 hero layer. Older saves (v1 medieval, v2 pre-expansion, v3
+   * pre-heroes, v4 pre-research) are detected as a version mismatch and fall
+   * back to a fresh frozen settlement rather than mis-mapping.
    */
   version: number;
   resources: Resources;
@@ -227,6 +355,10 @@ export interface GameState {
   summon: SummonState;
   /** Story campaign progress (FEAT-003): highest cleared stage + claimed rewards. */
   campaign: CampaignState;
+  /** Research tech-tree progress (FEAT-004): completed + in-progress nodes. */
+  research: ResearchState;
+  /** Chief-gear progress (FEAT-004): per-slot gear level + socketed charms. */
+  gear: GearState;
   /**
    * Current Furnace warmth level (the signature frozen-survival mechanic).
    * Persisted so warmth carries across sessions and is reconciled over the

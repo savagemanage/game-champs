@@ -367,6 +367,92 @@ export const STRINGS = {
   'campaign.c2s2.blurb': { en: 'A frost titan lumbers down the ridge. Break its advance before it reaches the hold.', ko: '서리 거인이 능선을 내려온다. 성채에 닿기 전에 그 진격을 꺾어라.' },
   'campaign.c2s3.name': { en: 'Heart of the Waste', ko: '황야의 심장' },
   'campaign.c2s3.blurb': { en: 'At the heart of the white waste the Horde makes its stand. End it here.', ko: '백색 황야의 심장부에서 무리가 최후의 저항을 벌인다. 여기서 끝내라.' },
+
+  // --- FEAT-004: research tech tree, chief gear + charms, troop tiers ---
+
+  // Research UI.
+  'research.title': { en: 'RESEARCH', ko: '연구' },
+  'research.branch.economy': { en: 'Economy', ko: '경제' },
+  'research.branch.battle': { en: 'Battle', ko: '전투' },
+  'research.branch.survival': { en: 'Survival', ko: '생존' },
+  'research.branch.development': { en: 'Development', ko: '발전' },
+  'research.start': { en: 'Research', ko: '연구 시작' },
+  'research.researching': { en: 'Researching… {seconds}s', ko: '연구 중… {seconds}초' },
+  'research.completed': { en: 'Researched', ko: '연구 완료' },
+  'research.busy': { en: 'The Ember Archive is already researching', ko: '불씨 서고가 이미 연구 중입니다' },
+  'research.locked': { en: 'Complete the prerequisite research first', ko: '선행 연구를 먼저 완료하세요' },
+  'research.needsLab': { en: 'Raise the Ember Archive to Lv.{level} first', ko: '먼저 불씨 서고를 Lv.{level}(으)로 올리세요' },
+  'research.insufficient': { en: 'Not enough resources', ko: '자원이 부족합니다' },
+
+  // Research node names (ORIGINAL).
+  'research.eco_foraging.name': { en: 'Deep Foraging', ko: '심층 채집' },
+  'research.eco_logistics.name': { en: 'Winter Logistics', ko: '겨울 병참' },
+  'research.eco_metallurgy.name': { en: 'Cold Metallurgy', ko: '한랭 야금술' },
+  'research.eco_efficient_works.name': { en: 'Efficient Works', ko: '효율 공정' },
+  'research.bat_drill.name': { en: 'Combat Drills', ko: '전투 훈련' },
+  'research.bat_armor.name': { en: 'Layered Armor', ko: '겹겹 장갑' },
+  'research.bat_infantry_doctrine.name': { en: 'Infantry Doctrine', ko: '보병 교리' },
+  'research.bat_lancer_doctrine.name': { en: 'Lancer Doctrine', ko: '창병 교리' },
+  'research.bat_marksman_doctrine.name': { en: 'Marksman Doctrine', ko: '사수 교리' },
+  'research.sur_insulation.name': { en: 'Insulation', ko: '단열 공법' },
+  'research.sur_provisioning.name': { en: 'Provisioning', ko: '보급 관리' },
+  'research.sur_hardened_frame.name': { en: 'Hardened Frame', ko: '강화 골격' },
+  'research.dev_ironworking.name': { en: 'Ironworking', ko: '철공술' },
+  'research.dev_steel_tactics.name': { en: 'Steel Tactics', ko: '강철 전술' },
+  'research.dev_master_forge.name': { en: 'Master Forge', ko: '명장의 제련' },
+  'research.dev_wide_streets.name': { en: 'Wide Streets', ko: '넓은 가로' },
+
+  // Research node descriptions (ORIGINAL).
+  'research.eco_foraging.desc': { en: 'Teach hunters to work the deep drifts, raising rations gathered.', ko: '사냥꾼이 깊은 눈밭을 다루게 하여 식량 수급을 늘린다.' },
+  'research.eco_logistics.desc': { en: 'Streamline supply runs so every producer yields more.', ko: '보급 동선을 정비해 모든 생산 건물의 산출을 늘린다.' },
+  'research.eco_metallurgy.desc': { en: 'Refine ore-working to boost iron and steel output.', ko: '광석 가공을 개량해 철과 강철 산출을 높인다.' },
+  'research.eco_efficient_works.desc': { en: 'Better tools and crews shorten every construction.', ko: '더 나은 도구와 인력으로 모든 공사 시간을 줄인다.' },
+  'research.bat_drill.desc': { en: 'Disciplined drills sharpen every soldier\u2019s attack.', ko: '엄격한 훈련으로 모든 병사의 공격력을 높인다.' },
+  'research.bat_armor.desc': { en: 'Layered plating raises troop health and defense.', ko: '겹겹 장갑으로 병력의 체력과 방어력을 높인다.' },
+  'research.bat_infantry_doctrine.desc': { en: 'A doctrine that hardens the infantry line.', ko: '보병 전열을 단단하게 하는 교리.' },
+  'research.bat_lancer_doctrine.desc': { en: 'A doctrine that sharpens the lancer charge.', ko: '창병의 돌격을 예리하게 하는 교리.' },
+  'research.bat_marksman_doctrine.desc': { en: 'A doctrine that steadies the marksman\u2019s aim.', ko: '사수의 조준을 안정시키는 교리.' },
+  'research.sur_insulation.desc': { en: 'Seal the pits against the cold, raising coal output.', ko: '탄광을 추위로부터 밀폐해 석탄 산출을 높인다.' },
+  'research.sur_provisioning.desc': { en: 'Careful rationing lifts food output and overall yield.', ko: '치밀한 배급으로 식량과 전체 산출을 끌어올린다.' },
+  'research.sur_hardened_frame.desc': { en: 'Toughen survivors against the elements, raising troop health.', ko: '생존자를 혹한에 단련시켜 병력 체력을 높인다.' },
+  'research.dev_ironworking.desc': { en: 'Master ironworking to train Tier 2 troops.', ko: '철공술을 익혀 2등급 병력을 훈련한다.' },
+  'research.dev_steel_tactics.desc': { en: 'Steel-forged arms unlock Tier 3 troops.', ko: '강철 무장으로 3등급 병력을 해금한다.' },
+  'research.dev_master_forge.desc': { en: 'The master forge unlocks the mightiest Tier 4 troops.', ko: '명장의 제련으로 최강의 4등급 병력을 해금한다.' },
+  'research.dev_wide_streets.desc': { en: 'Widen the hold\u2019s streets so construction moves faster.', ko: '성채의 가로를 넓혀 공사 속도를 높인다.' },
+
+  // Chief-gear UI.
+  'gear.title': { en: 'CHIEF GEAR', ko: '지휘관 장비' },
+  'gear.forge': { en: 'Forge', ko: '제작' },
+  'gear.upgrade': { en: 'Upgrade', ko: '강화' },
+  'gear.level': { en: 'Lv.{level}', ko: 'Lv.{level}' },
+  'gear.maxLevel': { en: 'MAX LEVEL', ko: '최대 레벨' },
+  'gear.socket': { en: 'Socket Charm', ko: '문양 장착' },
+  'gear.upgradeCharm': { en: 'Upgrade Charm', ko: '문양 강화' },
+  'gear.emptySocket': { en: 'Empty Socket', ko: '빈 소켓' },
+  'gear.noCharm': { en: 'Forge the gear before socketing a charm', ko: '문양을 장착하려면 먼저 장비를 제작하세요' },
+  'gear.insufficient': { en: 'Not enough materials', ko: '재료가 부족합니다' },
+
+  // Gear slot names (ORIGINAL).
+  'gear.slot.coat': { en: 'Frostplate Coat', ko: '서리판금 외투' },
+  'gear.slot.gloves': { en: 'Warden\u2019s Gloves', ko: '파수꾼의 장갑' },
+  'gear.slot.boots': { en: 'Trailbreaker Boots', ko: '설원 답파 장화' },
+  'gear.slot.belt': { en: 'Ember Belt', ko: '불씨 허리띠' },
+  'gear.slot.helm': { en: 'Sentinel Helm', ko: '파수병 투구' },
+  'gear.slot.emblem': { en: 'Hold Emblem', ko: '성채 문장' },
+
+  // Charm names (ORIGINAL).
+  'gear.charm.warfare': { en: 'Warfare Charm', ko: '전쟁 문양' },
+  'gear.charm.bulwark': { en: 'Bulwark Charm', ko: '방벽 문양' },
+  'gear.charm.harvest': { en: 'Harvest Charm', ko: '수확 문양' },
+
+  // Troop class + tier labels.
+  'troopClass.infantry': { en: 'Infantry', ko: '보병' },
+  'troopClass.lancer': { en: 'Lancer', ko: '창병' },
+  'troopClass.marksman': { en: 'Marksman', ko: '사수' },
+  'troop.tier': { en: 'Tier {tier}', ko: '{tier}등급' },
+  'troop.tierShort': { en: 'T{tier}', ko: 'T{tier}' },
+  'troop.maxTier': { en: 'Max Tier {tier}', ko: '최대 {tier}등급' },
+  'troop.tierLocked': { en: 'Research to unlock higher tiers', ko: '더 높은 등급은 연구로 해금하세요' },
 } satisfies Record<string, TrEntry>;
 
 /** The set of valid translation keys, derived from {@link STRINGS}. */

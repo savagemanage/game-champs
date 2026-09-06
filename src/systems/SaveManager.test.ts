@@ -9,6 +9,8 @@ import { PremiumWallet } from './PremiumWallet';
 import { HeroRoster } from './HeroRoster';
 import { SummonSystem } from './SummonSystem';
 import { CampaignSystem } from './CampaignSystem';
+import { ResearchSystem } from './ResearchSystem';
+import { GearSystem } from './GearSystem';
 import { ECONOMY, WARMTH, POPULATION } from '../config/GameConfig';
 import { outputPerSec } from '../config/BuildingConfig';
 import { troopDef } from '../config/TroopConfig';
@@ -76,6 +78,8 @@ describe('SaveManager', () => {
       heroes: new HeroRoster(),
       summon: new SummonSystem(),
       campaign: new CampaignSystem(),
+      research: new ResearchSystem(),
+      gear: new GearSystem(),
       waveCleared: 5,
     };
   }
@@ -90,7 +94,7 @@ describe('SaveManager', () => {
 
   it('uses the Frosthold save namespace', () => {
     expect(SAVE_KEY).toBe('frosthold:save');
-    expect(SAVE_VERSION).toBe(4);
+    expect(SAVE_VERSION).toBe(5);
   });
 
   it('produces a versioned plain JSON object on serialize', () => {
@@ -139,7 +143,7 @@ describe('SaveManager', () => {
     const population = atCapWorkforce(buildings, { hunters_hut: 99 });
     const pm = popMult(buildings, population);
     mgr.save(
-      { resources, buildings, training, warmth: new WarmthSystem(), population, premium: new PremiumWallet(), heroes: new HeroRoster(), summon: new SummonSystem(), campaign: new CampaignSystem(), waveCleared: 5 },
+      { resources, buildings, training, warmth: new WarmthSystem(), population, premium: new PremiumWallet(), heroes: new HeroRoster(), summon: new SummonSystem(), campaign: new CampaignSystem(), research: new ResearchSystem(), gear: new GearSystem(), waveCleared: 5 },
       saveTime,
     );
 
@@ -182,7 +186,7 @@ describe('SaveManager', () => {
     // each from a buildings snapshot at the matching level.
     const population = atCapWorkforce(buildings, { hunters_hut: 99 });
     mgr.save(
-      { resources, buildings, training, warmth: new WarmthSystem(), population, premium: new PremiumWallet(), heroes: new HeroRoster(), summon: new SummonSystem(), campaign: new CampaignSystem(), waveCleared: 0 },
+      { resources, buildings, training, warmth: new WarmthSystem(), population, premium: new PremiumWallet(), heroes: new HeroRoster(), summon: new SummonSystem(), campaign: new CampaignSystem(), research: new ResearchSystem(), gear: new GearSystem(), waveCleared: 0 },
       t0,
     );
 
@@ -300,7 +304,7 @@ describe('SaveManager', () => {
     ]);
     const training = new TrainingQueue(undefined, { trapper: 0, marksman: 0, vanguard: 0 });
     mgr.save(
-      { resources, buildings, training, warmth: new WarmthSystem(WARMTH.MAX_WARMTH), population: fullWorkforce(), premium: new PremiumWallet(), heroes: new HeroRoster(), summon: new SummonSystem(), campaign: new CampaignSystem(), waveCleared: 0 },
+      { resources, buildings, training, warmth: new WarmthSystem(WARMTH.MAX_WARMTH), population: fullWorkforce(), premium: new PremiumWallet(), heroes: new HeroRoster(), summon: new SummonSystem(), campaign: new CampaignSystem(), research: new ResearchSystem(), gear: new GearSystem(), waveCleared: 0 },
       0,
     );
 
@@ -336,7 +340,7 @@ describe('SaveManager', () => {
     const population = atCapWorkforce(buildings, { sawmill: 99, coal_pit: 99 });
     const pm = popMult(buildings, population);
     mgr.save(
-      { resources, buildings, training, warmth: new WarmthSystem(WARMTH.MAX_WARMTH), population, premium: new PremiumWallet(), heroes: new HeroRoster(), summon: new SummonSystem(), campaign: new CampaignSystem(), waveCleared: 0 },
+      { resources, buildings, training, warmth: new WarmthSystem(WARMTH.MAX_WARMTH), population, premium: new PremiumWallet(), heroes: new HeroRoster(), summon: new SummonSystem(), campaign: new CampaignSystem(), research: new ResearchSystem(), gear: new GearSystem(), waveCleared: 0 },
       0,
     );
 
@@ -387,7 +391,7 @@ describe('SaveManager', () => {
     ]);
     const training = new TrainingQueue(undefined, { trapper: 0, marksman: 0, vanguard: 0 });
     mgr.save(
-      { resources, buildings, training, warmth: new WarmthSystem(WARMTH.MAX_WARMTH), population: fullWorkforce(), premium: new PremiumWallet(), heroes: new HeroRoster(), summon: new SummonSystem(), campaign: new CampaignSystem(), waveCleared: 0 },
+      { resources, buildings, training, warmth: new WarmthSystem(WARMTH.MAX_WARMTH), population: fullWorkforce(), premium: new PremiumWallet(), heroes: new HeroRoster(), summon: new SummonSystem(), campaign: new CampaignSystem(), research: new ResearchSystem(), gear: new GearSystem(), waveCleared: 0 },
       0,
     );
 
@@ -416,7 +420,7 @@ describe('SaveManager', () => {
     const population = atCapWorkforce(buildings, { hunters_hut: 99 });
     const pm = popMult(buildings, population);
     mgr.save(
-      { resources, buildings, training, warmth: new WarmthSystem(WARMTH.MAX_WARMTH), population, premium: new PremiumWallet(), heroes: new HeroRoster(), summon: new SummonSystem(), campaign: new CampaignSystem(), waveCleared: 0 },
+      { resources, buildings, training, warmth: new WarmthSystem(WARMTH.MAX_WARMTH), population, premium: new PremiumWallet(), heroes: new HeroRoster(), summon: new SummonSystem(), campaign: new CampaignSystem(), research: new ResearchSystem(), gear: new GearSystem(), waveCleared: 0 },
       0,
     );
 
@@ -453,8 +457,8 @@ describe('SaveManager', () => {
 
   // --- FEAT-002: steel resource, premium currency, population, migration ---
 
-  it('bumps SAVE_VERSION to 4 for the hero/summon/campaign layer', () => {
-    expect(SAVE_VERSION).toBe(4);
+  it('bumps SAVE_VERSION to 5 for the research/gear/troop-tier layer', () => {
+    expect(SAVE_VERSION).toBe(5);
   });
 
   it('treats a pre-expansion version-2 save as a mismatch and starts fresh', () => {
@@ -482,6 +486,68 @@ describe('SaveManager', () => {
     expect(loaded.snapshot.population.total).toBeGreaterThan(0);
   });
 
+  it('treats a pre-research version-4 save as a mismatch and starts fresh', () => {
+    const storage = memoryStorage();
+    // A well-formed v4 (pre-research) save must NOT be mis-loaded into the v5
+    // shape; it falls back to a fresh settlement with empty research + gear.
+    const v4 = {
+      version: 4,
+      resources: { food: 500, wood: 500, coal: 500, iron: 500, steel: 100 },
+      premiumCurrency: 300,
+      population: { total: 20, assignments: {} },
+      heroes: { heroes: {}, lead: [] },
+      summon: { totalPulls: 0, pityCounter: 0 },
+      campaign: { highestCleared: 0, claimed: [] },
+      warmth: 80,
+      buildings: [{ kind: 'furnace', level: 4, upgradeEndsAt: null }],
+      army: { trapper: 3, marksman: 2, vanguard: 1 },
+      trainingQueue: [],
+      waveCleared: 9,
+      lastSeenAt: 0,
+    };
+    storage.setItem(SAVE_KEY, JSON.stringify(v4));
+    const loaded = new SaveManager(storage).load(0);
+    expect(loaded.loaded).toBe(false);
+    expect(loaded.snapshot.buildings.furnaceLevel).toBe(1);
+    // Fresh research + gear are present and empty.
+    expect(loaded.snapshot.research.completedIds()).toEqual([]);
+    expect(loaded.snapshot.research.maxTroopTier()).toBe(1);
+    expect(loaded.snapshot.gear.level('coat')).toBe(0);
+  });
+
+  it('round-trips research + chief-gear state through a save', () => {
+    const storage = memoryStorage();
+    const mgr = new SaveManager(storage);
+    const store = new ResourceStore({ food: 1e6, wood: 1e6, coal: 1e6, iron: 1e6, steel: 1e6 });
+
+    const research = new ResearchSystem();
+    research.start('eco_foraging', store, 10, 0);
+    research.advance(0 + 999_999_999); // complete it
+    const gear = new GearSystem();
+    gear.upgradeGear('gloves', store);
+    gear.socketCharm('gloves', 'warfare', store);
+
+    const snap: GameSnapshot = {
+      resources: new ResourceStore({ food: 1, wood: 1, coal: 1, iron: 1, steel: 1 }),
+      buildings: new BuildingSystem([{ kind: 'furnace', level: 2, upgradeEndsAt: null }]),
+      training: new TrainingQueue(undefined, { trapper: 0, marksman: 0, vanguard: 0 }),
+      warmth: new WarmthSystem(),
+      population: new PopulationSystem(),
+      premium: new PremiumWallet(0),
+      heroes: new HeroRoster(),
+      summon: new SummonSystem(),
+      campaign: new CampaignSystem(),
+      research,
+      gear,
+      waveCleared: 0,
+    };
+    mgr.save(snap, 0);
+    const loaded = mgr.load(0);
+    expect(loaded.snapshot.research.isCompleted('eco_foraging')).toBe(true);
+    expect(loaded.snapshot.gear.level('gloves')).toBe(1);
+    expect(loaded.snapshot.gear.charm('gloves')).toEqual({ kind: 'warfare', level: 1 });
+  });
+
   it('round-trips the new steel resource, Ember Sparks, and population', () => {
     const storage = memoryStorage();
     const mgr = new SaveManager(storage);
@@ -502,6 +568,8 @@ describe('SaveManager', () => {
       heroes: new HeroRoster(),
       summon: new SummonSystem(),
       campaign: new CampaignSystem(),
+      research: new ResearchSystem(),
+      gear: new GearSystem(),
       waveCleared: 0,
     };
     // Serialized JSON carries the new fields.
@@ -539,6 +607,8 @@ describe('SaveManager', () => {
       heroes: new HeroRoster(),
       summon: new SummonSystem(),
       campaign: new CampaignSystem(),
+      research: new ResearchSystem(),
+      gear: new GearSystem(),
       waveCleared: 0,
     };
     mgr.save(snap, 0);

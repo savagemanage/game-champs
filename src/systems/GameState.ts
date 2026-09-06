@@ -1,11 +1,19 @@
-import { POPULATION } from '../config/GameConfig';
-import type { Army, HeroId, ResourceCost, TroopKind } from '../types';
+import { POPULATION, RESOURCE_ORDER } from '../config/GameConfig';
+import {
+  armyBattleMultiplier,
+  combineModifiers,
+  economyMultiplierFor,
+} from '../config/StatModifiers';
+import { maxTrainableTier } from '../config/TroopConfig';
+import type { Army, HeroId, ResourceCost, StatModifiers, TroopKind } from '../types';
 import { BuildingSystem } from './BuildingSystem';
 import { CampaignSystem, type CampaignAttemptResult } from './CampaignSystem';
 import { CombatSystem } from './CombatSystem';
-import { HeroRoster } from './HeroRoster';
+import { GearSystem } from './GearSystem';
+import { HeroRoster, type HeroBonuses } from './HeroRoster';
 import { PopulationSystem } from './PopulationSystem';
 import { PremiumWallet } from './PremiumWallet';
+import { ResearchSystem } from './ResearchSystem';
 import { ResourceStore } from './ResourceStore';
 import { SummonSystem, type Rng, type SummonResult } from './SummonSystem';
 import { TrainingQueue } from './TrainingQueue';
@@ -48,6 +56,8 @@ export class GameState {
   readonly heroes: HeroRoster;
   readonly summon: SummonSystem;
   readonly campaign: CampaignSystem;
+  readonly research: ResearchSystem;
+  readonly gear: GearSystem;
   private _waveCleared: number;
 
   private readonly saver: SaveManager;
@@ -70,6 +80,8 @@ export class GameState {
     this.heroes = result.snapshot.heroes;
     this.summon = result.snapshot.summon;
     this.campaign = result.snapshot.campaign;
+    this.research = result.snapshot.research;
+    this.gear = result.snapshot.gear;
     this._waveCleared = result.snapshot.waveCleared;
     this.saver = saver;
     this.loaded = result.loaded;
@@ -124,22 +136,55 @@ export class GameState {
   }
 
   /**
+   * The single COMBINED stat-modifier bundle for the whole hold: research +
+   * chief gear + the lead heroes' aggregate bonus, all summed via the shared
+   * pure combiner. Every consumer (idle production, combat, campaign) reads this
+   * one bundle so the three progression sources stack coherently. Recomputed on
+   * demand so it always reflects the current systems.
+   */
+  modifiers(): StatModifiers {
+    return combineModifiers(
+      this.research.modifiers(),
+      this.gear.modifiers(),
+      heroBonusesToModifiers(this.heroes.bonuses()),
+    );
+  }
+
+  /**
+   * The combat-power multiplier applied to raw army power: the lead heroes'
+   * army bonus times the combined battle modifiers (attack/hp/defense) from
+   * research + gear + heroes. Heroes are counted once (their army bonus is in
+   * the multiplier, not doubled through the bundle) - the bundle's battle
+   * fields come from research + gear + the heroes' bonus adapted as troopAttack.
+   */
+  private battleMultiplier(): number {
+    const mods = combineModifiers(this.research.modifiers(), this.gear.modifiers());
+    return this.heroes.armyPowerMultiplier() * armyBattleMultiplier(mods);
+  }
+
+  /**
    * The hold's total effective ARMY power against wave `wave`, INCLUDING the
-   * lead heroes' aggregate army bonus. This is the value combat / campaign
-   * checks compare, so heroes matter in battle as well as production.
+   * lead heroes' aggregate army bonus AND the research/gear battle modifiers.
+   * This is the value combat / campaign checks compare, so heroes, research and
+   * gear all matter in battle as well as production.
    */
   effectiveArmyPower(wave: number): number {
-    return CombatSystem.effectiveArmyPower(this.army, wave) * this.heroes.armyPowerMultiplier();
+    return CombatSystem.effectiveArmyPower(this.army, wave) * this.battleMultiplier();
   }
 
   /**
    * The hold's hero-boosted combat power for campaign validation: the raw army
-   * power (matchup-neutral) lifted by the lead heroes' army bonus plus the total
-   * owned-hero power. Deterministic; feeds {@link attemptCampaignStage}.
+   * power (matchup-neutral) lifted by the combined battle multiplier plus the
+   * total owned-hero power. Deterministic; feeds {@link attemptCampaignStage}.
    */
   campaignPower(): number {
     const rawArmy = CombatSystem.armyPower(this.army);
-    return rawArmy * this.heroes.armyPowerMultiplier() + this.heroes.totalPower();
+    return rawArmy * this.battleMultiplier() + this.heroes.totalPower();
+  }
+
+  /** The current MAX trainable troop tier, gated by completed research. */
+  maxTroopTier(): number {
+    return maxTrainableTier(this.research.maxTroopTier());
   }
 
   /**
@@ -196,6 +241,8 @@ export class GameState {
       heroes: this.heroes,
       summon: this.summon,
       campaign: this.campaign,
+      research: this.research,
+      gear: this.gear,
       waveCleared: this._waveCleared,
     };
   }
@@ -224,13 +271,25 @@ export class GameState {
         extraHousing,
         this.buildings.totalProducerLevels() * POPULATION.STAFF_PER_PRODUCER_LEVEL,
       );
-      // Lead heroes' aggregate ECONOMY bonus lifts idle output on top of warmth
-      // x population, so investing in heroes visibly matters for production.
-      const heroEconMult = this.heroes.economyMultiplier();
-      const efficiency = warmthMult * popMult * heroEconMult;
-      this.resources.applyProduction(this.buildings.productionRates(), deltaMs, efficiency);
-      // Refine raw stock into steel (consumes iron + coal), scaled the same way.
-      this.buildings.refineryConversion(this.resources, deltaMs, efficiency);
+      // The combined economy modifiers (research + gear + heroes) scale idle
+      // output PER RESOURCE on top of warmth x population, so investing in any
+      // of the three progression sources visibly matters for production.
+      const mods = this.modifiers();
+      const baseEfficiency = warmthMult * popMult;
+      // Pre-scale the per-second production rates by each resource's economy
+      // multiplier, then credit at the warmth x population efficiency.
+      const rates = this.buildings.productionRates();
+      for (const res of RESOURCE_ORDER) {
+        rates[res] *= economyMultiplierFor(mods, res);
+      }
+      this.resources.applyProduction(rates, deltaMs, baseEfficiency);
+      // Refine raw stock into steel (consumes iron + coal), scaled the same way
+      // plus the steel-specific economy multiplier.
+      this.buildings.refineryConversion(
+        this.resources,
+        deltaMs,
+        baseEfficiency * economyMultiplierFor(mods, 'steel'),
+      );
       // The lit Furnace drips premium Ember Sparks (warmth-independent).
       this.premium.drip(deltaMs, furnaceLevel);
     }
@@ -258,4 +317,18 @@ export class GameState {
     this.saver.clear();
     GameState.instance = null;
   }
+}
+
+/**
+ * Adapt the HeroRoster's existing {@link HeroBonuses} shape into the shared
+ * {@link StatModifiers} bundle so heroes contribute to the SAME combined total
+ * as research + gear rather than through a parallel path. The heroes' `economy`
+ * fraction maps to the all-producer `economyOutput`; their `army` fraction maps
+ * to `troopAttack` (the dominant combat lever). This keeps the hero integration
+ * coherent without double-counting: production reads the combined bundle, and
+ * combat multiplies raw power by the heroes' army multiplier alongside the
+ * research/gear battle modifiers.
+ */
+function heroBonusesToModifiers(bonuses: HeroBonuses): Partial<StatModifiers> {
+  return { economyOutput: bonuses.economy, troopAttack: bonuses.army };
 }

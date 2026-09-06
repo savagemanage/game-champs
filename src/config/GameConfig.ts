@@ -405,6 +405,53 @@ export const CAMPAIGN = {
   CLEAR_POWER_MARGIN: 1.0,
 } as const;
 
+/**
+ * RESEARCH - the multi-branch tech tree (FEAT-004). Nodes are researched ONE at
+ * a time at the Ember Archive on a timer; a completed node's typed bonus is
+ * permanent and folds into the shared StatModifiers bundle. Per-node data
+ * (branch, prereqs, gate level, cost, duration, bonus) lives in
+ * ResearchConfig.ts; these are the shared knobs so nothing hardcodes a magic
+ * number in ResearchSystem.
+ */
+export const RESEARCH = {
+  /** The building whose level gates research nodes (the academy). */
+  LAB_BUILDING: 'ember_archive',
+} as const;
+
+/**
+ * GEAR - the chief-gear + charm layer (FEAT-004). Six original gear slots are
+ * forged/upgraded with materials; each level adds a typed bonus to the shared
+ * StatModifiers bundle, and a socketed charm adds more. Per-slot/charm data
+ * lives in GearConfig.ts; these are the shared curve knobs.
+ */
+export const GEAR = {
+  /** Highest level any single gear slot can reach. */
+  MAX_GEAR_LEVEL: 10,
+  /** Highest level any charm can reach. */
+  MAX_CHARM_LEVEL: 5,
+  /** Geometric growth of a gear-slot upgrade cost per level. */
+  GEAR_COST_GROWTH: 1.5,
+  /** Geometric growth of a charm upgrade cost per level. */
+  CHARM_COST_GROWTH: 1.6,
+} as const;
+
+/**
+ * TROOP_TIERS - the shared troop-tier curve (FEAT-004). Each troop kind has T1
+ * upward; per-tier stats/costs scale geometrically off the T1 baseline in
+ * TroopConfig. The highest trainable tier is gated by completed research
+ * (nodes that grant a `troopTier` bonus). These are the shared curve params.
+ */
+export const TROOP_TIERS = {
+  /** Highest troop tier that can EVER be unlocked (research permitting). */
+  MAX_TIER: 4,
+  /** Per-tier multiplicative stat growth above T1 (attack/hp/etc). */
+  STAT_GROWTH: 1.4,
+  /** Per-tier multiplicative training-cost growth above T1. */
+  COST_GROWTH: 1.5,
+  /** Per-tier multiplicative train-time growth above T1. */
+  TIME_GROWTH: 1.25,
+} as const;
+
 /** Scene keys used across the game. Centralized to avoid magic strings. */
 export const SceneKeys = {
   Boot: 'BootScene',
