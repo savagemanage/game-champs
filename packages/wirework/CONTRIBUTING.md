@@ -4,13 +4,19 @@ Thanks for your interest in improving **Wirework** — an original-world 2D
 pixel-art top-down wall-defense ODM action game built with Phaser 3. This guide
 covers how to set up the project, run the checks, and submit changes.
 
+> **Repo-wide rules live in the root [`CONTRIBUTING.md`](../../CONTRIBUTING.md).** That guide
+> covers the monorepo: adding a workspace, the `game.json` metadata, the deploy pipeline, and
+> the original-naming policy. This file covers what is specific to Wirework - its asset
+> pipeline, its config layout, and its own IP boundary.
+
 ## 1. Setup
 
-- Requires **Node 20**.
-- Install dependencies:
+- Requires **Node 22** and **npm 11**.
+- Wirework is a workspace of the [open-games](../../README.md) monorepo, so install from the
+  **repo root**, not from this directory:
 
   ```bash
-  npm install
+  npm install          # from the repo root
   ```
 
 ## 2. Dev / test / build
