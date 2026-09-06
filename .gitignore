@@ -11,3 +11,7 @@ coverage
 *.tsbuildinfo
 vite.config.js
 vite.config.d.ts
+
+# task / planning artifacts
+.tasks
+.agents/tasks/
