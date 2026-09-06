@@ -75,19 +75,22 @@ export class TitleScene extends Phaser.Scene {
     // Explainer + desktop keyboard cue rendered directly UNDER the CTA so a
     // first-time player knows exactly what the button does (it enters the base
     // hub) and that SPACE also starts. The keys come from the pure start-flow
-    // helper so their presence in the string table is unit-tested. These sit in
-    // the gap between the button (above) and the next menu button; `step` below
-    // is widened so nothing collides.
+    // helper so their presence in the string table is unit-tested. The CTA is a
+    // tall 28px button (box height ~60px, so its bottom edge sits ~30px below
+    // its centre), so these two lines are pushed clearly below that edge and
+    // spaced apart from each other; `step` below is widened so the following
+    // Upgrades button clears the key cue with a comfortable gap.
     const [subKey, keyCueKey] = startCtaSubKeys();
     this.add
-      .text(cx, y + 32, tr(subKey), textStyle(16, { color: PALETTE.MUTED_CSS, align: 'center' }))
+      .text(cx, y + 50, tr(subKey), textStyle(16, { color: PALETTE.MUTED_CSS, align: 'center' }))
       .setOrigin(0.5);
     this.add
-      .text(cx, y + 54, tr(keyCueKey), textStyle(15, { color: PALETTE.ACCENT_CSS, fontStyle: 'bold', allowSmall: true }))
+      .text(cx, y + 74, tr(keyCueKey), textStyle(15, { color: PALETTE.ACCENT_CSS, fontStyle: 'bold', allowSmall: true }))
       .setOrigin(0.5);
-    // The explainer + key cue occupy ~54px below the button; advance past them
-    // (larger than the normal step) so the Upgrades button clears the cue.
-    y += step + 26;
+    // The explainer + key cue occupy the band ~42..82px below the button
+    // centre; advance well past them (well over the normal step) so the
+    // Upgrades button top clears the key cue with a comfortable gap.
+    y += step + 50;
     Menu.button(this, cx, y, tr('title.upgrades'), () => this.go(SceneKeys.Upgrade), { width: 260 });
     y += step;
     Menu.button(this, cx, y, tr('title.howto'), () => this.toggleHowTo(), { width: 260 });
