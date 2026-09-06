@@ -8,11 +8,20 @@ import type { EnemyKind, TroopKind, UnitStats } from '../types';
 /** Which side of the field a battler fights for. */
 export type Side = 'friendly' | 'enemy';
 
-/** Texture key for each enemy kind (mirrors the sprite registry). */
+/**
+ * Texture key for each enemy kind (mirrors the sprite registry). The FEAT-005
+ * Frostbeast / world-boss kinds reuse the analogous standard-mob sprite as an
+ * INTERIM (rime_alpha -> wolf, glacier_behemoth -> titan, hoarfrost_wyrm ->
+ * ravager) so the battle renders and types stay complete; dedicated boss art is
+ * generated in FEAT-006.
+ */
 const ENEMY_TEXTURE_BY_KIND: Record<EnemyKind, TextureKey> = {
   frost_wolf: TextureKeys.EnemyFrostWolf,
   ravager: TextureKeys.EnemyRavager,
   frost_titan: TextureKeys.EnemyFrostTitan,
+  rime_alpha: TextureKeys.EnemyFrostWolf,
+  glacier_behemoth: TextureKeys.EnemyFrostTitan,
+  hoarfrost_wyrm: TextureKeys.EnemyRavager,
 };
 
 /**

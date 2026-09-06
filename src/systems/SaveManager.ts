@@ -1,16 +1,21 @@
 import { ECONOMY, POPULATION, RESOURCE_ORDER } from '../config/GameConfig';
 import { combineModifiers, economyMultiplierFor } from '../config/StatModifiers';
 import type { Army, GameState, StatModifiers, TroopKind } from '../types';
+import { AllianceSystem } from './AllianceSystem';
+import { ArenaSystem } from './ArenaSystem';
 import { BuildingSystem } from './BuildingSystem';
 import { CampaignSystem } from './CampaignSystem';
 import { GearSystem } from './GearSystem';
 import { HeroRoster } from './HeroRoster';
 import { PopulationSystem } from './PopulationSystem';
 import { PremiumWallet } from './PremiumWallet';
+import { QuestSystem } from './QuestSystem';
+import { RallySystem } from './RallySystem';
 import { ResearchSystem } from './ResearchSystem';
 import { ResourceStore } from './ResourceStore';
 import { SummonSystem } from './SummonSystem';
 import { TrainingQueue } from './TrainingQueue';
+import { VipSystem } from './VipSystem';
 import { WarmthSystem, type WarmthTickResult } from './WarmthSystem';
 
 /**
@@ -32,10 +37,16 @@ import { WarmthSystem, type WarmthTickResult } from './WarmthSystem';
  *   research tech tree (completed + in-progress nodes), forgeable chief gear
  *   with socketed charms, and research-gated troop tiers.
  *
+ * - v6: the FEAT-005 endgame + retention layer - world-boss / Frostbeast
+ *   rallies (per-boss HP depletion + tiered rewards), a simulated arena/PvP
+ *   ladder (rank + record + seed), a simulated NPC alliance (help charges +
+ *   tech contribution), daily/growth quests + a time-boxed events framework,
+ *   and VIP levels.
+ *
  * A save with any older version is treated as a mismatch and falls back to a
  * fresh frozen settlement rather than mis-mapping old kinds.
  */
-export const SAVE_VERSION = 5;
+export const SAVE_VERSION = 6;
 
 /** Default localStorage key for the single save slot (Frosthold namespace). */
 export const SAVE_KEY = 'frosthold:save';
@@ -64,6 +75,11 @@ export interface GameSnapshot {
   campaign: CampaignSystem;
   research: ResearchSystem;
   gear: GearSystem;
+  rally: RallySystem;
+  arena: ArenaSystem;
+  alliance: AllianceSystem;
+  quests: QuestSystem;
+  vip: VipSystem;
   waveCleared: number;
 }
 
@@ -110,6 +126,11 @@ export class SaveManager {
       campaign: snapshot.campaign.toJSON(),
       research: snapshot.research.toJSON(),
       gear: snapshot.gear.toJSON(),
+      rally: snapshot.rally.toJSON(),
+      arena: snapshot.arena.toJSON(),
+      alliance: snapshot.alliance.toJSON(),
+      quests: snapshot.quests.toJSON(),
+      vip: snapshot.vip.toJSON(),
       warmth: snapshot.warmth.toJSON(),
       buildings: snapshot.buildings.toJSON(),
       army: snapshot.training.army,
@@ -143,6 +164,13 @@ export class SaveManager {
     // Research tech tree + chief gear (both tolerate missing fields).
     const research = ResearchSystem.fromJSON(state.research);
     const gear = GearSystem.fromJSON(state.gear);
+    // FEAT-005 endgame layer: rallies, arena, alliance, quests, VIP (all
+    // tolerate missing fields so a partial / older-shaped save loads gracefully).
+    const rally = RallySystem.fromJSON(state.rally);
+    const arena = ArenaSystem.fromJSON(state.arena);
+    const alliance = AllianceSystem.fromJSON(state.alliance);
+    const quests = QuestSystem.fromJSON(state.quests);
+    const vip = VipSystem.fromJSON(state.vip);
 
     // Complete any research whose timer elapsed while away (one-at-a-time; a
     // single advance resolves the active node if its clock passed).
@@ -172,12 +200,15 @@ export class SaveManager {
     // whole credited window, so apply them up front.
     buildings.update(windowStart);
 
-    // The combined economy modifiers (research + gear + heroes) scale offline
-    // idle output the same way the live tick does, so offline and live agree.
+    // The combined economy modifiers (research + gear + heroes + alliance-tech +
+    // VIP) scale offline idle output the same way the live tick does, so offline
+    // and live agree.
     const mods = combineModifiers(
       research.modifiers(),
       gear.modifiers(),
       heroEconomyBundle(heroes),
+      alliance.modifiers(),
+      vip.modifiers(),
     );
 
     const offlineGains = ResourceStore.emptyBundle();
@@ -212,6 +243,11 @@ export class SaveManager {
         campaign,
         research,
         gear,
+        rally,
+        arena,
+        alliance,
+        quests,
+        vip,
         waveCleared: state.waveCleared ?? 0,
       },
       loaded: true,
@@ -234,6 +270,11 @@ export class SaveManager {
       campaign: new CampaignSystem(),
       research: new ResearchSystem(),
       gear: new GearSystem(),
+      rally: new RallySystem(),
+      arena: new ArenaSystem(),
+      alliance: new AllianceSystem(),
+      quests: new QuestSystem(),
+      vip: new VipSystem(),
       waveCleared: 0,
     };
   }

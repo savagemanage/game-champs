@@ -452,6 +452,125 @@ export const TROOP_TIERS = {
   TIME_GROWTH: 1.25,
 } as const;
 
+/**
+ * RALLY - world-boss / Frostbeast rallies (FEAT-005). A boss carries a huge HP
+ * pool depleted across MANY attempts; the player's per-attempt damage plus a
+ * DETERMINISTIC simulated-alliance contribution chip it down, and tiered
+ * rewards pay out by the fraction of the pool destroyed (and a kill bonus). All
+ * single-player: the "alliance" is an AI contribution, no servers. Per-boss HP
+ * / rewards live in RallyConfig.ts; these are the shared knobs.
+ */
+export const RALLY = {
+  /**
+   * Fraction of the player's own attempt damage that the simulated alliance
+   * adds on top (0.5 = NPC members contribute half again as much as the player
+   * did this attempt). Deterministic, so a rally's progress is reproducible.
+   */
+  ALLIANCE_DAMAGE_SHARE: 0.5,
+  /**
+   * Reward-tier thresholds as FRACTIONS of the boss HP pool the cumulative
+   * damage must reach to unlock each successive tier. The final entry (1.0) is
+   * the kill tier. Ascending; RallySystem grants each newly-reached tier once.
+   */
+  REWARD_TIER_THRESHOLDS: [0.25, 0.5, 0.75, 1.0] as const,
+} as const;
+
+/**
+ * ARENA - the simulated PvP ladder (FEAT-005). Opponents are AI power profiles
+ * generated deterministically from their ladder rank + a seed; a battle-power
+ * comparison decides win/loss, the player climbs on a win and slips on a loss,
+ * and rewards scale with rank. No networking. These are the shared knobs.
+ */
+export const ARENA = {
+  /** The lowest (numerically largest) rank a fresh player starts at. */
+  START_RANK: 50,
+  /** The best rank attainable (1 = champion). */
+  TOP_RANK: 1,
+  /**
+   * Base power an opponent at the WORST rank fields; the profile scales UP as
+   * rank improves (toward rank 1) by RANK_POWER_GROWTH per rank climbed, so
+   * higher ranks are genuinely harder.
+   */
+  BASE_OPPONENT_POWER: 400,
+  /** Multiplicative opponent-power growth per rank climbed toward the top. */
+  RANK_POWER_GROWTH: 1.08,
+  /**
+   * Deterministic +/- variance applied to an opponent's generated power from
+   * the match seed (0.2 = up to +/-20%), so equal-rank rematches differ but
+   * stay reproducible.
+   */
+  POWER_VARIANCE: 0.2,
+  /** Ranks gained per win (capped at TOP_RANK). */
+  RANK_GAIN_PER_WIN: 1,
+  /** Ranks lost per loss (capped at START_RANK). */
+  RANK_LOSS_PER_LOSS: 1,
+  /** Ember Sparks awarded per arena win, scaled by how high the rank is. */
+  WIN_SPARKS_BASE: 8,
+} as const;
+
+/**
+ * ALLIANCE - the simulated NPC alliance (FEAT-005). A fixed roster of AI
+ * members generates "help" charges over time that each shave a fixed slice off
+ * the player's active build/research timers, and an alliance-tech contribution
+ * track (points -> level) grants a shared StatModifiers bonus. No servers.
+ */
+export const ALLIANCE = {
+  /** Number of fixed NPC members in the simulated alliance. */
+  MEMBER_COUNT: 20,
+  /** Milliseconds a single "help" shaves off an active timer. */
+  HELP_REDUCTION_MS: 60_000,
+  /** Maximum help charges that can be banked at once. */
+  MAX_HELPS: 30,
+  /** Real milliseconds of play the AI members take to generate ONE help charge. */
+  HELP_GEN_INTERVAL_MS: 5 * 60_000,
+  /** Alliance-tech points needed for level 1 (each level costs LEVEL_GROWTH more). */
+  TECH_POINTS_PER_LEVEL: 100,
+  /** Geometric growth of the points needed for each successive tech level. */
+  TECH_LEVEL_GROWTH: 1.5,
+  /** Highest alliance-tech level attainable. */
+  MAX_TECH_LEVEL: 10,
+  /**
+   * The shared StatModifiers bonus GRANTED PER alliance-tech level (additive
+   * fractions): a small all-round economy + army lift, so contributing to the
+   * alliance measurably helps the whole hold.
+   */
+  TECH_BONUS_PER_LEVEL: { economyOutput: 0.02, troopAttack: 0.015 } as const,
+} as const;
+
+/**
+ * QUESTS - daily quests, growth/beginner milestones, and time-boxed events
+ * (FEAT-005). Dailies reset on a day boundary derived from an injected clock;
+ * milestones are one-time; an event runs for a fixed window granting a bonus
+ * multiplier. Per-quest data lives in QuestConfig.ts; these are shared knobs.
+ */
+export const QUESTS = {
+  /** Milliseconds in a day (the daily-reset boundary granularity). */
+  DAY_MS: 24 * 60 * 60 * 1000,
+  /** Default duration of a time-boxed event window, milliseconds. */
+  EVENT_DURATION_MS: 3 * 24 * 60 * 60 * 1000,
+} as const;
+
+/**
+ * VIP - the VIP progression (FEAT-005). VIP points accumulate from spending /
+ * activity and map to a VIP LEVEL; each level grants permanent QoL / stat
+ * bonuses expressed as a shared StatModifiers bundle. These are shared knobs;
+ * the per-level point thresholds + bonuses derive from them in VipConfig.ts.
+ */
+export const VIP = {
+  /** Points required to reach VIP level 1 (each level costs POINT_GROWTH more). */
+  BASE_POINTS_PER_LEVEL: 100,
+  /** Geometric growth of the points needed for each successive VIP level. */
+  POINT_GROWTH: 1.6,
+  /** Highest VIP level attainable. */
+  MAX_LEVEL: 12,
+  /**
+   * The shared StatModifiers bonus granted PER VIP level (additive fractions):
+   * a QoL blend of faster builds + more idle output, so VIP is permanent and
+   * always useful.
+   */
+  BONUS_PER_LEVEL: { economyOutput: 0.015, buildSpeed: 0.02 } as const,
+} as const;
+
 /** Scene keys used across the game. Centralized to avoid magic strings. */
 export const SceneKeys = {
   Boot: 'BootScene',

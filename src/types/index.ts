@@ -88,8 +88,20 @@ export type TroopTier = number;
 /** A standing army: a count for every troop kind. */
 export type Army = Record<TroopKind, number>;
 
-/** The Frozen Horde enemy kinds faced in battle. */
-export type EnemyKind = 'frost_wolf' | 'ravager' | 'frost_titan';
+/**
+ * The Frozen Horde enemy kinds faced in battle. The first three are the
+ * standard wave roster; the FEAT-005 additions are high-HP BOSS kinds fought in
+ * escalating world-boss rallies (RallySystem) — a fast pack alpha, an armoured
+ * bulwark, and a colossal apex predator — all ORIGINAL names.
+ */
+export type EnemyKind =
+  | 'frost_wolf'
+  | 'ravager'
+  | 'frost_titan'
+  // --- FEAT-005 Frostbeast / world-boss kinds (high-HP rally targets) ---
+  | 'rime_alpha' // pack-alpha Frostbeast (fast, lancer-role)
+  | 'glacier_behemoth' // armoured bulwark Frostbeast (infantry-role)
+  | 'hoarfrost_wyrm'; // apex world-boss (marksman-role, immense HP)
 
 /** A combatant's shared stat block (troops and enemies both use this shape). */
 export interface UnitStats {
@@ -288,6 +300,100 @@ export interface GearState {
   slots: Partial<Record<GearSlot, GearSlotState>>;
 }
 
+// --- FEAT-005: rallies, arena, alliance, quests, VIP -------------------------
+
+/**
+ * The persisted RALLY (world-boss) state, keyed by boss id. Each boss has a
+ * large HP pool depleted across repeated attempts; `damageDealt` is the total
+ * damage the player (plus simulated alliance contribution) has landed this
+ * cycle, `defeated` marks a kill, and `tierClaimed` records the highest reward
+ * tier already granted so tier rewards pay out exactly once per cycle.
+ */
+export interface RallyBossState {
+  /** Total damage dealt to the boss this cycle (player + simulated alliance). */
+  damageDealt: number;
+  /** Number of attempts made against the boss this cycle. */
+  attempts: number;
+  /** True once the boss HP pool has been fully depleted (a kill). */
+  defeated: boolean;
+  /** Highest reward TIER index already claimed (-1 = none), for reward-once. */
+  tierClaimed: number;
+}
+
+/** The persisted rally state: per-boss progress keyed by boss id. */
+export interface RallyState {
+  bosses: Record<string, RallyBossState>;
+}
+
+/**
+ * The persisted ARENA (simulated PvP) state. The player holds a `rank` on an
+ * NPC ladder (1 = top; higher numbers are lower ranks) and a running win/loss
+ * tally. Matches are resolved deterministically against a generated NPC power
+ * profile derived from the opponent's rank + a seed, so no networking is used.
+ */
+export interface ArenaState {
+  /** Current ladder rank (1 = champion; larger = lower). */
+  rank: number;
+  /** Total arena matches won. */
+  wins: number;
+  /** Total arena matches lost. */
+  losses: number;
+  /** Deterministic seed advanced each match so opponents/outcomes vary stably. */
+  seed: number;
+}
+
+/**
+ * The persisted ALLIANCE (simulated, NPC) state. A fixed roster of NPC members
+ * provides "help" that shaves time off the player's active build/research
+ * timers, and an alliance-tech contribution track (points -> level) grants a
+ * shared StatModifiers bonus. All single-player: no real members/servers.
+ */
+export interface AllianceState {
+  /** Accumulated alliance-tech contribution points. */
+  techPoints: number;
+  /** Alliance help charges currently available to spend on timers. */
+  helpsAvailable: number;
+}
+
+/**
+ * A single quest's persisted progress. `progress` counts toward the quest's
+ * target; `claimed` marks its reward as granted (one-time for milestones,
+ * per-day for dailies which reset the whole daily set on a day boundary).
+ */
+export interface QuestProgressState {
+  progress: number;
+  claimed: boolean;
+}
+
+/**
+ * The persisted QUEST state: daily quests (reset on a day boundary from an
+ * injected clock), one-time growth/beginner milestones, and the active
+ * time-boxed event. `dailyDayIndex` is the day the current daily set belongs to
+ * (floor(now / DAY_MS)); when the clock crosses into a new day the dailies
+ * reset. `milestones` persist across days (one-time).
+ */
+export interface QuestState {
+  /** The day index (floor(now/DAY_MS)) the current daily quests belong to. */
+  dailyDayIndex: number;
+  /** Daily quest progress keyed by quest id (reset each day). */
+  daily: Record<string, QuestProgressState>;
+  /** One-time growth/beginner milestone progress keyed by quest id. */
+  milestones: Record<string, QuestProgressState>;
+  /** The active time-boxed event id, or null when no event is running. */
+  activeEventId: string | null;
+  /** Epoch ms the active event ends (0 when none). */
+  eventEndsAt: number;
+}
+
+/**
+ * The persisted VIP state: accumulated VIP points that map to a VIP level
+ * granting permanent QoL / stat bonuses (expressed as a StatModifiers bundle).
+ */
+export interface VipState {
+  /** Total VIP points ever accumulated (monotonic; drives the level). */
+  points: number;
+}
+
 /**
  * The ONE shared stat-modifier bundle every progression source (research, gear,
  * heroes) contributes to and a pure combiner sums. All values are ADDITIVE
@@ -336,12 +442,13 @@ export interface StatModifiers {
 /** The complete persisted game state (serialized to localStorage by the save feature). */
 export interface GameState {
   /**
-   * Save-format version so future migrations can be detected. Bumped to 5 for
-   * the FEAT-004 research + chief-gear + troop-tier layer (a multi-branch tech
-   * tree, forgeable gear with socketed charms, and research-gated troop tiers)
-   * on top of the v4 hero layer. Older saves (v1 medieval, v2 pre-expansion, v3
-   * pre-heroes, v4 pre-research) are detected as a version mismatch and fall
-   * back to a fresh frozen settlement rather than mis-mapping.
+   * Save-format version so future migrations can be detected. Bumped to 6 for
+   * the FEAT-005 endgame + retention layer (world-boss rallies, a simulated
+   * arena/PvP ladder, a simulated NPC alliance, daily/growth quests + events,
+   * and VIP levels) on top of the v5 research/gear/troop-tier layer. Older
+   * saves (v1 medieval, v2 pre-expansion, v3 pre-heroes, v4 pre-research, v5
+   * pre-endgame) are detected as a version mismatch and fall back to a fresh
+   * frozen settlement rather than mis-mapping.
    */
   version: number;
   resources: Resources;
@@ -359,6 +466,16 @@ export interface GameState {
   research: ResearchState;
   /** Chief-gear progress (FEAT-004): per-slot gear level + socketed charms. */
   gear: GearState;
+  /** World-boss rally progress (FEAT-005): per-boss HP depletion + rewards. */
+  rally: RallyState;
+  /** Simulated arena/PvP ladder progress (FEAT-005): rank + win/loss + seed. */
+  arena: ArenaState;
+  /** Simulated NPC alliance state (FEAT-005): tech points + help charges. */
+  alliance: AllianceState;
+  /** Quest progress (FEAT-005): dailies, growth milestones, active event. */
+  quests: QuestState;
+  /** VIP progression (FEAT-005): accumulated points -> level -> bonuses. */
+  vip: VipState;
   /**
    * Current Furnace warmth level (the signature frozen-survival mechanic).
    * Persisted so warmth carries across sessions and is reconciled over the

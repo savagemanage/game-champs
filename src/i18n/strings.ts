@@ -453,6 +453,87 @@ export const STRINGS = {
   'troop.tierShort': { en: 'T{tier}', ko: 'T{tier}' },
   'troop.maxTier': { en: 'Max Tier {tier}', ko: '최대 {tier}등급' },
   'troop.tierLocked': { en: 'Research to unlock higher tiers', ko: '더 높은 등급은 연구로 해금하세요' },
+
+  // --- FEAT-005: world-boss rallies (ORIGINAL Frostbeast names) ---
+  'rally.title': { en: 'FROSTBEAST RALLY', ko: '서리괴수 총공격' },
+  'rally.attack': { en: 'Rally the Hold', ko: '총공격' },
+  'rally.remaining': { en: 'HP {remaining}/{pool}', ko: '체력 {remaining}/{pool}' },
+  'rally.attempts': { en: 'Attempts {count}', ko: '시도 {count}회' },
+  'rally.allianceShare': { en: 'Alliance dealt {amount}', ko: '연맹 피해 {amount}' },
+  'rally.defeated': { en: 'Frostbeast slain!', ko: '서리괴수 처치!' },
+  'rally.recommended': { en: 'Recommended Power {power}', ko: '권장 전투력 {power}' },
+  // Boss names + flavour (original).
+  'enemy.rime_alpha': { en: 'Rimefang Alpha', ko: '서릿이빨 우두머리' },
+  'enemy.glacier_behemoth': { en: 'Glacier Behemoth', ko: '빙하 거수' },
+  'enemy.hoarfrost_wyrm': { en: 'Hoarfrost Wyrm', ko: '성에 비룡' },
+  'rally.rime_alpha.desc': {
+    en: 'The pack-alpha of the frost wolves, swollen by the endless winter.',
+    ko: '끝없는 겨울에 몸집이 불어난 서리늑대 무리의 우두머리.',
+  },
+  'rally.glacier_behemoth.desc': {
+    en: 'A mountain of living ice that shrugs off all but the heaviest blows.',
+    ko: '가장 무거운 일격이 아니면 끄떡없는 살아 움직이는 얼음 산.',
+  },
+  'rally.hoarfrost_wyrm.desc': {
+    en: 'An apex predator of the deep blizzard; its breath freezes the air itself.',
+    ko: '깊은 눈보라의 정점에 선 포식자. 그 숨결은 공기마저 얼린다.',
+  },
+
+  // --- FEAT-005: arena (simulated PvP ladder) ---
+  'arena.title': { en: 'FROST ARENA', ko: '서리 투기장' },
+  'arena.fight': { en: 'Challenge', ko: '도전' },
+  'arena.rank': { en: 'Rank {rank}', ko: '{rank}위' },
+  'arena.record': { en: 'Wins {wins} · Losses {losses}', ko: '승 {wins} · 패 {losses}' },
+  'arena.opponentPower': { en: 'Opponent Power {power}', ko: '상대 전투력 {power}' },
+  'arena.win': { en: 'Victory! Rank up to {rank}', ko: '승리! {rank}위로 상승' },
+  'arena.loss': { en: 'Defeated. Slipped to rank {rank}', ko: '패배. {rank}위로 하락' },
+  'arena.reward': { en: '+{sparks} Ember Sparks', ko: '불씨 정수 +{sparks}' },
+
+  // --- FEAT-005: alliance (simulated NPC alliance) ---
+  'alliance.title': { en: 'FROSTHOLD PACT', ko: '서리성채 협정' },
+  'alliance.members': { en: '{count} Sworn Members', ko: '맹약 구성원 {count}명' },
+  'alliance.help': { en: 'Request Help', ko: '지원 요청' },
+  'alliance.helpsAvailable': { en: 'Help charges {count}', ko: '지원 횟수 {count}' },
+  'alliance.helpApplied': { en: 'Help shaved {seconds}s off the timer', ko: '지원으로 {seconds}초 단축' },
+  'alliance.noTimer': { en: 'No active timer to help with', ko: '지원할 진행 중인 작업이 없습니다' },
+  'alliance.tech': { en: 'Pact Research', ko: '협정 연구' },
+  'alliance.techLevel': { en: 'Pact Level {level}', ko: '협정 {level}단계' },
+  'alliance.contribute': { en: 'Contribute', ko: '기여' },
+  'alliance.techPoints': { en: 'Contribution {points}', ko: '기여도 {points}' },
+
+  // --- FEAT-005: quests, growth missions, events ---
+  'quest.title': { en: 'DAILY DUTIES', ko: '일일 임무' },
+  'quest.growthTitle': { en: 'GROWTH TRIALS', ko: '성장 과업' },
+  'quest.progress': { en: '{progress}/{target}', ko: '{progress}/{target}' },
+  'quest.claim': { en: 'Claim', ko: '수령' },
+  'quest.claimed': { en: 'Claimed', ko: '수령 완료' },
+  'quest.complete': { en: 'Complete', ko: '완료' },
+  'quest.resetsDaily': { en: 'Resets daily', ko: '매일 갱신' },
+  // Daily quest names (original).
+  'quest.daily_upgrade': { en: 'Raise Two Buildings', ko: '건물 2채 강화' },
+  'quest.daily_battle': { en: 'Repel Three Waves', ko: '세 차례 격퇴' },
+  'quest.daily_train': { en: 'Train a Batch', ko: '병력 훈련' },
+  'quest.daily_summon': { en: 'Summon a Hero', ko: '영웅 소환' },
+  // Growth milestone names (original).
+  'quest.growth_first_wave': { en: 'First Stand', ko: '첫 방어전' },
+  'quest.growth_builder': { en: 'Founder of the Hold', ko: '성채의 창건자' },
+  'quest.growth_scholar': { en: 'Keeper of Lore', ko: '지식의 수호자' },
+  'quest.growth_champion': { en: 'Champion of the Ember', ko: '불씨의 용사' },
+  'quest.growth_hunter': { en: 'Frostbeast Hunter', ko: '서리괴수 사냥꾼' },
+  // Events (original, time-boxed).
+  'event.title': { en: 'LIMITED EVENT', ko: '한정 이벤트' },
+  'event.active': { en: 'Active · {bonus}x output', ko: '진행 중 · 생산 {bonus}배' },
+  'event.endsIn': { en: 'Ends in {time}', ko: '종료까지 {time}' },
+  'event.ember_rush': { en: 'Ember Rush', ko: '불씨 축제' },
+  'event.frostfall_hunt': { en: 'Frostfall Hunt', ko: '설강 사냥제' },
+
+  // --- FEAT-005: VIP progression ---
+  'vip.title': { en: 'PATRON STANDING', ko: '후원자 지위' },
+  'vip.level': { en: 'VIP {level}', ko: 'VIP {level}' },
+  'vip.points': { en: '{points} Patron Points', ko: '후원 점수 {points}' },
+  'vip.toNext': { en: '{points} to next level', ko: '다음 단계까지 {points}' },
+  'vip.maxed': { en: 'Highest standing reached', ko: '최고 지위 달성' },
+  'vip.perk': { en: 'Perks: +{eco}% output, +{build}% build speed', ko: '혜택: 생산 +{eco}%, 건설 속도 +{build}%' },
 } satisfies Record<string, TrEntry>;
 
 /** The set of valid translation keys, derived from {@link STRINGS}. */

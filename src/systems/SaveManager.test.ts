@@ -11,6 +11,11 @@ import { SummonSystem } from './SummonSystem';
 import { CampaignSystem } from './CampaignSystem';
 import { ResearchSystem } from './ResearchSystem';
 import { GearSystem } from './GearSystem';
+import { RallySystem } from './RallySystem';
+import { ArenaSystem } from './ArenaSystem';
+import { AllianceSystem } from './AllianceSystem';
+import { QuestSystem } from './QuestSystem';
+import { VipSystem } from './VipSystem';
 import { ECONOMY, WARMTH, POPULATION } from '../config/GameConfig';
 import { outputPerSec } from '../config/BuildingConfig';
 import { troopDef } from '../config/TroopConfig';
@@ -80,6 +85,11 @@ describe('SaveManager', () => {
       campaign: new CampaignSystem(),
       research: new ResearchSystem(),
       gear: new GearSystem(),
+      rally: new RallySystem(),
+      arena: new ArenaSystem(),
+      alliance: new AllianceSystem(),
+      quests: new QuestSystem(),
+      vip: new VipSystem(),
       waveCleared: 5,
     };
   }
@@ -94,7 +104,7 @@ describe('SaveManager', () => {
 
   it('uses the Frosthold save namespace', () => {
     expect(SAVE_KEY).toBe('frosthold:save');
-    expect(SAVE_VERSION).toBe(5);
+    expect(SAVE_VERSION).toBe(6);
   });
 
   it('produces a versioned plain JSON object on serialize', () => {
@@ -143,7 +153,7 @@ describe('SaveManager', () => {
     const population = atCapWorkforce(buildings, { hunters_hut: 99 });
     const pm = popMult(buildings, population);
     mgr.save(
-      { resources, buildings, training, warmth: new WarmthSystem(), population, premium: new PremiumWallet(), heroes: new HeroRoster(), summon: new SummonSystem(), campaign: new CampaignSystem(), research: new ResearchSystem(), gear: new GearSystem(), waveCleared: 5 },
+      { resources, buildings, training, warmth: new WarmthSystem(), population, premium: new PremiumWallet(), heroes: new HeroRoster(), summon: new SummonSystem(), campaign: new CampaignSystem(), research: new ResearchSystem(), gear: new GearSystem(), rally: new RallySystem(), arena: new ArenaSystem(), alliance: new AllianceSystem(), quests: new QuestSystem(), vip: new VipSystem(), waveCleared: 5 },
       saveTime,
     );
 
@@ -186,7 +196,7 @@ describe('SaveManager', () => {
     // each from a buildings snapshot at the matching level.
     const population = atCapWorkforce(buildings, { hunters_hut: 99 });
     mgr.save(
-      { resources, buildings, training, warmth: new WarmthSystem(), population, premium: new PremiumWallet(), heroes: new HeroRoster(), summon: new SummonSystem(), campaign: new CampaignSystem(), research: new ResearchSystem(), gear: new GearSystem(), waveCleared: 0 },
+      { resources, buildings, training, warmth: new WarmthSystem(), population, premium: new PremiumWallet(), heroes: new HeroRoster(), summon: new SummonSystem(), campaign: new CampaignSystem(), research: new ResearchSystem(), gear: new GearSystem(), rally: new RallySystem(), arena: new ArenaSystem(), alliance: new AllianceSystem(), quests: new QuestSystem(), vip: new VipSystem(), waveCleared: 0 },
       t0,
     );
 
@@ -304,7 +314,7 @@ describe('SaveManager', () => {
     ]);
     const training = new TrainingQueue(undefined, { trapper: 0, marksman: 0, vanguard: 0 });
     mgr.save(
-      { resources, buildings, training, warmth: new WarmthSystem(WARMTH.MAX_WARMTH), population: fullWorkforce(), premium: new PremiumWallet(), heroes: new HeroRoster(), summon: new SummonSystem(), campaign: new CampaignSystem(), research: new ResearchSystem(), gear: new GearSystem(), waveCleared: 0 },
+      { resources, buildings, training, warmth: new WarmthSystem(WARMTH.MAX_WARMTH), population: fullWorkforce(), premium: new PremiumWallet(), heroes: new HeroRoster(), summon: new SummonSystem(), campaign: new CampaignSystem(), research: new ResearchSystem(), gear: new GearSystem(), rally: new RallySystem(), arena: new ArenaSystem(), alliance: new AllianceSystem(), quests: new QuestSystem(), vip: new VipSystem(), waveCleared: 0 },
       0,
     );
 
@@ -340,7 +350,7 @@ describe('SaveManager', () => {
     const population = atCapWorkforce(buildings, { sawmill: 99, coal_pit: 99 });
     const pm = popMult(buildings, population);
     mgr.save(
-      { resources, buildings, training, warmth: new WarmthSystem(WARMTH.MAX_WARMTH), population, premium: new PremiumWallet(), heroes: new HeroRoster(), summon: new SummonSystem(), campaign: new CampaignSystem(), research: new ResearchSystem(), gear: new GearSystem(), waveCleared: 0 },
+      { resources, buildings, training, warmth: new WarmthSystem(WARMTH.MAX_WARMTH), population, premium: new PremiumWallet(), heroes: new HeroRoster(), summon: new SummonSystem(), campaign: new CampaignSystem(), research: new ResearchSystem(), gear: new GearSystem(), rally: new RallySystem(), arena: new ArenaSystem(), alliance: new AllianceSystem(), quests: new QuestSystem(), vip: new VipSystem(), waveCleared: 0 },
       0,
     );
 
@@ -391,7 +401,7 @@ describe('SaveManager', () => {
     ]);
     const training = new TrainingQueue(undefined, { trapper: 0, marksman: 0, vanguard: 0 });
     mgr.save(
-      { resources, buildings, training, warmth: new WarmthSystem(WARMTH.MAX_WARMTH), population: fullWorkforce(), premium: new PremiumWallet(), heroes: new HeroRoster(), summon: new SummonSystem(), campaign: new CampaignSystem(), research: new ResearchSystem(), gear: new GearSystem(), waveCleared: 0 },
+      { resources, buildings, training, warmth: new WarmthSystem(WARMTH.MAX_WARMTH), population: fullWorkforce(), premium: new PremiumWallet(), heroes: new HeroRoster(), summon: new SummonSystem(), campaign: new CampaignSystem(), research: new ResearchSystem(), gear: new GearSystem(), rally: new RallySystem(), arena: new ArenaSystem(), alliance: new AllianceSystem(), quests: new QuestSystem(), vip: new VipSystem(), waveCleared: 0 },
       0,
     );
 
@@ -420,7 +430,7 @@ describe('SaveManager', () => {
     const population = atCapWorkforce(buildings, { hunters_hut: 99 });
     const pm = popMult(buildings, population);
     mgr.save(
-      { resources, buildings, training, warmth: new WarmthSystem(WARMTH.MAX_WARMTH), population, premium: new PremiumWallet(), heroes: new HeroRoster(), summon: new SummonSystem(), campaign: new CampaignSystem(), research: new ResearchSystem(), gear: new GearSystem(), waveCleared: 0 },
+      { resources, buildings, training, warmth: new WarmthSystem(WARMTH.MAX_WARMTH), population, premium: new PremiumWallet(), heroes: new HeroRoster(), summon: new SummonSystem(), campaign: new CampaignSystem(), research: new ResearchSystem(), gear: new GearSystem(), rally: new RallySystem(), arena: new ArenaSystem(), alliance: new AllianceSystem(), quests: new QuestSystem(), vip: new VipSystem(), waveCleared: 0 },
       0,
     );
 
@@ -457,8 +467,42 @@ describe('SaveManager', () => {
 
   // --- FEAT-002: steel resource, premium currency, population, migration ---
 
-  it('bumps SAVE_VERSION to 5 for the research/gear/troop-tier layer', () => {
-    expect(SAVE_VERSION).toBe(5);
+  it('bumps SAVE_VERSION to 6 for the FEAT-005 endgame layer', () => {
+    expect(SAVE_VERSION).toBe(6);
+  });
+
+  it('treats a pre-endgame version-5 save as a mismatch and starts fresh', () => {
+    const storage = memoryStorage();
+    // A well-formed v5 (pre-endgame) save must NOT be mis-loaded into the v6
+    // shape; it falls back to a fresh settlement with empty rally/arena/
+    // alliance/quest/VIP state.
+    const v5 = {
+      version: 5,
+      resources: { food: 500, wood: 500, coal: 500, iron: 500, steel: 100 },
+      premiumCurrency: 300,
+      population: { total: 20, assignments: {} },
+      heroes: { heroes: {}, lead: [] },
+      summon: { totalPulls: 0, pityCounter: 0 },
+      campaign: { highestCleared: 0, claimed: [] },
+      research: { completed: ['eco_foraging'], active: null },
+      gear: { slots: {} },
+      warmth: 80,
+      buildings: [{ kind: 'furnace', level: 4, upgradeEndsAt: null }],
+      army: { trapper: 3, marksman: 2, vanguard: 1 },
+      trainingQueue: [],
+      waveCleared: 9,
+      lastSeenAt: 0,
+    };
+    storage.setItem(SAVE_KEY, JSON.stringify(v5));
+    const loaded = new SaveManager(storage).load(0);
+    expect(loaded.loaded).toBe(false);
+    expect(loaded.snapshot.buildings.furnaceLevel).toBe(1);
+    // Fresh endgame systems are present and empty.
+    expect(loaded.snapshot.rally.attempts('rime_alpha')).toBe(0);
+    expect(loaded.snapshot.arena.wins).toBe(0);
+    expect(loaded.snapshot.alliance.techPoints).toBe(0);
+    expect(loaded.snapshot.vip.level).toBe(0);
+    expect(loaded.snapshot.quests.dailyProgress('daily_battle')).toBe(0);
   });
 
   it('treats a pre-expansion version-2 save as a mismatch and starts fresh', () => {
@@ -539,6 +583,11 @@ describe('SaveManager', () => {
       campaign: new CampaignSystem(),
       research,
       gear,
+      rally: new RallySystem(),
+      arena: new ArenaSystem(),
+      alliance: new AllianceSystem(),
+      quests: new QuestSystem(),
+      vip: new VipSystem(),
       waveCleared: 0,
     };
     mgr.save(snap, 0);
@@ -570,6 +619,11 @@ describe('SaveManager', () => {
       campaign: new CampaignSystem(),
       research: new ResearchSystem(),
       gear: new GearSystem(),
+      rally: new RallySystem(),
+      arena: new ArenaSystem(),
+      alliance: new AllianceSystem(),
+      quests: new QuestSystem(),
+      vip: new VipSystem(),
       waveCleared: 0,
     };
     // Serialized JSON carries the new fields.
@@ -609,6 +663,11 @@ describe('SaveManager', () => {
       campaign: new CampaignSystem(),
       research: new ResearchSystem(),
       gear: new GearSystem(),
+      rally: new RallySystem(),
+      arena: new ArenaSystem(),
+      alliance: new AllianceSystem(),
+      quests: new QuestSystem(),
+      vip: new VipSystem(),
       waveCleared: 0,
     };
     mgr.save(snap, 0);

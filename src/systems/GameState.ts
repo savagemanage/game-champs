@@ -1,11 +1,9 @@
-import { POPULATION, RESOURCE_ORDER } from '../config/GameConfig';
-import {
-  armyBattleMultiplier,
-  combineModifiers,
-  economyMultiplierFor,
-} from '../config/StatModifiers';
+import { ALLIANCE, POPULATION, RESOURCE_ORDER } from '../config/GameConfig';
+import { combineModifiers, economyMultiplierFor } from '../config/StatModifiers';
 import { maxTrainableTier } from '../config/TroopConfig';
 import type { Army, HeroId, ResourceCost, StatModifiers, TroopKind } from '../types';
+import { AllianceSystem } from './AllianceSystem';
+import { ArenaSystem, type ArenaMatchResult } from './ArenaSystem';
 import { BuildingSystem } from './BuildingSystem';
 import { CampaignSystem, type CampaignAttemptResult } from './CampaignSystem';
 import { CombatSystem } from './CombatSystem';
@@ -13,11 +11,17 @@ import { GearSystem } from './GearSystem';
 import { HeroRoster, type HeroBonuses } from './HeroRoster';
 import { PopulationSystem } from './PopulationSystem';
 import { PremiumWallet } from './PremiumWallet';
+import { QuestSystem, type QuestClaimResult } from './QuestSystem';
+import { RallySystem, type RallyAttemptResult } from './RallySystem';
 import { ResearchSystem } from './ResearchSystem';
 import { ResourceStore } from './ResourceStore';
 import { SummonSystem, type Rng, type SummonResult } from './SummonSystem';
 import { TrainingQueue } from './TrainingQueue';
+import { VipSystem } from './VipSystem';
 import { WarmthSystem } from './WarmthSystem';
+import type { QuestReward } from '../config/QuestConfig';
+import type { RallyReward } from '../config/RallyConfig';
+import type { BuildingKind } from '../types';
 import {
   SaveManager,
   browserStorage,
@@ -58,10 +62,17 @@ export class GameState {
   readonly campaign: CampaignSystem;
   readonly research: ResearchSystem;
   readonly gear: GearSystem;
+  readonly rally: RallySystem;
+  readonly arena: ArenaSystem;
+  readonly alliance: AllianceSystem;
+  readonly quests: QuestSystem;
+  readonly vip: VipSystem;
   private _waveCleared: number;
 
   private readonly saver: SaveManager;
   private msSinceSave = 0;
+  /** Fractional alliance-help accrual carried between ticks (see tick()). */
+  private allianceHelpAccrual = 0;
 
   /** Whether an existing save was found on load (vs a fresh game). */
   readonly loaded: boolean;
@@ -82,6 +93,11 @@ export class GameState {
     this.campaign = result.snapshot.campaign;
     this.research = result.snapshot.research;
     this.gear = result.snapshot.gear;
+    this.rally = result.snapshot.rally;
+    this.arena = result.snapshot.arena;
+    this.alliance = result.snapshot.alliance;
+    this.quests = result.snapshot.quests;
+    this.vip = result.snapshot.vip;
     this._waveCleared = result.snapshot.waveCleared;
     this.saver = saver;
     this.loaded = result.loaded;
@@ -114,9 +130,13 @@ export class GameState {
     return this._waveCleared;
   }
 
-  /** Record a newly-cleared wave (monotonic). */
-  recordWaveCleared(wave: number): void {
+  /**
+   * Record a newly-cleared wave (monotonic) and fire the `waveCleared` quest
+   * hook so daily/growth quests progress. `now` defaults to the wall clock.
+   */
+  recordWaveCleared(wave: number, now: number = Date.now()): void {
     if (wave > this._waveCleared) this._waveCleared = wave;
+    this.quests.record('waveCleared', 1, now);
   }
 
   /** Replace the standing army with post-battle survivors (applies casualties). */
@@ -147,39 +167,46 @@ export class GameState {
       this.research.modifiers(),
       this.gear.modifiers(),
       heroBonusesToModifiers(this.heroes.bonuses()),
+      this.alliance.modifiers(),
+      this.vip.modifiers(),
     );
   }
 
   /**
-   * The combat-power multiplier applied to raw army power: the lead heroes'
-   * army bonus times the combined battle modifiers (attack/hp/defense) from
-   * research + gear + heroes. Heroes are counted once (their army bonus is in
-   * the multiplier, not doubled through the bundle) - the bundle's battle
-   * fields come from research + gear + the heroes' bonus adapted as troopAttack.
+   * The combined RESEARCH + GEAR battle modifier bundle CombatSystem consumes
+   * (army-wide attack/hp/defense + the per-class Infantry/Lancer/Marksman
+   * bonuses). Heroes are deliberately NOT folded in here: their aggregate army
+   * bonus is applied separately via {@link HeroRoster.armyPowerMultiplier} so a
+   * hero is counted exactly once (its bonus is not also double-counted through
+   * the bundle's troopAttack field, which only feeds the economy/UI view).
    */
-  private battleMultiplier(): number {
-    const mods = combineModifiers(this.research.modifiers(), this.gear.modifiers());
-    return this.heroes.armyPowerMultiplier() * armyBattleMultiplier(mods);
+  private battleModifiers(): StatModifiers {
+    return combineModifiers(this.research.modifiers(), this.gear.modifiers());
   }
 
   /**
    * The hold's total effective ARMY power against wave `wave`, INCLUDING the
-   * lead heroes' aggregate army bonus AND the research/gear battle modifiers.
-   * This is the value combat / campaign checks compare, so heroes, research and
-   * gear all matter in battle as well as production.
+   * research/gear battle modifiers (via CombatSystem, which resolves the
+   * Infantry>Lancer>Marksman triangle and the per-class bonuses) AND the lead
+   * heroes' aggregate army bonus. Heroes, research and gear all matter in
+   * battle as well as production.
    */
   effectiveArmyPower(wave: number): number {
-    return CombatSystem.effectiveArmyPower(this.army, wave) * this.battleMultiplier();
+    return (
+      CombatSystem.effectiveArmyPower(this.army, wave, this.battleModifiers()) *
+      this.heroes.armyPowerMultiplier()
+    );
   }
 
   /**
    * The hold's hero-boosted combat power for campaign validation: the raw army
-   * power (matchup-neutral) lifted by the combined battle multiplier plus the
-   * total owned-hero power. Deterministic; feeds {@link attemptCampaignStage}.
+   * power (matchup-neutral) lifted by the research/gear battle modifiers and the
+   * lead heroes' army multiplier, plus the total owned-hero power. Deterministic;
+   * feeds {@link attemptCampaignStage}.
    */
   campaignPower(): number {
-    const rawArmy = CombatSystem.armyPower(this.army);
-    return rawArmy * this.battleMultiplier() + this.heroes.totalPower();
+    const rawArmy = CombatSystem.armyPower(this.army, this.battleModifiers());
+    return rawArmy * this.heroes.armyPowerMultiplier() + this.heroes.totalPower();
   }
 
   /** The current MAX trainable troop tier, gated by completed research. */
@@ -192,11 +219,14 @@ export class GameState {
    * a hero via the injected deterministic {@link Rng}, and apply the result to
    * the roster (a first copy, or shards for a duplicate). Returns the outcome.
    */
-  summonOnce(rng: Rng): SummonResult | null {
+  summonOnce(rng: Rng, now: number = Date.now()): SummonResult | null {
     if (!this.premium.spend(this.summon.sparkCost)) return null;
     const result = this.summon.pull(rng, (id) => this.heroes.isOwned(id));
     if (result.outcome === 'hero') this.heroes.grantHero(result.hero);
     else this.heroes.addShards(result.hero, result.shards);
+    // Spending sparks on summons contributes VIP points + a quest metric.
+    this.vip.addPoints(this.summon.sparkCost);
+    this.quests.record('summonPulled', 1, now);
     return result;
   }
 
@@ -229,6 +259,81 @@ export class GameState {
     }
   }
 
+  // --- FEAT-005: rallies, arena, alliance, quests, VIP ---------------------
+
+  /**
+   * Launch ONE rally attempt against a world boss with the hold's current
+   * combat power (hero + research + gear boosted). RallySystem applies the
+   * player's damage plus the deterministic simulated-alliance share, and grants
+   * any newly-unlocked reward tier ONCE (rewards applied here). Also advances
+   * the `rallyAttempt` quest metric. Returns the full attempt result.
+   */
+  attackRally(bossId: string, now: number = Date.now()): RallyAttemptResult {
+    const result = this.rally.attack(bossId, this.campaignPower());
+    for (const reward of result.rewards) this.grantReward(reward);
+    // Each attempt also earns a little alliance-tech contribution.
+    if (result.dealt > 0) this.alliance.contribute(1);
+    this.quests.record('rallyAttempt', 1, now);
+    return result;
+  }
+
+  /**
+   * Fight ONE simulated arena match with the hold's current combat power. On a
+   * win the player climbs the NPC ladder and earns Ember Sparks (credited here);
+   * a loss slips a rank. Deterministic given the persisted arena seed. Advances
+   * the `arenaWin` quest metric on a win. Returns the match result.
+   */
+  fightArena(now: number = Date.now()): ArenaMatchResult {
+    const result = this.arena.fight(this.campaignPower());
+    if (result.win) {
+      if (result.sparks > 0) this.premium.grant(result.sparks);
+      this.quests.record('arenaWin', 1, now);
+    }
+    return result;
+  }
+
+  /**
+   * Spend one alliance HELP charge on whichever timer is active, preferring an
+   * in-progress research node, then the first upgrading building. Shaves
+   * ALLIANCE.HELP_REDUCTION_MS off it. Returns the ms actually shaved (0 when no
+   * charge or no active timer).
+   */
+  useAllianceHelp(now: number = Date.now()): number {
+    if (this.research.isBusy) {
+      return this.alliance.help((ms, n) => this.research.reduceTimer(ms, n), now);
+    }
+    const kind: BuildingKind | null = this.buildings.firstUpgrading();
+    if (kind) {
+      return this.alliance.help((ms, n) => this.buildings.reduceUpgradeTimer(kind, ms, n), now);
+    }
+    return 0;
+  }
+
+  /**
+   * Claim a DAILY quest reward at `now` (once per day). Applies the reward and
+   * returns the claim result.
+   */
+  claimDailyQuest(id: string, now: number = Date.now()): QuestClaimResult {
+    const result = this.quests.claimDaily(id, now);
+    if (result.ok && result.reward) this.grantReward(result.reward);
+    return result;
+  }
+
+  /**
+   * Claim a GROWTH milestone reward (once ever). Applies the reward and returns
+   * the claim result.
+   */
+  claimMilestone(id: string, now: number = Date.now()): QuestClaimResult {
+    const result = this.quests.claimMilestone(id, now);
+    if (result.ok && result.reward) this.grantReward(result.reward);
+    return result;
+  }
+
+  /** Apply a rally/quest reward bundle (same shape as a campaign reward). */
+  private grantReward(reward: RallyReward | QuestReward): void {
+    this.grantCampaignReward(reward);
+  }
+
   /** A serializable snapshot of the live systems for the save layer. */
   snapshot(): GameSnapshot {
     return {
@@ -243,6 +348,11 @@ export class GameState {
       campaign: this.campaign,
       research: this.research,
       gear: this.gear,
+      rally: this.rally,
+      arena: this.arena,
+      alliance: this.alliance,
+      quests: this.quests,
+      vip: this.vip,
       waveCleared: this._waveCleared,
     };
   }
@@ -275,9 +385,12 @@ export class GameState {
       // output PER RESOURCE on top of warmth x population, so investing in any
       // of the three progression sources visibly matters for production.
       const mods = this.modifiers();
-      const baseEfficiency = warmthMult * popMult;
+      // A running time-boxed event lifts idle output by its production bonus, so
+      // events are a meaningful (temporary) boost on top of the permanent mods.
+      const eventBonus = this.quests.productionBonus(now);
+      const baseEfficiency = warmthMult * popMult * eventBonus;
       // Pre-scale the per-second production rates by each resource's economy
-      // multiplier, then credit at the warmth x population efficiency.
+      // multiplier, then credit at the warmth x population x event efficiency.
       const rates = this.buildings.productionRates();
       for (const res of RESOURCE_ORDER) {
         rates[res] *= economyMultiplierFor(mods, res);
@@ -295,6 +408,28 @@ export class GameState {
     }
     const buildingsDone = this.buildings.update(now);
     const trainingDone = this.training.advance(now);
+    // Complete any research whose timer elapsed this tick, and fire quest hooks
+    // for the progress made this tick (buildings upgraded, research completed).
+    const researchDone = this.research.advance(now);
+
+    // Roll the daily-quest board over on a day boundary + expire stale events.
+    this.quests.sync(now);
+    for (let i = 0; i < buildingsDone.length; i++) {
+      this.quests.record('buildingUpgraded', 1, now);
+    }
+    if (researchDone) this.quests.record('researchCompleted', 1, now);
+
+    // The simulated alliance trickles in help charges over real time so a
+    // returning player has some banked to spend on their timers. Fractional
+    // accrual is carried between ticks so a slow drip still adds up.
+    if (deltaMs > 0) {
+      this.allianceHelpAccrual += deltaMs / ALLIANCE.HELP_GEN_INTERVAL_MS;
+      const whole = Math.floor(this.allianceHelpAccrual);
+      if (whole > 0) {
+        this.alliance.grantHelps(whole);
+        this.allianceHelpAccrual -= whole;
+      }
+    }
 
     this.msSinceSave += deltaMs;
     if (this.msSinceSave >= AUTOSAVE_INTERVAL_MS) {

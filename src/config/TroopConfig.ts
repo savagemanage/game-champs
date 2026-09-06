@@ -105,6 +105,13 @@ export const ENEMY_ROLE: Record<EnemyKind, TroopKind> = {
   frost_wolf: 'trapper',
   ravager: 'vanguard',
   frost_titan: 'vanguard',
+  // --- FEAT-005 Frostbeast / world-boss kinds (rally targets) ---
+  // rime_alpha: a fast pack-alpha — a lancer-role skirmisher (trapper analogue).
+  rime_alpha: 'trapper',
+  // glacier_behemoth: an armoured bulwark — an infantry-role tank (vanguard analogue).
+  glacier_behemoth: 'vanguard',
+  // hoarfrost_wyrm: the apex world-boss — a ranged devastator (marksman analogue).
+  hoarfrost_wyrm: 'marksman',
 };
 
 /**
@@ -116,11 +123,22 @@ export function troopVsEnemyMultiplier(troop: TroopKind, enemy: EnemyKind): numb
   return TROOP_COUNTER[troop][ENEMY_ROLE[enemy]];
 }
 
+/** The WOS-style combat class each enemy kind fights as (via its troop role). */
+export function enemyClass(enemy: EnemyKind): TroopClass {
+  return TROOP_CLASS[ENEMY_ROLE[enemy]];
+}
+
 /** Frozen Horde enemy stat blocks (used by CombatSystem via WaveConfig composition). */
 export const ENEMY_DEFS: Record<EnemyKind, UnitStats> = {
   frost_wolf: { hp: 50, attack: 9, attackSpeed: 1.0, speed: 65, range: 24 },
   ravager: { hp: 130, attack: 18, attackSpeed: 0.7, speed: 45, range: 26 },
   frost_titan: { hp: 260, attack: 30, attackSpeed: 0.5, speed: 35, range: 30 },
+  // FEAT-005 Frostbeast / world-boss stat blocks: far higher hp than wave mobs
+  // (they are depleted across MANY rally attempts, not one battle) with heavy
+  // attack, so their per-unit power dwarfs a standard enemy.
+  rime_alpha: { hp: 900, attack: 55, attackSpeed: 1.1, speed: 70, range: 26 },
+  glacier_behemoth: { hp: 2400, attack: 90, attackSpeed: 0.6, speed: 30, range: 32 },
+  hoarfrost_wyrm: { hp: 6000, attack: 140, attackSpeed: 0.8, speed: 40, range: 160 },
 };
 
 /**

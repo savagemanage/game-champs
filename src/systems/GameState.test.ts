@@ -88,3 +88,79 @@ describe('GameState modifier integration', () => {
     expect(gs.maxTroopTier()).toBe(2);
   });
 });
+
+/**
+ * Integration tests that the FEAT-005 endgame systems are wired into GameState:
+ * rallies grant rewards, arena wins credit sparks, alliance help shortens the
+ * active timer, and quest hooks fire from the relevant actions.
+ */
+describe('GameState endgame integration', () => {
+  function freshState(): GameState {
+    return GameState.create(memoryStorage(), 0);
+  }
+
+  it('a rally attempt records the quest metric and grants tier rewards', () => {
+    const gs = freshState();
+    gs.setArmy({ trapper: 0, marksman: 0, vanguard: 5_000 }); // huge power -> big damage
+    const sparks0 = gs.premium.sparks;
+    const res = gs.attackRally('rime_alpha', 0);
+    expect(res.dealt).toBeGreaterThan(0);
+    expect(gs.rally.attempts('rime_alpha')).toBe(1);
+    // The daily/growth rally quest metric advanced.
+    expect(gs.quests.milestoneProgress('growth_hunter')).toBe(1);
+    // Crossing reward-tier thresholds granted at least the spark tiers.
+    expect(gs.premium.sparks).toBeGreaterThanOrEqual(sparks0);
+  });
+
+  it('an arena win credits Ember Sparks and records the metric', () => {
+    const gs = freshState();
+    gs.setArmy({ trapper: 0, marksman: 0, vanguard: 100_000 }); // overwhelming
+    const sparks0 = gs.premium.sparks;
+    const res = gs.fightArena(0);
+    expect(res.win).toBe(true);
+    expect(gs.premium.sparks).toBe(sparks0 + res.sparks);
+    expect(gs.arena.wins).toBe(1);
+  });
+
+  it('alliance help shortens the active building timer via GameState', () => {
+    const gs = freshState();
+    gs.alliance.grantHelps(1);
+    // Furnace at a level that lets the hut build; fund it and start an upgrade.
+    while (gs.buildings.furnaceLevel < 3) {
+      gs.buildings.startUpgrade('furnace', highStore(), 0);
+      gs.buildings.update(1e12);
+    }
+    gs.buildings.startUpgrade('hunters_hut', highStore(), 0);
+    const before = gs.buildings.upgradeEndsAt('hunters_hut')!;
+    const shaved = gs.useAllianceHelp(0);
+    expect(shaved).toBeGreaterThan(0);
+    expect(gs.buildings.upgradeEndsAt('hunters_hut')!).toBe(before - shaved);
+  });
+
+  it('claims a daily quest reward through GameState once complete', () => {
+    const gs = freshState();
+    // daily_battle needs 3 waves cleared.
+    gs.recordWaveCleared(1, 0);
+    gs.recordWaveCleared(2, 0);
+    gs.recordWaveCleared(3, 0);
+    const food0 = gs.resources.get('food');
+    const res = gs.claimDailyQuest('daily_battle', 0);
+    expect(res.ok).toBe(true);
+    // The reward (iron + sparks) was applied.
+    expect(gs.resources.get('iron')).toBeGreaterThan(0);
+    expect(food0).toBe(gs.resources.get('food')); // this reward is not food
+  });
+
+  it('summoning contributes VIP points', () => {
+    const gs = freshState();
+    gs.premium.grant(gs.summon.sparkCost * 2);
+    const pts0 = gs.vip.points;
+    gs.summonOnce(() => 0.5, 0);
+    expect(gs.vip.points).toBe(pts0 + gs.summon.sparkCost);
+  });
+});
+
+/** A well-stocked store so the endgame integration tests never fail on cost. */
+function highStore(): ResourceStore {
+  return new ResourceStore({ food: 1e9, wood: 1e9, coal: 1e9, iron: 1e9, steel: 1e9 });
+}

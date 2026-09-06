@@ -162,6 +162,30 @@ export class BuildingSystem {
   }
 
   /**
+   * Bring an in-progress upgrade's completion forward by `ms` (alliance help).
+   * No-op when the building is idle. Returns the ms actually shaved off (capped
+   * so the timer never lands before "now-ish" is the caller's concern; we clamp
+   * the reduction to what remains so the timer can complete but not go
+   * negative). The upgrade itself completes on the next {@link update}.
+   */
+  reduceUpgradeTimer(kind: BuildingKind, ms: number, now: number): number {
+    const state = this._buildings.get(kind);
+    if (!state || state.upgradeEndsAt === null || ms <= 0) return 0;
+    const remaining = Math.max(0, state.upgradeEndsAt - now);
+    const shaved = Math.min(ms, remaining);
+    state.upgradeEndsAt -= shaved;
+    return shaved;
+  }
+
+  /** Any building kind currently upgrading (stable BUILDING_ORDER), or null. */
+  firstUpgrading(): BuildingKind | null {
+    for (const kind of BUILDING_ORDER) {
+      if (this.isUpgrading(kind)) return kind;
+    }
+    return null;
+  }
+
+  /**
    * Aggregate per-second production rates across all producer buildings at
    * their current levels. Fed to ResourceStore.applyProduction.
    */

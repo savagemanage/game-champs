@@ -130,6 +130,20 @@ export class ResearchSystem {
   }
 
   /**
+   * Bring the in-progress node's completion forward by `ms` (alliance help).
+   * No-op when the lab is idle. Returns the ms actually shaved off (clamped to
+   * what remains so the timer can complete via {@link advance} but not go
+   * negative).
+   */
+  reduceTimer(ms: number, now: number): number {
+    if (!this._active || ms <= 0) return 0;
+    const remaining = Math.max(0, this._active.endsAt - now);
+    const shaved = Math.min(ms, remaining);
+    this._active.endsAt -= shaved;
+    return shaved;
+  }
+
+  /**
    * The aggregate permanent bonus of all COMPLETED nodes, as the shared
    * {@link StatModifiers} bundle. GameState combines this with gear + hero
    * bundles and consumes the total. Recomputed on demand (cheap; node count is

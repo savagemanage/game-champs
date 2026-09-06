@@ -52,6 +52,17 @@ export function waveComposition(n: number): WaveEntry[] {
     entries.push({ kind: 'frost_titan', count: titans });
   }
 
+  // Frostbeast champions crash into the LATE waves as mini-boss escorts (the
+  // full-strength versions are fought in RallySystem world-boss rallies). A
+  // lone rime alpha leads from wave 10, a glacier behemoth anchors from wave
+  // 15, so the endgame waves feel like the horde's apex predators arriving.
+  if (wave >= 10) {
+    entries.push({ kind: 'rime_alpha', count: 1 + Math.floor((wave - 10) / 5) });
+  }
+  if (wave >= 15) {
+    entries.push({ kind: 'glacier_behemoth', count: 1 + Math.floor((wave - 15) / 5) });
+  }
+
   return entries;
 }
 
