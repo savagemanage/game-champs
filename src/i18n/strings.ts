@@ -69,6 +69,14 @@ export const STRINGS = {
   },
   'town.onboardingDismiss': { en: 'Got it', ko: '알겠어요' },
 
+  // Warmth (the signature frozen-survival mechanic).
+  'warmth.label': { en: 'Warmth', ko: '온기' },
+  'warmth.value': { en: '{warmth}/{max}', ko: '{warmth}/{max}' },
+  'warmth.output': { en: 'Output {pct}%', ko: '생산 효율 {pct}%' },
+  'warmth.freezing': { en: 'FREEZING!', ko: '혹한 경고!' },
+  'warmth.fuelBurn': { en: 'Fuel: {wood} timber + {coal} coal /s', ko: '연료: 목재 {wood} + 석탄 {coal} /초' },
+  'warmth.furnaceInfo': { en: 'Warmth {warmth}/{max}', ko: '온기 {warmth}/{max}' },
+
   // Building names.
   'building.furnace': { en: 'Furnace', ko: '용광로' },
   'building.hunters_hut': { en: 'Hunters\u2019 Hut', ko: '사냥꾼 오두막' },

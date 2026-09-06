@@ -34,6 +34,14 @@ interface BuildingMarker {
   levelBadge: Phaser.GameObjects.Text;
 }
 
+/** Live warmth readout widgets in the HUD. */
+interface WarmthWidgets {
+  bar: ProgressBar;
+  label: Phaser.GameObjects.Text;
+  value: Phaser.GameObjects.Text;
+  status: Phaser.GameObjects.Text;
+}
+
 /**
  * TownScene - the main idle screen.
  *
@@ -56,6 +64,7 @@ export class TownScene extends Phaser.Scene {
 
   private resourceWidgets: ResourceWidget[] = [];
   private markers: BuildingMarker[] = [];
+  private warmthWidgets!: WarmthWidgets;
 
   private trainingPanel!: TrainingPanel;
 
@@ -87,6 +96,7 @@ export class TownScene extends Phaser.Scene {
 
     this.buildBuildings();
     this.buildTopBar();
+    this.buildWarmthBar();
     this.buildBottomBar();
     this.buildUpgradePanel();
 
@@ -124,6 +134,7 @@ export class TownScene extends Phaser.Scene {
     }
 
     this.refreshResourceBar();
+    this.refreshWarmthBar();
     this.refreshBuildingBadges();
     this.refreshUpgradePanel(now);
     this.trainingPanel.update();
@@ -183,7 +194,50 @@ export class TownScene extends Phaser.Scene {
       this.resourceWidgets.push({ res, amount, rate });
     });
 
-    Menu.label(this, CANVAS.WIDTH / 2, 60, tr('town.hint'), 12, 0.55).setColor(PALETTE.MUTED_CSS);
+    Menu.label(this, CANVAS.WIDTH / 2, 84, tr('town.hint'), 12, 0.55).setColor(PALETTE.MUTED_CSS);
+  }
+
+  // ---- Warmth HUD ----------------------------------------------------------
+
+  /**
+   * A live warmth strip below the resource bar: an ember-coloured progress bar
+   * fed each frame from GameState.warmth, its current/max readout, a production
+   * -efficiency percentage, and a FREEZING warning when warmth runs low.
+   */
+  private buildWarmthBar(): void {
+    const barW = 240;
+    const barX = CANVAS.WIDTH / 2 - barW / 2;
+    const barY = 60;
+
+    const label = this.add
+      .text(barX - 8, barY, tr('warmth.label'), textStyle(13, { fontStyle: 'bold', color: PALETTE.EMBER_CSS }))
+      .setOrigin(1, 0.5);
+    const bar = Menu.progressBar(this, barX, barY, barW, 12, PALETTE.EMBER);
+    const value = this.add.text(barX + barW + 12, barY, '', textStyle(12, { color: PALETTE.FROST_CSS })).setOrigin(0, 0.5);
+    const status = this.add.text(CANVAS.WIDTH / 2, barY + 16, '', textStyle(12, { fontStyle: 'bold' })).setOrigin(0.5);
+
+    this.warmthWidgets = { bar, label, value, status };
+  }
+
+  private refreshWarmthBar(): void {
+    const furnaceLevel = this.state.buildings.furnaceLevel;
+    const warmth = this.state.warmth;
+    const current = warmth.warmth;
+    const max = warmth.maxWarmth(furnaceLevel);
+    const ratio = warmth.warmthRatio(furnaceLevel);
+    const pct = Math.round(warmth.productionMultiplier(furnaceLevel) * 100);
+
+    const w = this.warmthWidgets;
+    w.bar.setProgress(ratio);
+    // Fill drifts from warm ember to biting frost-blue as warmth drops.
+    w.bar.setFillColor(ratio <= 0.25 ? PALETTE.DANGER : ratio <= 0.5 ? PALETTE.ICE : PALETTE.EMBER);
+    w.value.setText(tr('warmth.value', { warmth: Math.floor(current), max: Math.floor(max) }));
+
+    if (ratio <= 0.25) {
+      w.status.setText(tr('warmth.freezing')).setColor(PALETTE.DANGER_CSS).setVisible(true);
+    } else {
+      w.status.setText(tr('warmth.output', { pct })).setColor(pct >= 100 ? PALETTE.SUCCESS_CSS : PALETTE.MUTED_CSS).setVisible(true);
+    }
   }
 
   private refreshResourceBar(): void {
@@ -275,11 +329,21 @@ export class TownScene extends Phaser.Scene {
 
     this.upgradeLevel.setText(level > 0 ? tr('building.level', { level }) : tr('town.locked'));
 
-    // Producer output at current level.
+    // Producer output at current level; the Furnace instead shows its warmth
+    // reserve and per-second fuel burn (its defining role).
     if (isProducer(kind) && level > 0) {
       this.upgradeOutput.setText(tr('building.output', { amount: buildings.outputOf(def.produces!).toFixed(1) }));
+    } else if (kind === 'furnace' && level > 0) {
+      const warmth = this.state.warmth;
+      const burn = warmth.fuelPerSecond(level);
+      this.upgradeOutput.setColor(PALETTE.EMBER_CSS).setText(
+        `${tr('warmth.furnaceInfo', {
+          warmth: Math.floor(warmth.warmth),
+          max: Math.floor(warmth.maxWarmth(level)),
+        })}\n${tr('warmth.fuelBurn', { wood: burn.wood.toFixed(2), coal: burn.coal.toFixed(2) })}`,
+      );
     } else {
-      this.upgradeOutput.setText('');
+      this.upgradeOutput.setColor(PALETTE.SUCCESS_CSS).setText('');
     }
 
     const upgrading = buildings.isUpgrading(kind);

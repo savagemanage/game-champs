@@ -3,6 +3,7 @@ import type { Army, GameState, TroopKind } from '../types';
 import { BuildingSystem } from './BuildingSystem';
 import { ResourceStore } from './ResourceStore';
 import { TrainingQueue } from './TrainingQueue';
+import { WarmthSystem } from './WarmthSystem';
 
 /**
  * Current save-format version. Bump when GameState shape changes. Version 2 is
@@ -31,6 +32,7 @@ export interface GameSnapshot {
   resources: ResourceStore;
   buildings: BuildingSystem;
   training: TrainingQueue;
+  warmth: WarmthSystem;
   waveCleared: number;
 }
 
@@ -64,6 +66,7 @@ export class SaveManager {
     return {
       version: SAVE_VERSION,
       resources: snapshot.resources.toJSON(),
+      warmth: snapshot.warmth.toJSON(),
       buildings: snapshot.buildings.toJSON(),
       army: snapshot.training.army,
       trainingQueue: snapshot.training.toJSON(),
@@ -83,6 +86,8 @@ export class SaveManager {
     const resources = ResourceStore.fromJSON(state.resources);
     const buildings = BuildingSystem.fromJSON(state.buildings);
     const training = TrainingQueue.fromJSON(state.trainingQueue, normalizeArmy(state.army));
+    // A legacy / warmth-less save (undefined) restores to full warmth.
+    const warmth = WarmthSystem.fromJSON(state.warmth);
 
     // Training that finished while away joins the army. (Trained troops do not
     // produce resources, so this ordering has no bearing on offline gains.)
@@ -117,20 +122,39 @@ export class SaveManager {
       .sort((a, b) => a - b);
 
     for (const boundary of boundaries) {
+      // Advance warmth over the segment (burning fuel from the store at the
+      // current Furnace level) BEFORE production, mirroring the live tick order.
+      warmth.tick(boundary - cursor, buildings.furnaceLevel, resources);
       // Credit production at the CURRENT (pre-completion) rates up to this
-      // boundary, then apply the completion so later segments use higher rates.
-      accumulate(offlineGains, resources.applyProduction(buildings.productionRates(), boundary - cursor, ECONOMY.OFFLINE_EFFICIENCY));
+      // boundary, scaled by the warmth-derived multiplier, then apply the
+      // completion so later segments use higher rates.
+      accumulate(
+        offlineGains,
+        resources.applyProduction(
+          buildings.productionRates(),
+          boundary - cursor,
+          ECONOMY.OFFLINE_EFFICIENCY * warmth.productionMultiplier(buildings.furnaceLevel),
+        ),
+      );
       buildings.update(boundary);
       cursor = boundary;
     }
     // Final segment: from the last boundary (or window start) to `now`.
-    accumulate(offlineGains, resources.applyProduction(buildings.productionRates(), now - cursor, ECONOMY.OFFLINE_EFFICIENCY));
+    warmth.tick(now - cursor, buildings.furnaceLevel, resources);
+    accumulate(
+      offlineGains,
+      resources.applyProduction(
+        buildings.productionRates(),
+        now - cursor,
+        ECONOMY.OFFLINE_EFFICIENCY * warmth.productionMultiplier(buildings.furnaceLevel),
+      ),
+    );
     // Finish any upgrades whose timer elapsed exactly at/after `now` bookkeeping
     // (also completes upgrades that ended before the capped window began).
     buildings.update(now);
 
     return {
-      snapshot: { resources, buildings, training, waveCleared: state.waveCleared ?? 0 },
+      snapshot: { resources, buildings, training, warmth, waveCleared: state.waveCleared ?? 0 },
       loaded: true,
       offlineSeconds,
       offlineGains,
@@ -143,6 +167,7 @@ export class SaveManager {
       resources: new ResourceStore(),
       buildings: new BuildingSystem(),
       training: new TrainingQueue(),
+      warmth: new WarmthSystem(),
       waveCleared: 0,
     };
   }

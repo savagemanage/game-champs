@@ -80,6 +80,13 @@ export interface GameState {
    */
   version: number;
   resources: Resources;
+  /**
+   * Current Furnace warmth level (the signature frozen-survival mechanic).
+   * Persisted so warmth carries across sessions and is reconciled over the
+   * offline window on load. A legacy / warmth-less save (undefined) loads to
+   * full warmth (see WarmthSystem.fromJSON).
+   */
+  warmth: number;
   buildings: BuildingState[];
   /** Trained, idle troops available to send into battle. */
   army: Record<TroopKind, number>;

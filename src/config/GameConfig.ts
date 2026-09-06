@@ -152,6 +152,61 @@ export const COMBAT = {
 } as const;
 
 /**
+ * WARMTH - the signature frozen-survival mechanic. The Furnace burns fuel
+ * (wood + coal) every tick to hold back a lethal cold, sustaining a Warmth
+ * level. While fuel is available warmth climbs toward its max; when the
+ * stockpile runs dry warmth decays and idle production is throttled toward a
+ * floor. A higher Furnace level raises max warmth AND makes fuel burn more
+ * efficiently, so investing in the Ember pays off twice.
+ *
+ * These are the shared tuning knobs; the pure WarmthSystem (src/systems) reads
+ * them. Numbers are balanced so a base with steady wood/coal income stays warm
+ * and at full output, while neglecting fuel visibly (but not fatally) bites:
+ * production sinks toward WARMTH_PRODUCTION_FLOOR rather than stopping.
+ */
+export const WARMTH = {
+  /** Baseline maximum warmth at Furnace level 1. */
+  MAX_WARMTH: 100,
+  /** Extra maximum warmth granted per Furnace level above 1. */
+  MAX_WARMTH_PER_LEVEL: 20,
+  /**
+   * Base fuel burned per second at Furnace level 1 to sustain warmth, split
+   * across wood and coal. Higher Furnace levels burn LESS via
+   * FUEL_EFFICIENCY_PER_LEVEL (the Ember gets more out of every log).
+   */
+  FUEL_PER_SECOND: { wood: 0.6, coal: 0.4 },
+  /**
+   * Fractional reduction in fuel burn per Furnace level above 1 (e.g. 0.05 =
+   * 5% cheaper per level). Clamped so burn never drops below FUEL_MIN_FACTOR of
+   * the base, keeping fuel always meaningful.
+   */
+  FUEL_EFFICIENCY_PER_LEVEL: 0.05,
+  /** Lower bound on the fuel-burn multiplier from efficiency (40% of base). */
+  FUEL_MIN_FACTOR: 0.4,
+  /** Warmth points gained per second while the Furnace is fueled. */
+  WARMTH_GAIN_PER_SEC: 8,
+  /** Warmth points lost per second while unfueled / cold. */
+  WARMTH_DECAY_PER_SEC: 5,
+  /**
+   * Production-penalty curve: at full warmth (ratio 1) production runs at 1.0x;
+   * at zero warmth it is throttled to WARMTH_PRODUCTION_FLOOR. In between the
+   * multiplier scales LINEARLY between the floor and 1.0 with the warmth ratio.
+   */
+  WARMTH_PRODUCTION_FLOOR: 0.25,
+} as const;
+
+/**
+ * Pure helper: the idle-production multiplier for a given warmth ratio
+ * (current warmth / max warmth, expected in [0,1] but clamped defensively).
+ * Linearly interpolates from WARMTH.WARMTH_PRODUCTION_FLOOR at ratio 0 to 1.0
+ * at ratio 1, so callers (WarmthSystem, tests, UI) share one curve definition.
+ */
+export function warmthProductionMultiplier(warmthRatio: number): number {
+  const ratio = Math.min(1, Math.max(0, warmthRatio));
+  return WARMTH.WARMTH_PRODUCTION_FLOOR + (1 - WARMTH.WARMTH_PRODUCTION_FLOOR) * ratio;
+}
+
+/**
  * The four resource kinds, as an ordered tuple so UI and iteration share one
  * canonical order. The ResourceKind union type is derived in src/types.
  */
