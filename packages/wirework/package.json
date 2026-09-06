@@ -5,13 +5,14 @@
   "description": "Wirework - an original-world 2D pixel-art wall-defense ODM action game built with Phaser 3.",
   "author": "Janghoon Lee",
   "license": "Apache-2.0",
-  "homepage": "https://savagemanage.github.io/wirework/",
+  "homepage": "https://savagemanage.github.io/open-games/wirework/",
   "repository": {
     "type": "git",
-    "url": "https://github.com/savagemanage/wirework.git"
+    "url": "https://github.com/savagemanage/open-games.git",
+    "directory": "packages/wirework"
   },
   "bugs": {
-    "url": "https://github.com/savagemanage/wirework/issues"
+    "url": "https://github.com/savagemanage/open-games/issues"
   },
   "keywords": [
     "game",

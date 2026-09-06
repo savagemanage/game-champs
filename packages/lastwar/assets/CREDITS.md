@@ -4,8 +4,8 @@ LAST SQUAD is an **original** modern military-survival lane gate-runner *inspire
 by the lane gate-runner genre*. It is **not** based on "Last War", "Kingshot", or
 any other copyrighted property. There are **no** IP names, character names,
 faction logos, story text, or copied/traced sprites anywhere in this project. The
-`game-lastwar` repository slug is only the fixed GitHub Pages deploy identifier
-and does not describe the game brand.
+`lastwar` workspace slug is only the fixed GitHub Pages deploy identifier and
+does not describe the game brand.
 
 ## Provenance summary
 

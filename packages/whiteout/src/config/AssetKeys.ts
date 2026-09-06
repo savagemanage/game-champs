@@ -8,7 +8,7 @@
  * Vite base path.
  *
  * NOTE on paths: files in public/ are served at the site root, which is
- * import.meta.env.BASE_URL ('/game-whiteout/' in production, '/' in dev). Always
+ * import.meta.env.BASE_URL ('/open-games/whiteout/' in production, '/' in dev). Always
  * build load URLs with assetPath() so they resolve under the base path.
  */
 

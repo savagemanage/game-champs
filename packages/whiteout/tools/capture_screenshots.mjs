@@ -4,7 +4,7 @@
 // SINGLE process so the static server stays alive for the whole browser session
 // (detached background servers are reaped between separate shell invocations in
 // the CI sandbox). The flow is:
-//   1. serve dist/ over HTTP under the production base /game-whiteout/
+//   1. serve dist/ over HTTP under the production base /open-games/whiteout/
 //   2. launch headless Chromium (playwright-core, --no-sandbox)
 //   3. wait for the canvas + bundled Korean web font to be ready
 //   4. drive the UI (Play, panels, Command menu -> hub screens, Battle)
@@ -33,7 +33,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 const DIST = path.join(ROOT, 'dist');
 const OUT = path.join(ROOT, 'docs', 'screenshots');
-const BASE = '/game-whiteout/';
+const BASE = '/open-games/whiteout/';
 const PORT = 4173;
 
 const MIME = {

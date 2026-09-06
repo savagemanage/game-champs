@@ -9,7 +9,7 @@
  * any existing IP or trademark.
  *
  * NOTE on paths: files in public/ are served at the site root, which is
- * import.meta.env.BASE_URL ('/game-lastwar/' in production, '/' in dev). Always
+ * import.meta.env.BASE_URL ('/open-games/lastwar/' in production, '/' in dev). Always
  * build load URLs with assetPath() so they resolve under the base path.
  *
  * FRAME SIZES BELOW MUST MATCH tools/gen_sprites.py OUTPUT EXACTLY:

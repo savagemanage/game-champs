@@ -23,14 +23,14 @@
 > 캐릭터, 세력, 스토리, 스프라이트도 사용하지 않습니다. 전체 에셋 출처는
 > [`assets/CREDITS.md`](assets/CREDITS.md)를 참고하세요.
 >
-> 저장소 슬러그와 GitHub Pages 경로(`game-kingshot`,
-> `savagemanage.github.io/game-kingshot`)는 이 프로젝트가 오마주하는 장르를
+> 워크스페이스 슬러그와 GitHub Pages 경로(`packages/kingshot`,
+> `savagemanage.github.io/open-games/kingshot/`)는 이 프로젝트가 오마주하는 장르를
 > 나타내는 **배포 식별자**일 뿐, 게임 브랜드의 일부가 아닙니다. 빌드에 담긴 그
 > 무엇도(게임 내 제목 "Kingdom Rise / 킹덤 라이즈", 세계관, 병종·적 이름, 아트,
 > 오디오) 제3자 IP를 사용하지 않습니다. 슬러그는 고정된 배포 대상이며 의도적으로
 > 그대로 둡니다.
 
-**라이브 빌드 플레이:** <https://savagemanage.github.io/game-kingshot/>
+**라이브 빌드 플레이:** <https://savagemanage.github.io/open-games/kingshot/>
 
 ## 기술 스택
 
@@ -47,11 +47,20 @@
 ## 시작하기
 
 **Node 22 이상**이 필요합니다 (GitHub Pages 배포 워크플로가 빌드에 사용하는
-버전과 동일합니다. [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)
+버전과 동일합니다. [`.github/workflows/deploy.yml`](../../.github/workflows/deploy.yml)
 참고).
 
+킹덤 라이즈는 [open-games](../../README.md) 모노레포의 워크스페이스입니다.
+의존성은 이 디렉터리가 아니라 **저장소 루트**에서 한 번만 설치합니다.
+
 ```bash
-npm install       # 의존성 설치
+npm install       # 저장소 루트에서 실행; 모든 워크스페이스를 설치
+```
+
+이후 패키지 스크립트는 여기서 실행하거나, 루트에서 `-w packages/kingshot`을
+붙여 실행합니다.
+
+```bash
 npm run dev       # Vite 개발 서버 시작 (핫 리로드)
 npm run build     # 타입 체크 + dist/로 프로덕션 빌드
 npm run preview   # 프로덕션 빌드를 로컬에서 미리보기
@@ -164,31 +173,15 @@ python3 tools/gen_audio.py             # -> public/assets/audio  (표준 라이�
 
 ## 배포 (GitHub Pages)
 
-프로덕션 빌드는 Vite `base`를 `/game-kingshot/`로 설정하여 프로젝트 페이지 경로
-아래에서 에셋 URL이 올바르게 해석되도록 합니다.
+킹덤 라이즈는 [open-games](../../README.md) 모노레포의 일부로
+<https://savagemanage.github.io/open-games/kingshot/> 에 게시됩니다.
 
-### 자동 (GitHub Actions — 권장)
-
-`main`에 푸시하면
-[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)이 실행되어
-`npm ci && npm run build`를 수행하고, `dist/`를 Pages 아티팩트로 업로드한 뒤
-`actions/deploy-pages`로 게시합니다. 저장소에서 한 번
-**Settings → Pages → Build and deployment → Source: GitHub Actions**를 설정해
-두면, `main`에 푸시할 때마다 <https://savagemanage.github.io/game-kingshot/>로
-재배포됩니다.
-
-### 수동 (`npm run build` + `gh-pages` 대체)
-
-직접 게시하고 싶거나 Actions를 사용할 수 없을 때:
-
-```bash
-npm run build                     # dist/ 생성
-npx gh-pages -d dist              # dist/를 gh-pages 브랜치로 푸시
-```
-
-그런 다음 **Settings → Pages → Source: Deploy from a branch → `gh-pages` /
-root**를 설정하세요. 사이트는 동일한
-<https://savagemanage.github.io/game-kingshot/> 주소로 제공됩니다.
+배포는 저장소 전체를 한 번에 처리하는
+[`.github/workflows/deploy.yml`](../../.github/workflows/deploy.yml)이 담당합니다.
+`main`에 푸시할 때마다 모든 워크스페이스를 빌드하고, 각 `dist/`를 자기 서브패스로
+수집하고, 루트 랜딩 페이지를 생성해 함께 게시합니다. 게임마다 따로 설정할 것은
+없습니다. 게임 쪽에서 관여하는 것은 [`vite.config.ts`](vite.config.ts)의 프로덕션
+base 경로(`/open-games/kingshot/`)뿐입니다.
 
 ## 크레딧
 
@@ -198,7 +191,7 @@ root**를 설정하세요. 사이트는 동일한
 
 ## 라이선스
 
-Apache-2.0. [LICENSE](LICENSE)를 참고하세요.
+Apache-2.0. 저장소 루트의 [LICENSE](../../LICENSE)를 참고하세요.
 
 ---
 
@@ -236,15 +229,15 @@ with English available.
 > other third-party) names, characters, factions, story, or sprites. See
 > [`assets/CREDITS.md`](assets/CREDITS.md) for full asset provenance.
 >
-> The repository slug and GitHub Pages path (`game-kingshot`,
-> `savagemanage.github.io/game-kingshot`) are only a **deployment identifier**
+> The workspace slug and GitHub Pages path (`packages/kingshot`,
+> `savagemanage.github.io/open-games/kingshot/`) are only a **deployment identifier**
 > describing the genre this project is a homage to; they are not part of the
 > game's brand. Nothing shipped in the build (the in-game title "Kingdom Rise /
 > 킹덤 라이즈", the lore, the troop/enemy names, the art, and the audio) uses any
 > third-party IP. The slug is a fixed deployment target and is intentionally
 > left unchanged.
 
-**Play the live build:** <https://savagemanage.github.io/game-kingshot/>
+**Play the live build:** <https://savagemanage.github.io/open-games/kingshot/>
 
 ## Tech stack
 
@@ -261,10 +254,20 @@ with nearest-neighbour rendering.
 ## Getting started
 
 Requires **Node 22+** (the version the GitHub Pages deploy workflow builds
-with; see [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)).
+with; see [`.github/workflows/deploy.yml`](../../.github/workflows/deploy.yml)).
+
+Kingdom Rise is a workspace of the [open-games](../../README.md) monorepo, so
+dependencies are installed once from the **repo root**, not from this
+directory:
 
 ```bash
-npm install       # install dependencies
+npm install       # from the repo root; installs every workspace
+```
+
+Then run the package scripts from here (or from the root with
+`-w packages/kingshot`):
+
+```bash
 npm run dev       # start the Vite dev server (hot reload)
 npm run build     # type-check + production build into dist/
 npm run preview   # preview the production build locally
@@ -377,28 +380,16 @@ files. Full per-file provenance is in [`assets/CREDITS.md`](assets/CREDITS.md).
 
 ## Deployment (GitHub Pages)
 
-The production build sets the Vite `base` to `/game-kingshot/` so asset URLs
-resolve under the project-pages path.
+Kingdom Rise is published as part of the [open-games](../../README.md) monorepo,
+at <https://savagemanage.github.io/open-games/kingshot/>.
 
-### Automatic (GitHub Actions — recommended)
-
-Pushes to `main` trigger [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml),
-which runs `npm ci && npm run build`, uploads `dist/` as a Pages artifact, and
-publishes it with `actions/deploy-pages`. Enable **Settings → Pages → Build and
-deployment → Source: GitHub Actions** on the repository once, and every push to
-`main` redeploys to <https://savagemanage.github.io/game-kingshot/>.
-
-### Manual (`npm run build` + `gh-pages` fallback)
-
-If you prefer to publish by hand (or Actions is unavailable):
-
-```bash
-npm run build                     # produces dist/
-npx gh-pages -d dist              # push dist/ to the gh-pages branch
-```
-
-Then set **Settings → Pages → Source: Deploy from a branch → `gh-pages` / root**.
-The site serves at the same <https://savagemanage.github.io/game-kingshot/> URL.
+Deployment is handled once for the whole repo by
+[`.github/workflows/deploy.yml`](../../.github/workflows/deploy.yml): every push
+to `main` builds every workspace, collects each `dist/` into its own subpath,
+generates the root landing page, and publishes them together. There is nothing
+to configure per game - the production base path in
+[`vite.config.ts`](vite.config.ts) (`/open-games/kingshot/`) is the only
+game-side piece.
 
 ## Credits
 
@@ -408,4 +399,4 @@ All art and audio are original to this project and generated by the scripts in
 
 ## License
 
-Apache-2.0. See [LICENSE](LICENSE).
+Apache-2.0, under the repo-root [LICENSE](../../LICENSE).

@@ -53,7 +53,7 @@
 |------|------|------|
 | Typecheck | `npm run typecheck` | ✅ clean (strict TS) |
 | Test | `npm run test` | ✅ 300 passed / 27 files |
-| Build | `npm run build` | ✅ `/game-whiteout/` base로 dist 생성 |
+| Build | `npm run build` | ✅ `/open-games/whiteout/` base로 dist 생성 |
 
 ## Git 상태
 
@@ -69,7 +69,7 @@
 ## 남은 일 / 주의
 
 - **Push/배포는 하지 않음** — 오케스트레이터가 push하면 GitHub Pages
-  (https://savagemanage.github.io/game-whiteout/)로 자동 배포됩니다.
+  (https://savagemanage.github.io/open-games/whiteout/)로 자동 배포됩니다.
 - `.github/workflows/*`는 수정하지 않았습니다.
 - 보존된 이전 수정: 번들 한글 폰트(두부 없음), Town 재진입 크래시 수정, HUD 밴드
   분리/대비, 좌우 여백, 파비콘, 배틀 벽/라벨, 온보딩 목표/포인터/해금 라벨.

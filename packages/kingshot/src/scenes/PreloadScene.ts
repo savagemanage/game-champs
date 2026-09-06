@@ -10,7 +10,7 @@ import { UI_FONT_FAMILY } from '../ui/UiText';
  * bar while the queue drains, then advances to the Title scene.
  *
  * All URLs are built with assetPath() so files in public/ resolve under the
- * Vite base path ('/game-kingshot/' in production, '/' in dev).
+ * Vite base path ('/open-games/kingshot/' in production, '/' in dev).
  */
 export class PreloadScene extends Phaser.Scene {
   constructor() {

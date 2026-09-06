@@ -5,14 +5,14 @@ Survival" genre — a base‑building / hero‑collection / auto‑battler hub p
 viral lane **gate‑runner** mini‑game ("팔콘 구조대"). Built as a fully static,
 client‑only site and deployed to GitHub Pages.
 
-- **Live:** https://savagemanage.github.io/game-lastwar/
-- **Repo:** https://github.com/savagemanage/game-lastwar
+- **Live:** https://savagemanage.github.io/open-games/lastwar/
+- **Repo:** https://github.com/savagemanage/open-games (packages/lastwar)
 - **Default branch:** `main` (all work is merged here; deploys from `main`)
 
 > **IP boundary.** Original work inspired by the genre. No trademarked "Last War"
 > name, no real hero names/quotes/art. All names, lore, art, and audio are
 > original. "Last War" appears only in the not‑affiliated disclaimer in
-> `README.md` / `assets/CREDITS.md`. The repo slug `game-lastwar` is only a
+> `README.md` / `assets/CREDITS.md`. The workspace slug `lastwar` is only a
 > deployment identifier.
 
 ---
@@ -100,7 +100,7 @@ not assume any server exists.
   (`npm ci && npm run build`) and publishes `dist/` to GitHub Pages.
 - GitHub Pages **Source = GitHub Actions** must stay enabled in repo Settings
   (one‑time; already enabled).
-- `vite.config.ts` sets production `base` to **`/game-lastwar/`** — keep this
+- `vite.config.ts` sets production `base` to **`/open-games/lastwar/`** — keep this
   exactly; assets resolve base‑aware via `assetPath()` /
   `import.meta.env.BASE_URL`. Never hardcode absolute asset paths.
 - **CI safety:** never push changes to `.github/workflows/*` directly to `main`;

@@ -68,7 +68,7 @@ redistribution-permitting assets, and **every asset must be recorded in**
 ## 6. Reporting / contact
 
 Questions, bug reports, and feature ideas go through **GitHub Issues**:
-<https://github.com/savagemanage/wirework/issues>.
+<https://github.com/savagemanage/open-games/issues>.
 
 By contributing, you agree that your contributions are licensed under the
 project's [Apache-2.0](LICENSE) license.
