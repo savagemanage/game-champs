@@ -8,13 +8,15 @@
     "node": ">=22"
   },
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "!packages/_template"
   ],
   "scripts": {
     "build": "npm run build:games && npm run build:site",
     "build:games": "npm run build --workspaces --if-present",
     "build:site": "node site/build.mjs",
     "test": "npm run test --workspaces --if-present",
-    "typecheck": "npm run typecheck --workspaces --if-present"
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "new-game": "node scripts/new-game.mjs"
   }
 }

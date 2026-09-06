@@ -1,0 +1,10 @@
+{
+  "slug": "__slug__",
+  "title": "__title__",
+  "titleKo": "",
+  "genre": "",
+  "summary": "",
+  "summaryKo": "",
+  "stack": ["typescript", "phaser3"],
+  "status": "wip"
+}
