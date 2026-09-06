@@ -85,6 +85,7 @@ export class TrainingQueue {
     store: ResourceStore,
     now: number,
     hasBarracks: boolean,
+    trainSpeedMult = 1,
   ): EnqueueCheck {
     if (!hasBarracks) return { ok: false, reason: 'no_barracks' };
     if (!Number.isFinite(count) || count <= 0) return { ok: false, reason: 'bad_count' };
@@ -98,8 +99,15 @@ export class TrainingQueue {
     store.spend(totalCost);
 
     // Chain after the last queued batch's completion (or `now` if idle).
+    //
+    // `trainSpeedMult` scales each unit's train time (a value < 1 finishes
+    // faster). It defaults to 1 (neutral) so existing callers/tests are
+    // unaffected; the research feature threads its
+    // {@link ResearchSystem.trainSpeedMultiplier} through here so "training
+    // speed" techs shorten real batch completion times.
+    const perUnitMs = def.trainTimeMs * Math.max(0, trainSpeedMult);
     const startAt = this._queue.length > 0 ? this._queue[this._queue.length - 1].completesAt : now;
-    const completesAt = startAt + count * def.trainTimeMs;
+    const completesAt = startAt + count * perUnitMs;
     this._queue.push({ troop, count, completesAt });
     return { ok: true };
   }

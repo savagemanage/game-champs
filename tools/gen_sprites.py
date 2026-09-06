@@ -279,6 +279,39 @@ def draw_barracks(img, ox, oy, fw, fh, tier):
         banner(img, ox + fw - 11, oy + fh // 2 - 8, 8, FLAG)
 
 
+def draw_research(img, ox, oy, fw, fh, tier):
+    """Scholars' Hall: a stone study-tower topped with a small observatory dome
+    and marked with an open-book emblem. 48x48."""
+    draw_house_shell(img, ox, oy, fw, fh, STONE, STONE_DK, ROOF, ROOF_DK, ROOF_HI)
+    cxc = ox + fw // 2
+    # a slim study tower rising on the left
+    tw = 8
+    tx = ox + 9
+    ttop = oy + 8 if tier == 0 else oy + 5
+    tbot = oy + fh - 8
+    rect(img, tx, ttop, tx + tw, tbot, STONE)
+    rect(img, tx, ttop, tx, tbot, STONE_LT)
+    rect(img, tx + tw, ttop, tx + tw, tbot, STONE_DK)
+    # arched tower window glowing with lamplight
+    rect(img, tx + 3, ttop + 5, tx + 5, ttop + 9, GOLD)
+    # observatory dome cap on the tower
+    rect(img, tx - 1, ttop - 3, tx + tw + 1, ttop - 1, STONE_LT)
+    rect(img, tx + 1, ttop - 5, tx + tw - 1, ttop - 3, GLASS)
+    # open-book emblem on the main wall
+    bx, by = cxc + 2, oy + fh - 15
+    rect(img, bx - 6, by, bx + 5, by + 5, STONE_LT)     # pages
+    rect(img, bx - 1, by, bx, by + 5, WOOD_DK)          # spine
+    for i in range(4):                                   # text lines
+        px(img, bx - 5 + i, by + 2, STONE_DK)
+        px(img, bx + 1 + i, by + 2, STONE_DK)
+        px(img, bx - 5 + i, by + 4, STONE_DK)
+        px(img, bx + 1 + i, by + 4, STONE_DK)
+    if tier == 1:
+        # a scholar's blue pennant + gold trim on the tower
+        banner(img, tx - 2, ttop - 1, 8, FLAG)
+        rect(img, tx, tbot - 1, tx + tw, tbot - 1, GOLD)
+
+
 BUILDINGS = [
     ("town_center", 64, 64, draw_town_center),
     ("farm", 48, 48, draw_farm),
@@ -286,6 +319,7 @@ BUILDINGS = [
     ("quarry", 48, 48, draw_quarry),
     ("mine", 48, 48, draw_mine),
     ("barracks", 48, 48, draw_barracks),
+    ("research", 48, 48, draw_research),
 ]
 
 

@@ -99,6 +99,17 @@ export const ECONOMY = {
    * couple of minutes without hitting a silent resource wall.
    */
   START: { food: 300, wood: 400, stone: 250, gold: 50 },
+  /**
+   * Base per-resource soft storage cap. Passive production (live and offline)
+   * cannot push a stockpile past this cap, so it is a real ceiling the player
+   * feels. Research "storage" techs raise it via a multiplier (see
+   * ResearchSystem.storageMultiplier), making that branch a genuine, wired
+   * effect rather than a dead multiplier. Set generously so early play is never
+   * gated, but low enough that late idle production benefits from raising it.
+   * Rewards/spending are NOT capped (only passive production is), so battle
+   * payouts can still exceed the cap.
+   */
+  STORAGE_CAP: 5000,
 } as const;
 
 /**

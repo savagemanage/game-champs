@@ -1,5 +1,7 @@
+import { RESOURCE_ORDER } from '../config/GameConfig';
 import type { Army, TroopKind } from '../types';
 import { BuildingSystem } from './BuildingSystem';
+import { ResearchSystem } from './ResearchSystem';
 import { ResourceStore } from './ResourceStore';
 import { TrainingQueue } from './TrainingQueue';
 import {
@@ -34,6 +36,7 @@ export class GameState {
   readonly resources: ResourceStore;
   readonly buildings: BuildingSystem;
   readonly training: TrainingQueue;
+  readonly research: ResearchSystem;
   private _waveCleared: number;
 
   private readonly saver: SaveManager;
@@ -50,6 +53,7 @@ export class GameState {
     this.resources = result.snapshot.resources;
     this.buildings = result.snapshot.buildings;
     this.training = result.snapshot.training;
+    this.research = result.snapshot.research;
     this._waveCleared = result.snapshot.waveCleared;
     this.saver = saver;
     this.loaded = result.loaded;
@@ -109,6 +113,7 @@ export class GameState {
       resources: this.resources,
       buildings: this.buildings,
       training: this.training,
+      research: this.research,
       waveCleared: this._waveCleared,
     };
   }
@@ -119,18 +124,30 @@ export class GameState {
    * and auto-save on the interval. Returns the buildings/troops that finished
    * this tick so callers can play completion SFX.
    */
-  tick(now: number, deltaMs: number): { buildingsDone: ReturnType<BuildingSystem['update']>; trainingDone: ReturnType<TrainingQueue['advance']> } {
+  tick(now: number, deltaMs: number): {
+    buildingsDone: ReturnType<BuildingSystem['update']>;
+    trainingDone: ReturnType<TrainingQueue['advance']>;
+    researchDone: ReturnType<ResearchSystem['update']>;
+  } {
     if (deltaMs > 0) {
-      this.resources.applyProduction(this.buildings.productionRates(), deltaMs, 1);
+      // Live production seam: building rates are scaled by the research
+      // production multiplier, and the storage soft cap is raised by the
+      // research storage multiplier. Both default neutral on a fresh game.
+      const rates = this.buildings.productionRates();
+      const prodMult = this.research.productionMultiplier();
+      const boosted = ResourceStore.emptyBundle();
+      for (const res of RESOURCE_ORDER) boosted[res] = rates[res] * prodMult;
+      this.resources.applyProduction(boosted, deltaMs, 1, this.research.storageMultiplier());
     }
     const buildingsDone = this.buildings.update(now);
     const trainingDone = this.training.advance(now);
+    const researchDone = this.research.update(now);
 
     this.msSinceSave += deltaMs;
     if (this.msSinceSave >= AUTOSAVE_INTERVAL_MS) {
       this.save(now);
     }
-    return { buildingsDone, trainingDone };
+    return { buildingsDone, trainingDone, researchDone };
   }
 
   /** Persist the current state immediately, stamping `now` as last-seen. */

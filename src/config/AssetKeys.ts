@@ -34,6 +34,7 @@ export const TextureKeys = {
   Quarry: 'b_quarry',
   Mine: 'b_mine',
   Barracks: 'b_barracks',
+  Research: 'b_research',
 
   // Troop unit sprites (player-side).
   TroopSpearman: 'u_spearman',
@@ -110,6 +111,7 @@ export const SHEETS: readonly SheetAsset[] = [
   { key: TextureKeys.Quarry, url: 'assets/sprites/quarry.png', frame: { frameWidth: 48, frameHeight: 48 } },
   { key: TextureKeys.Mine, url: 'assets/sprites/mine.png', frame: { frameWidth: 48, frameHeight: 48 } },
   { key: TextureKeys.Barracks, url: 'assets/sprites/barracks.png', frame: { frameWidth: 48, frameHeight: 48 } },
+  { key: TextureKeys.Research, url: 'assets/sprites/research.png', frame: { frameWidth: 48, frameHeight: 48 } },
   { key: TextureKeys.TroopSpearman, url: 'assets/sprites/troop_spearman.png', frame: { frameWidth: 24, frameHeight: 28 } },
   { key: TextureKeys.TroopArcher, url: 'assets/sprites/troop_archer.png', frame: { frameWidth: 24, frameHeight: 28 } },
   { key: TextureKeys.TroopKnight, url: 'assets/sprites/troop_knight.png', frame: { frameWidth: 24, frameHeight: 28 } },
@@ -157,6 +159,7 @@ export const BUILDING_TEXTURE_BY_KIND: Record<string, TextureKey> = {
   quarry: TextureKeys.Quarry,
   mine: TextureKeys.Mine,
   barracks: TextureKeys.Barracks,
+  research: TextureKeys.Research,
 };
 
 /** Maps a TroopKind value to its spritesheet texture key. */

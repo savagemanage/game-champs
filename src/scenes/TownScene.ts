@@ -7,6 +7,7 @@ import { AudioManager } from '../systems/AudioManager';
 import { GameState } from '../systems/GameState';
 import { Menu, type MenuButton, type ProgressBar } from '../ui/Menu';
 import { TrainingPanel } from '../ui/TrainingPanel';
+import { ResearchPanel } from '../ui/ResearchPanel';
 import { textStyle } from '../ui/UiText';
 import { tr } from '../i18n/i18n';
 
@@ -17,7 +18,8 @@ const BUILDING_LAYOUT: Record<BuildingKind, { x: number; y: number; scale: numbe
   lumber_mill: { x: 700, y: 300, scale: 1.8 },
   quarry: { x: 170, y: 400, scale: 1.8 },
   mine: { x: 790, y: 400, scale: 1.8 },
-  barracks: { x: 480, y: 420, scale: 1.9 },
+  barracks: { x: 400, y: 430, scale: 1.9 },
+  research: { x: 590, y: 430, scale: 1.8 },
 };
 
 /** Per-resource live widgets in the top bar. */
@@ -58,6 +60,7 @@ export class TownScene extends Phaser.Scene {
   private markers: BuildingMarker[] = [];
 
   private trainingPanel!: TrainingPanel;
+  private researchPanel!: ResearchPanel;
 
   // Upgrade panel widgets (rebuilt per selected building).
   private upgradePanel!: Phaser.GameObjects.Container;
@@ -91,10 +94,12 @@ export class TownScene extends Phaser.Scene {
     this.buildUpgradePanel();
 
     this.trainingPanel = new TrainingPanel(this, this.state);
+    this.researchPanel = new ResearchPanel(this, this.state);
 
     // Keyboard shortcuts.
     this.input.keyboard?.on('keydown-B', () => this.goBattle());
     this.input.keyboard?.on('keydown-S', () => this.openSettings());
+    this.input.keyboard?.on('keydown-R', () => this.openResearch());
     this.input.keyboard?.on('keydown-ESC', () => this.closeUpgradePanel());
 
     this.audio.playMusic(AudioKeys.MusicLoop);
@@ -122,11 +127,17 @@ export class TownScene extends Phaser.Scene {
     if (done.buildingsDone.length > 0) {
       this.audio.playSfx(AudioKeys.BuildComplete, 0.6);
     }
+    // A completed research plays the same build-complete chime as a finished
+    // upgrade, so the player hears when a tech unlocks even off-panel.
+    if (done.researchDone.length > 0) {
+      this.audio.playSfx(AudioKeys.BuildComplete, 0.6);
+    }
 
     this.refreshResourceBar();
     this.refreshBuildingBadges();
     this.refreshUpgradePanel(now);
     this.trainingPanel.update();
+    this.researchPanel.update();
   }
 
   // ---- Buildings -----------------------------------------------------------
@@ -199,9 +210,10 @@ export class TownScene extends Phaser.Scene {
 
   private buildBottomBar(): void {
     const y = CANVAS.HEIGHT - 30;
-    Menu.button(this, 120, y, tr('town.training'), () => this.openTraining(), { width: 180 });
-    Menu.button(this, CANVAS.WIDTH / 2, y, tr('town.battle'), () => this.goBattle(), { width: 180, accent: PALETTE.DANGER });
-    Menu.button(this, CANVAS.WIDTH - 120, y, tr('town.settings'), () => this.openSettings(), { width: 180 });
+    Menu.button(this, 105, y, tr('town.training'), () => this.openTraining(), { width: 150 });
+    Menu.button(this, 275, y, tr('town.research'), () => this.openResearch(), { width: 150 });
+    Menu.button(this, CANVAS.WIDTH / 2 + 40, y, tr('town.battle'), () => this.goBattle(), { width: 160, accent: PALETTE.DANGER });
+    Menu.button(this, CANVAS.WIDTH - 105, y, tr('town.settings'), () => this.openSettings(), { width: 150 });
   }
 
   // ---- Upgrade panel -------------------------------------------------------
@@ -332,7 +344,12 @@ export class TownScene extends Phaser.Scene {
   private doUpgrade(): void {
     if (!this.selected) return;
     const now = Date.now();
-    const result = this.state.buildings.startUpgrade(this.selected, this.state.resources, now);
+    const result = this.state.buildings.startUpgrade(
+      this.selected,
+      this.state.resources,
+      now,
+      this.state.research.buildSpeedMultiplier(),
+    );
     if (result.ok) {
       this.audio.playSfx(AudioKeys.UiClick, 0.7);
       this.state.save(now);
@@ -351,7 +368,14 @@ export class TownScene extends Phaser.Scene {
 
   private openTraining(): void {
     this.closeUpgradePanel();
+    if (this.researchPanel.visible) this.researchPanel.setVisible(false);
     this.trainingPanel.toggle();
+  }
+
+  private openResearch(): void {
+    this.closeUpgradePanel();
+    if (this.trainingPanel.visible) this.trainingPanel.setVisible(false);
+    this.researchPanel.toggle();
   }
 
   private goBattle(): void {

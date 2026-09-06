@@ -1,6 +1,15 @@
 import { ECONOMY, RESOURCE_ORDER } from '../config/GameConfig';
 import type { Resources, ResourceCost, ResourceKind } from '../types';
 
+/**
+ * Per-resource soft storage cap given a storage multiplier (from research). The
+ * base cap comes from ECONOMY.STORAGE_CAP; a multiplier > 1 raises it. Only
+ * passive production is capped by this, so rewards/spending are unaffected.
+ */
+export function storageCap(capMult = 1): number {
+  return ECONOMY.STORAGE_CAP * Math.max(1, capMult);
+}
+
 /** Read-only rate bundle: how much of each resource is produced per second. */
 export type ProductionRates = Resources;
 
@@ -74,16 +83,30 @@ export class ResourceStore {
    * SECOND for each resource; `dtMs` is elapsed milliseconds; `efficiency`
    * scales the whole gain (1 for live play, ECONOMY.OFFLINE_EFFICIENCY when
    * reconciling offline time). Returns the bundle that was actually credited.
+   *
+   * Passive production is clamped to the soft storage cap ({@link storageCap}
+   * scaled by `capMult`). A balance already at/over the cap gains nothing more
+   * from production; a partial fill is credited only up to the cap. `capMult`
+   * defaults to 1 (base cap) so existing callers are unaffected; the research
+   * "storage" techs pass a multiplier > 1 to raise the ceiling. Rewards and
+   * spending (see {@link add}/{@link spend}) are NOT capped.
    */
-  applyProduction(rates: ProductionRates, dtMs: number, efficiency = 1): Resources {
+  applyProduction(rates: ProductionRates, dtMs: number, efficiency = 1, capMult = 1): Resources {
     const gained = ResourceStore.emptyBundle();
     if (dtMs <= 0 || efficiency <= 0) return gained;
     const seconds = dtMs / 1000;
+    const cap = storageCap(capMult);
     for (const res of RESOURCE_ORDER) {
       const amount = (rates[res] ?? 0) * seconds * efficiency;
-      if (amount > 0) {
-        gained[res] = amount;
-        this._balances[res] += amount;
+      if (amount <= 0) continue;
+      const current = this._balances[res];
+      // Only production is capped; a balance already over the cap (e.g. from a
+      // battle reward) is left untouched rather than clawed back.
+      const room = Math.max(0, cap - current);
+      const credited = Math.min(amount, room);
+      if (credited > 0) {
+        gained[res] = credited;
+        this._balances[res] += credited;
       }
     }
     return gained;

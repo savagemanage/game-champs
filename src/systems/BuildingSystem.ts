@@ -106,8 +106,18 @@ export class BuildingSystem {
   /**
    * Start an upgrade: spends the cost from `store` and schedules completion at
    * `now + upgradeTime`. Returns the check result; on failure nothing changes.
+   *
+   * `buildSpeedMult` scales the upgrade duration (a value < 1 finishes faster).
+   * It defaults to 1 (neutral) so existing callers/tests are unaffected; the
+   * research feature threads its {@link ResearchSystem.buildSpeedMultiplier}
+   * through here so "build speed" techs shorten real upgrade timers.
    */
-  startUpgrade(kind: BuildingKind, store: ResourceStore, now: number): UpgradeCheck {
+  startUpgrade(
+    kind: BuildingKind,
+    store: ResourceStore,
+    now: number,
+    buildSpeedMult = 1,
+  ): UpgradeCheck {
     const check = this.canUpgrade(kind, store);
     if (!check.ok) return check;
 
@@ -116,7 +126,7 @@ export class BuildingSystem {
 
     const existing = this._buildings.get(kind) ?? { kind, level: 0, upgradeEndsAt: null };
     existing.kind = kind;
-    existing.upgradeEndsAt = now + this.nextUpgradeTimeMs(kind);
+    existing.upgradeEndsAt = now + this.nextUpgradeTimeMs(kind) * Math.max(0, buildSpeedMult);
     this._buildings.set(kind, existing);
     return { ok: true };
   }

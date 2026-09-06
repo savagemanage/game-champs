@@ -206,6 +206,7 @@ export class TrainingPanel {
       this.state.resources,
       now,
       this.state.buildings.hasBarracks,
+      this.state.research.trainSpeedMultiplier(),
     );
     if (result.ok) {
       AudioManager.get(this.scene).playSfx(AudioKeys.TrainComplete, 0.5);

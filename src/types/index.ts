@@ -25,10 +25,11 @@ export type BuildingKind =
   | 'lumber_mill'
   | 'quarry'
   | 'mine'
-  | 'barracks';
+  | 'barracks'
+  | 'research';
 
 /** Producer buildings map to the single resource they generate. */
-export type ProducerKind = Exclude<BuildingKind, 'town_center' | 'barracks'>;
+export type ProducerKind = Exclude<BuildingKind, 'town_center' | 'barracks' | 'research'>;
 
 /**
  * The trainable troop kinds. Five roles form a soft rock-paper-scissors cycle
@@ -81,6 +82,18 @@ export interface TrainingOrder {
   completesAt: number;
 }
 
+/**
+ * Persisted research state: the unlocked tech ids and the single in-progress
+ * research slot (or null). Kept as a structural type here (rather than importing
+ * the systems layer) so this dependency-light types module stays leaf-level.
+ * OLD saves written before the research feature simply omit this field; the
+ * save layer default-constructs a fresh research state when it is missing.
+ */
+export interface ResearchStateSave {
+  unlocked: string[];
+  active: { techId: string; endsAt: number } | null;
+}
+
 /** The complete persisted game state (serialized to localStorage by the save feature). */
 export interface GameState {
   /** Save-format version so future migrations can be detected. */
@@ -92,6 +105,12 @@ export interface GameState {
   trainingQueue: TrainingOrder[];
   /** Highest battle wave cleared. */
   waveCleared: number;
+  /**
+   * Scholars' Hall research progress. OPTIONAL for backward compatibility:
+   * version-1 saves predate research and omit it, so the save layer treats a
+   * missing value as a fresh (empty) research state.
+   */
+  research?: ResearchStateSave;
   /** Epoch ms of the last simulation update (drives offline reconciliation). */
   lastSeenAt: number;
 }

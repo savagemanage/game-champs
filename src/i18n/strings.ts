@@ -59,7 +59,7 @@ export const STRINGS = {
   'town.battle': { en: 'To Battle', ko: '전투로' },
   'town.training': { en: 'Barracks', ko: '병영' },
   'town.settings': { en: 'Settings', ko: '설정' },
-  'town.hint': { en: 'Tap a building to upgrade   B Battle   S Settings', ko: '건물을 눌러 업그레이드   B 전투   S 설정' },
+  'town.hint': { en: 'Tap a building to upgrade   R Research   B Battle   S Settings', ko: '건물을 눌러 업그레이드   R 연구   B 전투   S 설정' },
   'town.locked': { en: 'Locked', ko: '잠김' },
   'town.saved': { en: 'Saved', ko: '저장됨' },
   'town.onboarding': {
@@ -75,6 +75,7 @@ export const STRINGS = {
   'building.quarry': { en: 'Quarry', ko: '채석장' },
   'building.mine': { en: 'Mine', ko: '광산' },
   'building.barracks': { en: 'Barracks', ko: '병영' },
+  'building.research': { en: "Scholars' Hall", ko: '연구소' },
 
   // Building descriptions.
   'building.town_center.desc': {
@@ -86,6 +87,10 @@ export const STRINGS = {
   'building.quarry.desc': { en: 'Cuts stone for sturdier structures.', ko: '더 튼튼한 건물을 위한 석재를 캔다.' },
   'building.mine.desc': { en: 'Digs up gold to fund upgrades and troops.', ko: '업그레이드와 병력 자금을 위한 금화를 채굴한다.' },
   'building.barracks.desc': { en: 'Trains troops to defend the kingdom in battle.', ko: '전투에서 왕국을 지킬 병력을 훈련한다.' },
+  'building.research.desc': {
+    en: 'Houses your scholars. Its level unlocks higher tiers of the tech tree, empowering your economy and army.',
+    ko: '학자들이 머무는 곳. 레벨이 오를수록 기술 트리의 상위 단계를 개방해 경제와 군대를 강화한다.',
+  },
 
   // Building panel UI.
   'building.level': { en: 'Level {level}', ko: '레벨 {level}' },
@@ -133,6 +138,64 @@ export const STRINGS = {
   'training.notEnough': { en: 'Not enough resources', ko: '자원 부족' },
   'training.cost': { en: 'Cost {cost}', ko: '비용 {cost}' },
   'training.time': { en: '{seconds}s each', ko: '개당 {seconds}초' },
+
+  // Research / tech-tree UI.
+  'research.title': { en: 'RESEARCH', ko: '연구' },
+  'town.research': { en: 'Research', ko: '연구' },
+  'research.branch.military': { en: 'Military', ko: '군사' },
+  'research.branch.economic': { en: 'Economy', ko: '경제' },
+  'research.unlock': { en: 'Research', ko: '연구' },
+  'research.unlocked': { en: 'Unlocked', ko: '연구 완료' },
+  'research.researching': { en: 'Researching… {seconds}s', ko: '연구 중… {seconds}초' },
+  'research.tier': { en: 'Tier {tier}', ko: '{tier}단계' },
+  'research.cost': { en: 'Cost {cost}', ko: '비용 {cost}' },
+  'research.time': { en: 'Time {seconds}s', ko: '시간 {seconds}초' },
+  'research.active': { en: 'Researching {name} — {seconds}s', ko: '{name} 연구 중 — {seconds}초' },
+  'research.idle': { en: 'No research in progress', ko: '진행 중인 연구 없음' },
+  'research.noBuildingHint': {
+    en: "Build a Scholars' Hall first (requires Town Center Lv.3)",
+    ko: '먼저 연구소를 지으세요 (중앙 청사 Lv.3 필요)',
+  },
+  // Distinct locked-reason messages.
+  'research.locked.building': { en: "Requires Scholars' Hall Lv.{level}", ko: '연구소 레벨 {level} 필요' },
+  'research.locked.prereq': { en: 'Requires prior research', ko: '선행 연구 필요' },
+  'research.locked.cost': { en: 'Not enough resources', ko: '자원 부족' },
+  'research.locked.busy': { en: 'Research in progress', ko: '연구 진행 중' },
+  'research.locked.already': { en: 'Already unlocked', ko: '이미 연구됨' },
+
+  // Tech names.
+  'tech.sharpened_blades': { en: 'Sharpened Blades', ko: '날 세우기' },
+  'tech.forged_weapons': { en: 'Forged Weapons', ko: '단조 무기' },
+  'tech.masterwork_arms': { en: 'Masterwork Arms', ko: '명장의 무구' },
+  'tech.hardened_armor': { en: 'Hardened Armor', ko: '강화 갑옷' },
+  'tech.tempered_plate': { en: 'Tempered Plate', ko: '담금질 판금' },
+  'tech.drill_grounds': { en: 'Drill Grounds', ko: '훈련장' },
+  'tech.veteran_cadre': { en: 'Veteran Cadre', ko: '정예 교관단' },
+  'tech.crop_rotation': { en: 'Crop Rotation', ko: '윤작법' },
+  'tech.guild_charters': { en: 'Guild Charters', ko: '길드 인가장' },
+  'tech.grand_markets': { en: 'Grand Markets', ko: '대시장' },
+  'tech.reinforced_stores': { en: 'Reinforced Stores', ko: '보강 창고' },
+  'tech.great_granaries': { en: 'Great Granaries', ko: '대곡창' },
+  'tech.scaffolding': { en: 'Scaffolding', ko: '비계 공법' },
+  'tech.master_masons': { en: 'Master Masons', ko: '석공 장인' },
+  'tech.ledger_keeping': { en: 'Ledger Keeping', ko: '장부 관리' },
+
+  // Tech descriptions.
+  'tech.sharpened_blades.desc': { en: '+10% troop attack in battle.', ko: '전투 시 병력 공격력 +10%.' },
+  'tech.forged_weapons.desc': { en: '+15% troop attack in battle.', ko: '전투 시 병력 공격력 +15%.' },
+  'tech.masterwork_arms.desc': { en: '+20% troop attack in battle.', ko: '전투 시 병력 공격력 +20%.' },
+  'tech.hardened_armor.desc': { en: 'Take ~10% fewer casualties on a win.', ko: '승리 시 전사자 약 10% 감소.' },
+  'tech.tempered_plate.desc': { en: 'Take ~15% fewer casualties on a win.', ko: '승리 시 전사자 약 15% 감소.' },
+  'tech.drill_grounds.desc': { en: 'Train troops 10% faster.', ko: '병력 훈련 속도 10% 향상.' },
+  'tech.veteran_cadre.desc': { en: 'Train troops 15% faster.', ko: '병력 훈련 속도 15% 향상.' },
+  'tech.crop_rotation.desc': { en: '+10% resource production.', ko: '자원 생산량 +10%.' },
+  'tech.guild_charters.desc': { en: '+15% resource production.', ko: '자원 생산량 +15%.' },
+  'tech.grand_markets.desc': { en: '+20% resource production.', ko: '자원 생산량 +20%.' },
+  'tech.reinforced_stores.desc': { en: '+50% storage capacity.', ko: '저장 한계 +50%.' },
+  'tech.great_granaries.desc': { en: 'Double storage capacity.', ko: '저장 한계 2배.' },
+  'tech.scaffolding.desc': { en: 'Building upgrades 10% faster.', ko: '건물 업그레이드 속도 10% 향상.' },
+  'tech.master_masons.desc': { en: 'Building upgrades 15% faster.', ko: '건물 업그레이드 속도 15% 향상.' },
+  'tech.ledger_keeping.desc': { en: '+25% offline production efficiency.', ko: '오프라인 생산 효율 +25%.' },
 
   // Combat / battle UI.
   'battle.title': { en: 'BATTLE', ko: '전투' },

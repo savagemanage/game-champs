@@ -72,7 +72,7 @@ export class CombatSystem {
    * counters the wave's dominant enemy outperforms an equal raw-power stack
    * that does not. Pure and deterministic.
    */
-  static effectiveArmyPower(army: Army, n: number): number {
+  static effectiveArmyPower(army: Army, n: number, attackMult = 1): number {
     const composition = waveComposition(n);
     // Wave power share per enemy kind (weights for the average multiplier).
     let waveTotal = 0;
@@ -99,7 +99,9 @@ export class CombatSystem {
       }
       total += raw * weighted;
     }
-    return total;
+    // Research "combat attack" techs scale the whole effective power (>1 =
+    // stronger). Defaults to 1 (neutral) so untouched callers are unaffected.
+    return total * Math.max(0, attackMult);
   }
 
   /** Total effective power of the wave `n`'s composition. */
@@ -112,15 +114,23 @@ export class CombatSystem {
   }
 
   /**
-   * Resolve a battle of `army` against wave `wave`. Deterministic. Returns a
-   * full {@link CombatResult}. The army passed in is NOT mutated; the caller
-   * applies survivors/reward from the result.
+   * Optional combat bonuses applied by the research feature. Both default to 1
+   * (neutral) so existing callers/tests resolve identically:
+   *   - attackMult:  scales the army's effective power (>1 wins more fights).
+   *   - defenseMult: reduces the casualty fraction on a win (>1 loses fewer
+   *                  troops). It divides the loss fraction, so 1.1 => ~9% fewer.
    */
-  static resolve(army: Army, wave: number): CombatResult {
+  static resolve(
+    army: Army,
+    wave: number,
+    bonuses: { attackMult?: number; defenseMult?: number } = {},
+  ): CombatResult {
+    const attackMult = Math.max(0, bonuses.attackMult ?? 1);
+    const defenseMult = Math.max(1, bonuses.defenseMult ?? 1);
     // The decision uses COMPOSITION-AWARE effective power (matchups applied),
     // reported as `armyPower` so the HUD/result reflect what actually decided
     // the battle. `wavePower` is the raw enemy total to beat.
-    const armyPower = CombatSystem.effectiveArmyPower(army, wave);
+    const armyPower = CombatSystem.effectiveArmyPower(army, wave, attackMult);
     const wavePower = CombatSystem.wavePower(wave);
 
     const casualties = emptyArmy();
@@ -146,7 +156,10 @@ export class CombatSystem {
 
     // Win: casualty FRACTION is the ratio of wave power to army power, so a
     // dominant win (wavePower << armyPower) costs little, a near-tie costs a lot.
-    const lossFraction = armyPower > 0 ? Math.min(1, wavePower / armyPower) : 0;
+    // Research "combat defense" techs divide the loss fraction (>1 = fewer
+    // losses); defaults to 1 so untouched callers are unaffected.
+    const lossFraction =
+      armyPower > 0 ? Math.min(1, wavePower / armyPower / defenseMult) : 0;
     for (const kind of TROOP_ORDER) {
       const count = Math.max(0, Math.floor(army[kind] ?? 0));
       if (count <= 0) continue;

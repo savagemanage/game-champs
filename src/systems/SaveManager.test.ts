@@ -3,6 +3,7 @@ import { SaveManager, memoryStorage, SAVE_VERSION, type GameSnapshot } from './S
 import { ResourceStore } from './ResourceStore';
 import { BuildingSystem } from './BuildingSystem';
 import { TrainingQueue } from './TrainingQueue';
+import { ResearchSystem } from './ResearchSystem';
 import { ECONOMY } from '../config/GameConfig';
 import { outputPerSec } from '../config/BuildingConfig';
 import { troopDef } from '../config/TroopConfig';
@@ -20,7 +21,8 @@ describe('SaveManager', () => {
       { kind: 'barracks', level: 1, upgradeEndsAt: null },
     ]);
     const training = new TrainingQueue(undefined, { spearman: 4, archer: 1, knight: 0 });
-    return { resources, buildings, training, waveCleared: 5 };
+    const research = new ResearchSystem();
+    return { resources, buildings, training, research, waveCleared: 5 };
   }
 
   /** A full army bundle over every troop kind (new kinds default to zero). */
@@ -68,7 +70,7 @@ describe('SaveManager', () => {
     // the new kinds to 0 rather than crash or leave them undefined.
     const storage = memoryStorage();
     const oldState = {
-      version: SAVE_VERSION,
+      version: 1, // a genuine v1 save (predates research)
       resources: { food: 10, wood: 10, stone: 10, gold: 10 },
       buildings: [{ kind: 'town_center', level: 1, upgradeEndsAt: null }],
       army: { spearman: 3, archer: 2, knight: 1 }, // no cavalry / siege
@@ -84,6 +86,59 @@ describe('SaveManager', () => {
     expect(loaded.snapshot.training.army).toEqual(
       fullArmy({ spearman: 3, archer: 2, knight: 1 }),
     );
+  });
+
+  it('migrates a v1 save (no research field) into a fresh valid research state', () => {
+    // A version-1 save predates the Scholars' Hall and has no `research` field.
+    // It must load without crashing and yield an empty-but-valid ResearchSystem
+    // (nothing unlocked, no active research, all multipliers neutral).
+    const storage = memoryStorage();
+    const v1 = {
+      version: 1,
+      resources: { food: 50, wood: 50, stone: 50, gold: 50 },
+      buildings: [{ kind: 'town_center', level: 2, upgradeEndsAt: null }],
+      army: { spearman: 1, archer: 0, knight: 0 },
+      trainingQueue: [],
+      waveCleared: 1,
+      lastSeenAt: 0,
+      // no `research` key
+    };
+    storage.setItem('kingdom-rise:save', JSON.stringify(v1));
+    const mgr = new SaveManager(storage);
+
+    const loaded = mgr.load(0);
+    expect(loaded.loaded).toBe(true);
+    const research = loaded.snapshot.research;
+    expect(research.unlocked).toEqual([]);
+    expect(research.isBusy).toBe(false);
+    // Every aggregate multiplier is neutral on a fresh state.
+    expect(research.productionMultiplier()).toBe(1);
+    expect(research.trainSpeedMultiplier()).toBe(1);
+    expect(research.combatAttackMultiplier()).toBe(1);
+    expect(research.storageMultiplier()).toBe(1);
+    expect(research.offlineEfficiencyMultiplier()).toBe(1);
+  });
+
+  it('round-trips research state (unlocked techs + active slot) through save -> load', () => {
+    const storage = memoryStorage();
+    const mgr = new SaveManager(storage);
+    const now = 2_000_000;
+
+    const snap = snapshot();
+    // Unlock one tech and start another (single slot busy).
+    const rich = new ResourceStore({ food: 99999, wood: 99999, stone: 99999, gold: 99999 });
+    snap.research.startResearch('crop_rotation', rich, 0, 1);
+    snap.research.update(snap.research.remainingMs(0)); // complete it at its own end
+    snap.research.startResearch('sharpened_blades', rich, now, 1);
+    expect(snap.research.isUnlocked('crop_rotation')).toBe(true);
+    expect(snap.research.activeTech).toBe('sharpened_blades');
+
+    mgr.save(snap, now);
+    // Load at the same instant so the active research is NOT yet complete.
+    const loaded = mgr.load(now);
+    expect(loaded.snapshot.research.isUnlocked('crop_rotation')).toBe(true);
+    expect(loaded.snapshot.research.activeTech).toBe('sharpened_blades');
+    expect(loaded.snapshot.research.productionMultiplier()).toBeCloseTo(1.1, 6);
   });
 
   it('applies offline idle gains capped and scaled by efficiency', () => {
@@ -120,7 +175,7 @@ describe('SaveManager', () => {
       { kind: 'farm', level: 2, upgradeEndsAt: t0 + boundaryOffset * 1000 },
     ]);
     const training = new TrainingQueue(undefined, { spearman: 0, archer: 0, knight: 0 });
-    mgr.save({ resources, buildings, training, waveCleared: 0 }, t0);
+    mgr.save({ resources, buildings, training, research: new ResearchSystem(), waveCleared: 0 }, t0);
 
     const loaded = mgr.load(t0 + windowSec * 1000);
     expect(loaded.offlineSeconds).toBe(windowSec);

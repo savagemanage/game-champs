@@ -1,12 +1,27 @@
-import { ECONOMY } from '../config/GameConfig';
+import { ECONOMY, RESOURCE_ORDER } from '../config/GameConfig';
 import { TROOP_ORDER } from '../config/TroopConfig';
 import type { Army, GameState } from '../types';
 import { BuildingSystem } from './BuildingSystem';
+import { ResearchSystem } from './ResearchSystem';
 import { ResourceStore } from './ResourceStore';
 import { TrainingQueue } from './TrainingQueue';
 
-/** Current save-format version. Bump when GameState shape changes. */
-export const SAVE_VERSION = 1;
+/**
+ * Current save-format version. Bump when the GameState shape changes.
+ *
+ * v1: original (resources/buildings/army/trainingQueue/waveCleared/lastSeenAt).
+ * v2: adds the Scholars' Hall `research` field. A v1 save (no research) still
+ *     loads: deserialize() default-constructs a fresh, empty ResearchSystem
+ *     when the field is missing, and the migration path in load() accepts v1
+ *     saves so returning players keep their progress. deserialize tolerates
+ *     other missing new fields the same way, so a future feature can add its
+ *     own field (bumping the version and extending the accepted range) without
+ *     breaking a v2 save.
+ */
+export const SAVE_VERSION = 2;
+
+/** Save versions this build can load and migrate forward from. */
+export const SUPPORTED_SAVE_VERSIONS: readonly number[] = [1, 2];
 
 /** Default localStorage key for the single save slot. */
 export const SAVE_KEY = 'kingdom-rise:save';
@@ -27,6 +42,7 @@ export interface GameSnapshot {
   resources: ResourceStore;
   buildings: BuildingSystem;
   training: TrainingQueue;
+  research: ResearchSystem;
   waveCleared: number;
 }
 
@@ -64,6 +80,7 @@ export class SaveManager {
       army: snapshot.training.army,
       trainingQueue: snapshot.training.toJSON(),
       waveCleared: snapshot.waveCleared,
+      research: snapshot.research.toJSON(),
       lastSeenAt: now,
     };
   }
@@ -79,6 +96,25 @@ export class SaveManager {
     const resources = ResourceStore.fromJSON(state.resources);
     const buildings = BuildingSystem.fromJSON(state.buildings);
     const training = TrainingQueue.fromJSON(state.trainingQueue, normalizeArmy(state.army));
+    // v1 saves omit `research`; ResearchSystem.fromJSON default-constructs a
+    // fresh, empty research state when the field is missing/malformed, so the
+    // migration never crashes. Advance it to `now` so any research that would
+    // have completed while offline is unlocked on load.
+    const research = ResearchSystem.fromJSON(state.research);
+    research.update(now);
+
+    // Research multipliers applied to offline reconciliation:
+    //  - production:  rates are boosted before crediting.
+    //  - storage:     raises the soft cap so offline gains can fill higher.
+    //  - offline eff: scales ECONOMY.OFFLINE_EFFICIENCY (>1 = more).
+    const prodMult = research.productionMultiplier();
+    const capMult = research.storageMultiplier();
+    const eff = ECONOMY.OFFLINE_EFFICIENCY * research.offlineEfficiencyMultiplier();
+    const boost = (rates: ReturnType<BuildingSystem['productionRates']>): typeof rates => {
+      const out = ResourceStore.emptyBundle();
+      for (const res of RESOURCE_ORDER) out[res] = (rates[res] ?? 0) * prodMult;
+      return out;
+    };
 
     // Training that finished while away joins the army. (Trained troops do not
     // produce resources, so this ordering has no bearing on offline gains.)
@@ -115,18 +151,18 @@ export class SaveManager {
     for (const boundary of boundaries) {
       // Credit production at the CURRENT (pre-completion) rates up to this
       // boundary, then apply the completion so later segments use higher rates.
-      accumulate(offlineGains, resources.applyProduction(buildings.productionRates(), boundary - cursor, ECONOMY.OFFLINE_EFFICIENCY));
+      accumulate(offlineGains, resources.applyProduction(boost(buildings.productionRates()), boundary - cursor, eff, capMult));
       buildings.update(boundary);
       cursor = boundary;
     }
     // Final segment: from the last boundary (or window start) to `now`.
-    accumulate(offlineGains, resources.applyProduction(buildings.productionRates(), now - cursor, ECONOMY.OFFLINE_EFFICIENCY));
+    accumulate(offlineGains, resources.applyProduction(boost(buildings.productionRates()), now - cursor, eff, capMult));
     // Finish any upgrades whose timer elapsed exactly at/after `now` bookkeeping
     // (also completes upgrades that ended before the capped window began).
     buildings.update(now);
 
     return {
-      snapshot: { resources, buildings, training, waveCleared: state.waveCleared ?? 0 },
+      snapshot: { resources, buildings, training, research, waveCleared: state.waveCleared ?? 0 },
       loaded: true,
       offlineSeconds,
       offlineGains,
@@ -139,6 +175,7 @@ export class SaveManager {
       resources: new ResourceStore(),
       buildings: new BuildingSystem(),
       training: new TrainingQueue(),
+      research: new ResearchSystem(),
       waveCleared: 0,
     };
   }
@@ -170,8 +207,10 @@ export class SaveManager {
     } catch {
       parsed = null;
     }
-    if (!parsed || typeof parsed !== 'object' || parsed.version !== SAVE_VERSION) {
-      // Unknown / corrupt / wrong-version save: start fresh rather than crash.
+    if (!parsed || typeof parsed !== 'object' || !SUPPORTED_SAVE_VERSIONS.includes(parsed.version)) {
+      // Unknown / corrupt / unsupported-version save: start fresh rather than
+      // crash. A v1 save is SUPPORTED (migrated forward in deserialize); only a
+      // version outside SUPPORTED_SAVE_VERSIONS resets.
       return {
         snapshot: SaveManager.freshGame(),
         loaded: false,

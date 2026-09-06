@@ -91,6 +91,16 @@ export const BUILDING_DEFS: Record<BuildingKind, BuildingDef> = {
     requiresTownCenterLevel: 2,
     maxLevel: BUILDINGS.MAX_LEVEL,
   },
+  research: {
+    kind: 'research',
+    // The Scholars' Hall (연구소): produces nothing, but its level gates which
+    // tiers of the tech tree can be researched. Gated behind Town Center level
+    // 3 so it is a mid-game pillar built after the core economy is standing.
+    baseCost: { wood: 160, stone: 120, gold: 60 },
+    baseOutputPerSec: 0,
+    requiresTownCenterLevel: 3,
+    maxLevel: BUILDINGS.MAX_LEVEL,
+  },
 };
 
 /** All building kinds, in a stable display/iteration order. */
@@ -101,6 +111,7 @@ export const BUILDING_ORDER: readonly BuildingKind[] = [
   'quarry',
   'mine',
   'barracks',
+  'research',
 ] as const;
 
 /** Lookup a building definition (never undefined for a valid kind). */
