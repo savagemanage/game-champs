@@ -43,6 +43,15 @@ import {
   EPIC_PITS,
 } from '../rift/map';
 import {
+  worldToScreen,
+  screenToWorld,
+  depthFor,
+  projectionScale,
+  HEIGHT_SCALE,
+  DEFAULT_PROJECTION,
+} from '../rift/iso';
+import { SpriteFactory, type SpriteSize } from '../render/sprites';
+import {
   buildStructureGraph,
   isStructureTargetable,
   isInhibitorAlive,
@@ -119,16 +128,79 @@ const TURRET_DAMAGE = 152;
 const TURRET_ATTACK_SPEED = 0.83;
 const RESOURCE_REGEN = 8; // per second
 
-/** Convert a world coordinate (0..3000) to a canvas pixel. */
+// How far (screen px) each entity's billboard is lifted off its ground point,
+// so it reads as "standing" in the dimetric view. Structures are taller; the
+// nexus is tallest.
+const CHAMPION_HEIGHT_PX = 26;
+const MINION_HEIGHT_PX = 14;
+const TURRET_HEIGHT_PX = 44;
+const INHIBITOR_HEIGHT_PX = 34;
+const NEXUS_HEIGHT_PX = 60;
+
+/**
+ * Convert a world coordinate (0..3000) to the FLAT gameplay-plane pixel space.
+ *
+ * IMPORTANT render model: `unit.pos` and ALL gameplay math (movement, distance,
+ * attackRange*SCALE, moveSpeed*SCALE, clampX/clampY, aim) live in this flat
+ * top-down pixel space, exactly as before the 2.5D overhaul. Only the DRAWING
+ * is projected: the flat pixel is converted back to world units and run through
+ * the FEAT-001 dimetric projection (see {@link project}). Keeping gameplay on
+ * the flat plane means combat ranges/speeds are byte-for-byte unchanged.
+ */
 function toScreen(p: Vec2): Vec2 {
   return { x: OFF_X + p.x * SCALE, y: OFF_Y + p.y * SCALE };
 }
 
+/** Inverse of {@link toScreen}: flat gameplay pixel -> world units (0..3000). */
+function pixelToWorld(p: Vec2): Vec2 {
+  return { x: (p.x - OFF_X) / SCALE, y: (p.y - OFF_Y) / SCALE };
+}
+
+/**
+ * Project a flat gameplay-plane pixel to its on-screen dimetric position. This
+ * is the single place the flat plane becomes 2.5D: pixel -> world -> screen.
+ */
+function project(p: Vec2): Vec2 {
+  return worldToScreen(pixelToWorld(p), DEFAULT_PROJECTION);
+}
+
+/**
+ * Depth key for an entity standing at a flat gameplay pixel, lifted by
+ * `heightPx` screen pixels. Delegates to the projection's {@link depthFor} on
+ * the underlying world coordinate so nearer (lower-on-screen) entities sort on
+ * top. Height is converted from screen pixels to world units for the tie-break.
+ */
+function depthForPixel(p: Vec2, heightPx = 0): number {
+  return depthFor(pixelToWorld(p), heightPx / HEIGHT_SCALE, DEFAULT_PROJECTION);
+}
+
+/** Depth band offsets so terrain < shadows < bodies without cross-mixing. */
+const DEPTH_TERRAIN = -100000;
+const DEPTH_SHADOW_BIAS = -5000;
+
+/** Convenience wrapper for the shared projection's fit-scale. */
+function projScale(): number {
+  return projectionScale(DEFAULT_PROJECTION);
+}
+
+/** Depth for transient VFX so they render above all entities. */
+const VFX_DEPTH = 200000;
+
 /** A rendered combat entity: pairs pure combat state with its Phaser visuals. */
 interface Entity {
   unit: Unit;
+  /**
+   * The upright billboard container. Positioned every frame at the entity's
+   * PROJECTED screen point, lifted up by {@link Entity.heightPx}. Holds the
+   * baked sprite image, hp bar and (for champions) the 2-letter label.
+   */
   container: Phaser.GameObjects.Container;
-  body: Phaser.GameObjects.Arc | Phaser.GameObjects.Rectangle;
+  /** Baked sprite billboard (procedural texture). */
+  body: Phaser.GameObjects.Image;
+  /** Ground-shadow ellipse drawn on the floor plane at the projected point. */
+  shadow?: Phaser.GameObjects.Ellipse;
+  /** How far (screen px) the billboard is lifted off its ground point. */
+  heightPx: number;
   hpBarBg?: Phaser.GameObjects.Rectangle;
   hpBar?: Phaser.GameObjects.Rectangle;
   /** Remaining stun seconds; entity cannot act while > 0. */
@@ -207,6 +279,9 @@ export default class BattleScene extends Phaser.Scene {
   };
   private abilityKeys!: Record<CooldownKey, Phaser.Input.Keyboard.Key>;
 
+  /** Procedural sprite/texture factory (baked once, cached, reused). */
+  private sprites!: SpriteFactory;
+
   private elapsed = 0;
   private ended = false;
   private stats = {
@@ -269,6 +344,7 @@ export default class BattleScene extends Phaser.Scene {
 
   create() {
     this.cameras.main.setBackgroundColor('#05140c');
+    this.sprites = new SpriteFactory(this);
     this.drawMap();
 
     this.buildStructures();
@@ -289,47 +365,123 @@ export default class BattleScene extends Phaser.Scene {
 
   // ---- Map + structure setup ----------------------------------------------
 
+  /**
+   * Draw the battlefield as a 2.5D dimetric terrain. Every geometry point is a
+   * world coordinate projected through {@link worldToScreen}; the square world
+   * reads as a diamond, lanes/river/jungle/bases are drawn in projected space,
+   * and jungle/epic markers are placed as depth-sorted billboards. Gameplay is
+   * untouched: this method only paints, using the FEAT-001 projection.
+   */
   private drawMap() {
     const g = this.add.graphics();
-    // Map base.
-    const tl = toScreen({ x: 0, y: 0 });
-    const size = WORLD_SIZE * SCALE;
-    g.fillStyle(0x0a2417, 1);
-    g.fillRoundedRect(tl.x, tl.y, size, size, 18);
-    g.lineStyle(2, 0x1c4d33, 1);
-    g.strokeRoundedRect(tl.x, tl.y, size, size, 18);
+    g.setDepth(DEPTH_TERRAIN);
 
-    // River band along the anti-diagonal.
-    g.lineStyle(Math.max(6, 46 * SCALE), 0x1b6fb0, 0.35);
-    const river = RIVER_ANCHORS.map(toScreen);
+    const w = (p: Vec2) => worldToScreen(p, DEFAULT_PROJECTION);
+
+    // Projected ground diamond (the whole world plane).
+    const c0 = w({ x: 0, y: 0 });
+    const c1 = w({ x: WORLD_SIZE, y: 0 });
+    const c2 = w({ x: WORLD_SIZE, y: WORLD_SIZE });
+    const c3 = w({ x: 0, y: WORLD_SIZE });
+    const diamond = [
+      new Phaser.Geom.Point(c0.x, c0.y),
+      new Phaser.Geom.Point(c1.x, c1.y),
+      new Phaser.Geom.Point(c2.x, c2.y),
+      new Phaser.Geom.Point(c3.x, c3.y),
+    ];
+    g.fillStyle(0x0a2417, 1);
+    g.fillPoints(diamond, true);
+    g.lineStyle(3, 0x1c4d33, 1);
+    g.strokePoints(diamond, true, true);
+
+    // Faint isometric tile grid so the ground reads as a 2.5D floor.
+    g.lineStyle(1, 0x11331f, 0.6);
+    const step = WORLD_SIZE / 12;
+    for (let i = 1; i < 12; i++) {
+      const a = w({ x: i * step, y: 0 });
+      const b = w({ x: i * step, y: WORLD_SIZE });
+      g.lineBetween(a.x, a.y, b.x, b.y);
+      const c = w({ x: 0, y: i * step });
+      const d = w({ x: WORLD_SIZE, y: i * step });
+      g.lineBetween(c.x, c.y, d.x, d.y);
+    }
+
+    // Jungle shading: tint the two off-lane quadrants (top-left / bottom-right
+    // of the diamond) a darker green so the jungle reads distinctly.
+    const mid = w({ x: WORLD_SIZE / 2, y: WORLD_SIZE / 2 });
+    g.fillStyle(0x082013, 0.55);
+    g.fillPoints(
+      [
+        new Phaser.Geom.Point(c0.x, c0.y),
+        new Phaser.Geom.Point(c1.x, c1.y),
+        new Phaser.Geom.Point(mid.x, mid.y),
+      ],
+      true,
+    );
+    g.fillPoints(
+      [
+        new Phaser.Geom.Point(c2.x, c2.y),
+        new Phaser.Geom.Point(c3.x, c3.y),
+        new Phaser.Geom.Point(mid.x, mid.y),
+      ],
+      true,
+    );
+
+    // River band along the anti-diagonal (projected polyline).
+    g.lineStyle(Math.max(10, 60 * projScale()), 0x1b6fb0, 0.4);
+    const river = RIVER_ANCHORS.map(w);
     g.beginPath();
     g.moveTo(river[0].x, river[0].y);
     for (let i = 1; i < river.length; i++) g.lineTo(river[i].x, river[i].y);
     g.strokePath();
 
-    // Lanes.
-    g.lineStyle(Math.max(4, 34 * SCALE), 0x2f7d52, 0.5);
+    // Lanes (projected polylines).
+    g.lineStyle(Math.max(8, 44 * projScale()), 0x2f7d52, 0.55);
     for (const lane of this.lanes) {
-      const pts = LANE_WAYPOINTS[lane].map(toScreen);
+      const pts = LANE_WAYPOINTS[lane].map(w);
       g.beginPath();
       g.moveTo(pts[0].x, pts[0].y);
       for (let i = 1; i < pts.length; i++) g.lineTo(pts[i].x, pts[i].y);
       g.strokePath();
     }
 
-    // Jungle camp + epic pit markers (Rift only).
+    // Base zones: a glowing pad at each fountain.
+    for (const side of ['ally', 'enemy'] as MapSide[]) {
+      const b = w(BASE_POSITIONS[side]);
+      const tint = side === 'ally' ? 0x2f6fe0 : 0xe0512f;
+      g.fillStyle(tint, 0.22);
+      g.fillEllipse(b.x, b.y, 120, 60);
+      g.lineStyle(2, tint, 0.7);
+      g.strokeEllipse(b.x, b.y, 120, 60);
+    }
+
+    // Jungle camp + epic pit markers (Rift only), as depth-sorted billboards.
     if (this.mode === 'rift') {
       for (const camp of JUNGLE_CAMPS) {
-        const p = toScreen(camp.pos);
-        const dot = this.add.circle(p.x, p.y, 4, 0x6fe08a, 0.8);
-        dot.setStrokeStyle(1, 0x0a2417);
+        this.spawnMarker('jungle', camp.pos);
       }
       for (const pit of EPIC_PITS) {
-        const p = toScreen(pit.pos);
-        const marker = this.add.star(p.x, p.y, 5, 5, 11, pit.id === 'dragon' ? 0xe8703a : 0x9b6bff, 0.85);
-        marker.setStrokeStyle(1, 0x02100a);
+        this.spawnMarker(pit.id, pit.pos);
       }
     }
+  }
+
+  /**
+   * Place a static projected marker billboard (jungle camp / epic monster) at a
+   * world position. Uses the baked marker texture and depth-sorts by its
+   * projected ground point so entities in front occlude it correctly.
+   */
+  private spawnMarker(variant: 'jungle' | 'dragon' | 'baron' | 'herald', worldPos: Vec2) {
+    const screen = worldToScreen(worldPos, DEFAULT_PROJECTION);
+    const { key, size } = this.sprites.ensure({ kind: 'marker', variant });
+    const heightPx = variant === 'jungle' ? 4 : 10;
+    if (variant !== 'jungle') {
+      const shadow = this.add.ellipse(screen.x, screen.y, size.width * 0.8, size.width * 0.36, 0x000000, 0.32);
+      shadow.setDepth(depthFor(worldPos, 0, DEFAULT_PROJECTION) + DEPTH_SHADOW_BIAS);
+    }
+    const img = this.add.image(screen.x, screen.y - heightPx, key);
+    img.setOrigin(0.5, 1 - (size.height - size.footY) / size.height);
+    img.setDepth(depthFor(worldPos, heightPx / HEIGHT_SCALE, DEFAULT_PROJECTION));
   }
 
   private buildStructures() {
@@ -410,10 +562,15 @@ export default class BattleScene extends Phaser.Scene {
       attackSpeed: champion.stats.attackSpeed,
       moveSpeed: champion.stats.moveSpeed * SCALE,
     });
-    const color = Phaser.Display.Color.HexStringToColor(champion.accentColor).color;
-    const body = this.add.circle(0, 0, 12, color);
-    body.setStrokeStyle(2, 0xf0e6d2);
-    const label = this.add.text(0, -22, champion.id.slice(0, 2).toUpperCase(), {
+    const { key, size } = this.sprites.ensure({
+      kind: 'champion',
+      role: champion.role,
+      accent: champion.accentColor,
+      team,
+    });
+    const heightPx = CHAMPION_HEIGHT_PX;
+    const body = this.makeBillboard(key, size);
+    const label = this.add.text(0, -size.height - 6, champion.id.slice(0, 2).toUpperCase(), {
       fontFamily: 'sans-serif',
       fontSize: '11px',
       color: '#f0e6d2',
@@ -421,10 +578,29 @@ export default class BattleScene extends Phaser.Scene {
     });
     label.setOrigin(0.5);
     const container = this.add.container(pos.x, pos.y, [body, label]);
-    const entity: Entity = { unit, container, body, stunned: 0 };
-    this.attachHpBar(entity, 26);
+    const shadow = this.makeShadow(size.width * 0.7);
+    const entity: Entity = { unit, container, body, shadow, heightPx, stunned: 0 };
+    this.attachHpBar(entity, size.height + 12);
     this.allEntities.push(entity);
     return entity;
+  }
+
+  /**
+   * Build the upright billboard image for a baked sprite. Origin is set so the
+   * image's ground-contact point (footY) is the anchor placed on the projected
+   * ground; container-relative Y is 0 there.
+   */
+  private makeBillboard(key: string, size: SpriteSize): Phaser.GameObjects.Image {
+    const img = this.add.image(0, 0, key);
+    // Anchor the sprite's foot at the container origin (0,0).
+    img.setOrigin(0.5, size.footY / size.height);
+    img.setPosition(0, 0);
+    return img;
+  }
+
+  /** A soft ground-shadow ellipse laid on the floor plane (its own object). */
+  private makeShadow(width: number): Phaser.GameObjects.Ellipse {
+    return this.add.ellipse(0, 0, width, width * 0.45, 0x000000, 0.32);
   }
 
   private spawnStructure(node: StructureNode, team: Team, pos: Vec2): Entity {
@@ -449,18 +625,16 @@ export default class BattleScene extends Phaser.Scene {
       attackSpeed: TURRET_ATTACK_SPEED,
       moveSpeed: 0,
     });
-    const color = Phaser.Display.Color.HexStringToColor(accent).color;
-    const size = node.kind === 'nexus' ? 26 : node.kind === 'inhibitor' ? 16 : 13;
-    const shape =
-      node.kind === 'nexus'
-        ? this.add.rectangle(0, 0, size, size, 0x081c12)
-        : node.kind === 'inhibitor'
-          ? this.add.rectangle(0, 0, size, size, 0x081c12)
-          : this.add.circle(0, 0, size, 0x081c12);
-    shape.setStrokeStyle(3, color);
-    const container = this.add.container(pos.x, pos.y, [shape]);
-    const entity: Entity = { unit, container, body: shape, stunned: 0, node };
-    this.attachHpBar(entity, size + 8);
+    const tier: 'turret' | 'inhibitor' | 'nexus' =
+      node.kind === 'nexus' ? 'nexus' : node.kind === 'inhibitor' ? 'inhibitor' : 'turret';
+    const heightPx =
+      tier === 'nexus' ? NEXUS_HEIGHT_PX : tier === 'inhibitor' ? INHIBITOR_HEIGHT_PX : TURRET_HEIGHT_PX;
+    const { key, size } = this.sprites.ensure({ kind: 'structure', tier, accent, team });
+    const body = this.makeBillboard(key, size);
+    const container = this.add.container(pos.x, pos.y, [body]);
+    const shadow = this.makeShadow(size.width * 0.8);
+    const entity: Entity = { unit, container, body, shadow, heightPx, stunned: 0, node };
+    this.attachHpBar(entity, size.height + 8);
     this.allEntities.push(entity);
     return entity;
   }
@@ -527,8 +701,21 @@ export default class BattleScene extends Phaser.Scene {
     this.abilityKeys.W.on('down', () => this.tryPlayerCast('W'));
 
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-      this.moveTarget = { x: pointer.worldX, y: pointer.worldY };
+      // Convert the click's SCREEN point back to the flat gameplay plane so
+      // click-to-move still lands where the player pointed in world terms.
+      this.moveTarget = this.pointerToGround(pointer);
     });
+  }
+
+  /**
+   * Map a pointer's canvas coordinates to the flat gameplay-plane pixel space.
+   * The pointer is in projected SCREEN space, so we invert the projection
+   * ({@link screenToWorld}) to world units and re-apply {@link toScreen} to get
+   * the flat pixel that all gameplay math (movement/aim/ranges) operates in.
+   */
+  private pointerToGround(pointer: Phaser.Input.Pointer): Vec2 {
+    const world = screenToWorld({ x: pointer.worldX, y: pointer.worldY }, DEFAULT_PROJECTION);
+    return toScreen(world);
   }
 
   // ---- Main loop -----------------------------------------------------------
@@ -653,21 +840,22 @@ export default class BattleScene extends Phaser.Scene {
       },
     );
     const accent = team === 'ally' ? this.playerChampion.accentColor : this.enemyChampion.accentColor;
-    const color = Phaser.Display.Color.HexStringToColor(accent).color;
-    const s = type === 'super' ? 10 : type === 'siege' ? 8 : 6;
-    const body = this.add.rectangle(0, 0, s, s, color);
-    body.setStrokeStyle(1, 0x02100a);
+    const { key, size } = this.sprites.ensure({ kind: 'minion', type, accent, team });
+    const body = this.makeBillboard(key, size);
     const container = this.add.container(screenPos.x, screenPos.y, [body]);
+    const shadow = this.makeShadow(size.width * 0.7);
     const entity: Entity = {
       unit,
       container,
       body,
+      shadow,
+      heightPx: MINION_HEIGHT_PX,
       stunned: 0,
       rift,
       path: laneWaypoints(lane, team).map(toScreen),
       minionType: type,
     };
-    this.attachHpBar(entity, s + 6);
+    this.attachHpBar(entity, size.height + 6);
     this.minions.push(entity);
     this.allEntities.push(entity);
   }
@@ -861,7 +1049,9 @@ export default class BattleScene extends Phaser.Scene {
   private tryPlayerCast(slot: CooldownKey) {
     if (this.ended || this.player.unit.dead || this.player.stunned > 0) return;
     const pointer = this.input.activePointer;
-    const aim = { x: pointer.worldX, y: pointer.worldY };
+    // Aim is taken from the pointer, re-mapped through the projection to the
+    // flat gameplay plane so cursor-aimed abilities land where intended.
+    const aim = this.pointerToGround(pointer);
     this.castAbility(this.player, slot, aim, this.playerChampion, this.playerCds, () => {
       const cost = this.abilityBySlot(this.playerChampion, slot).cost;
       if (this.playerResource < cost || this.playerCds[slot] > 0) return false;
@@ -1055,7 +1245,18 @@ export default class BattleScene extends Phaser.Scene {
 
   private syncVisuals() {
     for (const e of this.allEntities) {
-      e.container.setPosition(e.unit.pos.x, e.unit.pos.y);
+      // Project the entity's flat ground pixel to its on-screen dimetric point.
+      const ground = project(e.unit.pos);
+      // Ground shadow sits on the floor at the projected point.
+      if (e.shadow) {
+        e.shadow.setPosition(ground.x, ground.y);
+        e.shadow.setDepth(depthForPixel(e.unit.pos) + DEPTH_SHADOW_BIAS);
+        e.shadow.setVisible(e.container.visible);
+      }
+      // Billboard is lifted up by its height so it reads as standing, and
+      // depth-sorted by its projected ground point (+ tiny height tie-break).
+      e.container.setPosition(ground.x, ground.y - e.heightPx);
+      e.container.setDepth(depthForPixel(e.unit.pos, e.heightPx));
       if (e.hpBar) {
         const full = e.hpBar.getData('width') as number;
         const pct = Phaser.Math.Clamp(e.unit.hp / e.unit.maxHp, 0, 1);
@@ -1064,10 +1265,12 @@ export default class BattleScene extends Phaser.Scene {
         e.hpBar.fillColor = pct > 0.5 ? 0x3ad16a : pct > 0.25 ? 0xf0c000 : 0xd13a3a;
       }
       if (e.unit.dead && e.unit.kind === 'minion' && e.container.active) {
+        e.shadow?.destroy();
         e.container.destroy();
       }
       if (e.unit.dead && (e.unit.kind === 'turret' || e.unit.kind === 'nexus') && e.container.visible) {
         e.container.setAlpha(0.25);
+        e.shadow?.setAlpha(0.12);
       }
     }
     this.minions = this.minions.filter((m) => !(m.unit.dead && !m.container.active));
@@ -1076,8 +1279,9 @@ export default class BattleScene extends Phaser.Scene {
     );
   }
 
-  private floatingDamage(pos: Vec2, amount: number, color: number, prefix = '') {
+  private floatingDamage(rawPos: Vec2, amount: number, color: number, prefix = '') {
     if (amount <= 0) return;
+    const pos = project(rawPos);
     const text = this.add.text(pos.x, pos.y - 18, `${prefix}${amount}`, {
       fontFamily: 'sans-serif',
       fontSize: '12px',
@@ -1086,6 +1290,7 @@ export default class BattleScene extends Phaser.Scene {
     });
     text.setOrigin(0.5);
     text.setScale(0.6);
+    text.setDepth(VFX_DEPTH);
     this.tweens.add({ targets: text, scale: 1, duration: 120, ease: 'Back.easeOut' });
     this.tweens.add({
       targets: text,
@@ -1099,11 +1304,10 @@ export default class BattleScene extends Phaser.Scene {
 
   private hitFlash(entity: Entity) {
     if (!entity.container.active) return;
-    const shape = entity.body;
-    const original = shape.fillColor;
-    shape.fillColor = 0xffffff;
+    const img = entity.body;
+    img.setTintFill(0xffffff);
     this.time.delayedCall(70, () => {
-      if (shape.active) shape.fillColor = original;
+      if (img.active) img.clearTint();
     });
   }
 
@@ -1126,8 +1330,10 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   private deathBurst(entity: Entity, color: number) {
-    const ring = this.add.circle(entity.unit.pos.x, entity.unit.pos.y, 10, color, 0.5);
+    const p = project(entity.unit.pos);
+    const ring = this.add.circle(p.x, p.y, 10, color, 0.5);
     ring.setStrokeStyle(2, 0xffffff, 0.8);
+    ring.setDepth(VFX_DEPTH);
     this.tweens.add({
       targets: ring,
       scale: 2.2,
@@ -1142,46 +1348,78 @@ export default class BattleScene extends Phaser.Scene {
     return this.allEntities.find((e) => e.unit === unit);
   }
 
-  private drawProjectile(from: Vec2, to: Vec2, color: number) {
-    const dot = this.add.circle(from.x, from.y, 4, color);
-    this.tweens.add({ targets: dot, x: to.x, y: to.y, duration: 180, onComplete: () => dot.destroy() });
-  }
-
-  private drawBeam(from: Vec2, to: Vec2, color: number) {
-    const line = this.add.line(0, 0, from.x, from.y, to.x, to.y, color, 0.8);
-    line.setOrigin(0, 0);
-    line.setLineWidth(1.5);
-    this.tweens.add({ targets: line, alpha: 0, duration: 200, onComplete: () => line.destroy() });
-  }
-
-  private drawAoe(center: Vec2, radius: number, color: number) {
-    const circle = this.add.circle(center.x, center.y, radius, color, 0.28);
-    circle.setStrokeStyle(2, color, 0.8);
+  private drawProjectile(rawFrom: Vec2, rawTo: Vec2, color: number) {
+    const from = project(rawFrom);
+    const to = project(rawTo);
+    const dot = this.add.circle(from.x, from.y - CHAMPION_HEIGHT_PX * 0.5, 4, color);
+    dot.setDepth(VFX_DEPTH);
     this.tweens.add({
-      targets: circle,
-      alpha: 0,
-      scale: 1.15,
-      duration: 400,
-      onComplete: () => circle.destroy(),
+      targets: dot,
+      x: to.x,
+      y: to.y - CHAMPION_HEIGHT_PX * 0.5,
+      duration: 180,
+      onComplete: () => dot.destroy(),
     });
   }
 
-  private drawDashTrail(from: Vec2, to: Vec2, color: number) {
-    const line = this.add.line(0, 0, from.x, from.y, to.x, to.y, color, 0.6);
+  private drawBeam(rawFrom: Vec2, rawTo: Vec2, color: number) {
+    const from = project(rawFrom);
+    const to = project(rawTo);
+    const line = this.add.line(0, 0, from.x, from.y - TURRET_HEIGHT_PX * 0.5, to.x, to.y - CHAMPION_HEIGHT_PX * 0.5, color, 0.8);
+    line.setOrigin(0, 0);
+    line.setLineWidth(1.5);
+    line.setDepth(VFX_DEPTH);
+    this.tweens.add({ targets: line, alpha: 0, duration: 200, onComplete: () => line.destroy() });
+  }
+
+  /**
+   * Draw an ability AoE as a PROJECTED ground ellipse (a dimetric "circle" on
+   * the floor plane) so the ability's reach reads correctly in the 2.5D view.
+   * `radius` is in flat gameplay pixels; we sample the projected extents to get
+   * the on-screen ellipse width/height.
+   */
+  private drawAoe(rawCenter: Vec2, radius: number, color: number) {
+    const center = project(rawCenter);
+    // Project the flat-space radius onto screen axes: the dimetric transform
+    // squashes Y to ~half, so sample right/down offsets to size the ellipse.
+    const right = project({ x: rawCenter.x + radius, y: rawCenter.y });
+    const down = project({ x: rawCenter.x, y: rawCenter.y + radius });
+    const rx = Math.hypot(right.x - center.x, right.y - center.y);
+    const ry = Math.hypot(down.x - center.x, down.y - center.y);
+    const ellipse = this.add.ellipse(center.x, center.y, Math.max(6, rx + ry), Math.max(4, (rx + ry) * 0.5), color, 0.28);
+    ellipse.setStrokeStyle(2, color, 0.85);
+    ellipse.setDepth(VFX_DEPTH);
+    this.tweens.add({
+      targets: ellipse,
+      alpha: 0,
+      scale: 1.12,
+      duration: 400,
+      onComplete: () => ellipse.destroy(),
+    });
+  }
+
+  private drawDashTrail(rawFrom: Vec2, rawTo: Vec2, color: number) {
+    const from = project(rawFrom);
+    const to = project(rawTo);
+    const line = this.add.line(0, 0, from.x, from.y - CHAMPION_HEIGHT_PX * 0.5, to.x, to.y - CHAMPION_HEIGHT_PX * 0.5, color, 0.6);
     line.setOrigin(0, 0);
     line.setLineWidth(5);
+    line.setDepth(VFX_DEPTH);
     this.tweens.add({ targets: line, alpha: 0, duration: 280, onComplete: () => line.destroy() });
   }
 
   private pulse(container: Phaser.GameObjects.Container, color: number) {
     const ring = this.add.circle(container.x, container.y, 20, color, 0.4);
+    ring.setDepth(VFX_DEPTH);
     this.tweens.add({ targets: ring, scale: 1.6, alpha: 0, duration: 380, onComplete: () => ring.destroy() });
   }
 
   private castFlare(caster: Entity, color: number, ultimate: boolean) {
-    const { x, y } = caster.unit.pos;
-    const ring = this.add.circle(x, y, ultimate ? 16 : 12, color, 0);
+    const p = project(caster.unit.pos);
+    const y = p.y - caster.heightPx * 0.5;
+    const ring = this.add.circle(p.x, y, ultimate ? 16 : 12, color, 0);
     ring.setStrokeStyle(ultimate ? 3 : 2, color, 0.9);
+    ring.setDepth(VFX_DEPTH);
     this.tweens.add({
       targets: ring,
       scale: ultimate ? 2.6 : 1.8,
@@ -1194,12 +1432,14 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   private stunSpin(entity: Entity, color: number) {
-    const star = this.add.text(entity.unit.pos.x, entity.unit.pos.y - 26, '\u2726', {
+    const p = project(entity.unit.pos);
+    const star = this.add.text(p.x, p.y - entity.heightPx - 8, '\u2726', {
       fontFamily: 'sans-serif',
       fontSize: '14px',
       color: `#${color.toString(16).padStart(6, '0')}`,
     });
     star.setOrigin(0.5);
+    star.setDepth(VFX_DEPTH);
     this.tweens.add({ targets: star, angle: 360, alpha: 0, duration: 600, onComplete: () => star.destroy() });
   }
 

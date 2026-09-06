@@ -20,7 +20,7 @@ and deployed to **GitHub Pages**.
 
 - **Vite 5** – dev server and production bundler
 - **React 18** + **TypeScript** (strict mode) – UI shell, screens, and HUD overlay
-- **Phaser 3** – the real-time battle scene (rendered with pure shapes and tweens, no image assets)
+- **Phaser 3** – the real-time battle scene, rendered as a **2.5D sprite view**: the top-down world is drawn with a dimetric ("2:1 isometric") projection as a diamond ground, and every entity (champions, minions, structures, epic monsters) is a depth-sorted **ground-shadow + raised billboard** sprite. All sprite textures are **generated procedurally at runtime** (`generateTexture` from offscreen Graphics) and cached, so there are still **no image assets**
 - **react-i18next** (+ `i18next-browser-languagedetector`) – Korean and English locales with a persisted language toggle
 - **Web Audio API** – 100% procedural sound effects (no binary audio files)
 - **Vitest** + **@testing-library/react** – unit tests for pure game logic, i18n parity, and components
@@ -30,15 +30,18 @@ and deployed to **GitHub Pages**.
 ## Architecture: pure logic vs. rendering
 
 The core design rule is a strict split between **pure, Phaser-free, unit-tested game logic**
-and the **Phaser rendering layer**. Phaser only draws shapes/tweens and calls the pure
+and the **Phaser rendering layer**. Phaser only draws/bakes sprites and calls the pure
 helpers; it never owns the math. This keeps every formula testable in plain node/jsdom
-without a canvas.
+without a canvas. Even the 2.5D projection math is pure: the dimetric transform lives in
+`src/game/rift/iso.ts` and is exhaustively unit-tested, while the Phaser-side sprite factory
+(`src/game/render/sprites.ts`) only turns those pure descriptions into baked textures.
 
 Pure, unit-tested modules:
 
 - `src/game/combat.ts` – armor mitigation, cooldowns, ability resolution, structure-gated targeting
 - `src/game/ai.ts` – deterministic bot decision logic
 - `src/game/rift/map.ts` – the 3000×3000 world: lanes, waypoints, structure/jungle/river/epic anchors, path math
+- `src/game/rift/iso.ts` – the 2.5D dimetric projection: `worldToScreen` / `screenToWorld` (pointer input round-trips back to world space) and `depthFor` for painter's-order depth sorting
 - `src/game/rift/structures.ts` – the turret → inhibitor → nexus-turret → nexus gating graph + inhibitor respawn
 - `src/game/rift/minions.ts` – wave cadence/composition, super minions, per-type stats, lane navigation
 - `src/game/rift/economy.ts` – gold, XP, the level-1..18 curve, and all bounty tables
@@ -50,8 +53,10 @@ Pure, unit-tested modules:
 `src/game/scenes/BattleScene.ts` is the Phaser scene: it builds combat `Unit` records, routes
 movement/damage/wave/economy math through the pure helpers above (e.g. `advanceMinion`,
 `computeEffectiveStats`, `nextWaveNumberAt`, `isStructureTargetable`, `isInhibitorAlive`,
-`heraldReward`), and mirrors positions onto containers each frame. The React HUD reads a
-shared external store (`src/game/battleStore.ts`) via `useSyncExternalStore`.
+`heraldReward`), projects every world position through `iso.ts`, and mirrors positions onto
+containers each frame as depth-sorted shadow + billboard sprites baked by
+`src/game/render/sprites.ts`. The React HUD reads a shared external store
+(`src/game/battleStore.ts`) via `useSyncExternalStore`.
 
 ---
 
@@ -207,9 +212,12 @@ src/
     battleStore.ts              # external store bridging the scene and the React HUD
     BattleHud.tsx               # React overlay HUD (gold, level/XP, buffs, objectives, minimap)
     PhaserGame.tsx              # mounts a single Phaser.Game, StrictMode-safe
-    scenes/BattleScene.ts       # the Rift scene: renders the map + routes math through rift/
+    scenes/BattleScene.ts       # the Rift scene: renders the 2.5D map + routes math through rift/
+    render/
+      sprites.ts                # Phaser-side sprite factory: bakes procedural billboard textures (generateTexture), cached
     rift/                       # pure, unit-tested Summoner's Rift modules
       map.ts economy.ts minions.ts structures.ts jungle.ts objectives.ts loadout.ts
+      iso.ts                    # pure 2.5D dimetric projection: worldToScreen/screenToWorld/depthFor
   data/
     champions.ts                # typed champion roster (i18n keys, stats, growth, lane roles)
     items.ts                    # 12-item shop catalog
@@ -223,10 +231,20 @@ src/
 ## Notes on assets and audio
 
 There are **no binary art or audio assets**. Champion portraits are CSS gradients with
-initials, the battle is drawn entirely with Phaser shapes/tweens, and all sound effects are
-synthesized at runtime with the Web Audio API. The audio engine degrades to a no-op in
-headless/test environments where `AudioContext` is unavailable, so builds and unit tests
-stay green.
+initials, and all sound effects are synthesized at runtime with the Web Audio API.
+
+The battle renders as a **2.5D sprite scene** with no image files either. The top-down world
+is projected onto a dimetric ("2:1 isometric") plane so the square map reads as a diamond
+ground, and each entity is drawn as a **ground-shadow ellipse plus a raised, upright
+billboard** sprite, depth-sorted so whatever is nearer the viewer draws on top (see
+`src/game/rift/iso.ts`). Every sprite texture is **generated procedurally at runtime**: the
+factory in `src/game/render/sprites.ts` draws a stylized silhouette into an offscreen Phaser
+`Graphics` object once, bakes it into a GPU texture via `generateTexture`, and **caches** it
+by entity type / team / variant so a texture is created a single time and then reused by many
+lightweight billboard `Image`s. No PNGs, atlases, or spritesheets are loaded or committed.
+
+The audio engine degrades to a no-op in headless/test environments where `AudioContext` is
+unavailable, so builds and unit tests stay green.
 
 ---
 
