@@ -64,6 +64,8 @@ export class TownScene extends Phaser.Scene {
 
   private resourceWidgets: ResourceWidget[] = [];
   private markers: BuildingMarker[] = [];
+  /** Always-visible early hint under the Lumber Mill until it is built. */
+  private woodHint!: Phaser.GameObjects.Text;
   private defenseLabel!: Phaser.GameObjects.Text;
   private warmthLabel!: Phaser.GameObjects.Text;
   private warmthBar!: ProgressBar;
@@ -217,9 +219,29 @@ export class TownScene extends Phaser.Scene {
 
       this.markers.push({ kind, sprite, levelBadge });
     }
+
+    // A persistent early nudge toward WOOD: a small caption under the Lumber
+    // Mill telling a new player to build it first. Hidden the moment the mill
+    // is standing (see refreshBuildingBadges). Kept off to the side/below the
+    // sprite so it never overlaps the overhead level badge.
+    const mill = BUILDING_LAYOUT.lumber_mill;
+    this.woodHint = this.add
+      .text(mill.x, mill.y + 46, tr('town.woodHint'), textStyle(11, {
+        color: PALETTE.SUCCESS_CSS,
+        fontStyle: 'bold',
+        backgroundColor: PALETTE.PANEL_CSS,
+        padding: { x: 5, y: 3 },
+        align: 'center',
+        wordWrap: { width: 150 },
+      }))
+      .setOrigin(0.5, 0)
+      .setDepth(6)
+      .setVisible(false);
   }
 
   private refreshBuildingBadges(): void {
+    // Show the wood nudge only while the Lumber Mill is unbuilt.
+    this.woodHint.setVisible(this.state.buildings.level('lumber_mill') < 1);
     for (const marker of this.markers) {
       const level = this.state.buildings.level(marker.kind);
       const upgrading = this.state.buildings.isUpgrading(marker.kind);
@@ -227,8 +249,21 @@ export class TownScene extends Phaser.Scene {
       const frame = level >= 2 ? 1 : 0;
       if (marker.sprite.frame.name !== String(frame)) marker.sprite.setFrame(frame);
       if (level <= 0) {
-        marker.levelBadge.setText(tr('town.locked')).setColor(PALETTE.MUTED_CSS);
-        marker.sprite.setAlpha(0.5);
+        // Distinguish "buildable now" from "truly locked" so a building the
+        // player can raise this instant (e.g. the Lumber Mill on a fresh game)
+        // no longer looks like a dead-end 'Locked' tile. Only a building gated
+        // behind a higher Town Center shows the muted locked-reason label.
+        const badge = this.state.buildings.badgeState(marker.kind, this.state.resources);
+        if (badge.state === 'buildable') {
+          marker.levelBadge.setText(tr('town.buildable')).setColor(PALETTE.SUCCESS_CSS);
+          // Keep it inviting — only lightly dimmed so it still reads as "go here".
+          marker.sprite.setAlpha(0.85);
+        } else {
+          marker.levelBadge
+            .setText(tr('town.lockedReason', { level: badge.requiredTownCenterLevel }))
+            .setColor(PALETTE.MUTED_CSS);
+          marker.sprite.setAlpha(0.5);
+        }
       } else {
         marker.levelBadge.setText(tr('building.level', { level })).setColor(upgrading ? PALETTE.SUCCESS_CSS : PALETTE.ACCENT_CSS);
         marker.sprite.setAlpha(1);
@@ -401,7 +436,19 @@ export class TownScene extends Phaser.Scene {
     const level = buildings.level(kind);
     const def = buildingDef(kind);
 
-    this.upgradeLevel.setText(level > 0 ? tr('building.level', { level }) : tr('town.locked'));
+    // Level line: a standing building shows its level; an unbuilt one shows an
+    // inviting "buildable" affordance rather than a bare '잠김' — the locked
+    // string is reserved for buildings still gated behind a higher Town Center.
+    const badge = buildings.badgeState(kind, this.state.resources);
+    if (level > 0) {
+      this.upgradeLevel.setText(tr('building.level', { level })).setColor(PALETTE.ACCENT_CSS);
+    } else if (badge.state === 'buildable') {
+      this.upgradeLevel.setText(tr('town.buildable')).setColor(PALETTE.SUCCESS_CSS);
+    } else {
+      this.upgradeLevel
+        .setText(tr('town.lockedReason', { level: badge.requiredTownCenterLevel }))
+        .setColor(PALETTE.MUTED_CSS);
+    }
 
     // Producer output at current level.
     if (isProducer(kind) && level > 0) {
@@ -439,7 +486,8 @@ export class TownScene extends Phaser.Scene {
     const cost = buildings.nextUpgradeCost(kind);
     const timeSec = Math.round(buildings.nextUpgradeTimeMs(kind) / 1000);
     this.upgradeCostLabel.setText(`${this.costString(cost)}\n${tr('tooltip.time', { seconds: timeSec })}`);
-    this.upgradeButton.setText(tr('building.upgradeTo', { level: level + 1 }));
+    // Level 0 is the initial BUILD, not an "upgrade to Lv.1" — say so plainly.
+    this.upgradeButton.setText(level > 0 ? tr('building.upgradeTo', { level: level + 1 }) : tr('building.build'));
 
     const check = buildings.canUpgrade(kind, this.state.resources);
     if (check.ok) {
@@ -629,6 +677,7 @@ export class TownScene extends Phaser.Scene {
       townCenterPanelOpen: this.upgradePanel.visible && this.selected === 'town_center',
       townCenterUpgrading: this.state.buildings.isUpgrading('town_center'),
       townCenterLevel: this.state.buildings.townCenterLevel,
+      lumberMillBuilt: this.state.buildings.level('lumber_mill') >= 1,
       barracksBuilt: this.state.buildings.hasBarracks,
       troopsTrained: this.state.troopsTrained,
     };
@@ -653,6 +702,10 @@ export class TownScene extends Phaser.Scene {
     switch (anchor) {
       case 'town_center': {
         const layout = BUILDING_LAYOUT.town_center;
+        return { x: layout.x, y: layout.y, width: 96, height: 96 };
+      }
+      case 'lumber_mill': {
+        const layout = BUILDING_LAYOUT.lumber_mill;
         return { x: layout.x, y: layout.y, width: 96, height: 96 };
       }
       case 'upgrade_button':

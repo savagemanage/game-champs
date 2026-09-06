@@ -210,4 +210,51 @@ describe('BuildingSystem', () => {
     expect(after.ok).toBe(true);
     expect(after.reason).toBeUndefined();
   });
+
+  describe('badgeState (built / buildable / locked)', () => {
+    it('fresh game: town_center=built, farm & lumber_mill=buildable, quarry=locked', () => {
+      // The exact story FEAT-002 fixes: on a brand-new game the Lumber Mill and
+      // Farm are buildable RIGHT NOW (Town Center Lv.1 already met), while the
+      // Quarry is truly locked behind Town Center Lv.2.
+      const bs = new BuildingSystem();
+      const store = richStore();
+
+      expect(bs.badgeState('town_center', store).state).toBe('built');
+      expect(bs.badgeState('farm', store).state).toBe('buildable');
+      expect(bs.badgeState('lumber_mill', store).state).toBe('buildable');
+
+      const quarry = bs.badgeState('quarry', store);
+      expect(quarry.state).toBe('locked');
+      // The locked badge can name the Town Center level the player must reach.
+      expect(quarry.requiredTownCenterLevel).toBe(2);
+    });
+
+    it("'buildable' even when the player cannot yet afford it (cost is not locked)", () => {
+      // A lack of resources must NOT read as "Locked" — it is still buildable.
+      const bs = new BuildingSystem();
+      const broke = new ResourceStore({ food: 0, wood: 0, stone: 0, gold: 0 });
+      // Sanity: canUpgrade reports 'cost', not 'prereq', for the Farm here.
+      expect(bs.canUpgrade('farm', broke).reason).toBe('cost');
+      expect(bs.badgeState('farm', broke).state).toBe('buildable');
+      expect(bs.badgeState('lumber_mill', broke).state).toBe('buildable');
+    });
+
+    it('transitions to built once the building is standing, and unlocks gated ones as the Town Center grows', () => {
+      const store = richStore();
+      // Lumber Mill standing at Lv.1 -> 'built'.
+      const withMill = new BuildingSystem([
+        { kind: 'town_center', level: 1, upgradeEndsAt: null },
+        { kind: 'lumber_mill', level: 1, upgradeEndsAt: null },
+      ]);
+      expect(withMill.badgeState('lumber_mill', store).state).toBe('built');
+      // Quarry (needs TC2) is still locked at TC1.
+      expect(withMill.badgeState('quarry', store).state).toBe('locked');
+
+      // Raise the Town Center to Lv.2 and the Quarry becomes buildable.
+      const tc2 = new BuildingSystem([{ kind: 'town_center', level: 2, upgradeEndsAt: null }]);
+      expect(tc2.badgeState('quarry', store).state).toBe('buildable');
+      // The Barracks (also TC2-gated) likewise flips to buildable.
+      expect(tc2.badgeState('barracks', store).state).toBe('buildable');
+    });
+  });
 });

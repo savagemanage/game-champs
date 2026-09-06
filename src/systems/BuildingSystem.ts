@@ -20,6 +20,28 @@ export interface UpgradeCheck {
 }
 
 /**
+ * The three visible states a building's overhead badge / build panel can be in,
+ * used to tell the player at a glance whether a building is standing, ready to
+ * build right now, or still gated behind a higher Town Center level:
+ *  - 'built'     : level >= 1 (it is standing; show its level).
+ *  - 'buildable' : level 0 AND the Town Center prerequisite is met, so the
+ *                  player can start the build now (a lack of resources —
+ *                  reason 'cost' — is NOT "locked": it is still buildable, just
+ *                  not yet affordable).
+ *  - 'locked'    : level 0 AND the Town Center prerequisite is unmet
+ *                  (canUpgrade reason 'prereq'); the player must first raise the
+ *                  Town Center to {@link BadgeState.requiredTownCenterLevel}.
+ */
+export interface BadgeState {
+  state: 'built' | 'buildable' | 'locked';
+  /**
+   * The Town Center level this building requires to be built at all. Populated
+   * for every state so a 'locked' badge can name the level the player needs.
+   */
+  requiredTownCenterLevel: number;
+}
+
+/**
  * BuildingSystem - owned buildings, their levels, and the upgrade lifecycle.
  *
  * Pure logic (no Phaser). It owns a set of {@link BuildingState}s keyed by kind,
@@ -103,6 +125,33 @@ export class BuildingSystem {
 
     if (!store.canAfford(this.nextUpgradeCost(kind))) return { ok: false, reason: 'cost' };
     return { ok: true };
+  }
+
+  /**
+   * The visible {@link BadgeState} for `kind` right now, distinguishing a
+   * standing building from one that is buildable-immediately versus one still
+   * gated behind a higher Town Center. This is the single source of truth the
+   * town badges and the build/upgrade panel share so the UI never contradicts
+   * itself (e.g. never shows a "Locked" label next to an enabled Build button).
+   *
+   * It reuses {@link canUpgrade}'s reasons rather than re-deriving the gate:
+   * only reason 'prereq' (Town Center level too low) counts as truly LOCKED;
+   * 'cost' still means buildable (just not yet affordable). `store` is passed so
+   * this stays a thin wrapper over the same check the button uses.
+   */
+  badgeState(kind: BuildingKind, store: ResourceStore): BadgeState {
+    const requiredTownCenterLevel = buildingDef(kind).requiresTownCenterLevel;
+    if (this.level(kind) >= 1) {
+      return { state: 'built', requiredTownCenterLevel };
+    }
+    // Unbuilt: it is truly LOCKED only when the Town Center prerequisite is the
+    // thing blocking it. Anything else (affordable-or-not, i.e. reason 'cost' or
+    // ok) is presented as an inviting "buildable now" affordance.
+    const check = this.canUpgrade(kind, store);
+    if (!check.ok && check.reason === 'prereq') {
+      return { state: 'locked', requiredTownCenterLevel };
+    }
+    return { state: 'buildable', requiredTownCenterLevel };
   }
 
   /**

@@ -61,6 +61,15 @@ export const STRINGS = {
   'town.settings': { en: 'Settings', ko: '설정' },
   'town.hint': { en: 'Tap a building to upgrade   R Research   H Heroes   Q Quests   B Battle   S Settings', ko: '건물을 눌러 업그레이드   R 연구   H 영웅   Q 임무   B 전투   S 설정' },
   'town.locked': { en: 'Locked', ko: '잠김' },
+  'town.buildable': { en: 'Build', ko: '건설 가능' },
+  'town.lockedReason': {
+    en: 'Locked (needs Town Center Lv.{level})',
+    ko: '잠김 (중앙 청사 Lv.{level} 필요)',
+  },
+  'town.woodHint': {
+    en: 'Build the Lumber Mill to start producing wood.',
+    ko: '제재소를 지어 목재 생산을 시작하세요.',
+  },
   'town.defense': { en: 'Town Defense: {value}', ko: '마을 방어력: {value}' },
   // Hearth / Warmth (온기) survival layer.
   'town.warmth': { en: 'Warmth: {pct}%', ko: '온기: {pct}%' },
@@ -94,6 +103,10 @@ export const STRINGS = {
   'tutorial.resourcesWarmth': {
     en: 'Nicely done! Buildings gather resources over time — watch the top bar climb. Keep an eye on Warmth (온기): let the hearth die and production slows.',
     ko: '잘하셨어요! 건물은 시간이 지날수록 자원을 모읍니다 — 상단 막대가 오르는 걸 보세요. 온기도 살피세요: 화롯불이 꺼지면 생산이 느려집니다.',
+  },
+  'tutorial.buildLumberMill': {
+    en: 'Build the Lumber Mill for a steady wood income — almost every upgrade needs wood. Tap it on the map, then press Build.',
+    ko: '제재소를 지어 목재를 확보하세요. 대부분의 업그레이드에 목재가 필요합니다. 지도에서 제재소를 누른 뒤 짓기를 누르세요.',
   },
   'tutorial.buildAndTrain': {
     en: 'With the Town Center at Lv.2, tap the Barracks on the map to build it. Then open Barracks below and train a troop to raise your army.',
@@ -143,6 +156,7 @@ export const STRINGS = {
   'building.level': { en: 'Level {level}', ko: '레벨 {level}' },
   'building.maxLevel': { en: 'MAX LEVEL', ko: '최대 레벨' },
   'building.upgrade': { en: 'Upgrade', ko: '업그레이드' },
+  'building.build': { en: 'Build', ko: '짓기' },
   'building.upgradeTo': { en: 'Upgrade to Lv.{level}', ko: 'Lv.{level} 업그레이드' },
   'building.upgrading': { en: 'Upgrading… {seconds}s', ko: '업그레이드 중… {seconds}초' },
   'building.output': { en: 'Output: {amount}/s', ko: '생산량: {amount}/초' },
@@ -312,6 +326,11 @@ export const STRINGS = {
   'quest.summary': { en: 'Claimed {claimed} / {total}', ko: '수령 {claimed} / {total}' },
 
   // Quest descriptions.
+  'quest.secure_the_timber': { en: 'Secure the Timber', ko: '목재 확보' },
+  'quest.secure_the_timber.desc': {
+    en: 'Build the Lumber Mill to start a wood income — most upgrades need wood.',
+    ko: '제재소를 지어 목재 수입을 시작하세요 — 대부분의 업그레이드에 목재가 필요합니다.',
+  },
   'quest.raise_a_farm': { en: 'Raise a Farm', ko: '농장 짓기' },
   'quest.raise_a_farm.desc': { en: 'Build a Farm to feed your kingdom.', ko: '왕국을 먹일 농장을 지으세요.' },
   'quest.grow_the_center': { en: 'Grow the Capital', ko: '수도 성장' },
