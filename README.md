@@ -20,7 +20,7 @@ and deployed to **GitHub Pages**.
 
 - **Vite 5** – dev server and production bundler
 - **React 18** + **TypeScript** (strict mode) – UI shell, screens, and HUD overlay
-- **Phaser 3** – the real-time battle scene, rendered as a **2.5D sprite view**: the top-down world is drawn with a dimetric ("2:1 isometric") projection as a diamond ground, and every entity (champions, minions, structures, epic monsters) is a depth-sorted **ground-shadow + raised billboard** sprite. All sprite textures are **generated procedurally at runtime** (`generateTexture` from offscreen Graphics) and cached, so there are still **no image assets**
+- **Phaser 3** – the real-time battle scene, rendered as a **low-res procedural pixel-art 2.5D sprite view**: the top-down world is drawn with a dimetric ("2:1 isometric") projection as a diamond ground, and every entity (champions, minions, structures, epic monsters) is a depth-sorted **ground-shadow + raised billboard** sprite. Sprites are drawn as **chunky, hard-edged pixel art from a small derived palette** into a tiny offscreen buffer, baked once into a GPU texture with `generateTexture`, cached by key, and scaled up with **nearest-neighbor** (Phaser `render: { pixelArt: true, roundPixels: true, antialias: false }`), so there are still **no image assets**. Combat has deliberate **game feel / juice ('타격감')** — hit-flash, importance-scaled screen shake, cosmetic knockback/recoil, squash-and-stretch, impact spark particles, juicy damage-number popups, and a brief kill slow-mo — all driven off tweens/timers/camera so the deterministic simulation is never touched
 - **react-i18next** (+ `i18next-browser-languagedetector`) – Korean and English locales with a persisted language toggle
 - **Web Audio API** – 100% procedural sound effects (no binary audio files)
 - **Vitest** + **@testing-library/react** – unit tests for pure game logic, i18n parity, and components
@@ -214,7 +214,9 @@ src/
     PhaserGame.tsx              # mounts a single Phaser.Game, StrictMode-safe
     scenes/BattleScene.ts       # the Rift scene: renders the 2.5D map + routes math through rift/
     render/
-      sprites.ts                # Phaser-side sprite factory: bakes procedural billboard textures (generateTexture), cached
+      sprites.ts                # Phaser-side sprite factory: bakes procedural pixel-art billboard textures (generateTexture), cached
+      palette.ts                # pure limited-palette color math (accent -> 5-tone ramp), unit-tested
+      juice.ts                  # pure combat-juice math (hit importance, shake, knockback, sparks, popups), unit-tested
     rift/                       # pure, unit-tested Summoner's Rift modules
       map.ts economy.ts minions.ts structures.ts jungle.ts objectives.ts loadout.ts
       iso.ts                    # pure 2.5D dimetric projection: worldToScreen/screenToWorld/depthFor
@@ -230,18 +232,53 @@ src/
 
 ## Notes on assets and audio
 
-There are **no binary art or audio assets**. Champion portraits are CSS gradients with
-initials, and all sound effects are synthesized at runtime with the Web Audio API.
+There are **no binary art or audio assets** — none. Champion portraits are CSS gradients with
+initials, all sound effects are synthesized at runtime with the Web Audio API, and every
+battle sprite is drawn from code. No PNGs, atlases, or spritesheets are loaded or committed.
 
-The battle renders as a **2.5D sprite scene** with no image files either. The top-down world
-is projected onto a dimetric ("2:1 isometric") plane so the square map reads as a diamond
-ground, and each entity is drawn as a **ground-shadow ellipse plus a raised, upright
-billboard** sprite, depth-sorted so whatever is nearer the viewer draws on top (see
-`src/game/rift/iso.ts`). Every sprite texture is **generated procedurally at runtime**: the
-factory in `src/game/render/sprites.ts` draws a stylized silhouette into an offscreen Phaser
-`Graphics` object once, bakes it into a GPU texture via `generateTexture`, and **caches** it
-by entity type / team / variant so a texture is created a single time and then reused by many
-lightweight billboard `Image`s. No PNGs, atlases, or spritesheets are loaded or committed.
+### Low-res procedural pixel-art rendering
+
+The battle renders as a deliberate **low-res, procedural pixel-art 2.5D sprite scene** with no
+image files. The top-down world is projected onto a dimetric ("2:1 isometric") plane so the
+square map reads as a diamond ground, and each entity is drawn as a **ground-shadow ellipse
+plus a raised, upright billboard** sprite, depth-sorted so whatever is nearer the viewer draws
+on top (see `src/game/rift/iso.ts`).
+
+Every sprite texture is **generated procedurally at runtime** as chunky pixel art:
+
+- The factory in `src/game/render/sprites.ts` draws each champion / minion / structure / epic
+  monster as **hard-edged, blocky pixels** into a tiny offscreen buffer, then bakes it into a
+  GPU texture via `generateTexture` and **caches** it by entity type / team / variant, so a
+  texture is created a single time and reused by many lightweight billboard `Image`s.
+- Colors come from a **small, limited palette** derived from one accent color: the pure helper
+  in `src/game/render/palette.ts` turns an accent + team-rim color into a fixed five-tone ramp
+  (hard outline → shadow → base → light → team rim), so every sprite reads as a
+  limited-palette retro asset regardless of champion or team.
+- Phaser is configured for **nearest-neighbor** upscaling (`render: { pixelArt: true,
+  roundPixels: true, antialias: false }` in `src/game/PhaserGame.tsx`), so the small baked
+  textures scale up into crisp, aliased pixels instead of blurring.
+
+### Combat juice ('타격감')
+
+Hits carry deliberate **game feel**. `BattleScene.onDamage` is the single hit hook and fires,
+scaled by an importance band (chip → normal → ability → ult → big/lethal, classified in the
+pure `src/game/render/juice.ts`):
+
+- **hit-flash** (a brief `setTintFill` on the struck sprite),
+- **importance-scaled screen shake** (chip hits don't shake; a dedicated stronger shake on
+  turret/Nexus destruction),
+- cosmetic **knockback / recoil** (the struck billboard is nudged away from its attacker and
+  tweened back),
+- **squash-and-stretch** on the struck sprite,
+- **impact spark particles** (a burst of small pixel blocks whose count scales with the hit),
+- **juicy damage-number popups** (bigger, jitterier, heavier for larger hits), and
+- a brief **kill slow-mo** on champion takedowns.
+
+All of this juice is driven **only** off tweens, timers, camera, and transient VFX — it never
+writes `unit.pos` or any simulation timer — so the deterministic, unit-tested `update()`
+simulation is never perturbed. The numeric decisions behind the juice (how big a hit is, how
+hard to shake, how far to nudge, spark counts, popup styling) live in the pure, Phaser-free,
+unit-tested `src/game/render/juice.ts`.
 
 The audio engine degrades to a no-op in headless/test environments where `AudioContext` is
 unavailable, so builds and unit tests stay green.

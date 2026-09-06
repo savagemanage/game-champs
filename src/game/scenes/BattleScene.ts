@@ -52,6 +52,16 @@ import {
 } from '../rift/iso';
 import { SpriteFactory, type SpriteSize } from '../render/sprites';
 import {
+  classifyHit,
+  shakeForHit,
+  structureDestructionShake,
+  sparkCountForHit,
+  knockbackForHit,
+  knockbackDir,
+  popupStyleForHit,
+  type HitImportance,
+} from '../render/juice';
+import {
   buildStructureGraph,
   isStructureTargetable,
   isInhibitorAlive,
@@ -98,9 +108,6 @@ import {
   type TeamModifiers,
   type BaronBuffState,
 } from '../rift/objectives';
-
-/** Damage at or above this fraction of a champion's max HP earns a screen shake. */
-const BIG_HIT_FRACTION = 0.12;
 
 /** Data passed into the scene from React via `scene.start(key, data)`. */
 export interface BattleSceneData {
@@ -284,6 +291,8 @@ export default class BattleScene extends Phaser.Scene {
 
   private elapsed = 0;
   private ended = false;
+  /** Guards the cosmetic kill slow-mo so rapid kills cannot stack/strand it. */
+  private slowMoActive = false;
   private stats = {
     championKills: 0,
     minionKills: 0,
@@ -1017,7 +1026,9 @@ export default class BattleScene extends Phaser.Scene {
     if (target && canBasicAttack(u)) {
       const res = applyDamage(target, u.ad);
       this.registerKill(u, target, res.lethal);
-      this.onDamage(this.entityForUnit(target), target.pos, res.dealt, 0xffcc55, res.lethal);
+      this.onDamage(this.entityForUnit(target), target.pos, res.dealt, 0xffcc55, res.lethal, {
+        fromPos: u.pos,
+      });
       this.drawBeam(u.pos, target.pos, 0xffcc55);
       resetAttackCooldown(u);
     }
@@ -1041,7 +1052,9 @@ export default class BattleScene extends Phaser.Scene {
     const res = applyDamage(target, ad);
     if (attacker === this.player) this.stats.damageDealt += res.dealt;
     this.registerKill(u, target, res.lethal);
-    this.onDamage(this.entityForUnit(target), target.pos, res.dealt, 0xf0e6d2, res.lethal);
+    this.onDamage(this.entityForUnit(target), target.pos, res.dealt, 0xf0e6d2, res.lethal, {
+      fromPos: u.pos,
+    });
     if (u.attackRange > 220 * SCALE) this.drawProjectile(u.pos, target.pos, 0xf0e6d2);
     resetAttackCooldown(u);
   }
@@ -1133,7 +1146,11 @@ export default class BattleScene extends Phaser.Scene {
           const res = applyDamage(e.unit, effect.damage);
           if (isPlayer) this.stats.damageDealt += res.dealt;
           this.registerKill(caster.unit, e.unit, res.lethal);
-          this.onDamage(e, e.unit.pos, res.dealt, color, res.lethal);
+          this.onDamage(e, e.unit.pos, res.dealt, color, res.lethal, {
+            fromPos: caster.unit.pos,
+            ability: true,
+            ult: slot === 'R',
+          });
           if (effect.stunDuration > 0) {
             e.stunned = effect.stunDuration;
             this.stunSpin(e, color);
@@ -1279,54 +1296,211 @@ export default class BattleScene extends Phaser.Scene {
     );
   }
 
-  private floatingDamage(rawPos: Vec2, amount: number, color: number, prefix = '') {
+  private floatingDamage(
+    rawPos: Vec2,
+    amount: number,
+    color: number,
+    prefix = '',
+    importance: HitImportance = 'normal',
+  ) {
     if (amount <= 0) return;
     const pos = project(rawPos);
-    const text = this.add.text(pos.x, pos.y - 18, `${prefix}${amount}`, {
+    const style = popupStyleForHit(importance);
+    // Heavy hits get a hot near-white core so they punch through the accent
+    // color and read as clearly bigger than chip damage.
+    const shown = style.heavy ? 0xfff3c0 : color;
+    const jitter = (Math.random() * 2 - 1) * style.jitter;
+    const text = this.add.text(pos.x + jitter, pos.y - 18, `${prefix}${amount}`, {
       fontFamily: 'sans-serif',
-      fontSize: '12px',
-      color: `#${color.toString(16).padStart(6, '0')}`,
+      fontSize: `${style.fontSize}px`,
+      color: `#${shown.toString(16).padStart(6, '0')}`,
       fontStyle: 'bold',
+      stroke: '#101018',
+      strokeThickness: style.heavy ? 3 : 2,
     });
     text.setOrigin(0.5);
-    text.setScale(0.6);
+    text.setScale(0.4);
     text.setDepth(VFX_DEPTH);
-    this.tweens.add({ targets: text, scale: 1, duration: 120, ease: 'Back.easeOut' });
+    // Punchy Back.easeOut pop up to the importance-scaled peak, then settle.
     this.tweens.add({
       targets: text,
-      y: pos.y - 44,
+      scale: style.pop,
+      duration: 130,
+      ease: 'Back.easeOut',
+      yoyo: false,
+    });
+    this.tweens.add({
+      targets: text,
+      y: pos.y - (style.heavy ? 56 : 44),
       alpha: 0,
-      duration: 620,
+      duration: style.heavy ? 720 : 620,
+      delay: 90,
       ease: 'Cubic.easeOut',
       onComplete: () => text.destroy(),
     });
   }
 
-  private hitFlash(entity: Entity) {
+  private hitFlash(entity: Entity, importance: HitImportance = 'normal') {
     if (!entity.container.active) return;
     const img = entity.body;
     img.setTintFill(0xffffff);
-    this.time.delayedCall(70, () => {
+    // Bigger hits flash a touch longer so the impact reads as heavier.
+    const dur = importance === 'big' ? 110 : importance === 'chip' ? 55 : 80;
+    this.time.delayedCall(dur, () => {
       if (img.active) img.clearTint();
     });
   }
 
-  private shake(intensity: number) {
-    this.cameras.main.shake(160, Phaser.Math.Clamp(intensity, 0.003, 0.02));
+  private shake(intensity: number, duration = 160) {
+    if (intensity <= 0 || duration <= 0) return;
+    this.cameras.main.shake(duration, Phaser.Math.Clamp(intensity, 0.002, 0.03));
   }
 
-  private onDamage(target: Entity | undefined, pos: Vec2, amount: number, color: number, lethal: boolean) {
-    this.floatingDamage(pos, amount, color);
-    if (target) this.hitFlash(target);
+  /**
+   * Central hit hook: fires ALL combat juice for one damaging blow. Everything
+   * here is cosmetic (tweens / camera / timers / transient VFX) and NEVER writes
+   * `unit.pos` or any simulation timer, so it cannot perturb the deterministic
+   * `update()` step. `fromPos` (the attacker's flat position) is used only to
+   * pick a visual knockback DIRECTION.
+   */
+  private onDamage(
+    target: Entity | undefined,
+    pos: Vec2,
+    amount: number,
+    color: number,
+    lethal: boolean,
+    opts: { fromPos?: Vec2; ability?: boolean; ult?: boolean } = {},
+  ) {
+    const fraction = target ? amount / target.unit.maxHp : 0;
+    const importance = classifyHit({ fraction, ability: opts.ability, ult: opts.ult, lethal });
+
+    this.floatingDamage(pos, amount, color, '', importance);
+    if (target) {
+      this.hitFlash(target, importance);
+      this.squashStretch(target, importance);
+      this.knockback(target, opts.fromPos ?? pos, importance);
+    }
+    this.impactSparks(pos, color, importance);
     audio.play('hit');
+
     if (lethal) {
       audio.play('death');
       if (target) this.deathBurst(target, color);
+      // A champion takedown earns a brief, cosmetic slow-mo moment.
+      if (target && target.unit.kind === 'champion') this.killSlowMo();
     }
-    if (target && target.unit.kind === 'champion') {
-      const frac = amount / target.unit.maxHp;
-      if (frac >= BIG_HIT_FRACTION || lethal) this.shake(0.006 + frac * 0.04);
+
+    // Screen shake scales with importance; chip hits do not shake. Structure
+    // deaths get their own stronger shake below.
+    if (target && (target.unit.kind === 'champion' || lethal)) {
+      const s = shakeForHit(importance, fraction);
+      this.shake(s.intensity, s.duration);
     }
+    if (lethal && target && (target.unit.kind === 'turret' || target.unit.kind === 'nexus')) {
+      const s = structureDestructionShake();
+      this.shake(s.intensity, s.duration);
+    }
+  }
+
+  /**
+   * Short-lived burst of small pixel-block sparks at the projected hit point,
+   * tinted by the attack color. Bigger/lethal hits throw more sparks. Pinned to
+   * {@link VFX_DEPTH}; each spark tweens out then destroys itself.
+   */
+  private impactSparks(rawPos: Vec2, color: number, importance: HitImportance) {
+    const p = project(rawPos);
+    const count = sparkCountForHit(importance);
+    const spread = importance === 'big' ? 26 : importance === 'ult' ? 22 : 16;
+    const size = importance === 'big' ? 4 : importance === 'chip' ? 2 : 3;
+    for (let i = 0; i < count; i += 1) {
+      const angle = (Math.PI * 2 * i) / count + Math.random() * 0.6;
+      const dist = spread * (0.5 + Math.random() * 0.6);
+      const spark = this.add.rectangle(p.x, p.y - 6, size, size, i % 3 === 0 ? 0xffffff : color);
+      spark.setDepth(VFX_DEPTH);
+      this.tweens.add({
+        targets: spark,
+        x: p.x + Math.cos(angle) * dist,
+        y: p.y - 6 + Math.sin(angle) * dist * 0.6,
+        alpha: 0,
+        scale: 0.2,
+        duration: 220 + Math.random() * 160,
+        ease: 'Cubic.easeOut',
+        onComplete: () => spark.destroy(),
+      });
+    }
+  }
+
+  /**
+   * VISUAL-ONLY recoil: nudge the struck billboard's rendered body a few px away
+   * from its attacker, then tween it back. Applied to the sprite image's local
+   * offset INSIDE the container, so the container position (driven every frame
+   * from `unit.pos` in {@link syncVisuals}) is never fought over and the
+   * simulation's `unit.pos` is untouched.
+   */
+  private knockback(target: Entity, rawFrom: Vec2, importance: HitImportance) {
+    if (!target.container.active) return;
+    const img = target.body;
+    const dir = knockbackDir(project(rawFrom), project(target.unit.pos));
+    const dist = knockbackForHit(importance);
+    // Kill any in-flight recoil so rapid hits do not compound the offset.
+    this.tweens.killTweensOf(img);
+    const baseX = 0;
+    const baseY = 0;
+    img.x = baseX + dir.x * dist;
+    img.y = baseY + dir.y * dist;
+    this.tweens.add({
+      targets: img,
+      x: baseX,
+      y: baseY,
+      duration: 220,
+      ease: 'Back.easeOut',
+    });
+  }
+
+  /**
+   * Quick squash-and-stretch on the struck sprite: a brief vertical squash that
+   * springs back to scale 1. Purely a scale tween on the body image; auto-
+   * returns so it can never leave the sprite deformed.
+   */
+  private squashStretch(target: Entity, importance: HitImportance) {
+    if (!target.container.active) return;
+    // Applied to the CONTAINER scale (not the body image) so it never collides
+    // with the body-image knockback tween; syncVisuals only sets container
+    // position/depth, never scale, so this is safe to own here.
+    const c = target.container;
+    const amt = importance === 'big' ? 0.28 : importance === 'chip' ? 0.1 : 0.18;
+    this.tweens.killTweensOf(c);
+    this.tweens.add({
+      targets: c,
+      scaleX: 1 + amt,
+      scaleY: 1 - amt,
+      duration: 70,
+      ease: 'Quad.easeOut',
+      yoyo: true,
+      onComplete: () => {
+        if (c.active) c.setScale(1);
+      },
+    });
+  }
+
+  /**
+   * Brief, DETERMINISM-SAFE slow-mo on a champion kill. We slow ONLY the tween
+   * and animation timeScales (cosmetic layers) and add a short camera flash;
+   * the simulation keeps stepping on the real `deltaMs` in {@link update}, so
+   * cooldowns, waves, objectives, economy and win/lose are untouched. A one-shot
+   * real-time timer restores the tween timeScale, and re-entrancy is guarded so
+   * multiple kills in a row cannot stack or strand the scene slowed.
+   */
+  private killSlowMo() {
+    if (this.slowMoActive) return;
+    this.slowMoActive = true;
+    this.tweens.timeScale = 0.35;
+    this.cameras.main.flash(120, 255, 255, 255, false);
+    // Real-time timer: NOT affected by tweens.timeScale, so it always restores.
+    this.time.delayedCall(160, () => {
+      this.tweens.timeScale = 1;
+      this.slowMoActive = false;
+    });
   }
 
   private deathBurst(entity: Entity, color: number) {

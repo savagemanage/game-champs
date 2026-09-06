@@ -1,5 +1,5 @@
 /**
- * Procedural 2.5D sprite/texture factory for the battle renderer.
+ * Procedural LOW-RES PIXEL-ART sprite/texture factory for the battle renderer.
  *
  * The project ships ZERO binary art assets, so every sprite in the 2.5D battle
  * scene is drawn ONCE into an offscreen {@link Phaser.GameObjects.Graphics} and
@@ -9,10 +9,20 @@
  * {@link Phaser.GameObjects.Image} billboards. Nothing here regenerates a
  * texture per frame.
  *
+ * STYLE: each sprite is authored on a SMALL integer texel grid and drawn as
+ * BLOCKY, hard-edged pixels from a LIMITED five-tone palette derived from the
+ * caller's accent color (see {@link ./palette}). We only ever fill
+ * integer-aligned rectangles (no anti-aliased circles/arcs/rounded rects), and
+ * curves/diagonals are stair-stepped as blocks. The grid is baked at a small
+ * integer multiple (`TEXEL` block size) so that, combined with the Phaser
+ * `render.pixelArt` (nearest-neighbor) config in PhaserGame.tsx and Scale.FIT,
+ * the sprites blow up into crisp chunky retro pixels instead of blurring.
+ *
  * Unlike the `rift/*` modules (which stay pure and Phaser-free), this is an
  * explicit RENDER helper, so it MAY import Phaser. It contains no gameplay
- * logic: it only turns a description of an entity into a stylized silhouette
- * texture, tinted by the caller-supplied accent/team color.
+ * logic: it only turns a description of an entity into a stylized pixel-art
+ * texture, tinted by the caller-supplied accent/team color. The pure color math
+ * lives in {@link ./palette} and is unit-tested there.
  *
  * Each entity is drawn as an upright BILLBOARD (a stylized front-facing
  * silhouette) meant to be paired, at draw time, with a separate ground-shadow
@@ -23,6 +33,13 @@
 import Phaser from 'phaser';
 import type { ChampionRole } from '../../data/champions';
 import type { MinionType } from '../rift/minions';
+import {
+  darken,
+  derivePalette,
+  hexToInt,
+  lighten,
+  type SpritePalette,
+} from './palette';
 
 /** Team a sprite belongs to; used only to bias the outline/rim color. */
 export type SpriteTeam = 'ally' | 'enemy';
@@ -75,56 +92,54 @@ export type SpriteSpec =
   | StructureSpriteSpec
   | MarkerSpriteSpec;
 
-/** Rim/outline color per team (kept subtle so the accent still reads). */
+/** Rim/outline color per team (kept bright so the ally/enemy tell reads). */
 const TEAM_RIM: Record<SpriteTeam, number> = {
   ally: 0x8fd7ff,
   enemy: 0xff8a7a,
 };
 
-const OUTLINE = 0x05100a;
-
 /**
- * Readability tuning multipliers applied to the original billboard designs.
- *
- * The projected diamond is width-constrained, so the fitted projection scale is
- * fixed; to make units read clearly (and look less cramped) in the 2.5D view we
- * bake the procedural sprites at a larger design size. These are pure texture
- * sizes and have NO effect on gameplay math (which stays on the flat plane).
- * Champions/minions get the biggest bump since they cluster in lane; structures
- * are already tall, so they only get a gentle increase.
+ * Texel block size: how many real texture pixels each authored grid cell
+ * occupies when baked. A grid cell is a hard square block; combined with the
+ * scene's nearest-neighbor upscaling this keeps the "chunky pixel" read.
  */
-const CHAMPION_SPRITE_SCALE = 1.35;
-const MINION_SPRITE_SCALE = 1.35;
-const STRUCTURE_SPRITE_SCALE = 1.2;
+const TEXEL = 3;
 
-/** Lighten a packed 0xRRGGBB color toward white by `amount` in [0,1]. */
-function lighten(color: number, amount: number): number {
-  const c = Phaser.Display.Color.IntegerToColor(color);
-  return Phaser.Display.Color.GetColor(
-    Math.round(c.red + (255 - c.red) * amount),
-    Math.round(c.green + (255 - c.green) * amount),
-    Math.round(c.blue + (255 - c.blue) * amount),
-  );
-}
+/**
+ * A tiny helper that treats the offscreen Graphics as a coarse pixel grid:
+ * every `px`/`rect` call fills BLOCKY, integer-aligned rectangles scaled by
+ * {@link TEXEL}. No anti-aliased primitives are ever used, so baked edges stay
+ * perfectly hard. Coordinates are in GRID (texel) units, not pixels.
+ */
+class PixelGrid {
+  constructor(private readonly g: Phaser.GameObjects.Graphics) {}
 
-/** Darken a packed 0xRRGGBB color toward black by `amount` in [0,1]. */
-function darken(color: number, amount: number): number {
-  const c = Phaser.Display.Color.IntegerToColor(color);
-  return Phaser.Display.Color.GetColor(
-    Math.round(c.red * (1 - amount)),
-    Math.round(c.green * (1 - amount)),
-    Math.round(c.blue * (1 - amount)),
-  );
-}
+  /** Fill a single texel block at grid (x, y). */
+  px(x: number, y: number, color: number, alpha = 1): void {
+    this.g.fillStyle(color, alpha);
+    this.g.fillRect(x * TEXEL, y * TEXEL, TEXEL, TEXEL);
+  }
 
-function hexToInt(hex: string): number {
-  return Phaser.Display.Color.HexStringToColor(hex).color;
+  /** Fill a `w`x`h` block of texels with its top-left at grid (x, y). */
+  rect(x: number, y: number, w: number, h: number, color: number, alpha = 1): void {
+    if (w <= 0 || h <= 0) return;
+    this.g.fillStyle(color, alpha);
+    this.g.fillRect(x * TEXEL, y * TEXEL, w * TEXEL, h * TEXEL);
+  }
+
+  /** Draw a 1-texel-thick hard outline just OUTSIDE the given texel box. */
+  outlineBox(x: number, y: number, w: number, h: number, color: number): void {
+    this.rect(x - 1, y - 1, w + 2, 1, color); // top
+    this.rect(x - 1, y + h, w + 2, 1, color); // bottom
+    this.rect(x - 1, y, 1, h, color); // left
+    this.rect(x + w, y, 1, h, color); // right
+  }
 }
 
 /**
- * Factory that bakes and caches procedural billboard textures. One instance is
- * created per {@link Phaser.Scene}; textures live in the scene's texture manager
- * and are keyed so repeated requests reuse the same baked image.
+ * Factory that bakes and caches procedural pixel-art billboard textures. One
+ * instance is created per {@link Phaser.Scene}; textures live in the scene's
+ * texture manager and are keyed so repeated requests reuse the same baked image.
  */
 export class SpriteFactory {
   private readonly scene: Phaser.Scene;
@@ -167,19 +182,20 @@ export class SpriteFactory {
   private bake(key: string, spec: SpriteSpec): SpriteSize {
     const g = this.scene.add.graphics();
     g.setVisible(false);
+    const grid = new PixelGrid(g);
     let size: SpriteSize;
     switch (spec.kind) {
       case 'champion':
-        size = this.drawChampion(g, spec);
+        size = this.drawChampion(grid, spec);
         break;
       case 'minion':
-        size = this.drawMinion(g, spec);
+        size = this.drawMinion(grid, spec);
         break;
       case 'structure':
-        size = this.drawStructure(g, spec);
+        size = this.drawStructure(grid, spec);
         break;
       case 'marker':
-        size = this.drawMarker(g, spec);
+        size = this.drawMarker(grid, spec);
         break;
     }
     g.generateTexture(key, size.width, size.height);
@@ -187,262 +203,281 @@ export class SpriteFactory {
     return size;
   }
 
-  // -- Champion: upright body + head + an archetype motif ------------------
+  // -- Champion: upright pixel figure + head + an archetype motif ----------
 
-  private drawChampion(g: Phaser.GameObjects.Graphics, spec: ChampionSpriteSpec): SpriteSize {
-    // Readability tuning: champions are drawn ~1.35x larger than the original
-    // 40x56 design so they read clearly in the projected diamond without
-    // becoming a cluttered cluster. All interior coordinates scale with `s`.
-    const s = CHAMPION_SPRITE_SCALE;
-    const w = Math.round(40 * s);
-    const h = Math.round(56 * s);
-    const accent = hexToInt(spec.accent);
-    const rim = TEAM_RIM[spec.team];
-    const cx = w / 2;
+  private drawChampion(grid: PixelGrid, spec: ChampionSpriteSpec): SpriteSize {
+    // Authored on an 18x26 texel grid; baked to 54x78 px at TEXEL=3.
+    const GW = 18;
+    const GH = 26;
+    const pal = derivePalette(hexToInt(spec.accent), TEAM_RIM[spec.team]);
+    const cx = GW / 2; // 9
 
-    // Cast shadow on the base (small dark oval already handled by BattleScene;
-    // here we only draw the standing figure so it can float above the shadow).
-    // Cloak / torso: a rounded trapezoid body.
-    const bodyTop = 20 * s;
-    const bodyBottom = h - 4 * s;
-    g.fillStyle(darken(accent, 0.35), 1);
-    g.fillRoundedRect(cx - 12 * s, bodyTop, 24 * s, bodyBottom - bodyTop, 6 * s);
-    // Front lit panel.
-    g.fillStyle(accent, 1);
-    g.fillRoundedRect(cx - 9 * s, bodyTop + 2 * s, 18 * s, bodyBottom - bodyTop - 4 * s, 5 * s);
-    g.fillStyle(lighten(accent, 0.3), 1);
-    g.fillRoundedRect(cx - 7 * s, bodyTop + 3 * s, 6 * s, bodyBottom - bodyTop - 8 * s, 3 * s);
-    // Team rim outline around the torso.
-    g.lineStyle(2 * s, rim, 0.9);
-    g.strokeRoundedRect(cx - 12 * s, bodyTop, 24 * s, bodyBottom - bodyTop, 6 * s);
+    // --- Legs (two blocky stumps) ---
+    grid.rect(6, 21, 2, 4, pal.shadow);
+    grid.rect(10, 21, 2, 4, pal.shadow);
+    grid.outlineBox(6, 21, 2, 4, pal.outline);
+    grid.outlineBox(10, 21, 2, 4, pal.outline);
 
-    // Head.
-    g.fillStyle(0xf0e6d2, 1);
-    g.fillCircle(cx, 14 * s, 8 * s);
-    g.lineStyle(2 * s, OUTLINE, 0.8);
-    g.strokeCircle(cx, 14 * s, 8 * s);
+    // --- Torso: blocky trapezoid (shadow side + base + lit front strip) ---
+    const bx = 4;
+    const by = 10;
+    const bw = 10;
+    const bh = 12;
+    grid.rect(bx, by, bw, bh, pal.shadow); // full body base = shadow tone
+    grid.rect(bx + 1, by, bw - 2, bh, pal.base); // main body plate
+    grid.rect(bx + 2, by + 1, 3, bh - 2, pal.light); // front-lit strip
+    grid.outlineBox(bx, by, bw, bh, pal.outline);
+    // Team rim: a bright 1-texel highlight down the lit shoulder edge.
+    grid.rect(bx + 1, by, 1, bh, pal.rim);
 
-    // Archetype motif drawn as a held prop, tinted lighter than the accent.
-    const motif = lighten(accent, 0.45);
-    this.drawChampionMotif(g, spec.role, cx, motif, s);
+    // --- Shoulders (slightly wider block) ---
+    grid.rect(bx - 1, by, 1, 3, pal.shadow);
+    grid.rect(bx + bw, by, 1, 3, pal.shadow);
 
-    return { width: w, height: h, footY: h - 3 * s };
+    // --- Head (blocky, skin-toned) ---
+    const HEAD = 0xf0e6d2;
+    const hx = cx - 3; // 6
+    const hy = 4;
+    grid.rect(hx, hy, 6, 6, HEAD);
+    grid.rect(hx + 1, hy + 1, 4, 2, lighten(HEAD, 0.2)); // lit brow
+    grid.rect(hx + 1, hy + 4, 4, 1, darken(HEAD, 0.3)); // jaw shadow
+    grid.outlineBox(hx, hy, 6, 6, pal.outline);
+
+    // --- Archetype motif (held prop, drawn as blocks in a lighter accent) ---
+    this.drawChampionMotif(grid, spec.role, pal);
+
+    return { width: GW * TEXEL, height: GH * TEXEL, footY: (GH - 1) * TEXEL };
   }
 
-  private drawChampionMotif(
-    g: Phaser.GameObjects.Graphics,
-    role: ChampionRole,
-    cx: number,
-    motif: number,
-    s: number,
-  ) {
-    g.lineStyle(3 * s, motif, 1);
+  private drawChampionMotif(grid: PixelGrid, role: ChampionRole, pal: SpritePalette) {
+    const motif = lighten(pal.base, 0.5);
+    const motifDark = darken(motif, 0.35);
     switch (role) {
       case 'marksman': {
-        // A bow: a curved arc on the right side.
-        g.beginPath();
-        g.arc(cx + 16 * s, 30 * s, 16 * s, Phaser.Math.DegToRad(-70), Phaser.Math.DegToRad(70), false);
-        g.strokePath();
-        g.lineStyle(1.5 * s, motif, 1);
-        g.lineBetween(cx + 4 * s, 15 * s, cx + 4 * s, 45 * s); // bowstring
+        // A bow: a stair-stepped vertical arc on the right, blocky string.
+        grid.rect(15, 8, 1, 2, motif);
+        grid.rect(16, 10, 1, 5, motif);
+        grid.rect(15, 15, 1, 2, motif);
+        grid.rect(14, 11, 1, 3, motifDark); // grip
+        grid.rect(13, 9, 1, 8, motif); // bowstring
         break;
       }
       case 'assassin': {
-        // Twin blades: two thin daggers crossing.
-        g.fillStyle(motif, 1);
-        g.fillTriangle(cx + 10 * s, 42 * s, cx + 14 * s, 42 * s, cx + 20 * s, 12 * s);
-        g.fillTriangle(cx - 10 * s, 42 * s, cx - 14 * s, 42 * s, cx - 20 * s, 12 * s);
+        // Twin daggers crossing: two thin stair-stepped blades.
+        grid.rect(13, 9, 1, 3, motif);
+        grid.rect(14, 11, 1, 3, motif);
+        grid.rect(15, 13, 1, 3, motif);
+        grid.rect(4, 9, 1, 3, motif);
+        grid.rect(3, 11, 1, 3, motif);
+        grid.rect(2, 13, 1, 3, motif);
         break;
       }
       case 'bruiser': {
-        // A shield: a rounded plate on the left arm.
-        g.fillStyle(motif, 1);
-        g.fillRoundedRect(cx - 22 * s, 22 * s, 12 * s, 20 * s, 4 * s);
-        g.lineStyle(1.5 * s, OUTLINE, 0.7);
-        g.strokeRoundedRect(cx - 22 * s, 22 * s, 12 * s, 20 * s, 4 * s);
+        // A shield: a solid plate on the left arm with a bright boss.
+        grid.rect(1, 12, 4, 7, motifDark);
+        grid.rect(2, 13, 2, 5, motif);
+        grid.rect(2, 15, 2, 1, lighten(motif, 0.4)); // boss highlight
+        grid.outlineBox(1, 12, 4, 7, pal.outline);
         break;
       }
       case 'mage': {
         // A staff with a glowing orb at the top.
-        g.lineStyle(3 * s, motif, 1);
-        g.lineBetween(cx + 16 * s, 12 * s, cx + 16 * s, 48 * s);
-        g.fillStyle(lighten(motif, 0.4), 1);
-        g.fillCircle(cx + 16 * s, 10 * s, 6 * s);
+        grid.rect(15, 6, 1, 15, motifDark); // shaft
+        grid.rect(14, 3, 3, 3, motif); // orb
+        grid.rect(15, 4, 1, 1, lighten(motif, 0.5)); // orb glint
         break;
       }
       case 'enchanter': {
-        // A floating orb / halo above the shoulder.
-        g.lineStyle(2.5 * s, motif, 1);
-        g.strokeCircle(cx + 15 * s, 16 * s, 7 * s);
-        g.fillStyle(lighten(motif, 0.5), 0.9);
-        g.fillCircle(cx + 15 * s, 16 * s, 3 * s);
+        // A floating halo ring above the shoulder (blocky ring).
+        grid.rect(13, 5, 3, 1, motif);
+        grid.rect(13, 8, 3, 1, motif);
+        grid.rect(12, 6, 1, 2, motif);
+        grid.rect(16, 6, 1, 2, motif);
+        grid.rect(14, 6, 1, 2, lighten(motif, 0.4)); // inner glow
         break;
       }
     }
   }
 
-  // -- Minion: a small pawn, bigger for siege/super ------------------------
+  // -- Minion: a small pixel pawn, bigger for siege/super ------------------
 
-  private drawMinion(g: Phaser.GameObjects.Graphics, spec: MinionSpriteSpec): SpriteSize {
-    const typeScale = spec.type === 'super' ? 1.5 : spec.type === 'siege' ? 1.25 : 1;
-    const scale = typeScale * MINION_SPRITE_SCALE;
-    const w = Math.round(22 * scale);
-    const h = Math.round(30 * scale);
-    const accent = hexToInt(spec.accent);
-    const rim = TEAM_RIM[spec.team];
-    const cx = w / 2;
+  private drawMinion(grid: PixelGrid, spec: MinionSpriteSpec): SpriteSize {
+    // Base melee/caster on a 14x18 grid; siege/super get more texels so they
+    // read as physically bigger threats (siege 16x20, super 18x24).
+    const big = spec.type === 'super' ? 2 : spec.type === 'siege' ? 1 : 0;
+    const GW = 14 + big * 2;
+    const GH = 18 + big * 3;
+    const pal = derivePalette(hexToInt(spec.accent), TEAM_RIM[spec.team]);
+    const cx = Math.floor(GW / 2);
 
-    // Body: a rounded pawn.
-    g.fillStyle(darken(accent, 0.3), 1);
-    g.fillRoundedRect(cx - 7 * scale, 12 * scale, 14 * scale, 16 * scale, 4 * scale);
-    g.fillStyle(accent, 1);
-    g.fillRoundedRect(cx - 5 * scale, 13 * scale, 10 * scale, 13 * scale, 3 * scale);
-    g.lineStyle(1.5, rim, 0.85);
-    g.strokeRoundedRect(cx - 7 * scale, 12 * scale, 14 * scale, 16 * scale, 4 * scale);
-    // Head.
-    g.fillStyle(lighten(accent, 0.25), 1);
-    g.fillCircle(cx, 8 * scale, 5 * scale);
-    g.lineStyle(1, OUTLINE, 0.7);
-    g.strokeCircle(cx, 8 * scale, 5 * scale);
-    // Siege/super get a little cannon/spike to read as bigger threats.
+    // Body: a squat blocky pawn.
+    const bw = 8 + big * 2;
+    const bh = 8 + big * 2;
+    const bx = cx - Math.floor(bw / 2);
+    const by = GH - bh - 2;
+    grid.rect(bx, by, bw, bh, pal.shadow);
+    grid.rect(bx + 1, by, bw - 2, bh, pal.base);
+    grid.rect(bx + 1, by + 1, 2, bh - 2, pal.light); // lit strip
+    grid.outlineBox(bx, by, bw, bh, pal.outline);
+    grid.rect(bx + 1, by, 1, bh, pal.rim); // team rim edge
+
+    // Head: a blocky knob.
+    const hs = 4 + big;
+    const hx = cx - Math.floor(hs / 2);
+    const hy = by - hs;
+    grid.rect(hx, hy, hs, hs, lighten(pal.base, 0.2));
+    grid.outlineBox(hx, hy, hs, hs, pal.outline);
+
+    // Siege/super: a cannon/spike jutting out to read as a bigger threat.
     if (spec.type === 'siege' || spec.type === 'super') {
-      g.fillStyle(lighten(accent, 0.4), 1);
-      g.fillRect(cx + 4 * scale, 14 * scale, 6 * scale, 4 * scale);
+      const barrel = lighten(pal.base, 0.4);
+      grid.rect(bx + bw, by + 1, 2 + big, 2, barrel);
+      grid.outlineBox(bx + bw, by + 1, 2 + big, 2, pal.outline);
     }
 
-    return { width: w, height: h, footY: h - 2 };
+    return { width: GW * TEXEL, height: GH * TEXEL, footY: (GH - 1) * TEXEL };
   }
 
-  // -- Structure: tiered tower / crystal with visible height ---------------
+  // -- Structure: tiered pixel tower / crystal with visible height ---------
 
-  private drawStructure(g: Phaser.GameObjects.Graphics, spec: StructureSpriteSpec): SpriteSize {
-    const accent = hexToInt(spec.accent);
-    const rim = TEAM_RIM[spec.team];
-    // Gentle readability bump; interior coordinates scale with `s`.
-    const s = STRUCTURE_SPRITE_SCALE;
+  private drawStructure(grid: PixelGrid, spec: StructureSpriteSpec): SpriteSize {
+    const pal = derivePalette(hexToInt(spec.accent), TEAM_RIM[spec.team]);
+
     if (spec.tier === 'nexus') {
-      // Tall crystal on a plinth.
-      const w = Math.round(56 * s);
-      const h = Math.round(96 * s);
-      const cx = w / 2;
-      g.fillStyle(darken(accent, 0.4), 1);
-      g.fillRoundedRect(cx - 22 * s, h - 18 * s, 44 * s, 16 * s, 5 * s); // plinth
-      g.lineStyle(2 * s, rim, 0.8);
-      g.strokeRoundedRect(cx - 22 * s, h - 18 * s, 44 * s, 16 * s, 5 * s);
-      // Crystal body: a tall diamond.
-      g.fillStyle(accent, 1);
-      g.fillPoints(
-        [
-          new Phaser.Geom.Point(cx, 6 * s),
-          new Phaser.Geom.Point(cx + 18 * s, h - 30 * s),
-          new Phaser.Geom.Point(cx, h - 14 * s),
-          new Phaser.Geom.Point(cx - 18 * s, h - 30 * s),
-        ],
-        true,
-      );
-      g.fillStyle(lighten(accent, 0.5), 0.9);
-      g.fillPoints(
-        [
-          new Phaser.Geom.Point(cx, 6 * s),
-          new Phaser.Geom.Point(cx + 8 * s, h - 34 * s),
-          new Phaser.Geom.Point(cx, h - 20 * s),
-          new Phaser.Geom.Point(cx - 8 * s, h - 34 * s),
-        ],
-        true,
-      );
-      g.lineStyle(2.5 * s, rim, 1);
-      g.strokePoints(
-        [
-          new Phaser.Geom.Point(cx, 6 * s),
-          new Phaser.Geom.Point(cx + 18 * s, h - 30 * s),
-          new Phaser.Geom.Point(cx, h - 14 * s),
-          new Phaser.Geom.Point(cx - 18 * s, h - 30 * s),
-        ],
-        true,
-        true,
-      );
-      return { width: w, height: h, footY: h - 4 * s };
+      // Tall crystal on a plinth. 22x38 grid -> 66x114 px.
+      const GW = 22;
+      const GH = 38;
+      const cx = GW / 2; // 11
+      // Plinth.
+      grid.rect(2, GH - 6, GW - 4, 5, pal.shadow);
+      grid.rect(3, GH - 6, GW - 6, 2, pal.base);
+      grid.outlineBox(2, GH - 6, GW - 4, 5, pal.outline);
+      // Crystal: a stair-stepped diamond built from horizontal blocks.
+      const top = 2;
+      const midY = 18;
+      const botY = GH - 8;
+      for (let y = top; y <= botY; y++) {
+        // Half-width grows to the middle then shrinks.
+        const t = y <= midY ? (y - top) / (midY - top) : (botY - y) / (botY - midY);
+        const half = Math.max(1, Math.round(1 + t * 6));
+        const tone = y < midY ? pal.light : pal.base;
+        grid.rect(cx - half, y, half * 2, 1, tone);
+      }
+      // Bright core facet.
+      grid.rect(cx - 1, top + 3, 2, midY - top - 3, lighten(pal.base, 0.5));
+      // Hard outline pass down the crystal silhouette edges.
+      for (let y = top; y <= botY; y++) {
+        const t = y <= midY ? (y - top) / (midY - top) : (botY - y) / (botY - midY);
+        const half = Math.max(1, Math.round(1 + t * 6));
+        grid.px(cx - half - 1, y, pal.outline);
+        grid.px(cx + half, y, pal.outline);
+      }
+      grid.rect(cx - 1, top - 1, 2, 1, pal.outline); // apex cap
+      grid.rect(cx - 2, top, 1, 1, pal.rim); // rim glint
+      return { width: GW * TEXEL, height: GH * TEXEL, footY: (GH - 1) * TEXEL };
     }
 
     if (spec.tier === 'inhibitor') {
-      const w = Math.round(44 * s);
-      const h = Math.round(60 * s);
-      const cx = w / 2;
-      g.fillStyle(darken(accent, 0.4), 1);
-      g.fillRoundedRect(cx - 16 * s, h - 14 * s, 32 * s, 12 * s, 4 * s);
-      g.fillStyle(accent, 1);
-      g.fillPoints(
-        [
-          new Phaser.Geom.Point(cx, 10 * s),
-          new Phaser.Geom.Point(cx + 14 * s, h - 16 * s),
-          new Phaser.Geom.Point(cx - 14 * s, h - 16 * s),
-        ],
-        true,
-      );
-      g.fillStyle(lighten(accent, 0.4), 0.85);
-      g.fillCircle(cx, h - 30 * s, 7 * s);
-      g.lineStyle(2 * s, rim, 0.9);
-      g.strokeCircle(cx, h - 30 * s, 7 * s);
-      return { width: w, height: h, footY: h - 3 * s };
+      // A squat pyramid with a glowing core. 16x24 grid -> 48x72 px.
+      const GW = 16;
+      const GH = 24;
+      const cx = GW / 2; // 8
+      // Base.
+      grid.rect(2, GH - 5, GW - 4, 4, pal.shadow);
+      grid.outlineBox(2, GH - 5, GW - 4, 4, pal.outline);
+      // Stepped pyramid.
+      const top = 3;
+      const bot = GH - 6;
+      for (let y = top; y <= bot; y++) {
+        const half = Math.max(1, Math.round(1 + ((y - top) / (bot - top)) * 5));
+        grid.rect(cx - half, y, half * 2, 1, y < (top + bot) / 2 ? pal.light : pal.base);
+        grid.px(cx - half - 1, y, pal.outline);
+        grid.px(cx + half, y, pal.outline);
+      }
+      // Glowing core.
+      grid.rect(cx - 2, 10, 4, 4, lighten(pal.base, 0.5));
+      grid.outlineBox(cx - 2, 10, 4, 4, pal.outline);
+      grid.rect(cx - 1, 11, 1, 2, pal.rim);
+      return { width: GW * TEXEL, height: GH * TEXEL, footY: (GH - 1) * TEXEL };
     }
 
-    // Turret: a stepped tower with a glowing top.
-    const w = Math.round(40 * s);
-    const h = Math.round(76 * s);
-    const cx = w / 2;
-    g.fillStyle(darken(accent, 0.45), 1);
-    g.fillRoundedRect(cx - 16 * s, h - 16 * s, 32 * s, 14 * s, 4 * s); // base
-    g.fillStyle(darken(accent, 0.2), 1);
-    g.fillRect(cx - 11 * s, 24 * s, 22 * s, h - 38 * s); // shaft
-    g.lineStyle(2 * s, rim, 0.85);
-    g.strokeRect(cx - 11 * s, 24 * s, 22 * s, h - 38 * s);
-    // Crenellated head.
-    g.fillStyle(accent, 1);
-    g.fillRoundedRect(cx - 14 * s, 12 * s, 28 * s, 16 * s, 4 * s);
+    // Turret: a stepped tower with a crenellated glowing head. 16x30 -> 48x90.
+    const GW = 16;
+    const GH = 30;
+    const cx = GW / 2; // 8
+    // Base foot.
+    grid.rect(2, GH - 6, GW - 4, 5, pal.shadow);
+    grid.outlineBox(2, GH - 6, GW - 4, 5, pal.outline);
+    // Shaft.
+    const sx = cx - 4;
+    const sw = 8;
+    const sy = 9;
+    const sh = GH - 6 - sy;
+    grid.rect(sx, sy, sw, sh, pal.shadow);
+    grid.rect(sx + 1, sy, sw - 2, sh, pal.base);
+    grid.rect(sx + 1, sy, 2, sh, pal.light); // lit column
+    grid.outlineBox(sx, sy, sw, sh, pal.outline);
+    grid.rect(sx + 1, sy, 1, sh, pal.rim); // team rim edge
+    // Crenellated head (wider block with two notches).
+    const hx = cx - 5;
+    const hw = 10;
+    grid.rect(hx, 3, hw, 6, pal.base);
+    grid.rect(hx + 2, 2, 2, 1, pal.base); // merlon
+    grid.rect(hx + hw - 4, 2, 2, 1, pal.base); // merlon
+    grid.outlineBox(hx, 3, hw, 6, pal.outline);
     // Glowing eye.
-    g.fillStyle(lighten(accent, 0.6), 1);
-    g.fillCircle(cx, 20 * s, 5 * s);
-    g.lineStyle(2 * s, rim, 1);
-    g.strokeRoundedRect(cx - 14 * s, 12 * s, 28 * s, 16 * s, 4 * s);
-    return { width: w, height: h, footY: h - 4 * s };
+    grid.rect(cx - 1, 5, 2, 2, lighten(pal.base, 0.6));
+    grid.px(cx - 1, 5, pal.rim);
+    return { width: GW * TEXEL, height: GH * TEXEL, footY: (GH - 1) * TEXEL };
   }
 
-  // -- Markers: jungle camp dot / epic monster silhouette ------------------
+  // -- Markers: jungle camp dot / epic monster pixel silhouette ------------
 
-  private drawMarker(g: Phaser.GameObjects.Graphics, spec: MarkerSpriteSpec): SpriteSize {
+  private drawMarker(grid: PixelGrid, spec: MarkerSpriteSpec): SpriteSize {
     if (spec.variant === 'jungle') {
-      const w = 20;
-      const h = 20;
-      g.fillStyle(0x6fe08a, 0.9);
-      g.fillCircle(w / 2, h / 2, 6);
-      g.lineStyle(1.5, 0x0a2417, 1);
-      g.strokeCircle(w / 2, h / 2, 6);
-      return { width: w, height: h, footY: h - 2 };
+      // A small blocky leaf/gem dot. 8x8 grid -> 24x24 px.
+      const GW = 8;
+      const GH = 8;
+      const green = 0x6fe08a;
+      grid.rect(2, 2, 4, 4, green);
+      grid.rect(3, 2, 2, 4, lighten(green, 0.3));
+      grid.rect(2, 3, 1, 2, darken(green, 0.2));
+      grid.outlineBox(2, 2, 4, 4, 0x0a2417);
+      return { width: GW * TEXEL, height: GH * TEXEL, footY: (GH - 1) * TEXEL };
     }
-    // Epic monsters: larger creature silhouettes.
-    const color =
+
+    // Epic monsters: larger blocky creature silhouettes. 18x20 grid -> 54x60px.
+    const baseColor =
       spec.variant === 'dragon' ? 0xe8703a : spec.variant === 'baron' ? 0x9b6bff : 0x7ad0ff;
-    const w = 54;
-    const h = 58;
-    const cx = w / 2;
-    // Hulking body.
-    g.fillStyle(darken(color, 0.3), 1);
-    g.fillEllipse(cx, h - 18, 40, 30);
-    g.fillStyle(color, 1);
-    g.fillEllipse(cx, h - 20, 32, 22);
-    // Head + horns.
-    g.fillStyle(lighten(color, 0.2), 1);
-    g.fillCircle(cx + 12, h - 30, 9);
-    g.fillStyle(darken(color, 0.15), 1);
-    g.fillTriangle(cx + 8, h - 38, cx + 12, h - 48, cx + 16, h - 38);
-    g.fillTriangle(cx + 16, h - 36, cx + 22, h - 44, cx + 22, h - 34);
-    // Wings for dragon/herald.
+    const pal = derivePalette(baseColor, spec.variant === 'baron' ? 0xc9b0ff : 0xbfe9ff);
+    const GW = 18;
+    const GH = 20;
+
+    // Hulking body (wide blocky mass).
+    grid.rect(3, 11, 12, 6, pal.shadow);
+    grid.rect(4, 11, 10, 5, pal.base);
+    grid.rect(5, 12, 4, 2, pal.light); // lit flank
+    grid.outlineBox(3, 11, 12, 6, pal.outline);
+
+    // Head jutting to the right.
+    grid.rect(11, 6, 5, 5, pal.base);
+    grid.rect(12, 7, 2, 2, pal.light);
+    grid.outlineBox(11, 6, 5, 5, pal.outline);
+    // Horns (stair-stepped blocks).
+    grid.rect(12, 4, 1, 2, lighten(pal.base, 0.2));
+    grid.rect(14, 3, 1, 3, lighten(pal.base, 0.2));
+
+    // Wings for dragon/herald (a stepped left wing); baron gets a spine hump.
     if (spec.variant !== 'baron') {
-      g.fillStyle(lighten(color, 0.1), 0.9);
-      g.fillTriangle(cx - 4, h - 30, cx - 26, h - 44, cx - 18, h - 22);
+      grid.rect(1, 7, 2, 2, lighten(pal.base, 0.15));
+      grid.rect(2, 9, 2, 2, lighten(pal.base, 0.15));
+      grid.rect(3, 11, 1, 1, lighten(pal.base, 0.15));
+      grid.outlineBox(1, 7, 2, 2, pal.outline);
+    } else {
+      grid.rect(4, 9, 2, 2, lighten(pal.base, 0.25));
+      grid.rect(7, 9, 2, 2, lighten(pal.base, 0.25));
     }
-    g.lineStyle(2, 0x120704, 0.9);
-    g.strokeEllipse(cx, h - 20, 32, 22);
-    return { width: w, height: h, footY: h - 4 };
+
+    return { width: GW * TEXEL, height: GH * TEXEL, footY: (GH - 1) * TEXEL };
   }
 }

@@ -63,7 +63,7 @@ export default function PhaserGame({
         width: GAME_WIDTH,
         height: GAME_HEIGHT,
       },
-      render: { pixelArt: false, antialias: true },
+      render: { pixelArt: true, antialias: false, roundPixels: true },
       scene: [BattleScene],
     });
     gameRef.current = game;
