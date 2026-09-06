@@ -1,5 +1,8 @@
+import { POPULATION } from '../config/GameConfig';
 import type { Army, TroopKind } from '../types';
 import { BuildingSystem } from './BuildingSystem';
+import { PopulationSystem } from './PopulationSystem';
+import { PremiumWallet } from './PremiumWallet';
 import { ResourceStore } from './ResourceStore';
 import { TrainingQueue } from './TrainingQueue';
 import { WarmthSystem } from './WarmthSystem';
@@ -36,6 +39,8 @@ export class GameState {
   readonly buildings: BuildingSystem;
   readonly training: TrainingQueue;
   readonly warmth: WarmthSystem;
+  readonly population: PopulationSystem;
+  readonly premium: PremiumWallet;
   private _waveCleared: number;
 
   private readonly saver: SaveManager;
@@ -53,6 +58,8 @@ export class GameState {
     this.buildings = result.snapshot.buildings;
     this.training = result.snapshot.training;
     this.warmth = result.snapshot.warmth;
+    this.population = result.snapshot.population;
+    this.premium = result.snapshot.premium;
     this._waveCleared = result.snapshot.waveCleared;
     this.saver = saver;
     this.loaded = result.loaded;
@@ -113,6 +120,8 @@ export class GameState {
       buildings: this.buildings,
       training: this.training,
       warmth: this.warmth,
+      population: this.population,
+      premium: this.premium,
       waveCleared: this._waveCleared,
     };
   }
@@ -126,12 +135,27 @@ export class GameState {
   tick(now: number, deltaMs: number): { buildingsDone: ReturnType<BuildingSystem['update']>; trainingDone: ReturnType<TrainingQueue['advance']> } {
     if (deltaMs > 0) {
       const furnaceLevel = this.buildings.furnaceLevel;
+      const extraHousing = this.buildings.totalHousing();
       // Advance warmth FIRST: burn fuel from the stockpile at the current
-      // Furnace level, raising or decaying warmth. Then credit production
-      // scaled by the warmth-derived multiplier, so a cold hold produces less.
+      // Furnace level, raising or decaying warmth. Then grow the survivor
+      // workforce and credit production scaled by BOTH the warmth-derived
+      // multiplier AND the population (satisfaction x staffing) multiplier, so a
+      // cold, crowded, or understaffed hold produces less.
       this.warmth.tick(deltaMs, furnaceLevel, this.resources);
-      const efficiency = this.warmth.productionMultiplier(furnaceLevel);
+      this.population.tick(deltaMs, extraHousing);
+
+      const warmthMult = this.warmth.productionMultiplier(furnaceLevel);
+      const popMult = this.population.outputMultiplier(
+        this.warmth.warmthRatio(furnaceLevel),
+        extraHousing,
+        this.buildings.totalProducerLevels() * POPULATION.STAFF_PER_PRODUCER_LEVEL,
+      );
+      const efficiency = warmthMult * popMult;
       this.resources.applyProduction(this.buildings.productionRates(), deltaMs, efficiency);
+      // Refine raw stock into steel (consumes iron + coal), scaled the same way.
+      this.buildings.refineryConversion(this.resources, deltaMs, efficiency);
+      // The lit Furnace drips premium Ember Sparks (warmth-independent).
+      this.premium.drip(deltaMs, furnaceLevel);
     }
     const buildingsDone = this.buildings.update(now);
     const trainingDone = this.training.advance(now);

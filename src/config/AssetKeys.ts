@@ -166,4 +166,7 @@ export const RESOURCE_ICON_FRAME: Record<string, number> = {
   wood: 1,
   coal: 2,
   iron: 3,
+  // Refined steel reuses the iron ingot frame until a dedicated icon is
+  // generated in the art feature (this feature does not touch tools/).
+  steel: 3,
 };

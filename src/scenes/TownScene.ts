@@ -30,6 +30,18 @@ const BUILDING_LAYOUT: Record<BuildingKind, { x: number; y: number; scale: numbe
   coal_pit: { x: 170, y: 400, scale: 1.8 },
   iron_mine: { x: 790, y: 400, scale: 1.8 },
   war_camp: { x: 480, y: 420, scale: 1.9 },
+  // FEAT-002 expanded city. Positions are laid out for when the art feature
+  // adds their sprites; until a texture exists they are not rendered (the
+  // buildBuildings loop skips any kind without a registered texture).
+  shelter_row: { x: 330, y: 400, scale: 1.7 },
+  frost_vault: { x: 620, y: 400, scale: 1.7 },
+  forge_hall: { x: 380, y: 250, scale: 1.7 },
+  envoy_hall: { x: 580, y: 250, scale: 1.7 },
+  warming_ward: { x: 250, y: 470, scale: 1.6 },
+  ember_archive: { x: 710, y: 470, scale: 1.6 },
+  infantry_yard: { x: 400, y: 470, scale: 1.6 },
+  lancer_yard: { x: 480, y: 480, scale: 1.6 },
+  marksman_range: { x: 560, y: 470, scale: 1.6 },
 };
 
 /** Per-resource live widgets in the top bar. */
@@ -158,6 +170,10 @@ export class TownScene extends Phaser.Scene {
     for (const kind of BUILDING_ORDER) {
       const layout = BUILDING_LAYOUT[kind];
       const tex = BUILDING_TEXTURE_BY_KIND[kind];
+      // The expanded FEAT-002 city has no sprites yet (art lands in a later
+      // feature); skip any building whose texture is not registered so the
+      // town renders cleanly while its economy/city logic is already live.
+      if (!tex) continue;
       const sprite = this.add
         .image(layout.x, layout.y, tex, 0)
         .setScale(layout.scale)

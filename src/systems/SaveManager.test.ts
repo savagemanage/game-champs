@@ -4,9 +4,51 @@ import { ResourceStore } from './ResourceStore';
 import { BuildingSystem } from './BuildingSystem';
 import { TrainingQueue } from './TrainingQueue';
 import { WarmthSystem } from './WarmthSystem';
-import { ECONOMY, WARMTH } from '../config/GameConfig';
+import { PopulationSystem } from './PopulationSystem';
+import { PremiumWallet } from './PremiumWallet';
+import { ECONOMY, WARMTH, POPULATION } from '../config/GameConfig';
 import { outputPerSec } from '../config/BuildingConfig';
 import { troopDef } from '../config/TroopConfig';
+
+/**
+ * A fully-staffed, well-housed workforce used by the offline-reconciliation
+ * tests: plenty of housing (so satisfaction headroom is high) and enough
+ * survivors assigned to fully staff the base's producers. This lets those tests
+ * isolate the capping / warmth / upgrade-split behaviour they target while the
+ * population multiplier stays a single, computable factor.
+ */
+function fullWorkforce(assignments: Partial<Record<string, number>> = {}): PopulationSystem {
+  return PopulationSystem.fromJSON({ total: 40, assignments: assignments as never });
+}
+
+/**
+ * A workforce pinned AT the base's housing cap for the given buildings, with
+ * the supplied per-building assignments. Being at the cap, growth is a no-op
+ * over the offline window, so satisfaction (headroom) and staffing - and thus
+ * the population output multiplier - stay CONSTANT, letting a test fold a single
+ * multiplier into a closed-form expectation.
+ */
+function atCapWorkforce(
+  buildings: BuildingSystem,
+  assignments: Partial<Record<string, number>> = {},
+): PopulationSystem {
+  const cap = POPULATION.BASE_HOUSING + buildings.totalHousing();
+  return PopulationSystem.fromJSON({ total: cap, assignments: assignments as never });
+}
+
+/**
+ * The population output multiplier a given snapshot's workforce applies over an
+ * offline segment, computed from the SAME systems the SaveManager uses so the
+ * expectations track the real curve rather than a hardcoded number. Warmth ratio
+ * is taken at full (1) for the ample-fuel offline tests.
+ */
+function popMult(buildings: BuildingSystem, population: PopulationSystem, warmthRatio = 1): number {
+  return population.outputMultiplier(
+    warmthRatio,
+    buildings.totalHousing(),
+    buildings.totalProducerLevels() * POPULATION.STAFF_PER_PRODUCER_LEVEL,
+  );
+}
 
 /**
  * Unit tests for the versioned save layer with an INJECTED fake storage (no
@@ -21,7 +63,15 @@ describe('SaveManager', () => {
       { kind: 'war_camp', level: 1, upgradeEndsAt: null },
     ]);
     const training = new TrainingQueue(undefined, { trapper: 4, marksman: 1, vanguard: 0 });
-    return { resources, buildings, training, warmth: new WarmthSystem(), waveCleared: 5 };
+    return {
+      resources,
+      buildings,
+      training,
+      warmth: new WarmthSystem(),
+      population: fullWorkforce(),
+      premium: new PremiumWallet(),
+      waveCleared: 5,
+    };
   }
 
   it('loads a fresh game when storage is empty', () => {
@@ -34,7 +84,7 @@ describe('SaveManager', () => {
 
   it('uses the Frosthold save namespace', () => {
     expect(SAVE_KEY).toBe('frosthold:save');
-    expect(SAVE_VERSION).toBe(2);
+    expect(SAVE_VERSION).toBe(3);
   });
 
   it('produces a versioned plain JSON object on serialize', () => {
@@ -56,7 +106,7 @@ describe('SaveManager', () => {
     const loaded = mgr.load(now); // same instant -> no offline gains
     expect(loaded.loaded).toBe(true);
     expect(loaded.offlineSeconds).toBe(0);
-    expect(loaded.snapshot.resources.balances).toEqual({ food: 100, wood: 200, coal: 300, iron: 40 });
+    expect(loaded.snapshot.resources.balances).toEqual({ food: 100, wood: 200, coal: 300, iron: 40, steel: 0 });
     expect(loaded.snapshot.buildings.furnaceLevel).toBe(3);
     expect(loaded.snapshot.buildings.level('hunters_hut')).toBe(2);
     expect(loaded.snapshot.training.army).toEqual({ trapper: 4, marksman: 1, vanguard: 0 });
@@ -77,15 +127,24 @@ describe('SaveManager', () => {
       { kind: 'war_camp', level: 1, upgradeEndsAt: null },
     ]);
     const training = new TrainingQueue(undefined, { trapper: 4, marksman: 1, vanguard: 0 });
-    mgr.save({ resources, buildings, training, warmth: new WarmthSystem(), waveCleared: 5 }, saveTime);
+    // Workforce pinned AT the housing cap so it neither grows nor changes its
+    // satisfaction/staffing over the window: the population multiplier is then a
+    // single constant we can fold into the expectation. Fully staff the hut.
+    const population = atCapWorkforce(buildings, { hunters_hut: 99 });
+    const pm = popMult(buildings, population);
+    mgr.save(
+      { resources, buildings, training, warmth: new WarmthSystem(), population, premium: new PremiumWallet(), waveCleared: 5 },
+      saveTime,
+    );
 
     const elapsedSec = 3600; // 1 hour, under the 8h cap
     const loaded = mgr.load(saveTime + elapsedSec * 1000);
     expect(loaded.offlineSeconds).toBe(elapsedSec);
 
     // Only the level-2 hunters' hut produces (food). Warmth is pinned at max
-    // (multiplier 1.0), so expected = rate * seconds * efficiency.
-    const expectedFood = outputPerSec('hunters_hut', 2) * elapsedSec * ECONOMY.OFFLINE_EFFICIENCY;
+    // (multiplier 1.0); expected = rate * seconds * efficiency * populationMult.
+    const expectedFood =
+      outputPerSec('hunters_hut', 2) * elapsedSec * ECONOMY.OFFLINE_EFFICIENCY * pm;
     expect(loaded.offlineGains.food).toBeCloseTo(expectedFood, 4);
     expect(loaded.snapshot.resources.get('food')).toBeCloseTo(100 + expectedFood, 4);
     // Warmth held at its Furnace-L3 maximum throughout.
@@ -111,7 +170,15 @@ describe('SaveManager', () => {
       { kind: 'hunters_hut', level: 2, upgradeEndsAt: t0 + boundaryOffset * 1000 },
     ]);
     const training = new TrainingQueue(undefined, { trapper: 0, marksman: 0, vanguard: 0 });
-    mgr.save({ resources, buildings, training, warmth: new WarmthSystem(), waveCleared: 0 }, t0);
+    // At-cap, fully-staffed workforce so growth is a no-op and satisfaction is
+    // constant; only the STAFFING factor shifts when the hut hits L3 (its
+    // desired staffing rises), so the multiplier differs per segment - we sample
+    // each from a buildings snapshot at the matching level.
+    const population = atCapWorkforce(buildings, { hunters_hut: 99 });
+    mgr.save(
+      { resources, buildings, training, warmth: new WarmthSystem(), population, premium: new PremiumWallet(), waveCleared: 0 },
+      t0,
+    );
 
     const loaded = mgr.load(t0 + windowSec * 1000);
     expect(loaded.offlineSeconds).toBe(windowSec);
@@ -119,10 +186,14 @@ describe('SaveManager', () => {
     expect(loaded.snapshot.buildings.level('hunters_hut')).toBe(3);
 
     const eff = ECONOMY.OFFLINE_EFFICIENCY;
+    // Population multiplier per segment (producer level, hence desired staffing,
+    // rises at the boundary), sampled from the same systems the SaveManager uses.
+    const pmL2 = popMult(new BuildingSystem([{ kind: 'hunters_hut', level: 2, upgradeEndsAt: null }]), population);
+    const pmL3 = popMult(new BuildingSystem([{ kind: 'hunters_hut', level: 3, upgradeEndsAt: null }]), population);
     const expectedSplit =
-      outputPerSec('hunters_hut', 2) * boundaryOffset * eff +
-      outputPerSec('hunters_hut', 3) * (windowSec - boundaryOffset) * eff;
-    const naiveWhole = outputPerSec('hunters_hut', 3) * windowSec * eff;
+      outputPerSec('hunters_hut', 2) * boundaryOffset * eff * pmL2 +
+      outputPerSec('hunters_hut', 3) * (windowSec - boundaryOffset) * eff * pmL3;
+    const naiveWhole = outputPerSec('hunters_hut', 3) * windowSec * eff * pmL3;
 
     expect(loaded.offlineGains.food).toBeCloseTo(expectedSplit, 4);
     // The split credit is strictly less than the old over-credit (post-upgrade
@@ -222,7 +293,10 @@ describe('SaveManager', () => {
       { kind: 'hunters_hut', level: 1, upgradeEndsAt: null },
     ]);
     const training = new TrainingQueue(undefined, { trapper: 0, marksman: 0, vanguard: 0 });
-    mgr.save({ resources, buildings, training, warmth: new WarmthSystem(WARMTH.MAX_WARMTH), waveCleared: 0 }, 0);
+    mgr.save(
+      { resources, buildings, training, warmth: new WarmthSystem(WARMTH.MAX_WARMTH), population: fullWorkforce(), premium: new PremiumWallet(), waveCleared: 0 },
+      0,
+    );
 
     const elapsedSec = WARMTH.MAX_WARMTH / WARMTH.WARMTH_DECAY_PER_SEC + 100; // long enough to fully freeze
     const loaded = mgr.load(elapsedSec * 1000);
@@ -251,7 +325,14 @@ describe('SaveManager', () => {
       { kind: 'coal_pit', level: 1, upgradeEndsAt: null },
     ]);
     const training = new TrainingQueue(undefined, { trapper: 0, marksman: 0, vanguard: 0 });
-    mgr.save({ resources, buildings, training, warmth: new WarmthSystem(WARMTH.MAX_WARMTH), waveCleared: 0 }, 0);
+    // At-cap, fully-staffed workforce -> constant population multiplier we fold
+    // into the expected gross production below.
+    const population = atCapWorkforce(buildings, { sawmill: 99, coal_pit: 99 });
+    const pm = popMult(buildings, population);
+    mgr.save(
+      { resources, buildings, training, warmth: new WarmthSystem(WARMTH.MAX_WARMTH), population, premium: new PremiumWallet(), waveCleared: 0 },
+      0,
+    );
 
     const elapsedSec = 3600; // 1 hour, under the cap
     const loaded = mgr.load(elapsedSec * 1000);
@@ -260,9 +341,9 @@ describe('SaveManager', () => {
     expect(loaded.snapshot.warmth.warmth).toBe(loaded.snapshot.warmth.maxWarmth(1));
 
     const eff = ECONOMY.OFFLINE_EFFICIENCY;
-    // Gross production over the window (multiplier 1.0 at full warmth).
-    const grossWood = outputPerSec('sawmill', 1) * elapsedSec * eff;
-    const grossCoal = outputPerSec('coal_pit', 1) * elapsedSec * eff;
+    // Gross production over the window (warmth 1.0, scaled by the population mult).
+    const grossWood = outputPerSec('sawmill', 1) * elapsedSec * eff * pm;
+    const grossCoal = outputPerSec('coal_pit', 1) * elapsedSec * eff * pm;
     // Fuel the L1 Furnace burned over the window (per-second demand * seconds).
     const perSec = new WarmthSystem().fuelPerSecond(1);
     const burnedWood = perSec.wood * elapsedSec;
@@ -299,7 +380,10 @@ describe('SaveManager', () => {
       { kind: 'hunters_hut', level: 1, upgradeEndsAt: null },
     ]);
     const training = new TrainingQueue(undefined, { trapper: 0, marksman: 0, vanguard: 0 });
-    mgr.save({ resources, buildings, training, warmth: new WarmthSystem(WARMTH.MAX_WARMTH), waveCleared: 0 }, 0);
+    mgr.save(
+      { resources, buildings, training, warmth: new WarmthSystem(WARMTH.MAX_WARMTH), population: fullWorkforce(), premium: new PremiumWallet(), waveCleared: 0 },
+      0,
+    );
 
     const elapsedSec = 3600;
     const loaded = mgr.load(elapsedSec * 1000);
@@ -323,12 +407,17 @@ describe('SaveManager', () => {
       { kind: 'hunters_hut', level: 1, upgradeEndsAt: null },
     ]);
     const training = new TrainingQueue(undefined, { trapper: 0, marksman: 0, vanguard: 0 });
-    mgr.save({ resources, buildings, training, warmth: new WarmthSystem(WARMTH.MAX_WARMTH), waveCleared: 0 }, 0);
+    const population = atCapWorkforce(buildings, { hunters_hut: 99 });
+    const pm = popMult(buildings, population);
+    mgr.save(
+      { resources, buildings, training, warmth: new WarmthSystem(WARMTH.MAX_WARMTH), population, premium: new PremiumWallet(), waveCleared: 0 },
+      0,
+    );
 
     const loaded = mgr.load(3600 * 1000);
     expect(loaded.snapshot.warmth.warmth).toBe(loaded.snapshot.warmth.maxWarmth(2));
-    // Full warmth -> unthrottled offline food credit.
-    const expectedFood = outputPerSec('hunters_hut', 1) * 3600 * ECONOMY.OFFLINE_EFFICIENCY;
+    // Full warmth -> offline food credit scaled by the population multiplier.
+    const expectedFood = outputPerSec('hunters_hut', 1) * 3600 * ECONOMY.OFFLINE_EFFICIENCY * pm;
     expect(loaded.offlineGains.food).toBeCloseTo(expectedFood, 3);
   });
 
@@ -354,5 +443,99 @@ describe('SaveManager', () => {
   it('freshGame starts fully warm', () => {
     const fresh = SaveManager.freshGame();
     expect(fresh.warmth.warmth).toBe(WARMTH.MAX_WARMTH);
+  });
+
+  // --- FEAT-002: steel resource, premium currency, population, migration ---
+
+  it('bumps SAVE_VERSION to 3 for the economy/city expansion', () => {
+    expect(SAVE_VERSION).toBe(3);
+  });
+
+  it('treats a pre-expansion version-2 save as a mismatch and starts fresh', () => {
+    const storage = memoryStorage();
+    // A well-formed version-2 (pre-expansion) save must NOT be mis-loaded into
+    // the v3 shape; it falls back to a fresh frozen settlement.
+    const v2 = {
+      version: 2,
+      resources: { food: 500, wood: 500, coal: 500, iron: 500 },
+      warmth: 80,
+      buildings: [{ kind: 'furnace', level: 4, upgradeEndsAt: null }],
+      army: { trapper: 3, marksman: 2, vanguard: 1 },
+      trainingQueue: [],
+      waveCleared: 9,
+      lastSeenAt: 0,
+    };
+    storage.setItem(SAVE_KEY, JSON.stringify(v2));
+    const loaded = new SaveManager(storage).load(0);
+    expect(loaded.loaded).toBe(false);
+    expect(loaded.snapshot.buildings.furnaceLevel).toBe(1);
+    expect(loaded.snapshot.resources.get('food')).toBe(ECONOMY.START.food);
+    // Fresh expansion fields are present and sane.
+    expect(loaded.snapshot.resources.get('steel')).toBe(0);
+    expect(loaded.snapshot.premium.sparks).toBe(0);
+    expect(loaded.snapshot.population.total).toBeGreaterThan(0);
+  });
+
+  it('round-trips the new steel resource, Ember Sparks, and population', () => {
+    const storage = memoryStorage();
+    const mgr = new SaveManager(storage);
+    const resources = new ResourceStore({ food: 1, wood: 2, coal: 3, iron: 4, steel: 55 });
+    const buildings = new BuildingSystem([
+      { kind: 'furnace', level: 3, upgradeEndsAt: null },
+      { kind: 'shelter_row', level: 2, upgradeEndsAt: null },
+      { kind: 'hunters_hut', level: 2, upgradeEndsAt: null },
+    ]);
+    const population = PopulationSystem.fromJSON({ total: 12, assignments: { hunters_hut: 5 } });
+    const snap: GameSnapshot = {
+      resources,
+      buildings,
+      training: new TrainingQueue(undefined, { trapper: 0, marksman: 0, vanguard: 0 }),
+      warmth: new WarmthSystem(),
+      population,
+      premium: new PremiumWallet(42),
+      waveCleared: 0,
+    };
+    // Serialized JSON carries the new fields.
+    const state = SaveManager.serialize(snap, 0);
+    expect(state.resources.steel).toBe(55);
+    expect(state.premiumCurrency).toBe(42);
+    expect(state.population.total).toBe(12);
+    expect(state.population.assignments.hunters_hut).toBe(5);
+
+    mgr.save(snap, 0);
+    const loaded = mgr.load(0); // no elapsed time
+    expect(loaded.snapshot.resources.get('steel')).toBe(55);
+    expect(loaded.snapshot.premium.sparks).toBe(42);
+    expect(loaded.snapshot.population.total).toBe(12);
+    expect(loaded.snapshot.population.assignedTo('hunters_hut')).toBe(5);
+  });
+
+  it('refines steel and drips Ember Sparks over an offline window', () => {
+    const storage = memoryStorage();
+    const mgr = new SaveManager(storage);
+    // A Forge Hall (refinery) with ample iron + coal to keep it fed, and a lit
+    // Furnace: while away it should mint steel and drip premium sparks.
+    const resources = new ResourceStore({ food: 0, wood: 1e9, coal: 1e9, iron: 1e9, steel: 0 });
+    const buildings = new BuildingSystem([
+      { kind: 'furnace', level: 3, upgradeEndsAt: null },
+      { kind: 'forge_hall', level: 1, upgradeEndsAt: null },
+    ]);
+    const snap: GameSnapshot = {
+      resources,
+      buildings,
+      training: new TrainingQueue(undefined, { trapper: 0, marksman: 0, vanguard: 0 }),
+      warmth: new WarmthSystem(WARMTH.MAX_WARMTH),
+      population: atCapWorkforce(buildings),
+      premium: new PremiumWallet(0),
+      waveCleared: 0,
+    };
+    mgr.save(snap, 0);
+
+    const loaded = mgr.load(3600 * 1000);
+    // Steel was minted from iron + coal during reconciliation...
+    expect(loaded.snapshot.resources.get('steel')).toBeGreaterThan(0);
+    expect(loaded.offlineGains.steel).toBeGreaterThan(0);
+    // ...and premium Ember Sparks dripped from the lit Furnace.
+    expect(loaded.snapshot.premium.sparks).toBeGreaterThan(0);
   });
 });

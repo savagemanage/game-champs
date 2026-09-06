@@ -24,9 +24,11 @@ export class ResourceStore {
     }
   }
 
-  /** A zeroed resource bundle. */
+  /** A zeroed resource bundle (one entry per canonical RESOURCE_ORDER kind). */
   static emptyBundle(): Resources {
-    return { food: 0, wood: 0, coal: 0, iron: 0 };
+    const bundle = {} as Resources;
+    for (const res of RESOURCE_ORDER) bundle[res] = 0;
+    return bundle;
   }
 
   /** Current amount of a single resource. */

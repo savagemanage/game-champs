@@ -1,17 +1,27 @@
-import { ECONOMY } from '../config/GameConfig';
+import { ECONOMY, POPULATION } from '../config/GameConfig';
 import type { Army, GameState, TroopKind } from '../types';
 import { BuildingSystem } from './BuildingSystem';
+import { PopulationSystem } from './PopulationSystem';
+import { PremiumWallet } from './PremiumWallet';
 import { ResourceStore } from './ResourceStore';
 import { TrainingQueue } from './TrainingQueue';
 import { WarmthSystem, type WarmthTickResult } from './WarmthSystem';
 
 /**
- * Current save-format version. Bump when GameState shape changes. Version 2 is
- * the Frosthold re-theme (new resource/building/troop/enemy vocabulary), so a
- * legacy version-1 'kingdom-rise' save is treated as a version mismatch and
- * falls back to a fresh frozen settlement rather than mis-mapping old kinds.
+ * Current save-format version. Bump when GameState shape changes.
+ *
+ * - v1: the legacy 'kingdom-rise' medieval theme.
+ * - v2: the Frosthold re-theme (frozen resource/building/troop/enemy
+ *   vocabulary + warmth).
+ * - v3: the FEAT-002 economy/city expansion - refined `steel` resource, Ember
+ *   Sparks premium currency, survivor population, and the enlarged building
+ *   roster (Shelter Row / Frost Vault / Forge Hall / Envoy Hall / Warming Ward
+ *   / Ember Archive / class yards).
+ *
+ * A save with any older version is treated as a mismatch and falls back to a
+ * fresh frozen settlement rather than mis-mapping old kinds.
  */
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 
 /** Default localStorage key for the single save slot (Frosthold namespace). */
 export const SAVE_KEY = 'frosthold:save';
@@ -33,6 +43,8 @@ export interface GameSnapshot {
   buildings: BuildingSystem;
   training: TrainingQueue;
   warmth: WarmthSystem;
+  population: PopulationSystem;
+  premium: PremiumWallet;
   waveCleared: number;
 }
 
@@ -72,6 +84,8 @@ export class SaveManager {
     return {
       version: SAVE_VERSION,
       resources: snapshot.resources.toJSON(),
+      premiumCurrency: snapshot.premium.toJSON(),
+      population: snapshot.population.toJSON(),
       warmth: snapshot.warmth.toJSON(),
       buildings: snapshot.buildings.toJSON(),
       army: snapshot.training.army,
@@ -94,6 +108,9 @@ export class SaveManager {
     const training = TrainingQueue.fromJSON(state.trainingQueue, normalizeArmy(state.army));
     // A legacy / warmth-less save (undefined) restores to full warmth.
     const warmth = WarmthSystem.fromJSON(state.warmth);
+    // The survivor workforce + premium wallet (both tolerate missing fields).
+    const population = PopulationSystem.fromJSON(state.population);
+    const premium = PremiumWallet.fromJSON(state.premiumCurrency);
 
     // Training that finished while away joins the army. (Trained troops do not
     // produce resources, so this ordering has no bearing on offline gains.)
@@ -128,42 +145,18 @@ export class SaveManager {
       .sort((a, b) => a - b);
 
     for (const boundary of boundaries) {
-      // Advance warmth over the segment (burning fuel from the store at the
-      // current Furnace level) BEFORE production, mirroring the live tick order.
-      // Deduct any fuel actually burned so `offlineGains` reflects the NET
-      // wood/coal change (production credited minus furnace burn), matching the
-      // authoritative store balance the player actually returns to.
-      deductFuel(offlineGains, warmth.tick(boundary - cursor, buildings.furnaceLevel, resources));
-      // Credit production at the CURRENT (pre-completion) rates up to this
-      // boundary, scaled by the warmth-derived multiplier, then apply the
-      // completion so later segments use higher rates.
-      accumulate(
-        offlineGains,
-        resources.applyProduction(
-          buildings.productionRates(),
-          boundary - cursor,
-          ECONOMY.OFFLINE_EFFICIENCY * warmth.productionMultiplier(buildings.furnaceLevel),
-        ),
-      );
+      creditSegment(boundary - cursor, resources, buildings, warmth, population, premium, offlineGains);
       buildings.update(boundary);
       cursor = boundary;
     }
     // Final segment: from the last boundary (or window start) to `now`.
-    deductFuel(offlineGains, warmth.tick(now - cursor, buildings.furnaceLevel, resources));
-    accumulate(
-      offlineGains,
-      resources.applyProduction(
-        buildings.productionRates(),
-        now - cursor,
-        ECONOMY.OFFLINE_EFFICIENCY * warmth.productionMultiplier(buildings.furnaceLevel),
-      ),
-    );
+    creditSegment(now - cursor, resources, buildings, warmth, population, premium, offlineGains);
     // Finish any upgrades whose timer elapsed exactly at/after `now` bookkeeping
     // (also completes upgrades that ended before the capped window began).
     buildings.update(now);
 
     return {
-      snapshot: { resources, buildings, training, warmth, waveCleared: state.waveCleared ?? 0 },
+      snapshot: { resources, buildings, training, warmth, population, premium, waveCleared: state.waveCleared ?? 0 },
       loaded: true,
       offlineSeconds,
       offlineGains,
@@ -177,6 +170,8 @@ export class SaveManager {
       buildings: new BuildingSystem(),
       training: new TrainingQueue(),
       warmth: new WarmthSystem(),
+      population: new PopulationSystem(),
+      premium: new PremiumWallet(),
       waveCleared: 0,
     };
   }
@@ -224,6 +219,50 @@ export class SaveManager {
   clear(): void {
     this.storage.removeItem(this.key);
   }
+}
+
+/**
+ * Credit ONE offline sub-segment of length `dtMs` at the rates currently in
+ * effect, mirroring the live GameState.tick order so offline and live play
+ * agree: advance warmth (burning fuel), grow the survivor workforce, credit
+ * idle production scaled by warmth x population multipliers, run the Forge Hall
+ * refinery over the same window/efficiency, and drip premium Ember Sparks. The
+ * fuel burned is netted out of `offlineGains` (as elsewhere) so the reported
+ * wood/coal is the honest net change. `steel` accrues into offlineGains via the
+ * refinery's minted output. Mutates the passed systems + `offlineGains`.
+ */
+function creditSegment(
+  dtMs: number,
+  resources: ResourceStore,
+  buildings: BuildingSystem,
+  warmth: WarmthSystem,
+  population: PopulationSystem,
+  premium: PremiumWallet,
+  offlineGains: ReturnType<ResourceStore['toJSON']>,
+): void {
+  if (dtMs <= 0) return;
+  const furnaceLevel = buildings.furnaceLevel;
+  const extraHousing = buildings.totalHousing();
+
+  // Warmth first (burns fuel); net that fuel out of the reported gains.
+  deductFuel(offlineGains, warmth.tick(dtMs, furnaceLevel, resources));
+  // Grow the workforce over the segment so later segments are better staffed.
+  population.tick(dtMs, extraHousing);
+
+  const warmthMult = warmth.productionMultiplier(furnaceLevel);
+  const popMult = population.outputMultiplier(
+    warmth.warmthRatio(furnaceLevel),
+    extraHousing,
+    buildings.totalProducerLevels() * POPULATION.STAFF_PER_PRODUCER_LEVEL,
+  );
+  const efficiency = ECONOMY.OFFLINE_EFFICIENCY * warmthMult * popMult;
+
+  accumulate(offlineGains, resources.applyProduction(buildings.productionRates(), dtMs, efficiency));
+  // Refine iron + coal into steel over the same window at the same efficiency;
+  // fold the minted steel into the reported gains.
+  offlineGains.steel += buildings.refineryConversion(resources, dtMs, efficiency);
+  // Premium sparks drip while the Furnace is lit (warmth-independent, offline-scaled).
+  premium.drip(dtMs, furnaceLevel, ECONOMY.OFFLINE_EFFICIENCY);
 }
 
 /** Add every resource in `src` into `dst` in place (both full bundles). */

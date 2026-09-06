@@ -66,6 +66,12 @@ export const PALETTE = {
   GOLD: 0xb9c4cf, // iron: cold steel grey (kept key name to avoid churn)
   GOLD_CSS: '#b9c4cf',
 
+  // Refined + premium accents (steel ingot, Ember Sparks).
+  STEEL_RES: 0x8fa6c9, // refined steel: bright blued alloy
+  STEEL_RES_CSS: '#8fa6c9',
+  SPARK: 0xffd27a, // Ember Sparks premium currency (warm gold-amber)
+  SPARK_CSS: '#ffd27a',
+
   // Signature frozen-survival tones.
   EMBER: 0xff7a3c,
   EMBER_CSS: '#ff7a3c',
@@ -105,8 +111,90 @@ export const ECONOMY = {
   MAX_OFFLINE_SECONDS: 8 * 60 * 60,
   /** Fraction of full production rate granted for offline time (idle games cap this). */
   OFFLINE_EFFICIENCY: 0.5,
-  /** Starting stockpile for a fresh save. */
-  START: { food: 200, wood: 200, coal: 100, iron: 50 },
+  /** Starting stockpile for a fresh save. `steel` (refined) starts empty. */
+  START: { food: 200, wood: 200, coal: 100, iron: 50, steel: 0 },
+} as const;
+
+/**
+ * REFINERY - the Forge Hall converts raw stock (iron + coal) into refined
+ * `steel`, the mid-game material heavier upgrades and later tiers will demand.
+ * Conversion is a continuous per-second process gated on having the inputs:
+ * each second the Forge Hall consumes INPUT_PER_STEEL of each input per unit of
+ * steel it can afford, up to its level-scaled throughput. Pure math lives in
+ * BuildingConfig (steelThroughputPerSec) + BuildingSystem.refineryConversion.
+ */
+export const REFINERY = {
+  /** Raw inputs consumed to mint ONE unit of steel. */
+  INPUT_PER_STEEL: { iron: 2, coal: 1 } as const,
+  /** Steel minted per second by a level-1 Forge Hall (scales by OUTPUT_GROWTH). */
+  BASE_STEEL_PER_SEC: 0.15,
+} as const;
+
+/**
+ * WAREHOUSE - the Frost Vault shelters a fraction of every stockpile from raid
+ * loss. It does not cap production; it defines PROTECTED_FRACTION of the
+ * current balance (scaled by vault level) that can never be taken. The pure
+ * helper protectedAmount() lives in BuildingConfig so combat/raid features and
+ * tests share one definition.
+ */
+export const WAREHOUSE = {
+  /** Protected fraction of a stockpile at Frost Vault level 1. */
+  BASE_PROTECTED_FRACTION: 0.15,
+  /** Extra protected fraction per Frost Vault level above 1. */
+  PROTECTED_FRACTION_PER_LEVEL: 0.05,
+  /** Hard ceiling on the protected fraction regardless of level. */
+  MAX_PROTECTED_FRACTION: 0.75,
+} as const;
+
+/**
+ * POPULATION - the survivor workforce. Survivors are housed by Shelter Row and
+ * assigned to producer buildings; a well-housed, warm population works harder
+ * while overcrowding or a freezing hold saps output. This mirrors
+ * WarmthSystem's shape so GameState.tick can multiply the two efficiencies.
+ *
+ *  - Housing capacity = BASE_HOUSING + HOUSING_PER_LEVEL * shelterLevels.
+ *  - Survivors trickle in over time toward the housing cap at GROWTH_PER_SEC.
+ *  - Satisfaction blends warmth ratio with the housing headroom (crowding);
+ *    it drives an output multiplier via populationOutputMultiplier().
+ *  - The workforce multiplier also scales with how fully producers are staffed
+ *    (assigned survivors vs. desired staffing), floored so an unstaffed base
+ *    still limps along rather than stopping.
+ */
+export const POPULATION = {
+  /** Housing capacity with no Shelter Row built (the Furnace shelters a few). */
+  BASE_HOUSING: 8,
+  /** Extra housing capacity per Shelter Row level. */
+  HOUSING_PER_LEVEL: 6,
+  /** Survivors that arrive per second (toward the housing cap). */
+  GROWTH_PER_SEC: 0.02,
+  /** Survivors a fresh hold begins with. */
+  START_SURVIVORS: 4,
+  /** Desired survivors to fully staff ONE producer level. */
+  STAFF_PER_PRODUCER_LEVEL: 1,
+  /** Lowest workforce multiplier when producers are completely unstaffed. */
+  STAFFING_FLOOR: 0.35,
+  /**
+   * Satisfaction curve weights: satisfaction = WARMTH_WEIGHT * warmthRatio +
+   * HOUSING_WEIGHT * housingHeadroom, clamped to [0,1]. Housing headroom is
+   * 1 when there is spare housing and falls toward 0 as the hold overcrowds.
+   */
+  SATISFACTION_WARMTH_WEIGHT: 0.6,
+  SATISFACTION_HOUSING_WEIGHT: 0.4,
+  /** Output multiplier at zero satisfaction (a miserable hold still produces). */
+  SATISFACTION_OUTPUT_FLOOR: 0.5,
+} as const;
+
+/**
+ * PREMIUM - the Ember Sparks soft-premium currency (an ORIGINAL stand-in for a
+ * gacha/premium gem). It is NOT an idle resource: it lives in a separate wallet
+ * and drips slowly from the lit Furnace (a later feature spends it on summons /
+ * boosts). Kept out of RESOURCE_ORDER so it never mixes into production math.
+ */
+export const PREMIUM = {
+  /** Ember Sparks a fresh hold begins with. */
+  START_SPARKS: 0,
+  /** Ember Sparks the Furnace drips per second while lit (level 1+). */
+  SPARK_DRIP_PER_SEC: 0.005,
 } as const;
 
 /**
@@ -210,7 +298,29 @@ export function warmthProductionMultiplier(warmthRatio: number): number {
  * The four resource kinds, as an ordered tuple so UI and iteration share one
  * canonical order. The ResourceKind union type is derived in src/types.
  */
-export const RESOURCE_ORDER = ['food', 'wood', 'coal', 'iron'] as const;
+export const RESOURCE_ORDER = ['food', 'wood', 'coal', 'iron', 'steel'] as const;
+
+/**
+ * Pure helper: the producer-output multiplier from the survivor workforce,
+ * mirroring {@link warmthProductionMultiplier} in shape. It blends two effects
+ * so callers (PopulationSystem, GameState.tick, tests, UI) share one curve:
+ *
+ *  - `satisfaction` in [0,1] scales output from SATISFACTION_OUTPUT_FLOOR (a
+ *    miserable but not idle hold) up to 1.0 (fully content).
+ *  - `staffingRatio` in [0,1] (assigned survivors / desired staffing) scales
+ *    output from STAFFING_FLOOR (skeleton crew) up to 1.0 (fully staffed).
+ *
+ * The two factors multiply, so a warm, well-housed AND well-staffed hold reaches
+ * 1.0x while neglect on either axis bites (but never stops) production.
+ */
+export function populationOutputMultiplier(satisfaction: number, staffingRatio: number): number {
+  const sat = Math.min(1, Math.max(0, satisfaction));
+  const staff = Math.min(1, Math.max(0, staffingRatio));
+  const satFactor =
+    POPULATION.SATISFACTION_OUTPUT_FLOOR + (1 - POPULATION.SATISFACTION_OUTPUT_FLOOR) * sat;
+  const staffFactor = POPULATION.STAFFING_FLOOR + (1 - POPULATION.STAFFING_FLOOR) * staff;
+  return satFactor * staffFactor;
+}
 
 /** Scene keys used across the game. Centralized to avoid magic strings. */
 export const SceneKeys = {

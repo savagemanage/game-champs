@@ -53,7 +53,15 @@ export const STRINGS = {
   'resource.wood': { en: 'Timber', ko: '목재' },
   'resource.coal': { en: 'Coal', ko: '석탄' },
   'resource.iron': { en: 'Iron', ko: '철' },
+  'resource.steel': { en: 'Steel', ko: '강철' },
   'resource.perSecond': { en: '{amount}/s', ko: '{amount}/초' },
+
+  // Premium currency (Ember Sparks) + survivor population labels.
+  'premium.emberSparks': { en: 'Ember Sparks', ko: '불씨 정수' },
+  'population.label': { en: 'Survivors', ko: '생존자' },
+  'population.value': { en: '{total}/{cap}', ko: '{total}/{cap}' },
+  'population.assigned': { en: 'Working {assigned} · Idle {idle}', ko: '작업 {assigned} · 대기 {idle}' },
+  'population.satisfaction': { en: 'Morale {pct}%', ko: '사기 {pct}%' },
 
   // Town scene / HUD.
   'town.title': { en: 'YOUR HOLD', ko: '나의 성채' },
@@ -84,6 +92,15 @@ export const STRINGS = {
   'building.coal_pit': { en: 'Coal Pit', ko: '탄광' },
   'building.iron_mine': { en: 'Iron Mine', ko: '철광산' },
   'building.war_camp': { en: 'War Camp', ko: '전진 기지' },
+  'building.shelter_row': { en: 'Shelter Row', ko: '피난 거처' },
+  'building.frost_vault': { en: 'Frost Vault', ko: '서리 금고' },
+  'building.forge_hall': { en: 'Forge Hall', ko: '제련장' },
+  'building.envoy_hall': { en: 'Envoy Hall', ko: '사절관' },
+  'building.warming_ward': { en: 'Warming Ward', ko: '온기 병동' },
+  'building.ember_archive': { en: 'Ember Archive', ko: '불씨 서고' },
+  'building.infantry_yard': { en: 'Infantry Yard', ko: '보병 연무장' },
+  'building.lancer_yard': { en: 'Lancer Yard', ko: '창병 연무장' },
+  'building.marksman_range': { en: 'Marksman Range', ko: '사격장' },
 
   // Building descriptions.
   'building.furnace.desc': {
@@ -95,6 +112,15 @@ export const STRINGS = {
   'building.coal_pit.desc': { en: 'Digs coal to feed the Furnace and hold back the cold.', ko: '용광로에 넣어 추위를 막을 석탄을 캔다.' },
   'building.iron_mine.desc': { en: 'Mines iron to forge upgrades and arm your soldiers.', ko: '업그레이드와 병력 무장을 위한 철을 채굴한다.' },
   'building.war_camp.desc': { en: 'Trains survivors into soldiers to defend the hold in battle.', ko: '전투에서 성채를 지킬 병사로 생존자를 훈련한다.' },
+  'building.shelter_row.desc': { en: 'Warm quarters that house more survivors and raise your population cap.', ko: '더 많은 생존자를 수용해 인구 한계를 올리는 따뜻한 거처.' },
+  'building.frost_vault.desc': { en: 'A fortified store that shelters a portion of your resources from raids.', ko: '자원의 일부를 약탈로부터 지켜 주는 견고한 창고.' },
+  'building.forge_hall.desc': { en: 'A steelworks that refines iron and coal into sturdy steel.', ko: '철과 석탄을 정련해 튼튼한 강철을 만드는 제련소.' },
+  'building.envoy_hall.desc': { en: 'A diplomatic hub for envoys and requests for aid from other holds.', ko: '다른 성채에 사절과 원조 요청을 보내는 외교 거점.' },
+  'building.warming_ward.desc': { en: 'A heated infirmary where wounded survivors recover.', ko: '부상당한 생존자가 회복하는 난방 병동.' },
+  'building.ember_archive.desc': { en: 'A hall of study where survivors research new advances.', ko: '생존자들이 새로운 기술을 연구하는 학문의 전당.' },
+  'building.infantry_yard.desc': { en: 'A drill yard that trains front-line infantry.', ko: '최전선 보병을 훈련하는 연무장.' },
+  'building.lancer_yard.desc': { en: 'A drill yard that trains charging lancers.', ko: '돌격 창병을 훈련하는 연무장.' },
+  'building.marksman_range.desc': { en: 'A shooting range that trains ranged marksmen.', ko: '원거리 사수를 훈련하는 사격장.' },
 
   // Building panel UI.
   'building.level': { en: 'Level {level}', ko: '레벨 {level}' },
