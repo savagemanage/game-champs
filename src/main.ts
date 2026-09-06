@@ -61,7 +61,17 @@ const config: Phaser.Types.Core.GameConfig = {
   },
   scale: {
     mode: Phaser.Scale.FIT,
-    autoCenter: Phaser.Scale.CENTER_BOTH,
+    // CENTERING: do NOT let Phaser center the canvas. autoCenter (CENTER_BOTH)
+    // injects an inline `margin-left`/`margin-top` onto the canvas to center it
+    // inside the parent. But the parent `#game` in index.html is already a
+    // full-viewport flexbox (align-items/justify-content: center) that centers
+    // the canvas. Stacking both mechanisms DOUBLE-centers: the flex parent puts
+    // the canvas in the middle, then Phaser's extra margin-left shoves it a
+    // further ~half-a-gutter to the right (measured ~207px off on a 1280x800
+    // viewport). With NO_CENTER, Phaser leaves margin:0 and the flex parent is
+    // the sole centering owner, so the canvas center matches the viewport
+    // center at every window size (and vertically too).
+    autoCenter: Phaser.Scale.NO_CENTER,
     width: CANVAS.WIDTH,
     height: CANVAS.HEIGHT,
   },

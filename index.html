@@ -60,6 +60,19 @@
         justify-content: center;
       }
       /*
+        CENTERING owner: the #game flexbox above is the SOLE mechanism that
+        centers the canvas in the viewport (Phaser's autoCenter is set to
+        NO_CENTER in src/main.ts to avoid double-centering, which pushed the
+        canvas ~207px right on wide viewports). This rule keeps the canvas
+        margin at 0 so no stale inline margin from Phaser can re-offset it, and
+        `display:block` removes the inline-element baseline gap. The flex parent
+        then centers it both horizontally and vertically at every window size.
+      */
+      #game canvas {
+        margin: 0;
+        display: block;
+      }
+      /*
         The canvas is scaled by Phaser's Scale.FIT to the viewport, which is
         almost always a NON-INTEGER factor (e.g. 0.75x on a narrow phone). We
         deliberately do NOT set `image-rendering: pixelated` here: nearest-
