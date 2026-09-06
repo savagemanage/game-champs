@@ -40,6 +40,7 @@ describe('SaveManager', () => {
       troopsTrained: 0,
       battlesWon: 0,
       onboardingSeen: false,
+      tutorialDone: false,
     };
   }
 
@@ -417,6 +418,7 @@ describe('SaveManager', () => {
         troopsTrained: 0,
         battlesWon: 0,
         onboardingSeen: false,
+        tutorialDone: false,
       },
       t0,
     );
@@ -503,8 +505,8 @@ describe('SaveManager', () => {
     expect(mgr.load(0).loaded).toBe(false);
   });
 
-  it('current SAVE_VERSION is 6 (onboardingSeen field)', () => {
-    expect(SAVE_VERSION).toBe(6);
+  it('current SAVE_VERSION is 7 (tutorialDone field)', () => {
+    expect(SAVE_VERSION).toBe(7);
   });
 
   it('a fresh game starts with onboardingSeen=false so the welcome shows once', () => {
@@ -519,7 +521,7 @@ describe('SaveManager', () => {
     snap.onboardingSeen = true;
     const state = SaveManager.serialize(snap, 0);
     expect(state.onboardingSeen).toBe(true);
-    expect(state.version).toBe(6);
+    expect(state.version).toBe(7);
   });
 
   it('migrates an old save (no onboardingSeen) to onboardingSeen=true (returning player is never re-shown the welcome)', () => {
@@ -548,5 +550,53 @@ describe('SaveManager', () => {
     storage.setItem('kingdom-rise:save', JSON.stringify(state));
     const loaded = new SaveManager(storage).load(0);
     expect(loaded.snapshot.onboardingSeen).toBe(false);
+  });
+
+  it('a fresh game starts with tutorialDone=false so the tutorial runs once', () => {
+    const mgr = new SaveManager(memoryStorage());
+    const fresh = mgr.load(0);
+    expect(fresh.loaded).toBe(false);
+    expect(fresh.snapshot.tutorialDone).toBe(false);
+  });
+
+  it('serialize round-trips the tutorialDone flag', () => {
+    const snap = snapshot();
+    snap.tutorialDone = true;
+    const state = SaveManager.serialize(snap, 0);
+    expect(state.tutorialDone).toBe(true);
+    expect(state.version).toBe(7);
+    // Full round-trip through storage.
+    const storage = memoryStorage();
+    storage.setItem('kingdom-rise:save', JSON.stringify(state));
+    expect(new SaveManager(storage).load(0).snapshot.tutorialDone).toBe(true);
+  });
+
+  it('migrates an old save (no tutorialDone) to tutorialDone=true (returning player is never shown the tutorial)', () => {
+    // A save that predates the flag belongs to a returning player who has
+    // already played, so a missing flag must migrate to `true`.
+    const storage = memoryStorage();
+    const v6 = {
+      version: 6,
+      resources: { food: 50, wood: 50, stone: 50, gold: 50 },
+      buildings: [{ kind: 'town_center', level: 2, upgradeEndsAt: null }],
+      army: { spearman: 1, archer: 0, knight: 0 },
+      trainingQueue: [],
+      waveCleared: 1,
+      onboardingSeen: true,
+      lastSeenAt: 0,
+      // no `tutorialDone` key
+    };
+    storage.setItem('kingdom-rise:save', JSON.stringify(v6));
+    const loaded = new SaveManager(storage).load(0);
+    expect(loaded.loaded).toBe(true);
+    expect(loaded.snapshot.tutorialDone).toBe(true);
+  });
+
+  it('preserves an explicit tutorialDone=false on a versioned save', () => {
+    const storage = memoryStorage();
+    const state = SaveManager.serialize(snapshot(), 0); // tutorialDone=false
+    storage.setItem('kingdom-rise:save', JSON.stringify(state));
+    const loaded = new SaveManager(storage).load(0);
+    expect(loaded.snapshot.tutorialDone).toBe(false);
   });
 });

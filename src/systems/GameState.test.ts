@@ -394,3 +394,78 @@ describe('GameState first-run onboarding', () => {
     expect(state.onboardingSeen).toBe(true);
   });
 });
+
+/**
+ * First-run interactive tutorial "run once, ever" logic. The tutorial absorbs
+ * the old welcome, so the once-only decision lives in GameState (pure): the
+ * scene calls shouldRunTutorial() on every Town entry, the flag flips the
+ * moment the tutorial ends, and it never returns true again — including across
+ * a reload — unless the player explicitly asks to replay it from Settings.
+ */
+describe('GameState first-run tutorial', () => {
+  const NOW = 3_000_000;
+  const fresh = (): GameState => GameState.create(memoryStorage(), NOW);
+
+  it('runs the tutorial exactly once on a brand-new game', () => {
+    const state = fresh();
+    expect(state.loaded).toBe(false);
+    expect(state.tutorialDone).toBe(false);
+    expect(state.shouldRunTutorial()).toBe(true);
+    // The scene marks it done when the tutorial completes/skips.
+    state.markTutorialDone(NOW);
+    // Any subsequent Town entry in the SAME session: never again.
+    expect(state.shouldRunTutorial()).toBe(false);
+    expect(state.shouldRunTutorial()).toBe(false);
+    expect(state.tutorialDone).toBe(true);
+  });
+
+  it('does not run the tutorial for a returning player (loaded save)', () => {
+    const storage = memoryStorage();
+    const first = GameState.create(storage, NOW);
+    first.markTutorialDone(NOW);
+    const returning = GameState.create(storage, NOW + 1000);
+    expect(returning.loaded).toBe(true);
+    expect(returning.shouldRunTutorial()).toBe(false);
+    expect(returning.tutorialDone).toBe(true);
+  });
+
+  it('never runs the tutorial again after a reload even if never completed', () => {
+    // Even a fresh game merely saved (autosave) is a "loaded" save next launch,
+    // so shouldRunTutorial is false regardless of the persisted flag.
+    const storage = memoryStorage();
+    const first = GameState.create(storage, NOW);
+    expect(first.shouldRunTutorial()).toBe(true);
+    first.save(NOW); // autosave, tutorial not yet marked done
+    const relaunch = GameState.create(storage, NOW + 1000);
+    expect(relaunch.loaded).toBe(true);
+    expect(relaunch.shouldRunTutorial()).toBe(false);
+  });
+
+  it('markTutorialDone is idempotent and persists across a reload', () => {
+    const storage = memoryStorage();
+    const state = GameState.create(storage, NOW);
+    state.markTutorialDone(NOW);
+    expect(() => state.markTutorialDone(NOW)).not.toThrow();
+    expect(state.tutorialDone).toBe(true);
+    // Persisted: a reload sees it done.
+    const reloaded = GameState.create(storage, NOW + 1000);
+    expect(reloaded.tutorialDone).toBe(true);
+  });
+
+  it('resetTutorial (replay) clears the flag in memory and re-arms shouldRunTutorial for a returning player', () => {
+    const storage = memoryStorage();
+    const state = GameState.create(storage, NOW);
+    state.markTutorialDone(NOW);
+    // Reload as a returning player: tutorial would not normally run.
+    const returning = GameState.create(storage, NOW + 1000);
+    expect(returning.shouldRunTutorial()).toBe(false);
+    // Player asks to replay from Settings.
+    returning.resetTutorial();
+    expect(returning.tutorialDone).toBe(false);
+    expect(returning.shouldRunTutorial()).toBe(true);
+    // Completing the replay re-marks it done.
+    returning.markTutorialDone(NOW + 2000);
+    expect(returning.shouldRunTutorial()).toBe(false);
+    expect(returning.tutorialDone).toBe(true);
+  });
+});

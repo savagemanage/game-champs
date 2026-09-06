@@ -191,6 +191,14 @@ export interface GameState {
    * a brand-new game starts `false` so the welcome is shown exactly once.
    */
   onboardingSeen?: boolean;
+  /**
+   * Whether the first-run interactive tutorial has been completed or skipped.
+   * OPTIONAL for backward compatibility: saves predating this flag omit it. The
+   * save layer treats a missing value on an EXISTING save as `true` (a returning
+   * player has already played, so they are never shown the tutorial), while a
+   * brand-new game starts `false` so the guided tutorial runs exactly once.
+   */
+  tutorialDone?: boolean;
   /** Epoch ms of the last simulation update (drives offline reconciliation). */
   lastSeenAt: number;
 }

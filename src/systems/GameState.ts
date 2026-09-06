@@ -52,6 +52,8 @@ export class GameState {
   private _battlesWon: number;
   /** Whether the first-run onboarding welcome card has already been shown. */
   private _onboardingSeen: boolean;
+  /** Whether the first-run interactive tutorial has been completed or skipped. */
+  private _tutorialDone: boolean;
 
   private readonly saver: SaveManager;
   private msSinceSave = 0;
@@ -75,6 +77,7 @@ export class GameState {
     this._troopsTrained = result.snapshot.troopsTrained;
     this._battlesWon = result.snapshot.battlesWon;
     this._onboardingSeen = result.snapshot.onboardingSeen;
+    this._tutorialDone = result.snapshot.tutorialDone;
     // Seed the derived quest statuses from the loaded progress immediately so
     // the UI has correct locked/active/completable state before the first tick.
     this.quests.refresh(this.questProgress());
@@ -167,6 +170,58 @@ export class GameState {
     if (this._onboardingSeen) return;
     this._onboardingSeen = true;
     this.save(now);
+  }
+
+  /** Whether the first-run interactive tutorial has been completed or skipped. */
+  get tutorialDone(): boolean {
+    return this._tutorialDone;
+  }
+
+  /**
+   * Whether the first-run interactive tutorial should run right now: true only
+   * for a brand-new game (no save loaded) that has not yet completed/skipped
+   * it. Mirrors {@link shouldShowOnboarding}, and the tutorial ABSORBS the old
+   * welcome card so a first-time player sees the guided tour instead of a
+   * single static popup. A returning player (loaded save) is treated as already
+   * tutored and never sees it.
+   *
+   * A REPLAY from Settings clears the flag in memory ({@link resetTutorial}) so
+   * this returns true again on the next Town entry even though a save exists.
+   */
+  shouldRunTutorial(): boolean {
+    return !this._tutorialDone && (!this.loaded || this._tutorialReplay);
+  }
+
+  /**
+   * Set when the player asks to replay the tutorial from Settings: it forces
+   * {@link shouldRunTutorial} true on the next Town entry even for a loaded
+   * (returning-player) save. Cleared again by {@link markTutorialDone}.
+   */
+  private _tutorialReplay = false;
+
+  /**
+   * Mark the interactive tutorial as completed/skipped: flips the in-memory
+   * flag IMMEDIATELY (so a re-entry to Town in the same session never re-runs
+   * it, even before the save completes) and persists so it never runs again
+   * across sessions. Also clears any pending replay request. Idempotent.
+   */
+  markTutorialDone(now: number = Date.now()): void {
+    this._tutorialReplay = false;
+    if (this._tutorialDone) return;
+    this._tutorialDone = true;
+    this.save(now);
+  }
+
+  /**
+   * Replay the tutorial: clears the done flag in memory and arms a replay
+   * request so {@link shouldRunTutorial} returns true on the next Town entry
+   * even for a returning player. Does NOT persist (the flag re-persists once
+   * the replayed tutorial completes via {@link markTutorialDone}), so a reload
+   * mid-replay simply keeps the previously-saved state.
+   */
+  resetTutorial(): void {
+    this._tutorialDone = false;
+    this._tutorialReplay = true;
   }
 
   /**
@@ -289,6 +344,7 @@ export class GameState {
       troopsTrained: this._troopsTrained,
       battlesWon: this._battlesWon,
       onboardingSeen: this._onboardingSeen,
+      tutorialDone: this._tutorialDone,
     };
   }
 

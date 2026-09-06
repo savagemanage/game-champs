@@ -12,6 +12,8 @@ import { HeroPanel } from '../ui/HeroPanel';
 import { QuestPanel } from '../ui/QuestPanel';
 import { textStyle } from '../ui/UiText';
 import { tr } from '../i18n/i18n';
+import { TutorialFlow, type TutorialAnchor, type TutorialProgress } from '../systems/TutorialFlow';
+import { TutorialOverlay, type AnchorRect } from '../ui/TutorialOverlay';
 
 /** Fixed layout position for each building sprite on the town map. */
 const BUILDING_LAYOUT: Record<BuildingKind, { x: number; y: number; scale: number }> = {
@@ -81,6 +83,16 @@ export class TownScene extends Phaser.Scene {
    */
   private onboardingDismiss: (() => void) | null = null;
 
+  /**
+   * The first-run interactive tutorial. Non-null only while the guided tour is
+   * running for a brand-new player (or a replay from Settings). The pure
+   * {@link TutorialFlow} owns sequencing; {@link TutorialOverlay} renders the
+   * active step's coach-mark, and {@link update} watches the shared GameState
+   * each frame to advance gameplay steps.
+   */
+  private tutorialFlow: TutorialFlow | null = null;
+  private tutorialOverlay: TutorialOverlay | null = null;
+
   // Upgrade panel widgets (rebuilt per selected building).
   private upgradePanel!: Phaser.GameObjects.Container;
   private selected: BuildingKind | null = null;
@@ -113,6 +125,8 @@ export class TownScene extends Phaser.Scene {
     this.markers = [];
     this.selected = null;
     this.onboardingDismiss = null;
+    this.tutorialFlow = null;
+    this.tutorialOverlay = null;
 
     this.cameras.main.setBackgroundColor(PALETTE.BG_SKY_CSS);
     Menu.fadeIn(this);
@@ -140,14 +154,14 @@ export class TownScene extends Phaser.Scene {
 
     this.audio.playMusic(AudioKeys.MusicLoop);
 
-    // Surface offline gains once, if any were credited on load; on a brand-new
-    // kingdom, show a one-time onboarding hint instead.
-    if (this.state.shouldShowOnboarding()) {
-      // Show the first-run welcome exactly once, ever. Marking it seen here
-      // (in memory + persisted) means returning to Town from Settings/Battle in
-      // this same session — or any later session — never shows it again.
+    // First-run experience: a brand-new player (or a Settings replay) runs the
+    // guided interactive tutorial, which ABSORBS the old single welcome card.
+    // Everyone else surfaces any offline gains once. We still mark the old
+    // onboarding flag seen so its once-only invariant (and its tests) hold, but
+    // the tutorial — not the static popup — is what a new player actually sees.
+    if (this.state.shouldRunTutorial()) {
       this.state.markOnboardingSeen();
-      this.showOnboarding();
+      this.startTutorial();
     } else {
       this.maybeShowOfflineGains();
     }
@@ -180,6 +194,7 @@ export class TownScene extends Phaser.Scene {
     this.researchPanel.update();
     this.heroPanel.update();
     this.questPanel.update();
+    this.tutorialTick();
   }
 
   // ---- Buildings -----------------------------------------------------------
@@ -529,52 +544,130 @@ export class TownScene extends Phaser.Scene {
     this.state.save(Date.now());
   }
 
+  // ---- First-run interactive tutorial --------------------------------------
+
   /**
-   * First-run onboarding: a dismissible centred card explaining the core loop
-   * (gather -> upgrade -> train -> battle). Only shown for a brand-new kingdom
-   * (no save was loaded), so returning players are never nagged.
+   * Begin the guided tutorial for a brand-new player: create the pure flow and
+   * its overlay renderer, and draw the first (welcome) step. The overlay's Skip
+   * ends it from any step; Next advances informational steps; gameplay steps
+   * advance from {@link tutorialTick} as the shared GameState changes.
    */
-  private showOnboarding(): void {
-    const cx = CANVAS.WIDTH / 2;
-    const cy = CANVAS.HEIGHT / 2;
-    const w = 560;
-    const h = 220;
-
-    const overlay = this.add.rectangle(0, 0, CANVAS.WIDTH, CANVAS.HEIGHT, 0x000000, 0.5).setOrigin(0, 0).setDepth(70).setInteractive();
-    const card = this.add.container(0, 0).setDepth(71);
-
-    const panel = Menu.panel(this, cx, cy, w, h);
-    const title = Menu.title(this, cx, cy - h / 2 + 30, tr('brand.name'), 30).setColor(PALETTE.ACCENT_CSS);
-    const body = this.add
-      .text(cx, cy - 6, tr('town.onboarding'), textStyle(15, { align: 'center', color: PALETTE.TEXT_CSS, wordWrap: { width: w - 60 } }))
-      .setOrigin(0.5)
-      .setLineSpacing(6);
-
-    const dismiss = (): void => {
-      // Idempotent: opening a panel and clicking the button can both fire this,
-      // and it may run again while the fade-out tween is still in flight.
-      if (this.onboardingDismiss === null) return;
-      this.onboardingDismiss = null;
-      this.tweens.add({
-        targets: [overlay, card],
-        alpha: 0,
-        duration: 250,
-        onComplete: () => {
-          overlay.destroy();
-          card.destroy();
+  private startTutorial(): void {
+    const flow = new TutorialFlow();
+    this.tutorialFlow = flow;
+    this.tutorialOverlay = new TutorialOverlay(
+      this,
+      flow,
+      (anchor) => this.resolveTutorialAnchor(anchor),
+      {
+        onNext: () => {
+          if (!this.tutorialFlow) return;
+          this.tutorialFlow.advance('next');
+          this.afterTutorialAdvance();
         },
-      });
-    };
-    // Registering the dismiss marks onboarding as "on screen": any panel/battle/
-    // settings action tears it down first (see dismissOnboardingIfOpen).
-    this.onboardingDismiss = dismiss;
-    const ok = Menu.button(this, cx, cy + h / 2 - 34, tr('town.onboardingDismiss'), dismiss, { width: 200 });
+        onSkip: () => this.endTutorial(),
+      },
+    );
+    this.tutorialOverlay.render();
+  }
 
-    card.add([panel, title, body, ok.container]);
-    // A gentle entrance so it reads as an intentional, polished welcome.
-    card.setAlpha(0);
-    overlay.setAlpha(0);
-    this.tweens.add({ targets: [overlay, card], alpha: 1, duration: 300, ease: 'Sine.easeOut' });
+  /**
+   * Watch the shared GameState each frame and advance the active GAMEPLAY step
+   * when the player performs the expected action (its predicate over a plain
+   * progress snapshot is satisfied). Informational steps advance via Next, so
+   * they are ignored here. Re-renders the overlay on any advance; ends the
+   * tutorial when the flow completes.
+   */
+  private tutorialTick(): void {
+    const flow = this.tutorialFlow;
+    if (!flow || flow.isComplete) return;
+    // A gameplay overlay panel (Training/Research/Hero/Quest) renders at depth
+    // 50 — BELOW the tutorial overlay (depth 80). While one is open, suspend the
+    // tutorial's dim frame so the panel's own build/train buttons receive
+    // clicks; without this the `build_and_train` step is unwinnable because the
+    // dim would occlude the TrainingPanel it asks the player to operate.
+    this.tutorialOverlay?.setDimSuspended(this.anyGameplayPanelOpen());
+    if (flow.advance(this.tutorialProgress())) {
+      this.afterTutorialAdvance();
+    }
+  }
+
+  /** Whether any depth-50 gameplay overlay panel is currently open. */
+  private anyGameplayPanelOpen(): boolean {
+    return (
+      this.trainingPanel.visible ||
+      this.researchPanel.visible ||
+      this.heroPanel.visible ||
+      this.questPanel.visible
+    );
+  }
+
+  /** Re-render after an advance, or tear down + persist once complete. */
+  private afterTutorialAdvance(): void {
+    const flow = this.tutorialFlow;
+    if (!flow) return;
+    if (flow.isComplete) {
+      this.endTutorial();
+    } else {
+      this.tutorialOverlay?.render();
+    }
+  }
+
+  /** Tear down the tutorial overlay and mark it done (persists the flag). */
+  private endTutorial(): void {
+    this.tutorialFlow = null;
+    if (this.tutorialOverlay) {
+      this.tutorialOverlay.destroy();
+      this.tutorialOverlay = null;
+    }
+    this.state.markTutorialDone();
+  }
+
+  /** A plain progress snapshot the tutorial's gameplay predicates read. */
+  private tutorialProgress(): TutorialProgress {
+    return {
+      townCenterPanelOpen: this.upgradePanel.visible && this.selected === 'town_center',
+      townCenterUpgrading: this.state.buildings.isUpgrading('town_center'),
+      townCenterLevel: this.state.buildings.townCenterLevel,
+      barracksBuilt: this.state.buildings.hasBarracks,
+      troopsTrained: this.state.troopsTrained,
+    };
+  }
+
+  /**
+   * Map a tutorial step's anchor descriptor to a concrete on-screen rect so the
+   * overlay can frame/highlight it. Bottom-bar slots mirror the layout in
+   * {@link buildBottomBar} (six evenly-spaced slots across the 960px canvas).
+   */
+  private resolveTutorialAnchor(anchor: TutorialAnchor): AnchorRect {
+    const slots = 6;
+    const slotW = CANVAS.WIDTH / slots;
+    const barY = CANVAS.HEIGHT - 28;
+    // Bottom-bar slot centres by action index (see buildBottomBar order).
+    const slotRect = (index: number): AnchorRect => ({
+      x: slotW * index + slotW / 2,
+      y: barY,
+      width: slotW - 14,
+      height: 40,
+    });
+    switch (anchor) {
+      case 'town_center': {
+        const layout = BUILDING_LAYOUT.town_center;
+        return { x: layout.x, y: layout.y, width: 96, height: 96 };
+      }
+      case 'upgrade_button':
+        // The Upgrade button inside the open upgrade panel (right side).
+        return { x: this.upgradeButton.container.x, y: this.upgradeButton.container.y, width: 240, height: 44 };
+      case 'training':
+        return slotRect(0);
+      case 'battle':
+        return slotRect(4);
+      case 'quests':
+        return slotRect(3);
+      case 'center':
+      default:
+        return { x: CANVAS.WIDTH / 2, y: CANVAS.HEIGHT / 2, width: 0, height: 0 };
+    }
   }
 
   private maybeShowOfflineGains(): void {

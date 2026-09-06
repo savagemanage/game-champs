@@ -76,6 +76,35 @@ export const STRINGS = {
   },
   'town.onboardingDismiss': { en: 'Got it', ko: '알겠어요' },
 
+  // First-run interactive tutorial (coach-mark overlay).
+  'tutorial.skip': { en: 'Skip', ko: '건너뛰기' },
+  'tutorial.next': { en: 'Next', ko: '다음' },
+  'tutorial.welcome': {
+    en: 'Welcome, my liege! Grow your kingdom: gather resources, upgrade buildings, train troops, and win battles. This quick tour shows you how.',
+    ko: '환영합니다, 폐하! 왕국을 키워 보세요: 자원을 모으고, 건물을 올리고, 병력을 훈련해 전투에서 승리하는 것이 목표입니다. 이 짧은 안내가 방법을 알려 드립니다.',
+  },
+  'tutorial.selectTownCenter': {
+    en: 'This is the Town Center — the heart of your kingdom. Tap it to open its panel.',
+    ko: '여기가 중앙 청사입니다 — 왕국의 심장부죠. 눌러서 건물 창을 열어 보세요.',
+  },
+  'tutorial.upgradeTownCenter': {
+    en: 'Press Upgrade to raise the Town Center to Lv.2. Its level caps how far every other building can grow.',
+    ko: '업그레이드를 눌러 중앙 청사를 Lv.2로 올리세요. 청사의 레벨이 다른 모든 건물의 성장 한계를 결정합니다.',
+  },
+  'tutorial.resourcesWarmth': {
+    en: 'Nicely done! Buildings gather resources over time — watch the top bar climb. Keep an eye on Warmth (온기): let the hearth die and production slows.',
+    ko: '잘하셨어요! 건물은 시간이 지날수록 자원을 모읍니다 — 상단 막대가 오르는 걸 보세요. 온기도 살피세요: 화롯불이 꺼지면 생산이 느려집니다.',
+  },
+  'tutorial.buildAndTrain': {
+    en: 'With the Town Center at Lv.2, tap the Barracks on the map to build it. Then open Barracks below and train a troop to raise your army.',
+    ko: '중앙 청사가 Lv.2가 되면 지도에서 병영을 눌러 건설하세요. 그 다음 아래의 병영을 열어 병력을 훈련해 군대를 키우세요.',
+  },
+  'tutorial.battleQuests': {
+    en: 'Your army is ready — march To Battle for the payoff! Check Quests (임무) too for goals and rewards. Good luck!',
+    ko: '군대가 준비됐습니다 — 전투로 나아가 성과를 거두세요! 임무도 확인해 목표와 보상을 챙기세요. 행운을 빕니다!',
+  },
+  'settings.replayTutorial': { en: 'Replay Tutorial', ko: '튜토리얼 다시 보기' },
+
   // Building names.
   'building.town_center': { en: 'Town Center', ko: '중앙 청사' },
   'building.farm': { en: 'Farm', ko: '농장' },

@@ -72,6 +72,16 @@ export class SettingsScene extends Phaser.Scene {
     this.buildStepper(tr('settings.language'), y, this.languageText(), (dir) => this.stepLanguage(dir));
     y += step;
 
+    // Replay the first-run tutorial: clears the tutorial-done flag (in memory,
+    // re-armed even for a returning player) and returns to Town, where the
+    // guided tour runs again from step 0. Placed above the reset row so the two
+    // never overlap.
+    Menu.button(this, cx, y + 10, tr('settings.replayTutorial'), () => this.onReplayTutorial(), {
+      width: 300,
+      fontSize: 18,
+    });
+    y += step;
+
     // Reset progress (two-press confirm).
     const reset = Menu.button(this, cx, y + 10, tr('settings.reset'), () => this.onResetPressed(), {
       width: 300,
@@ -79,7 +89,7 @@ export class SettingsScene extends Phaser.Scene {
     });
     this.resetButtonText = reset.setText;
 
-    Menu.button(this, cx, CANVAS.HEIGHT * 0.92, tr('settings.back'), () => this.close(), { width: 220 });
+    Menu.button(this, cx, CANVAS.HEIGHT * 0.94, tr('settings.back'), () => this.close(), { width: 220 });
 
     this.input.keyboard?.on('keydown-ESC', () => this.close());
   }
@@ -161,6 +171,16 @@ export class SettingsScene extends Phaser.Scene {
     }
     GameState.get().reset();
     Menu.fadeTo(this, () => this.scene.start(SceneKeys.Title));
+  }
+
+  /**
+   * Replay the tutorial: clear the tutorial-done flag (re-armed even for a
+   * returning player) and go to Town, where TownScene.create runs the guided
+   * tour again from step 0.
+   */
+  private onReplayTutorial(): void {
+    GameState.get().resetTutorial();
+    Menu.fadeTo(this, () => this.scene.start(SceneKeys.Town));
   }
 
   private close(): void {

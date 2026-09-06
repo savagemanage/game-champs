@@ -39,11 +39,17 @@ import { WarmthSystem } from './WarmthSystem';
  *     game, so deserialize() migrates a missing flag to `true` and they are
  *     never shown the welcome. A brand-new game (freshGame) starts `false`, so
  *     the welcome is shown exactly once.
+ * v7: adds the `tutorialDone` flag (whether the first-run interactive tutorial
+ *     has been completed or skipped). Exactly like `onboardingSeen`: a v1..v6
+ *     save already EXISTS, so its owner is a returning player who has already
+ *     played, and deserialize() migrates a missing flag to `true` (they are
+ *     never shown the tutorial). A brand-new game (freshGame) starts `false`,
+ *     so the guided tutorial runs exactly once for a first-time player.
  */
-export const SAVE_VERSION = 6;
+export const SAVE_VERSION = 7;
 
 /** Save versions this build can load and migrate forward from. */
-export const SUPPORTED_SAVE_VERSIONS: readonly number[] = [1, 2, 3, 4, 5, 6];
+export const SUPPORTED_SAVE_VERSIONS: readonly number[] = [1, 2, 3, 4, 5, 6, 7];
 
 /** Default localStorage key for the single save slot. */
 export const SAVE_KEY = 'kingdom-rise:save';
@@ -75,6 +81,8 @@ export interface GameSnapshot {
   battlesWon: number;
   /** Whether the first-run onboarding welcome card has already been shown. */
   onboardingSeen: boolean;
+  /** Whether the first-run interactive tutorial has been completed or skipped. */
+  tutorialDone: boolean;
 }
 
 /** Extra info returned from a load so the caller can surface offline gains. */
@@ -118,6 +126,7 @@ export class SaveManager {
       battlesWon: Math.max(0, Math.floor(snapshot.battlesWon)),
       warmth: snapshot.warmth.toJSON(),
       onboardingSeen: snapshot.onboardingSeen,
+      tutorialDone: snapshot.tutorialDone,
       lastSeenAt: now,
     };
   }
@@ -158,6 +167,11 @@ export class SaveManager {
     // migrates to `true` (they are never shown the first-run welcome). Only a
     // brand-new game (freshGame) starts `false`.
     const onboardingSeen = typeof state.onboardingSeen === 'boolean' ? state.onboardingSeen : true;
+    // v1..v6 saves omit `tutorialDone`. Exactly like `onboardingSeen`: because
+    // this save EXISTS, its owner is a returning player who has already played,
+    // so a missing flag migrates to `true` (they are never shown the tutorial).
+    // Only a brand-new game (freshGame) starts `false`.
+    const tutorialDone = typeof state.tutorialDone === 'boolean' ? state.tutorialDone : true;
 
     // Training that finished while away joins the army. (Trained troops do not
     // produce resources, so this ordering has no bearing on offline gains.)
@@ -239,6 +253,7 @@ export class SaveManager {
         troopsTrained,
         battlesWon,
         onboardingSeen,
+        tutorialDone,
       },
       loaded: true,
       offlineSeconds,
@@ -260,6 +275,7 @@ export class SaveManager {
       troopsTrained: 0,
       battlesWon: 0,
       onboardingSeen: false,
+      tutorialDone: false,
     };
   }
 
