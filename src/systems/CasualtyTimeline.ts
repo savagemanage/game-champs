@@ -10,7 +10,7 @@ import type { CombatResult } from './CombatSystem';
  * The scene must never invent its own combat math: the truth is the single
  * {@link CombatResult} from CombatSystem.resolve(). This module turns that
  * result into a small, ordered sequence of discrete "ticks", where on every
- * tick some friendly troops and some enemy raiders fall. Crucially the timeline
+ * tick some friendly troops and some Frozen Horde beasts fall. Crucially the timeline
  * ENDS exactly on the resolution:
  *   - friendly troop counts drain from the starting army down to
  *     result.survivors (all-zero on a loss),
@@ -26,7 +26,7 @@ import type { CombatResult } from './CombatSystem';
 export interface BattleCounts {
   /** Living friendly troops by kind. */
   friendly: Army;
-  /** Living enemy raiders by kind. */
+  /** Living Frozen Horde enemies by kind. */
   enemy: Record<string, number>;
 }
 
@@ -36,7 +36,7 @@ export interface TimelineStep {
   index: number;
   /** Friendly troops still alive after this tick. */
   friendly: Army;
-  /** Enemy raiders still alive after this tick. */
+  /** Frozen Horde enemies still alive after this tick. */
   enemy: Record<string, number>;
 }
 
@@ -51,7 +51,7 @@ export interface BattleTimeline {
 }
 
 function cloneArmy(a: Army): Army {
-  return { spearman: a.spearman ?? 0, archer: a.archer ?? 0, knight: a.knight ?? 0 };
+  return { trapper: a.trapper ?? 0, marksman: a.marksman ?? 0, vanguard: a.vanguard ?? 0 };
 }
 
 function totalArmy(a: Army): number {
@@ -121,7 +121,7 @@ export function buildTimeline(army: Army, result: CombatResult, steps = 8): Batt
 
   const timelineSteps: TimelineStep[] = [];
   for (let i = 1; i <= stepCount; i++) {
-    const friendly: Army = { spearman: 0, archer: 0, knight: 0 };
+    const friendly: Army = { trapper: 0, marksman: 0, vanguard: 0 };
     for (const k of TROOP_ORDER) {
       friendly[k] = drainAt(startFriendly[k] ?? 0, endFriendly[k] ?? 0, i, stepCount);
     }
@@ -149,7 +149,7 @@ export function friendlyTotal(counts: { friendly: Army }): number {
   return totalArmy(counts.friendly);
 }
 
-/** Total enemy raiders alive in a set of counts. */
+/** Total Frozen Horde enemies alive in a set of counts. */
 export function enemyTotal(counts: { enemy: Record<string, number> }): number {
   return totalEnemy(counts.enemy);
 }

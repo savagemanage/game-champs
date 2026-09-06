@@ -10,10 +10,10 @@ import { textStyle } from '../ui/UiText';
 
 /**
  * TitleScene - the front door. Renders the layered pixel backdrop, the game
- * title, and Continue / New Kingdom / Settings buttons, and kicks off the music
+ * title, and Continue / New Hold / Settings buttons, and kicks off the music
  * bed. Deploys into the TownScene with a fade transition.
  *
- * "Continue" is shown only when a save exists; "New Kingdom" wipes any existing
+ * "Continue" is shown only when a save exists; "New Hold" wipes any existing
  * progress before entering the town. Either way the shared GameState singleton
  * backs the town from here on.
  */

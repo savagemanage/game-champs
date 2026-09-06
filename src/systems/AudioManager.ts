@@ -8,7 +8,7 @@ import { clamp01, loadSettings, persistSettings, type GameSettings } from './Set
 export type { GameSettings } from './SettingsStore';
 
 /**
- * AudioManager - the single owner of sound in Kingdom Rise.
+ * AudioManager - the single owner of sound in Frosthold: Last Ember.
  *
  * Responsibilities:
  *   - Load/persist {@link GameSettings} to localStorage (survives reloads).

@@ -123,8 +123,8 @@ export class CombatSystem {
     const armyPower = CombatSystem.effectiveArmyPower(army, wave);
     const wavePower = CombatSystem.wavePower(wave);
 
-    const casualties: Army = { spearman: 0, archer: 0, knight: 0 };
-    const survivors: Army = { spearman: 0, archer: 0, knight: 0 };
+    const casualties: Army = { trapper: 0, marksman: 0, vanguard: 0 };
+    const survivors: Army = { trapper: 0, marksman: 0, vanguard: 0 };
 
     const win = armyPower >= wavePower && armyPower > 0;
 

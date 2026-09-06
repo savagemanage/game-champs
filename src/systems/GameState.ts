@@ -2,6 +2,7 @@ import type { Army, TroopKind } from '../types';
 import { BuildingSystem } from './BuildingSystem';
 import { ResourceStore } from './ResourceStore';
 import { TrainingQueue } from './TrainingQueue';
+import { WarmthSystem } from './WarmthSystem';
 import {
   SaveManager,
   browserStorage,
@@ -34,6 +35,7 @@ export class GameState {
   readonly resources: ResourceStore;
   readonly buildings: BuildingSystem;
   readonly training: TrainingQueue;
+  readonly warmth: WarmthSystem;
   private _waveCleared: number;
 
   private readonly saver: SaveManager;
@@ -50,6 +52,7 @@ export class GameState {
     this.resources = result.snapshot.resources;
     this.buildings = result.snapshot.buildings;
     this.training = result.snapshot.training;
+    this.warmth = result.snapshot.warmth;
     this._waveCleared = result.snapshot.waveCleared;
     this.saver = saver;
     this.loaded = result.loaded;
@@ -109,6 +112,7 @@ export class GameState {
       resources: this.resources,
       buildings: this.buildings,
       training: this.training,
+      warmth: this.warmth,
       waveCleared: this._waveCleared,
     };
   }
@@ -121,7 +125,13 @@ export class GameState {
    */
   tick(now: number, deltaMs: number): { buildingsDone: ReturnType<BuildingSystem['update']>; trainingDone: ReturnType<TrainingQueue['advance']> } {
     if (deltaMs > 0) {
-      this.resources.applyProduction(this.buildings.productionRates(), deltaMs, 1);
+      const furnaceLevel = this.buildings.furnaceLevel;
+      // Advance warmth FIRST: burn fuel from the stockpile at the current
+      // Furnace level, raising or decaying warmth. Then credit production
+      // scaled by the warmth-derived multiplier, so a cold hold produces less.
+      this.warmth.tick(deltaMs, furnaceLevel, this.resources);
+      const efficiency = this.warmth.productionMultiplier(furnaceLevel);
+      this.resources.applyProduction(this.buildings.productionRates(), deltaMs, efficiency);
     }
     const buildingsDone = this.buildings.update(now);
     const trainingDone = this.training.advance(now);

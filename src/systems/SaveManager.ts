@@ -3,12 +3,18 @@ import type { Army, GameState, TroopKind } from '../types';
 import { BuildingSystem } from './BuildingSystem';
 import { ResourceStore } from './ResourceStore';
 import { TrainingQueue } from './TrainingQueue';
+import { WarmthSystem, type WarmthTickResult } from './WarmthSystem';
 
-/** Current save-format version. Bump when GameState shape changes. */
-export const SAVE_VERSION = 1;
+/**
+ * Current save-format version. Bump when GameState shape changes. Version 2 is
+ * the Frosthold re-theme (new resource/building/troop/enemy vocabulary), so a
+ * legacy version-1 'kingdom-rise' save is treated as a version mismatch and
+ * falls back to a fresh frozen settlement rather than mis-mapping old kinds.
+ */
+export const SAVE_VERSION = 2;
 
-/** Default localStorage key for the single save slot. */
-export const SAVE_KEY = 'kingdom-rise:save';
+/** Default localStorage key for the single save slot (Frosthold namespace). */
+export const SAVE_KEY = 'frosthold:save';
 
 /**
  * Minimal synchronous key/value storage. `window.localStorage` satisfies this,
@@ -26,6 +32,7 @@ export interface GameSnapshot {
   resources: ResourceStore;
   buildings: BuildingSystem;
   training: TrainingQueue;
+  warmth: WarmthSystem;
   waveCleared: number;
 }
 
@@ -36,7 +43,13 @@ export interface LoadResult {
   loaded: boolean;
   /** Elapsed offline seconds credited (after capping), 0 for a fresh game. */
   offlineSeconds: number;
-  /** Resources credited from offline idle production. */
+  /**
+   * NET resource change credited over the offline window: idle production minus
+   * the fuel (wood + coal) the Furnace burned to hold back the cold. wood/coal
+   * may therefore be negative when the furnace outburned production; food/iron
+   * are production-only. The ResourceStore balance is the authoritative value;
+   * this bundle is the honest "while away" summary derived from it.
+   */
   offlineGains: ReturnType<ResourceStore['toJSON']>;
 }
 
@@ -59,6 +72,7 @@ export class SaveManager {
     return {
       version: SAVE_VERSION,
       resources: snapshot.resources.toJSON(),
+      warmth: snapshot.warmth.toJSON(),
       buildings: snapshot.buildings.toJSON(),
       army: snapshot.training.army,
       trainingQueue: snapshot.training.toJSON(),
@@ -78,6 +92,8 @@ export class SaveManager {
     const resources = ResourceStore.fromJSON(state.resources);
     const buildings = BuildingSystem.fromJSON(state.buildings);
     const training = TrainingQueue.fromJSON(state.trainingQueue, normalizeArmy(state.army));
+    // A legacy / warmth-less save (undefined) restores to full warmth.
+    const warmth = WarmthSystem.fromJSON(state.warmth);
 
     // Training that finished while away joins the army. (Trained troops do not
     // produce resources, so this ordering has no bearing on offline gains.)
@@ -90,7 +106,7 @@ export class SaveManager {
     // would over-pay for the pre-upgrade portion. So we split the window at
     // each upgrade-completion boundary and credit each sub-segment at the rates
     // in effect during it, advancing buildings segment by segment. The result
-    // is that a farm that hit L3 one minute before you return is paid at L2 for
+    // is that a hut that hit L3 one minute before you return is paid at L2 for
     // the earlier hours and L3 only for that final minute.
     const lastSeen = state.lastSeenAt ?? now;
     const rawSeconds = Math.max(0, (now - lastSeen) / 1000);
@@ -112,32 +128,55 @@ export class SaveManager {
       .sort((a, b) => a - b);
 
     for (const boundary of boundaries) {
+      // Advance warmth over the segment (burning fuel from the store at the
+      // current Furnace level) BEFORE production, mirroring the live tick order.
+      // Deduct any fuel actually burned so `offlineGains` reflects the NET
+      // wood/coal change (production credited minus furnace burn), matching the
+      // authoritative store balance the player actually returns to.
+      deductFuel(offlineGains, warmth.tick(boundary - cursor, buildings.furnaceLevel, resources));
       // Credit production at the CURRENT (pre-completion) rates up to this
-      // boundary, then apply the completion so later segments use higher rates.
-      accumulate(offlineGains, resources.applyProduction(buildings.productionRates(), boundary - cursor, ECONOMY.OFFLINE_EFFICIENCY));
+      // boundary, scaled by the warmth-derived multiplier, then apply the
+      // completion so later segments use higher rates.
+      accumulate(
+        offlineGains,
+        resources.applyProduction(
+          buildings.productionRates(),
+          boundary - cursor,
+          ECONOMY.OFFLINE_EFFICIENCY * warmth.productionMultiplier(buildings.furnaceLevel),
+        ),
+      );
       buildings.update(boundary);
       cursor = boundary;
     }
     // Final segment: from the last boundary (or window start) to `now`.
-    accumulate(offlineGains, resources.applyProduction(buildings.productionRates(), now - cursor, ECONOMY.OFFLINE_EFFICIENCY));
+    deductFuel(offlineGains, warmth.tick(now - cursor, buildings.furnaceLevel, resources));
+    accumulate(
+      offlineGains,
+      resources.applyProduction(
+        buildings.productionRates(),
+        now - cursor,
+        ECONOMY.OFFLINE_EFFICIENCY * warmth.productionMultiplier(buildings.furnaceLevel),
+      ),
+    );
     // Finish any upgrades whose timer elapsed exactly at/after `now` bookkeeping
     // (also completes upgrades that ended before the capped window began).
     buildings.update(now);
 
     return {
-      snapshot: { resources, buildings, training, waveCleared: state.waveCleared ?? 0 },
+      snapshot: { resources, buildings, training, warmth, waveCleared: state.waveCleared ?? 0 },
       loaded: true,
       offlineSeconds,
       offlineGains,
     };
   }
 
-  /** A brand-new game snapshot (fresh stockpile, level-1 Town Center, empty queue). */
+  /** A brand-new game snapshot (fresh stockpile, level-1 Furnace, empty queue). */
   static freshGame(): GameSnapshot {
     return {
       resources: new ResourceStore(),
       buildings: new BuildingSystem(),
       training: new TrainingQueue(),
+      warmth: new WarmthSystem(),
       waveCleared: 0,
     };
   }
@@ -197,9 +236,25 @@ function accumulate(
   }
 }
 
+/**
+ * Subtract the fuel a warmth tick burned (wood + coal) from the running
+ * `offlineGains` bundle, so the reported summary is the NET change over the
+ * offline window rather than gross production. Uses the tick's reported
+ * {@link WarmthTickResult.fuelSpent} directly (never re-derived). food/iron are
+ * never fuel, so they are untouched. The value can go negative when the furnace
+ * burned more than was produced; that honest net is surfaced by the UI.
+ */
+function deductFuel(
+  dst: ReturnType<ResourceStore['toJSON']>,
+  tick: WarmthTickResult,
+): void {
+  dst.wood -= tick.fuelSpent.wood;
+  dst.coal -= tick.fuelSpent.coal;
+}
+
 /** Coerce a possibly-partial army object into a full, non-negative integer Army. */
 function normalizeArmy(army: Partial<Army> | undefined): Army {
-  const out: Army = { spearman: 0, archer: 0, knight: 0 };
+  const out: Army = { trapper: 0, marksman: 0, vanguard: 0 };
   if (army) {
     for (const kind of Object.keys(out) as TroopKind[]) {
       out[kind] = Math.max(0, Math.floor(army[kind] ?? 0));

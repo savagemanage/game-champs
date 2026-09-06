@@ -10,14 +10,26 @@ import { TrainingPanel } from '../ui/TrainingPanel';
 import { textStyle } from '../ui/UiText';
 import { tr } from '../i18n/i18n';
 
+/**
+ * Format a NET offline resource delta for the "while away" banner. The amount
+ * can be negative (the Furnace burned more fuel than was produced), so a
+ * positive value is prefixed with '+' and a negative one keeps its '-', making
+ * the honest net change unambiguous. Magnitude is floored so tiny fractional
+ * drift renders as 0 rather than noise.
+ */
+function signed(value: number): string {
+  const whole = value < 0 ? Math.ceil(value) : Math.floor(value);
+  return whole > 0 ? `+${whole}` : String(whole);
+}
+
 /** Fixed layout position for each building sprite on the town map. */
 const BUILDING_LAYOUT: Record<BuildingKind, { x: number; y: number; scale: number }> = {
-  town_center: { x: 480, y: 250, scale: 2.0 },
-  farm: { x: 250, y: 300, scale: 1.8 },
-  lumber_mill: { x: 700, y: 300, scale: 1.8 },
-  quarry: { x: 170, y: 400, scale: 1.8 },
-  mine: { x: 790, y: 400, scale: 1.8 },
-  barracks: { x: 480, y: 420, scale: 1.9 },
+  furnace: { x: 480, y: 250, scale: 2.0 },
+  hunters_hut: { x: 250, y: 300, scale: 1.8 },
+  sawmill: { x: 700, y: 300, scale: 1.8 },
+  coal_pit: { x: 170, y: 400, scale: 1.8 },
+  iron_mine: { x: 790, y: 400, scale: 1.8 },
+  war_camp: { x: 480, y: 420, scale: 1.9 },
 };
 
 /** Per-resource live widgets in the top bar. */
@@ -34,18 +46,26 @@ interface BuildingMarker {
   levelBadge: Phaser.GameObjects.Text;
 }
 
+/** Live warmth readout widgets in the HUD. */
+interface WarmthWidgets {
+  bar: ProgressBar;
+  label: Phaser.GameObjects.Text;
+  value: Phaser.GameObjects.Text;
+  status: Phaser.GameObjects.Text;
+}
+
 /**
  * TownScene - the main idle screen.
  *
  * Draws the town backdrop and each building sprite at its map position, a top
- * resource bar (food/wood/stone/gold with icons) that updates every frame from
+ * resource bar (food/wood/coal/iron with icons) that updates every frame from
  * the shared {@link GameState}'s ResourceStore, and ticks idle production live
  * through GameState.tick(delta). Clicking a building opens an upgrade panel
  * showing its current level, next-level cost, upgrade time and an Upgrade
- * button (disabled + greyed when unaffordable or the Town-Center prerequisite
- * is unmet) plus an in-progress timer/progress bar while an upgrade builds.
- * A Barracks button opens the {@link TrainingPanel}; a Battle button routes to
- * the BattleScene; a Settings button opens SettingsScene.
+ * button (disabled + greyed when unaffordable or the Furnace prerequisite is
+ * unmet) plus an in-progress timer/progress bar while an upgrade builds. A War
+ * Camp button opens the {@link TrainingPanel}; a Battle button routes to the
+ * BattleScene; a Settings button opens SettingsScene.
  *
  * All state lives in the single GameState instance, so the training panel, the
  * upgrade flow, and (later) the battle all read/write the same simulation.
@@ -56,6 +76,7 @@ export class TownScene extends Phaser.Scene {
 
   private resourceWidgets: ResourceWidget[] = [];
   private markers: BuildingMarker[] = [];
+  private warmthWidgets!: WarmthWidgets;
 
   private trainingPanel!: TrainingPanel;
 
@@ -87,6 +108,7 @@ export class TownScene extends Phaser.Scene {
 
     this.buildBuildings();
     this.buildTopBar();
+    this.buildWarmthBar();
     this.buildBottomBar();
     this.buildUpgradePanel();
 
@@ -100,7 +122,7 @@ export class TownScene extends Phaser.Scene {
     this.audio.playMusic(AudioKeys.MusicLoop);
 
     // Surface offline gains once, if any were credited on load; on a brand-new
-    // kingdom, show a one-time onboarding hint instead.
+    // hold, show a one-time onboarding hint instead.
     if (this.state.loaded) {
       this.maybeShowOfflineGains();
     } else {
@@ -124,6 +146,7 @@ export class TownScene extends Phaser.Scene {
     }
 
     this.refreshResourceBar();
+    this.refreshWarmthBar();
     this.refreshBuildingBadges();
     this.refreshUpgradePanel(now);
     this.trainingPanel.update();
@@ -183,7 +206,50 @@ export class TownScene extends Phaser.Scene {
       this.resourceWidgets.push({ res, amount, rate });
     });
 
-    Menu.label(this, CANVAS.WIDTH / 2, 60, tr('town.hint'), 12, 0.55).setColor(PALETTE.MUTED_CSS);
+    Menu.label(this, CANVAS.WIDTH / 2, 84, tr('town.hint'), 12, 0.55).setColor(PALETTE.MUTED_CSS);
+  }
+
+  // ---- Warmth HUD ----------------------------------------------------------
+
+  /**
+   * A live warmth strip below the resource bar: an ember-coloured progress bar
+   * fed each frame from GameState.warmth, its current/max readout, a production
+   * -efficiency percentage, and a FREEZING warning when warmth runs low.
+   */
+  private buildWarmthBar(): void {
+    const barW = 240;
+    const barX = CANVAS.WIDTH / 2 - barW / 2;
+    const barY = 60;
+
+    const label = this.add
+      .text(barX - 8, barY, tr('warmth.label'), textStyle(13, { fontStyle: 'bold', color: PALETTE.EMBER_CSS }))
+      .setOrigin(1, 0.5);
+    const bar = Menu.progressBar(this, barX, barY, barW, 12, PALETTE.EMBER);
+    const value = this.add.text(barX + barW + 12, barY, '', textStyle(12, { color: PALETTE.FROST_CSS })).setOrigin(0, 0.5);
+    const status = this.add.text(CANVAS.WIDTH / 2, barY + 16, '', textStyle(12, { fontStyle: 'bold' })).setOrigin(0.5);
+
+    this.warmthWidgets = { bar, label, value, status };
+  }
+
+  private refreshWarmthBar(): void {
+    const furnaceLevel = this.state.buildings.furnaceLevel;
+    const warmth = this.state.warmth;
+    const current = warmth.warmth;
+    const max = warmth.maxWarmth(furnaceLevel);
+    const ratio = warmth.warmthRatio(furnaceLevel);
+    const pct = Math.round(warmth.productionMultiplier(furnaceLevel) * 100);
+
+    const w = this.warmthWidgets;
+    w.bar.setProgress(ratio);
+    // Fill drifts from warm ember to biting frost-blue as warmth drops.
+    w.bar.setFillColor(ratio <= 0.25 ? PALETTE.DANGER : ratio <= 0.5 ? PALETTE.ICE : PALETTE.EMBER);
+    w.value.setText(tr('warmth.value', { warmth: Math.floor(current), max: Math.floor(max) }));
+
+    if (ratio <= 0.25) {
+      w.status.setText(tr('warmth.freezing')).setColor(PALETTE.DANGER_CSS).setVisible(true);
+    } else {
+      w.status.setText(tr('warmth.output', { pct })).setColor(pct >= 100 ? PALETTE.SUCCESS_CSS : PALETTE.MUTED_CSS).setVisible(true);
+    }
   }
 
   private refreshResourceBar(): void {
@@ -275,11 +341,21 @@ export class TownScene extends Phaser.Scene {
 
     this.upgradeLevel.setText(level > 0 ? tr('building.level', { level }) : tr('town.locked'));
 
-    // Producer output at current level.
+    // Producer output at current level; the Furnace instead shows its warmth
+    // reserve and per-second fuel burn (its defining role).
     if (isProducer(kind) && level > 0) {
       this.upgradeOutput.setText(tr('building.output', { amount: buildings.outputOf(def.produces!).toFixed(1) }));
+    } else if (kind === 'furnace' && level > 0) {
+      const warmth = this.state.warmth;
+      const burn = warmth.fuelPerSecond(level);
+      this.upgradeOutput.setColor(PALETTE.EMBER_CSS).setText(
+        `${tr('warmth.furnaceInfo', {
+          warmth: Math.floor(warmth.warmth),
+          max: Math.floor(warmth.maxWarmth(level)),
+        })}\n${tr('warmth.fuelBurn', { wood: burn.wood.toFixed(2), coal: burn.coal.toFixed(2) })}`,
+      );
     } else {
-      this.upgradeOutput.setText('');
+      this.upgradeOutput.setColor(PALETTE.SUCCESS_CSS).setText('');
     }
 
     const upgrading = buildings.isUpgrading(kind);
@@ -320,7 +396,7 @@ export class TownScene extends Phaser.Scene {
     } else {
       this.upgradeButton.setEnabled(false);
       if (check.reason === 'prereq') {
-        this.upgradeStatus.setText(tr('building.lockedByTownCenter', { level: def.requiresTownCenterLevel }));
+        this.upgradeStatus.setText(tr('building.lockedByFurnace', { level: def.requiresFurnaceLevel }));
       } else if (check.reason === 'cost') {
         this.upgradeStatus.setText(tr('building.insufficient'));
       } else {
@@ -370,7 +446,7 @@ export class TownScene extends Phaser.Scene {
 
   /**
    * First-run onboarding: a dismissible centred card explaining the core loop
-   * (gather -> upgrade -> train -> battle). Only shown for a brand-new kingdom
+   * (gather -> upgrade -> train -> battle). Only shown for a brand-new hold
    * (no save was loaded), so returning players are never nagged.
    */
   private showOnboarding(): void {
@@ -412,17 +488,21 @@ export class TownScene extends Phaser.Scene {
   private maybeShowOfflineGains(): void {
     if (!this.state.loaded || this.state.offlineSeconds <= 1) return;
     const g = this.state.offlineGains;
-    const total = g.food + g.wood + g.stone + g.gold;
-    if (total < 1) return;
+    // offlineGains is a NET bundle: production minus furnace fuel burn, so
+    // wood/coal can be negative. Suppress only a truly negligible window - use
+    // the summed MAGNITUDE of the net change so a meaningful net loss (e.g. the
+    // Furnace outburned production) still surfaces, not just net gains.
+    const magnitude = Math.abs(g.food) + Math.abs(g.wood) + Math.abs(g.coal) + Math.abs(g.iron);
+    if (magnitude < 1) return;
     const banner = this.add
       .text(
         CANVAS.WIDTH / 2,
         90,
         tr('save.offlineGains', {
-          food: Math.floor(g.food),
-          wood: Math.floor(g.wood),
-          stone: Math.floor(g.stone),
-          gold: Math.floor(g.gold),
+          food: signed(g.food),
+          wood: signed(g.wood),
+          coal: signed(g.coal),
+          iron: signed(g.iron),
         }),
         textStyle(13, { color: PALETTE.ACCENT_CSS, backgroundColor: PALETTE.PANEL_CSS, padding: { x: 8, y: 6 }, wordWrap: { width: 600 }, align: 'center' }),
       )

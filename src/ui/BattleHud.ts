@@ -12,7 +12,7 @@ export interface BattleHudState {
   totalWaves: number;
   /** Friendly troops still standing. */
   armyRemaining: number;
-  /** Enemy raiders still standing. */
+  /** Frozen Horde enemies still standing. */
   enemyRemaining: number;
 }
 
@@ -114,7 +114,7 @@ export class BattleHud {
     this.enemyText.setText(`${state.enemyRemaining} ${tr('battle.enemyRemaining')}`);
   }
 
-  /** Flash the transient wave banner announcing the incoming raiders. */
+  /** Flash the transient wave banner announcing the incoming Horde. */
   announceWave(wave: number, totalWaves: number, incoming: number): void {
     this.banner.setText(`${tr('battle.wave', { wave, total: totalWaves })}\n${tr('battle.incoming', { count: incoming })}`);
     this.banner.setAlpha(1);

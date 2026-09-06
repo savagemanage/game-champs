@@ -20,11 +20,11 @@ interface TroopRow {
 }
 
 /**
- * TrainingPanel - the Barracks troop-training interface (the FEAT-003 "Hud"
+ * TrainingPanel - the War Camp troop-training interface (the FEAT-003 "Hud"
  * component). It lists each troop type with its cost and per-unit train time,
  * a +/- batch-count selector, and a Train button that enqueues a batch through
  * the shared {@link GameState}'s {@link TrainingQueue} (which enforces the
- * up-front cost charge and the Barracks prerequisite). Below the roster it
+ * up-front cost charge and the War Camp prerequisite). Below the roster it
  * shows the live training queue with remaining times and the standing army
  * counts, both refreshed every frame from the same queue.
  *
@@ -180,7 +180,7 @@ export class TrainingPanel {
       row.count,
       this.state.resources,
       now,
-      this.state.buildings.hasBarracks,
+      this.state.buildings.hasWarCamp,
     );
     if (result.ok) {
       AudioManager.get(this.scene).playSfx(AudioKeys.TrainComplete, 0.5);
@@ -193,19 +193,19 @@ export class TrainingPanel {
   refresh(): void {
     if (!this._visible) return;
     const now = Date.now();
-    const hasBarracks = this.state.buildings.hasBarracks;
+    const hasWarCamp = this.state.buildings.hasWarCamp;
     const army = this.state.training.army;
 
     for (const row of this.rows) {
       row.armyLabel.setText(tr('training.army', { count: army[row.troop] }));
-      row.trainButton.setEnabled(hasBarracks && this.affordable(row));
+      row.trainButton.setEnabled(hasWarCamp && this.affordable(row));
       row.trainButton.setText(tr('training.trainCount', { count: row.count }));
     }
 
     // Queue readout.
     const orders = this.state.training.orders;
-    if (!hasBarracks) {
-      this.queueText.setText(tr('training.noBarracks'));
+    if (!hasWarCamp) {
+      this.queueText.setText(tr('training.noWarCamp'));
     } else if (orders.length === 0) {
       this.queueText.setText(`${tr('training.queue')}: ${tr('training.queueEmpty')}`);
     } else {

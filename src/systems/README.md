@@ -7,9 +7,9 @@ class/module with **no Phaser import**, so it can be unit-tested with vitest
 Pure-logic systems:
 
 - `ResourceStore` — resource stockpiles + per-second idle-production math.
-- `BuildingSystem` — upgrade costs, build timers, and the Town-Center level gate.
+- `BuildingSystem` — upgrade costs, build timers, and the Furnace level gate.
 - `TrainingQueue` — troop training queue and completion timing.
-- `CombatSystem` — wave resolution between the army and raider waves.
+- `CombatSystem` — wave resolution between the army and Frozen Horde waves.
 - `SaveManager` — serialize/deserialize `GameState` to injectable storage
   (`localStorage` in the browser) with offline idle-gain reconciliation.
 

@@ -26,14 +26,14 @@ export interface GameSettings {
   language: Language;
 }
 
-export const SETTINGS_STORAGE_KEY = 'kingdom-rise:settings:v1';
+export const SETTINGS_STORAGE_KEY = 'frosthold:settings:v1';
 
 export const SETTINGS_DEFAULTS: GameSettings = {
   masterVolume: 0.8,
   sfxVolume: 0.9,
   musicVolume: 0.5,
-  // Kingdom Rise is Korean-first, matching the i18n runtime default. This is
-  // also the fallback when browser-language detection is unavailable.
+  // Frosthold is Korean-first, matching the i18n runtime default. This is also
+  // the fallback when browser-language detection is unavailable.
   language: 'ko',
 };
 

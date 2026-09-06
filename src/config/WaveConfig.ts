@@ -1,11 +1,12 @@
 /**
- * WaveConfig - deterministic raider-wave composition and rewards.
+ * WaveConfig - deterministic Frozen Horde wave composition and rewards.
  *
  * Given a 1-based wave number, `waveComposition(n)` returns the exact enemy
  * roster for that wave and `waveReward(n)` returns the resource payout for
  * clearing it. Both are pure functions of `n` (no randomness), so combat and
  * progression are fully reproducible and unit-testable.
  *
+ * The Frozen Horde swells out of the blizzard as the long night deepens.
  * Difficulty scales by COMPOSITION only (more and heavier enemies at higher
  * waves), never by mutating per-unit stats - those live in TroopConfig.ENEMY_DEFS.
  */
@@ -13,10 +14,10 @@
 import type { EnemyKind, ResourceCost } from '../types';
 
 /**
- * The number of configured waves in a full campaign run. Clearing this many
+ * The number of configured waves in a full campaign run. Surviving this many
  * waves is a full victory (the battle result scene celebrates it). Waves past
  * this still resolve with valid compositions/rewards, but progression treats
- * TOTAL_WAVES as the finish line so the loop has a defined "you won" state.
+ * TOTAL_WAVES as the finish line so the loop has a defined "you endured" state.
  */
 export const TOTAL_WAVES = 20;
 
@@ -28,27 +29,27 @@ export interface WaveEntry {
 
 /**
  * Enemy roster for wave `n` (1-based). Composition grows with the wave index:
- * raiders scale steadily, brutes join from wave 3, rams from wave 5, and every
- * count ramps up as waves progress.
+ * frost wolves scale steadily, ravagers join from wave 3, frost titans from
+ * wave 5, and every count ramps up as the blizzard worsens.
  */
 export function waveComposition(n: number): WaveEntry[] {
   const wave = Math.max(1, Math.floor(n));
   const entries: WaveEntry[] = [];
 
-  // Raiders: the backbone of every wave, scaling roughly linearly.
-  const raiders = 3 + Math.floor(wave * 1.5);
-  entries.push({ kind: 'raider', count: raiders });
+  // Frost wolves: the backbone of every wave, scaling roughly linearly.
+  const wolves = 3 + Math.floor(wave * 1.5);
+  entries.push({ kind: 'frost_wolf', count: wolves });
 
-  // Brutes: appear from wave 3, one more roughly every two waves.
+  // Ravagers: appear from wave 3, one more roughly every two waves.
   if (wave >= 3) {
-    const brutes = 1 + Math.floor((wave - 3) / 2);
-    entries.push({ kind: 'brute', count: brutes });
+    const ravagers = 1 + Math.floor((wave - 3) / 2);
+    entries.push({ kind: 'ravager', count: ravagers });
   }
 
-  // Rams: heavy siege from wave 5, one more roughly every three waves.
+  // Frost titans: heavy siege from wave 5, one more roughly every three waves.
   if (wave >= 5) {
-    const rams = 1 + Math.floor((wave - 5) / 3);
-    entries.push({ kind: 'ram', count: rams });
+    const titans = 1 + Math.floor((wave - 5) / 3);
+    entries.push({ kind: 'frost_titan', count: titans });
   }
 
   return entries;
@@ -56,7 +57,7 @@ export function waveComposition(n: number): WaveEntry[] {
 
 /**
  * Resource reward for clearing wave `n` (1-based). Grows geometrically so later
- * waves are worth pushing for. Gold only starts dropping from wave 2.
+ * waves are worth pushing for. Iron only starts dropping from wave 2.
  */
 export function waveReward(n: number): ResourceCost {
   const wave = Math.max(1, Math.floor(n));
@@ -64,7 +65,7 @@ export function waveReward(n: number): ResourceCost {
   return {
     food: Math.round(60 * scale),
     wood: Math.round(50 * scale),
-    stone: Math.round(30 * scale),
-    gold: wave >= 2 ? Math.round(15 * scale) : 0,
+    coal: Math.round(30 * scale),
+    iron: wave >= 2 ? Math.round(15 * scale) : 0,
   };
 }

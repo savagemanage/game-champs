@@ -4,7 +4,7 @@ import { STRINGS } from './strings';
 
 /**
  * Pure-logic tests for the i18n runtime (FEAT-001), in the existing vitest
- * style (no Phaser runtime). Kingdom Rise is Korean-first, so the default
+ * style (no Phaser runtime). Frosthold is Korean-first, so the default
  * language is 'ko'. Language is reset to 'ko' after each test so the
  * module-level state does not leak between cases.
  */
@@ -15,13 +15,13 @@ describe('i18n tr()', () => {
 
   it('returns Korean by default (Korean-first)', () => {
     expect(getLanguage()).toBe('ko');
-    expect(tr('title.play')).toBe('왕국 입장');
+    expect(tr('title.play')).toBe('성채 입장');
   });
 
   it('returns English after setLanguage("en")', () => {
     setLanguage('en');
     expect(getLanguage()).toBe('en');
-    expect(tr('title.play')).toBe('Enter Kingdom');
+    expect(tr('title.play')).toBe('Enter the Hold');
   });
 
   it('substitutes {param} placeholders', () => {
@@ -31,8 +31,8 @@ describe('i18n tr()', () => {
 
   it('substitutes multiple params in one template', () => {
     setLanguage('en');
-    expect(tr('save.offlineGains', { food: 10, wood: 20, stone: 30, gold: 40 })).toBe(
-      'While away you gathered 10 food, 20 wood, 30 stone, 40 gold.',
+    expect(tr('save.offlineGains', { food: 10, wood: 20, coal: 30, iron: 40 })).toBe(
+      'While away you gathered 10 rations, 20 timber, 30 coal, 40 iron.',
     );
   });
 
@@ -54,7 +54,7 @@ describe('i18n tr()', () => {
     // Force a change away and back so the setter actually re-applies 'ko'.
     setLanguage('en');
     setLanguage('ko');
-    expect(tr('title.play')).toBe('Enter Kingdom');
+    expect(tr('title.play')).toBe('Enter the Hold');
     (STRINGS['title.play'] as { ko: string }).ko = original;
   });
 

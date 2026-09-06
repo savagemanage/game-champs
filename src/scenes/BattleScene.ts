@@ -23,8 +23,8 @@ const TIMELINE_STEPS = 10;
 /** Base milliseconds per casualty tick at 1x speed. */
 const STEP_MS = 520;
 
-/** Enemy kinds in draw order (raiders front, heavies behind). */
-const ENEMY_ORDER: readonly EnemyKind[] = ['raider', 'brute', 'ram'] as const;
+/** Enemy kinds in draw order (frost wolves front, heavies behind). */
+const ENEMY_ORDER: readonly EnemyKind[] = ['frost_wolf', 'ravager', 'frost_titan'] as const;
 
 /**
  * BattleScene - the animated wave battle, a VISUALIZATION of CombatSystem.
@@ -36,7 +36,7 @@ const ENEMY_ORDER: readonly EnemyKind[] = ['raider', 'brute', 'ram'] as const;
  *   2. Resolve the battle ONCE via {@link CombatSystem.resolve} - the single
  *      source of truth for the outcome - and turn it into a per-tick casualty
  *      {@link BattleTimeline} that ends exactly on that resolution.
- *   3. Lay out one {@link Battler} per living unit (troops left, raiders right)
+ *   3. Lay out one {@link Battler} per living unit (soldiers left, Horde right)
  *      over the battle backdrop, march the two lines together, then play the
  *      timeline: on each tick some units on each side fall (spark/dust + hit
  *      SFX) and the survivors' HP bars drain, so the on-screen counts always
@@ -132,7 +132,7 @@ export class BattleScene extends Phaser.Scene {
     }
     this.friendlyUnits = this.layOut(friendlyList, 'friendly', BattleScene.FRIENDLY_X, -1);
 
-    // Enemy raiders from the wave composition on the right.
+    // Frozen Horde from the wave composition on the right.
     const enemyList: EnemyKind[] = [];
     for (const kind of ENEMY_ORDER) {
       const entry = waveComposition(this.wave).find((e) => e.kind === kind);
@@ -256,7 +256,7 @@ export class BattleScene extends Phaser.Scene {
     // so a maxed (sprite-capped) army reads cleanly on the last frame: friendly
     // to the survivor total, enemy to its terminal timeline count (0 on a win,
     // the surviving remainder on a loss). Without snapping the enemy side too,
-    // visibleRatio rounding could leave a stray raider standing at 42/side.
+    // visibleRatio rounding could leave a stray beast standing at 42/side.
     this.trimSide(this.friendlyUnits, this.result.win ? this.armyTotal(this.result.survivors) : 0);
     this.trimSide(this.enemyUnits, this.result.win ? 0 : this.enemyRemainingOnLoss());
 

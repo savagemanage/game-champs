@@ -1,7 +1,7 @@
 /**
  * i18n.ts - the tiny runtime around the {@link STRINGS} table.
  *
- * Holds the current {@link Language} at module level. Kingdom Rise is
+ * Holds the current {@link Language} at module level. Frosthold: Last Ember is
  * KOREAN-FIRST, so the default is 'ko'. Exposes get/set accessors, a
  * change-subscription list so scenes can re-render if they want to, and the
  * {@link tr} lookup used everywhere for user-facing text.
@@ -50,7 +50,7 @@ export function subscribe(fn: (lang: Language) => void): () => void {
  * language. If any of the navigator's preferred locales starts with `ko`
  * (case-insensitively) the game opens in Korean; any other locale opens in
  * English. Korean is the fallback when detection is impossible (no navigator,
- * empty locales, e.g. the node/test environment), keeping Kingdom Rise
+ * empty locales, e.g. the node/test environment), keeping Frosthold
  * Korean-first.
  *
  * The navigator-like object is passed in so this stays a pure, unit-testable
