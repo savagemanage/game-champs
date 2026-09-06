@@ -1,0 +1,26 @@
+{
+  "name": "game-whiteout",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Frosthold: Last Ember - an original frozen-survival city-builder / idle browser game inspired by (not based on) the genre: fuel a central Furnace with wood and coal to hold back the cold, gather food/wood/coal/iron through idle resource buildings, climb a Furnace-gated building tree, train troops, and repel escalating Frozen Horde waves. Built with Phaser 3.",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "phaser": "^3.80.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "vite": "^5.2.0",
+    "vitest": "^1.6.0"
+  }
+}
