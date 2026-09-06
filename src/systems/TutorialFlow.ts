@@ -30,6 +30,8 @@ export interface TutorialProgress {
   townCenterUpgrading: boolean;
   /** The current Town Center level. */
   townCenterLevel: number;
+  /** Whether the Lumber Mill has been built (level >= 1) — the wood-income step. */
+  lumberMillBuilt: boolean;
   /** Whether the Barracks has been built (level >= 1). */
   barracksBuilt: boolean;
   /** Cumulative troops trained over the game's lifetime. */
@@ -47,6 +49,7 @@ export interface TutorialProgress {
 export type TutorialAnchor =
   | 'center'
   | 'town_center'
+  | 'lumber_mill'
   | 'upgrade_button'
   | 'training'
   | 'battle'
@@ -93,8 +96,15 @@ export interface TutorialStep {
  *   1. "this is the Town Center, tap it"            -> its upgrade panel opens
  *   2. "upgrade it to Lv.2"                         -> an upgrade STARTS
  *   3. resources accrue over time + warmth (온기)   [Next]
- *   4. "build a Barracks (needs TC Lv.2) then train a troop" -> a troop trained
- *   5. "march To Battle — and check 임무(Quests)"  [Next]
+ *   4. "build the Lumber Mill for wood (needed by upgrades)" -> Lumber Mill built
+ *   5. "build a Barracks (needs TC Lv.2) then train a troop" -> a troop trained
+ *   6. "march To Battle — and check 임무(Quests)"  [Next]
+ *
+ * The Lumber Mill step comes early (right after warmth, before the Barracks)
+ * because almost every upgrade costs wood: a brand-new player who does not
+ * build it first quickly stalls. It sits after the Town Center upgrade so the
+ * player has already met the mill's Town-Center-Lv.1 prerequisite (which a
+ * fresh game does), keeping the sequence winnable.
  */
 export const TUTORIAL_STEPS: readonly TutorialStep[] = [
   {
@@ -122,6 +132,17 @@ export const TUTORIAL_STEPS: readonly TutorialStep[] = [
     bodyKey: 'tutorial.resourcesWarmth',
     anchor: 'center',
     advance: 'next',
+  },
+  {
+    id: 'build_lumber_mill',
+    bodyKey: 'tutorial.buildLumberMill',
+    anchor: 'lumber_mill',
+    // Advance once the Lumber Mill is standing. Buildable immediately (it needs
+    // only Town Center Lv.1), so this is a winnable early "wood first" step.
+    advance: (p) => p.lumberMillBuilt,
+    // The player must open the Lumber Mill's build panel and press Build, so the
+    // step needs unrestricted town interaction (no blocking dim frame).
+    freeInteraction: true,
   },
   {
     id: 'build_and_train',

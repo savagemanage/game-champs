@@ -238,7 +238,7 @@ describe('SaveManager', () => {
     const loaded = mgr.load(0);
     expect(loaded.loaded).toBe(true);
     expect(loaded.snapshot.quests.claimed).toEqual([]);
-    expect(loaded.snapshot.quests.status('raise_a_farm')).not.toBe('claimed');
+    expect(loaded.snapshot.quests.status('secure_the_timber')).not.toBe('claimed');
     expect(loaded.snapshot.troopsTrained).toBe(0);
     expect(loaded.snapshot.battlesWon).toBe(0);
   });
@@ -251,22 +251,22 @@ describe('SaveManager', () => {
     const snap = snapshot();
     // Refresh with a progress that satisfies the first quest, then claim it.
     snap.quests.refresh({
-      buildingLevels: { farm: 1 },
+      buildingLevels: { lumber_mill: 1 },
       townCenterLevel: 1,
       troopsTrained: 0,
       battlesWon: 0,
       techsUnlocked: 0,
       unlockedTechIds: [],
     });
-    snap.quests.claim('raise_a_farm'); // mark the first quest claimed
+    snap.quests.claim('secure_the_timber'); // mark the first quest claimed
     snap.troopsTrained = 17;
     snap.battlesWon = 3;
-    expect(snap.quests.isClaimed('raise_a_farm')).toBe(true);
+    expect(snap.quests.isClaimed('secure_the_timber')).toBe(true);
 
     mgr.save(snap, now);
     const loaded = mgr.load(now);
-    expect(loaded.snapshot.quests.claimed).toEqual(['raise_a_farm']);
-    expect(loaded.snapshot.quests.isClaimed('raise_a_farm')).toBe(true);
+    expect(loaded.snapshot.quests.claimed).toEqual(['secure_the_timber']);
+    expect(loaded.snapshot.quests.isClaimed('secure_the_timber')).toBe(true);
     expect(loaded.snapshot.troopsTrained).toBe(17);
     expect(loaded.snapshot.battlesWon).toBe(3);
   });

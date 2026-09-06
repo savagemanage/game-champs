@@ -236,8 +236,14 @@ describe('GameState quest counters through the real paths', () => {
     // The battle quest (repel_the_raiders) needs 5 wins and sits deep in the
     // chain; walk the chain by claiming prerequisites once each condition is met.
     // First satisfy + claim the earlier quests so repel_the_raiders unlocks.
-    // raise_a_farm: farm level 1.
     state.resources.add({ wood: 9999, stone: 9999, food: 9999, gold: 9999 });
+    // secure_the_timber: lumber mill level 1 (the new wood-first first quest).
+    state.buildings.startUpgrade('lumber_mill', state.resources, NOW);
+    state.buildings.update(NOW + state.buildings.nextUpgradeTimeMs('lumber_mill'));
+    state.tick(NOW + 1, 1);
+    expect(state.quests.status('secure_the_timber')).toBe('completable');
+    expect(state.claimQuest('secure_the_timber')).toBe(true);
+    // raise_a_farm: farm level 1.
     state.buildings.startUpgrade('farm', state.resources, NOW);
     state.buildings.update(NOW + state.buildings.nextUpgradeTimeMs('farm'));
     state.tick(NOW + 1, 1);
@@ -268,6 +274,12 @@ describe('GameState quest counters through the real paths', () => {
     // is unlocked, then show the win counter flips it completable and the reward
     // applies exactly once. Claim each predecessor by satisfying its condition.
     state.resources.add({ wood: 99999, stone: 99999, food: 99999, gold: 99999 });
+
+    // secure_the_timber (lumber mill L1) — the wood-first first quest.
+    state.buildings.startUpgrade('lumber_mill', state.resources, NOW);
+    state.buildings.update(NOW + state.buildings.nextUpgradeTimeMs('lumber_mill'));
+    state.tick(NOW + 1, 1);
+    expect(state.claimQuest('secure_the_timber')).toBe(true);
 
     // raise_a_farm (farm L1)
     state.buildings.startUpgrade('farm', state.resources, NOW);

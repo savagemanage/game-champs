@@ -53,6 +53,7 @@ export interface QuestReward {
 
 /** The identifiers of every quest in the chain. */
 export type QuestId =
+  | 'secure_the_timber'
   | 'raise_a_farm'
   | 'grow_the_center'
   | 'first_recruits'
@@ -80,55 +81,63 @@ export interface QuestDef {
  * with hero shards so quests feed the hero pillar.
  */
 export const QUEST_DEFS: Record<QuestId, QuestDef> = {
-  // 1. Build your first food producer.
+  // 1. Secure a WOOD income first — almost every upgrade needs timber, so the
+  // Lumber Mill is the very first thing a new player should build.
+  secure_the_timber: {
+    id: 'secure_the_timber',
+    condition: { type: 'buildingLevel', kind: 'lumber_mill', level: 1 },
+    reward: { resources: { wood: 200 } },
+  },
+  // 2. Build your first food producer.
   raise_a_farm: {
     id: 'raise_a_farm',
     condition: { type: 'buildingLevel', kind: 'farm', level: 1 },
     reward: { resources: { food: 200, wood: 120 } },
+    requires: 'secure_the_timber',
   },
-  // 2. Grow the capital to unlock the mid-game buildings.
+  // 3. Grow the capital to unlock the mid-game buildings.
   grow_the_center: {
     id: 'grow_the_center',
     condition: { type: 'townCenterLevel', level: 3 },
     reward: { resources: { wood: 200, stone: 200, gold: 120 } },
     requires: 'raise_a_farm',
   },
-  // 3. Train your first troops.
+  // 4. Train your first troops.
   first_recruits: {
     id: 'first_recruits',
     condition: { type: 'troopsTrained', count: 10 },
     reward: { resources: { gold: 150 }, shards: { heroId: 'ser_alden', shards: 5 } },
     requires: 'grow_the_center',
   },
-  // 4. Establish the research building.
+  // 5. Establish the research building.
   found_the_hall: {
     id: 'found_the_hall',
     condition: { type: 'buildingLevel', kind: 'research', level: 1 },
     reward: { resources: { gold: 200, stone: 150 } },
     requires: 'first_recruits',
   },
-  // 5. Unlock your first tech.
+  // 6. Unlock your first tech.
   first_research: {
     id: 'first_research',
     condition: { type: 'techUnlocked', count: 1 },
     reward: { resources: { gold: 250 }, shards: { heroId: 'mira_goldhand', shards: 6 } },
     requires: 'found_the_hall',
   },
-  // 6. Field a real army.
+  // 7. Field a real army.
   muster_an_army: {
     id: 'muster_an_army',
     condition: { type: 'troopsTrained', count: 30 },
     reward: { resources: { food: 400, gold: 200 }, shards: { heroId: 'kara_stormblade', shards: 8 } },
     requires: 'first_research',
   },
-  // 7. Win a handful of battles.
+  // 8. Win a handful of battles.
   repel_the_raiders: {
     id: 'repel_the_raiders',
     condition: { type: 'battlesWon', count: 5 },
     reward: { resources: { gold: 400 }, shards: { heroId: 'ser_alden', shards: 10 } },
     requires: 'muster_an_army',
   },
-  // 8. Fortify: reach a defended, well-researched late game.
+  // 9. Fortify: reach a defended, well-researched late game.
   hold_the_line: {
     id: 'hold_the_line',
     condition: { type: 'techUnlocked', count: 3 },
@@ -139,6 +148,7 @@ export const QUEST_DEFS: Record<QuestId, QuestDef> = {
 
 /** All quest ids in chain order. */
 export const QUEST_ORDER: readonly QuestId[] = [
+  'secure_the_timber',
   'raise_a_farm',
   'grow_the_center',
   'first_recruits',

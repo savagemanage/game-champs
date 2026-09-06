@@ -87,51 +87,55 @@ describe('QuestSystem.refresh - chain unlocking', () => {
   it('locks every quest but the first on a fresh log', () => {
     const q = new QuestSystem();
     q.refresh(emptyProgress());
-    expect(q.status('raise_a_farm')).toBe('active'); // first, unlocked, condition unmet
-    expect(q.status('grow_the_center')).toBe('locked'); // predecessor not claimed
-    expect(q.status('first_recruits')).toBe('locked');
+    // The chain now leads with the wood-first Lumber Mill quest.
+    expect(q.status('secure_the_timber')).toBe('active'); // first, unlocked, condition unmet
+    expect(q.status('raise_a_farm')).toBe('locked'); // predecessor not claimed
+    expect(q.status('grow_the_center')).toBe('locked');
   });
 
   it('marks the first quest completable once its condition is met', () => {
     const q = new QuestSystem();
-    q.refresh(emptyProgress({ buildingLevels: { farm: 1 } }));
-    expect(q.status('raise_a_farm')).toBe('completable');
+    q.refresh(emptyProgress({ buildingLevels: { lumber_mill: 1 } }));
+    expect(q.status('secure_the_timber')).toBe('completable');
     // The next quest stays locked until the first is CLAIMED (not merely done).
-    expect(q.status('grow_the_center')).toBe('locked');
+    expect(q.status('raise_a_farm')).toBe('locked');
   });
 
   it('unlocks the next quest only after the predecessor is claimed', () => {
     const q = new QuestSystem();
-    q.refresh(emptyProgress({ buildingLevels: { farm: 1 }, townCenterLevel: 3 }));
-    expect(q.status('raise_a_farm')).toBe('completable');
-    expect(q.status('grow_the_center')).toBe('locked');
+    q.refresh(emptyProgress({ buildingLevels: { lumber_mill: 1, farm: 1 } }));
+    expect(q.status('secure_the_timber')).toBe('completable');
+    expect(q.status('raise_a_farm')).toBe('locked');
 
-    // Claim the first: the second unlocks and, since TC is already 3, is completable.
-    expect(q.claim('raise_a_farm')).not.toBeNull();
-    q.refresh(emptyProgress({ buildingLevels: { farm: 1 }, townCenterLevel: 3 }));
-    expect(q.status('raise_a_farm')).toBe('claimed');
-    expect(q.status('grow_the_center')).toBe('completable');
-    expect(q.status('first_recruits')).toBe('locked'); // still behind grow_the_center
+    // Claim the first: the second (raise_a_farm) unlocks and, since the farm is
+    // already built, is completable.
+    expect(q.claim('secure_the_timber')).not.toBeNull();
+    q.refresh(emptyProgress({ buildingLevels: { lumber_mill: 1, farm: 1 } }));
+    expect(q.status('secure_the_timber')).toBe('claimed');
+    expect(q.status('raise_a_farm')).toBe('completable');
+    expect(q.status('grow_the_center')).toBe('locked'); // still behind raise_a_farm
   });
 });
 
 describe('QuestSystem.claim - reward correctness + claim-once', () => {
   it('returns the exact reward bundle for a completable quest', () => {
     const q = new QuestSystem();
-    q.refresh(emptyProgress({ buildingLevels: { farm: 1 } }));
-    const reward = q.claim('raise_a_farm');
-    expect(reward).toEqual(QUEST_DEFS.raise_a_farm.reward);
-    expect(reward?.resources).toEqual({ food: 200, wood: 120 });
+    q.refresh(emptyProgress({ buildingLevels: { lumber_mill: 1 } }));
+    const reward = q.claim('secure_the_timber');
+    expect(reward).toEqual(QUEST_DEFS.secure_the_timber.reward);
+    expect(reward?.resources).toEqual({ wood: 200 });
   });
 
   it('returns a shard reward when the quest grants shards', () => {
     const q = new QuestSystem();
     // Fast-forward the chain by claiming predecessors with a satisfying snapshot.
     const full = emptyProgress({
-      buildingLevels: { farm: 1, research: 1 },
+      buildingLevels: { lumber_mill: 1, farm: 1, research: 1 },
       townCenterLevel: 3,
       troopsTrained: 10,
     });
+    q.refresh(full);
+    q.claim('secure_the_timber');
     q.refresh(full);
     q.claim('raise_a_farm');
     q.refresh(full);
@@ -143,41 +147,42 @@ describe('QuestSystem.claim - reward correctness + claim-once', () => {
 
   it('cannot claim a locked or incomplete quest', () => {
     const q = new QuestSystem();
-    q.refresh(emptyProgress()); // farm not built, chain locked
-    expect(q.canClaim('raise_a_farm')).toBe(false);
+    q.refresh(emptyProgress()); // lumber mill not built, chain locked
+    expect(q.canClaim('secure_the_timber')).toBe(false);
+    expect(q.claim('secure_the_timber')).toBeNull();
+    expect(q.canClaim('raise_a_farm')).toBe(false); // locked
     expect(q.claim('raise_a_farm')).toBeNull();
-    expect(q.canClaim('grow_the_center')).toBe(false); // locked
-    expect(q.claim('grow_the_center')).toBeNull();
   });
 
   it('cannot be claimed twice (claim-once)', () => {
     const q = new QuestSystem();
-    q.refresh(emptyProgress({ buildingLevels: { farm: 1 } }));
-    expect(q.claim('raise_a_farm')).not.toBeNull();
-    expect(q.isClaimed('raise_a_farm')).toBe(true);
+    q.refresh(emptyProgress({ buildingLevels: { lumber_mill: 1 } }));
+    expect(q.claim('secure_the_timber')).not.toBeNull();
+    expect(q.isClaimed('secure_the_timber')).toBe(true);
     // A second claim yields nothing.
-    expect(q.canClaim('raise_a_farm')).toBe(false);
-    expect(q.claim('raise_a_farm')).toBeNull();
+    expect(q.canClaim('secure_the_timber')).toBe(false);
+    expect(q.claim('secure_the_timber')).toBeNull();
   });
 });
 
 describe('QuestSystem JSON round-trip', () => {
   it('persists and restores the claimed set', () => {
     const q = new QuestSystem();
-    q.refresh(emptyProgress({ buildingLevels: { farm: 1 }, townCenterLevel: 3 }));
+    const snap = emptyProgress({ buildingLevels: { lumber_mill: 1, farm: 1 }, townCenterLevel: 3 });
+    q.refresh(snap);
+    q.claim('secure_the_timber');
+    q.refresh(snap);
     q.claim('raise_a_farm');
-    q.refresh(emptyProgress({ buildingLevels: { farm: 1 }, townCenterLevel: 3 }));
-    q.claim('grow_the_center');
 
     const json = q.toJSON();
-    expect(json.claimed).toEqual(['raise_a_farm', 'grow_the_center']);
+    expect(json.claimed).toEqual(['secure_the_timber', 'raise_a_farm']);
 
     const restored = QuestSystem.fromJSON(json);
-    expect(restored.claimed).toEqual(['raise_a_farm', 'grow_the_center']);
-    expect(restored.isClaimed('raise_a_farm')).toBe(true);
+    expect(restored.claimed).toEqual(['secure_the_timber', 'raise_a_farm']);
+    expect(restored.isClaimed('secure_the_timber')).toBe(true);
     // After restore, refresh derives the next quest as unlocked.
-    restored.refresh(emptyProgress({ buildingLevels: { farm: 1, research: 1 }, townCenterLevel: 3, troopsTrained: 10 }));
-    expect(restored.status('first_recruits')).toBe('completable');
+    restored.refresh(emptyProgress({ buildingLevels: { lumber_mill: 1, farm: 1, research: 1 }, townCenterLevel: 3, troopsTrained: 10 }));
+    expect(restored.status('grow_the_center')).toBe('completable');
   });
 
   it('tolerates a missing / malformed / stale save', () => {
@@ -196,7 +201,7 @@ describe('QuestSystem integration - full progression snapshot', () => {
     // A snapshot satisfying: farm built, TC L3, 10 troops trained, 5 battles
     // won, and 1 tech unlocked.
     const progress = emptyProgress({
-      buildingLevels: { farm: 2, research: 1 },
+      buildingLevels: { lumber_mill: 1, farm: 2, research: 1 },
       townCenterLevel: 3,
       troopsTrained: 30,
       battlesWon: 5,
@@ -207,7 +212,7 @@ describe('QuestSystem integration - full progression snapshot', () => {
     // Walk the chain: each claim unlocks the next, and all conditions are met
     // except hold_the_line (needs 3 techs) so it stays active at the end.
     const applied: { resources: number; shards: number } = { resources: 0, shards: 0 };
-    const walk = ['raise_a_farm', 'grow_the_center', 'first_recruits', 'found_the_hall', 'first_research'] as const;
+    const walk = ['secure_the_timber', 'raise_a_farm', 'grow_the_center', 'first_recruits', 'found_the_hall', 'first_research'] as const;
     for (const id of walk) {
       q.refresh(progress);
       expect(q.canClaim(id)).toBe(true);
