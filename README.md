@@ -110,6 +110,34 @@ Vite가 출력하는 개발 서버 주소(기본값 <http://localhost:5173>)를 
 > 항상 우선합니다. 언어는 **타이틀 화면 우측 상단의 토글**(◀ 한국어 ▶)이나
 > **설정** 화면에서 언제든 바꿀 수 있으며, 모든 라벨이 즉시 전환됩니다.
 
+## 확장 시스템
+
+기본 방치·전투 루프 위에, 이 게임은 혹한 생존 4X/방치 장르의 **깊이**를 오리지널
+이름과 아트로 재현한 여러 시스템을 갖추고 있습니다. 모든 게임 로직은 Phaser에
+의존하지 않는 순수 시스템(유닛 테스트 포함)에 있으며, 씬은 마을 허브의 **지휘**
+메뉴에서 열리는 얇은 화면으로 이를 보여 줍니다.
+
+- **확장된 도시 · 인구.** 화로가 게이트하는 다수의 오리지널 건물(피난 거처,
+  서리 금고, 제련장, 사절관, 온기 병동, 불씨 서고, 보병·창병·사수 연무장)과 온기
+  ·주거로 생산 효율이 오르내리는 **생존자 인구** 시스템, 그리고 정련 자원
+  **강철**과 프리미엄 화폐 **불씨 정수(Ember Sparks)**.
+- **영웅 · 소환.** 4단계 희귀도, 조각, 결정론적 **소환(가챠)**(천장 포함),
+  레벨·승급·스킬, 보병/창병/사수 3직군을 갖춘 오리지널 영웅단. 지휘 영웅의
+  보너스는 생산과 전투에 모두 반영됩니다.
+- **원정(캠페인).** 오리지널 서사의 단계별 탐험 지도. 첫 돌파 시 자원·조각·정수
+  보상을 한 번 지급하고 다음 관문을 해금합니다.
+- **연구 · 지휘관 장비.** 4개 분기(경제/전투/생존/발전)의 **연구 기술 트리**와
+  6부위 **지휘관 장비** + 문양. 완성된 보너스는 공유 스탯 번들에 누적됩니다.
+- **협정 · 총공격 · 투기장.** NPC로 시뮬레이션된 **협정(연맹)**(지원으로 타이머
+  단축, 협정 연구 기여), 반복 시도로 깎아내는 **서리괴수 총공격(월드 보스)**, 그리고
+  AI 사다리 **투기장(모의 PvP)**. 서버 없이 전부 단일 플레이입니다.
+- **일일 임무 · 성장 과업 · VIP · 이벤트.** 매일 갱신되는 일일 임무, 1회성 성장
+  과업, 영구 혜택의 **VIP** 등급, 시간제한 **이벤트** 보너스.
+
+> **PR #2(README 개편) 조율 안내.** 이 절은 README를 다시 쓰는 별도의 열린
+> PR(`docs/readme-overhaul`)과 충돌하지 않도록 **추가(additive)** 방식으로만
+> 덧붙였습니다. 두 작업을 합칠 때 이 절의 내용을 개편본에 반영해 주세요.
+
 ## 저장 / 지속성
 
 게임은 15초 주기와 주요 행동(업그레이드, 전투, 탭 이탈) 시점에 `localStorage`로
@@ -123,7 +151,8 @@ Vite가 출력하는 개발 서버 주소(기본값 <http://localhost:5173>)를 
 src/
   main.ts          Phaser.Game 부트스트랩 + 씬 목록
   config/          설정 기반 튜닝 값 (Game/Building/Troop/Wave) + 에셋/씬 키
-  scenes/          Boot, Preload, Title, Town, Battle, GameOver, Settings
+  scenes/          Boot, Preload, Title, Town, Battle, GameOver, Settings,
+                   Hero, Summon, Campaign, Research, Gear, Alliance, Arena, Quests (+ HubScene 베이스)
   entities/        Battler (애니메이션되는 단일 전투 유닛)
   systems/         순수 로직 시스템: ResourceStore, BuildingSystem, TrainingQueue,
                    CombatSystem, CasualtyTimeline, WarmthSystem, SaveManager,
@@ -303,6 +332,42 @@ on-screen buttons.
 (한국어 / English), all persisted to `localStorage`, plus a two-press
 **Reset Progress** option that wipes the save and starts a fresh hold.
 
+## Expanded systems
+
+On top of the core idle + battle loop, the game layers several systems that
+mirror the **depth** of the frozen-survival 4X/idle genre with entirely original
+names and art. All game logic lives in Phaser-free, unit-tested pure systems;
+the scenes are thin screens that surface them from the Town hub's **Command**
+menu.
+
+- **Expanded city + population.** A larger Furnace-gated city of original
+  buildings (Shelter Row, Frost Vault, Forge Hall, Envoy Hall, Warming Ward,
+  Ember Archive, and the Infantry/Lancer/Marksman yards), a **survivor
+  population** whose morale (warmth + housing) scales producer output, a refined
+  resource **Steel**, and a premium currency, **Ember Sparks**.
+- **Heroes + summon.** An original hero roster across four rarities with shards,
+  a deterministic **summon (gacha)** with a pity guarantee, level-ups, star-ups,
+  skills, and the Infantry/Lancer/Marksman classes. Lead heroes' bonuses feed
+  both production and combat.
+- **Expedition (campaign).** A staged exploration map with an original
+  narrative; first-clear rewards (resources / shards / Ember Sparks) are granted
+  once and unlock the next stage.
+- **Research + Chief Gear.** A four-branch **research tech tree**
+  (economy / battle / survival / development) and a six-slot **chief gear** set
+  with charms; completed bonuses stack into one shared stat bundle.
+- **Pact, rallies + arena.** An NPC-simulated **alliance (the Frosthold Pact)**
+  with help charges that shorten timers and a contribution track, **Frostbeast
+  world-boss rallies** worn down over repeated attempts, and an AI-ladder
+  **arena (simulated PvP)** — all single-player, no servers.
+- **Daily duties, growth trials, VIP + events.** Daily quests that reset on a
+  day boundary, one-time growth milestones, a permanent-perk **VIP** track, and
+  time-boxed **event** bonuses.
+
+> **Coordination note (PR #2, README overhaul).** This section was added
+> **additively** so it does not clobber the separate open PR
+> (`docs/readme-overhaul`) that rewrites this README. When reconciling, fold
+> this section's content into the overhaul.
+
 ## Persistence
 
 The game auto-saves to `localStorage` on a 15-second cadence and on meaningful
@@ -317,7 +382,8 @@ crashing. Idle production accrued while you were away is reconciled on load
 src/
   main.ts          Phaser.Game bootstrap + scene list
   config/          Centralized, config-driven tuning (Game/Building/Troop/Wave) + asset/scene keys
-  scenes/          Boot, Preload, Title, Town, Battle, GameOver, Settings
+  scenes/          Boot, Preload, Title, Town, Battle, GameOver, Settings,
+                   Hero, Summon, Campaign, Research, Gear, Alliance, Arena, Quests (+ a HubScene base)
   entities/        Battler (a single animated combat unit)
   systems/         Pure-logic systems: ResourceStore, BuildingSystem, TrainingQueue,
                    CombatSystem, CasualtyTimeline, WarmthSystem, SaveManager,

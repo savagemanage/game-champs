@@ -534,6 +534,18 @@ export const STRINGS = {
   'vip.toNext': { en: '{points} to next level', ko: '다음 단계까지 {points}' },
   'vip.maxed': { en: 'Highest standing reached', ko: '최고 지위 달성' },
   'vip.perk': { en: 'Perks: +{eco}% output, +{build}% build speed', ko: '혜택: 생산 +{eco}%, 건설 속도 +{build}%' },
+
+  // --- FEAT-006: Town hub navigation to the system screens ---
+  'nav.menu': { en: 'Command', ko: '지휘' },
+  'nav.hero': { en: 'Heroes', ko: '영웅' },
+  'nav.summon': { en: 'Summon', ko: '소환' },
+  'nav.campaign': { en: 'Expedition', ko: '원정' },
+  'nav.research': { en: 'Research', ko: '연구' },
+  'nav.gear': { en: 'Chief Gear', ko: '지휘관 장비' },
+  'nav.alliance': { en: 'Pact & Rally', ko: '협정과 총공격' },
+  'nav.arena': { en: 'Arena', ko: '투기장' },
+  'nav.quests': { en: 'Duties', ko: '임무' },
+  'nav.close': { en: 'Close Menu', ko: '메뉴 닫기' },
 } satisfies Record<string, TrEntry>;
 
 /** The set of valid translation keys, derived from {@link STRINGS}. */

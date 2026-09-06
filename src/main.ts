@@ -7,6 +7,14 @@ import { TownScene } from './scenes/TownScene';
 import { BattleScene } from './scenes/BattleScene';
 import { GameOverScene } from './scenes/GameOverScene';
 import { SettingsScene } from './scenes/SettingsScene';
+import { HeroScene } from './scenes/HeroScene';
+import { SummonScene } from './scenes/SummonScene';
+import { CampaignScene } from './scenes/CampaignScene';
+import { ResearchScene } from './scenes/ResearchScene';
+import { GearScene } from './scenes/GearScene';
+import { AllianceScene } from './scenes/AllianceScene';
+import { ArenaScene } from './scenes/ArenaScene';
+import { QuestsScene } from './scenes/QuestsScene';
 
 /**
  * Phaser bootstrap for Frosthold: Last Ember.
@@ -36,7 +44,24 @@ const config: Phaser.Types.Core.GameConfig = {
       debug: false,
     },
   },
-  scene: [BootScene, PreloadScene, TitleScene, TownScene, BattleScene, GameOverScene, SettingsScene],
+  scene: [
+    BootScene,
+    PreloadScene,
+    TitleScene,
+    TownScene,
+    BattleScene,
+    GameOverScene,
+    SettingsScene,
+    // FEAT-006: player-facing screens for the expanded systems.
+    HeroScene,
+    SummonScene,
+    CampaignScene,
+    ResearchScene,
+    GearScene,
+    AllianceScene,
+    ArenaScene,
+    QuestsScene,
+  ],
 };
 
 // eslint-disable-next-line no-new

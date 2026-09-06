@@ -1,4 +1,4 @@
-import { ALLIANCE, POPULATION, RESOURCE_ORDER } from '../config/GameConfig';
+import { ALLIANCE, HEROES, POPULATION, RESOURCE_ORDER, heroTrainXp } from '../config/GameConfig';
 import { combineModifiers, economyMultiplierFor } from '../config/StatModifiers';
 import { maxTrainableTier } from '../config/TroopConfig';
 import type { Army, HeroId, ResourceCost, StatModifiers, TroopKind } from '../types';
@@ -228,6 +228,20 @@ export class GameState {
     this.vip.addPoints(this.summon.sparkCost);
     this.quests.record('summonPulled', 1, now);
     return result;
+  }
+
+  /**
+   * Train an owned hero by spending HEROES.TRAIN_SPARK_COST Ember Sparks for
+   * heroTrainXp() experience (an ORIGINAL spark->XP exchange). Returns the
+   * number of levels gained, or -1 when the hero is not owned / sparks are
+   * insufficient (nothing spent). Spending also feeds VIP points, matching the
+   * summon path.
+   */
+  trainHero(id: HeroId): number {
+    if (!this.heroes.isOwned(id)) return -1;
+    if (!this.premium.spend(HEROES.TRAIN_SPARK_COST)) return -1;
+    this.vip.addPoints(HEROES.TRAIN_SPARK_COST);
+    return this.heroes.addXp(id, heroTrainXp(HEROES.TRAIN_SPARK_COST));
   }
 
   /**

@@ -178,6 +178,54 @@ def sfx_defeat():
 
 
 # --------------------------------------------------------------------------
+# FEAT-006 SFX for the expanded systems (summon / level-up / research / boss
+# hit / quest claim). Same cold-glassy palette warmed by ember notes.
+# --------------------------------------------------------------------------
+def sfx_summon():
+    # a shimmering upward arpeggio into a warm ember chord (a hero answers the
+    # call): icy notes rising, then a bright held tone.
+    s = seq(
+        tone(659.25, 0.09, 0.32),        # E5
+        tone(830.61, 0.09, 0.34),        # G#5
+        tone(987.77, 0.09, 0.36),        # B5
+        tone(1318.51, 0.30, 0.40),       # E6 (bright)
+    )
+    s = mix(s, tone(1975.53, 0.20, 0.10))  # airy sparkle overtone
+    write_wav("summon.wav", s)
+
+
+def sfx_level_up():
+    # two quick rising notes with a warm bloom — a hero grows stronger.
+    s = seq(tone(587.33, 0.10, 0.36), tone(880.00, 0.10, 0.38), tone(1174.66, 0.22, 0.40))
+    write_wav("level_up.wav", s)
+
+
+def sfx_research_complete():
+    # a calm, resolved two-note chime (a discovery settles into place): a soft
+    # perfect-fifth rise with a gentle shimmer.
+    s = mix(
+        seq(tone(523.25, 0.16, 0.34), tone(783.99, 0.30, 0.38)),
+        tone(1046.50, 0.30, 0.10),
+    )
+    write_wav("research_complete.wav", s)
+
+
+def sfx_boss_hit():
+    # a heavier, colder impact than a normal hit: a deep ice thud + a longer
+    # frosty crack (the Frostbeast reels).
+    s = mix(sweep(180, 40, 0.26, 0.6), noise(0.16, 0.30, 0.28))
+    s = mix(s, tone(90, 0.20, 0.24))     # low body
+    write_wav("boss_hit.wav", s)
+
+
+def sfx_quest_claim():
+    # a bright, satisfying two-note "reward" pip with a coin-like sparkle.
+    s = seq(tone(880.00, 0.07, 0.34), tone(1318.51, 0.16, 0.40))
+    s = mix(s, tone(1760.00, 0.10, 0.12))
+    write_wav("quest_claim.wav", s)
+
+
+# --------------------------------------------------------------------------
 # MUSIC: a seamless looping frozen-survival bed. A sparse minor pad over a low
 # wind layer, with a slow ember-pulse standing in for the hearth heartbeat.
 # --------------------------------------------------------------------------
@@ -259,5 +307,13 @@ if __name__ == "__main__":
     sfx_battle_hit()
     sfx_victory()
     sfx_defeat()
+    # Music is synthesized BEFORE the FEAT-006 SFX so its wind bed's RNG draw
+    # is unchanged by the added effects (keeps music_loop.wav byte-stable across
+    # feature additions; the SFX below are appended after).
     music_loop()
+    sfx_summon()
+    sfx_level_up()
+    sfx_research_complete()
+    sfx_boss_hit()
+    sfx_quest_claim()
     print("\nAll original audio synthesized (WAV, 22.05kHz mono).")

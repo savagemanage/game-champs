@@ -361,7 +361,25 @@ export const HEROES = {
    * 1 from 2 stars, skill 2 from 3 stars. Skill level tracks the hero's star at
    * unlock time and rises with further star-ups, capped at the star rank.
    */
+  /**
+   * Ember Sparks a single hero-training action spends, and the XP that spend
+   * grants. Training a hero at the Warming Ward converts premium sparks into
+   * experience (an ORIGINAL take on the genre's XP tomes) so heroes can be
+   * levelled from the Hero screen. GameState.trainHero uses these; the pure
+   * spark->XP helper heroTrainXp() keeps the number out of the systems.
+   */
+  TRAIN_SPARK_COST: 20,
+  TRAIN_XP_PER_SPARK: 15,
 } as const;
+
+/**
+ * Pure helper: the hero XP granted for spending `sparks` Ember Sparks on
+ * training (sparks * HEROES.TRAIN_XP_PER_SPARK, floored to whole XP). Shared by
+ * GameState.trainHero and its test so the conversion lives in one place.
+ */
+export function heroTrainXp(sparks: number): number {
+  return Math.max(0, Math.floor(sparks) * HEROES.TRAIN_XP_PER_SPARK);
+}
 
 /**
  * SUMMON - the deterministic gacha (FEAT-003). A pull costs Ember Sparks (the
@@ -581,6 +599,16 @@ export const SceneKeys = {
   Settings: 'SettingsScene',
   Pause: 'PauseScene',
   GameOver: 'GameOverScene',
+  // FEAT-006: player-facing screens for the expanded systems, reachable from
+  // the Town hub and back.
+  Hero: 'HeroScene',
+  Summon: 'SummonScene',
+  Campaign: 'CampaignScene',
+  Research: 'ResearchScene',
+  Gear: 'GearScene',
+  Alliance: 'AllianceScene',
+  Arena: 'ArenaScene',
+  Quests: 'QuestsScene',
 } as const;
 
 export type SceneKey = (typeof SceneKeys)[keyof typeof SceneKeys];

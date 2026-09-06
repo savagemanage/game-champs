@@ -79,8 +79,8 @@ export function detectBrowserLanguage(
  */
 export function tr(key: TrKey, params?: Record<string, string | number>): string {
   const entry = STRINGS[key];
-  let template = entry[currentLang];
-  if (!template) template = entry.en;
+  let template = entry ? (entry[currentLang] as string) : '';
+  if (!template) template = entry ? entry.en : key;
 
   if (params) {
     template = template.replace(/\{(\w+)\}/g, (whole, name: string) => {
@@ -89,4 +89,15 @@ export function tr(key: TrKey, params?: Record<string, string | number>): string
     });
   }
   return template;
+}
+
+/**
+ * Like {@link tr} but for keys COMPOSED at runtime from config-driven ids
+ * (hero/research/boss/event/quest ids that are plain strings rather than the
+ * literal {@link TrKey} union). The key is validated against the table at call
+ * time; a missing key falls back to the key string itself (never a crash), so a
+ * scene rendering a data-driven list stays type-safe without widening TrKey.
+ */
+export function trDyn(key: string, params?: Record<string, string | number>): string {
+  return tr(key as TrKey, params);
 }

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { GameState } from './GameState';
 import { memoryStorage } from './SaveManager';
 import { ResourceStore } from './ResourceStore';
+import { HEROES, heroTrainXp } from '../config/GameConfig';
 
 /**
  * Integration tests that the FEAT-004 progression sources are actually CONSUMED
@@ -157,6 +158,48 @@ describe('GameState endgame integration', () => {
     const pts0 = gs.vip.points;
     gs.summonOnce(() => 0.5, 0);
     expect(gs.vip.points).toBe(pts0 + gs.summon.sparkCost);
+  });
+});
+
+/**
+ * FEAT-006 hero training: the Hero screen's spark->XP exchange. Verifies the
+ * pure helper and the GameState.trainHero action (spends sparks, grants XP /
+ * levels, guards ownership + affordability).
+ */
+describe('hero training (FEAT-006)', () => {
+  function freshState(): GameState {
+    return GameState.create(memoryStorage(), 0);
+  }
+
+  it('heroTrainXp converts sparks to XP deterministically', () => {
+    expect(heroTrainXp(HEROES.TRAIN_SPARK_COST)).toBe(HEROES.TRAIN_SPARK_COST * HEROES.TRAIN_XP_PER_SPARK);
+    expect(heroTrainXp(0)).toBe(0);
+    expect(heroTrainXp(-5)).toBe(0);
+  });
+
+  it('trainHero spends sparks and grants XP to an owned hero', () => {
+    const gs = freshState();
+    gs.heroes.grantHero('ember_warden');
+    gs.premium.grant(HEROES.TRAIN_SPARK_COST * 5);
+    const sparks0 = gs.premium.sparks;
+    const vip0 = gs.vip.points;
+    const levels = gs.trainHero('ember_warden');
+    expect(levels).toBeGreaterThanOrEqual(0);
+    expect(gs.premium.sparks).toBe(sparks0 - HEROES.TRAIN_SPARK_COST);
+    expect(gs.vip.points).toBe(vip0 + HEROES.TRAIN_SPARK_COST);
+    // The hero accrued the XP (either as banked xp or a level gain).
+    const h = gs.heroes.get('ember_warden')!;
+    expect(h.level >= 1 && (h.level > 1 || h.xp > 0)).toBe(true);
+  });
+
+  it('trainHero refuses an unowned hero or insufficient sparks (nothing spent)', () => {
+    const gs = freshState();
+    // Unowned.
+    expect(gs.trainHero('the_kindled_queen')).toBe(-1);
+    // Owned but broke.
+    gs.heroes.grantHero('ember_warden');
+    expect(gs.premium.sparks).toBeLessThan(HEROES.TRAIN_SPARK_COST);
+    expect(gs.trainHero('ember_warden')).toBe(-1);
   });
 });
 
