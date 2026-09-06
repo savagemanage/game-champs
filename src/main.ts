@@ -29,23 +29,49 @@ import { resolveRenderPlan } from './ui/renderScale';
  * CRISP-TEXT RENDER PIPELINE (FEAT-002)
  * -------------------------------------
  * The whole game is laid out in a fixed 960x540 LOGICAL coordinate system
- * (CANVAS). Previously the Phaser drawing buffer was ALSO 960x540 and the
- * browser scaled that low-res buffer up to the physical display, so every UI
- * glyph was nearest-neighbour-upscaled and looked blurry. To fix that WITHOUT
- * changing any scene's coordinates we size the backbuffer to the device's real
- * pixel resolution (logical size * renderScale, where renderScale tracks
- * window.devicePixelRatio - see ui/renderScale.ts) and then zoom each scene's
- * main camera by the same factor so the 960x540 logical world still fills the
- * buffer. Text now rasterizes at device pixels and stays sharp; sprites keep
- * NEAREST filtering (pixelArt:true) so they remain crisp pixel-art. Scale.FIT +
- * autoCenter then letterbox that device-resolution buffer to the viewport at a
- * 1:1 device-pixel ratio, so the browser no longer upscales a low-res canvas.
+ * (CANVAS). Previously the Phaser drawing buffer was 960x540 (or only
+ * DPR-scaled) and Scale.FIT stretched that low-res buffer up to fill the
+ * window, so every UI glyph was upscaled by the browser and looked blurry. The
+ * magnification a canvas undergoes on screen is
+ * `devicePixelRatio * (displayedCssSize / logicalSize)`, NOT just DPR: on a
+ * normal dpr=1 desktop the canvas is still CSS-stretched (e.g. 960x540 -> a
+ * 1920x1080 window is a 2x blow-up), so keying the buffer off DPR alone left
+ * text blurry for most desktop users.
+ *
+ * To fix that WITHOUT changing any scene's coordinates we size the backbuffer
+ * to the REAL number of physical pixels the canvas occupies on screen (logical
+ * size * renderScale, where renderScale tracks BOTH the device pixel ratio AND
+ * the displayed-vs-logical size ratio - see ui/renderScale.ts) and then zoom
+ * each scene's main camera by the same factor so the 960x540 logical world
+ * still fills the buffer. Text now rasterizes at display resolution and stays
+ * sharp; sprites keep NEAREST filtering (pixelArt:true) so they remain crisp
+ * pixel-art. Because the buffer is now at least the displayed physical size,
+ * Scale.FIT + autoCenter only ever DOWNSCALES it to the viewport (a sharp
+ * minification), never upscales a low-res canvas.
+ *
+ * The plan is recomputed on every window resize (see registerRenderScale) so
+ * the buffer/zoom track the live window size - maximise the window on a dpr=1
+ * display and the buffer grows to keep text crisp.
  */
-const RENDER_PLAN = resolveRenderPlan(
-  CANVAS.WIDTH,
-  CANVAS.HEIGHT,
-  typeof window !== 'undefined' ? window.devicePixelRatio : 1,
-);
+
+/** Measure the container the game is displayed in (CSS pixels) + the DPR. */
+function measureDisplay(): { cssWidth: number; cssHeight: number; dpr: number } {
+  if (typeof window === 'undefined') {
+    return { cssWidth: CANVAS.WIDTH, cssHeight: CANVAS.HEIGHT, dpr: 1 };
+  }
+  const parent = typeof document !== 'undefined' ? document.getElementById('game') : null;
+  const rect = parent?.getBoundingClientRect();
+  const cssWidth = rect && rect.width > 0 ? rect.width : window.innerWidth || CANVAS.WIDTH;
+  const cssHeight = rect && rect.height > 0 ? rect.height : window.innerHeight || CANVAS.HEIGHT;
+  return { cssWidth, cssHeight, dpr: window.devicePixelRatio || 1 };
+}
+
+function planFromDisplay(): ReturnType<typeof resolveRenderPlan> {
+  const { cssWidth, cssHeight, dpr } = measureDisplay();
+  return resolveRenderPlan(CANVAS.WIDTH, CANVAS.HEIGHT, cssWidth, cssHeight, dpr);
+}
+
+const RENDER_PLAN = planFromDisplay();
 
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
@@ -60,10 +86,12 @@ const config: Phaser.Types.Core.GameConfig = {
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
-    // Backbuffer sized to DEVICE pixels (logical 960x540 * renderScale). Each
-    // scene's main camera is zoomed by RENDER_PLAN.scale (see applyRenderScale)
-    // so the 960x540 logical layout is preserved and simply drawn at higher
-    // resolution.
+    // Backbuffer sized to the DISPLAYED physical pixels (logical 960x540 *
+    // renderScale, derived from DPR AND the displayed-vs-logical size ratio).
+    // Each scene's main camera is zoomed by the same scale (see
+    // registerRenderScale) so the 960x540 logical layout is preserved and
+    // simply drawn at higher resolution. This is the BOOT size; the plan is
+    // recomputed and game.scale.resize()d on every window resize.
     width: RENDER_PLAN.bufferWidth,
     height: RENDER_PLAN.bufferHeight,
   },
@@ -115,35 +143,67 @@ function boot(): void {
 }
 
 /**
- * Zoom every scene's main camera by RENDER_PLAN.scale so the 960x540 LOGICAL
- * layout fills the device-resolution backbuffer (see the pipeline note above).
+ * The live render plan. Starts at the boot-time RENDER_PLAN and is recomputed on
+ * every window resize so the backbuffer and camera zoom track the current
+ * displayed size (see the pipeline note above). Kept module-level so the resize
+ * handler and the per-scene camera hook read one source of truth.
+ */
+let currentPlan = RENDER_PLAN;
+
+/**
+ * Zoom a scene's main camera by the current plan's scale so the 960x540 LOGICAL
+ * layout fills the display-resolution backbuffer (see the pipeline note above).
  * Because the backbuffer is `logical * scale` and the camera is zoomed by the
  * same `scale`, the camera's world view is exactly 960x540 again - we only
  * re-anchor it to logical (0,0) via the plan's scroll offset (a zoomed camera
  * otherwise centres its world view on the buffer midpoint). Every scene in this
  * game is a static full-screen 960x540 layout that only touches `cameras.main`
- * (no scrolling/following cameras), so this single global hook is sufficient
+ * (no scrolling/following cameras), so applying to `cameras.main` is sufficient
  * and keeps all per-scene coordinates and pointer input in logical space.
  *
- * When RENDER_PLAN.scale is 1 (a 1x display) this is a no-op zoom, so nothing
- * changes on non-HiDPI screens.
+ * At scale 1 (a small/1x display) zoom becomes 1 and scroll 0, i.e. a no-op, so
+ * nothing changes on displays that don't need a scaled buffer.
+ */
+function applyCameraZoom(cam: Phaser.Cameras.Scene2D.Camera | undefined): void {
+  if (!cam) return;
+  cam.setZoom(currentPlan.scale);
+  cam.setScroll(currentPlan.scrollX, currentPlan.scrollY);
+}
+
+/**
+ * Wire the render-scale pipeline: zoom every scene's main camera to the current
+ * plan, and recompute the plan (resize the backbuffer + re-zoom every camera)
+ * whenever the window/container size or DPR changes. This keeps UI text crisp as
+ * the window is resized on a dpr=1 display (the buffer grows/shrinks to match
+ * the real displayed pixel size) while the 960x540 logical layout and input map
+ * stay identical.
  */
 function registerRenderScale(game: Phaser.Game): void {
-  if (RENDER_PLAN.scale === 1) {
-    return;
-  }
-  const apply = (cam: Phaser.Cameras.Scene2D.Camera | undefined): void => {
-    if (!cam) return;
-    cam.setZoom(RENDER_PLAN.scale);
-    cam.setScroll(RENDER_PLAN.scrollX, RENDER_PLAN.scrollY);
-  };
   // Attach the zoom to a scene's main camera on every CREATE (create() runs on
   // first start AND on every restart/return, so the zoom re-applies to the
   // fresh camera) plus once immediately in case the scene already created.
   const attach = (scene: Phaser.Scene): void => {
-    scene.sys.events.on(Phaser.Scenes.Events.CREATE, () => apply(scene.cameras.main));
-    apply(scene.cameras.main);
+    scene.sys.events.on(Phaser.Scenes.Events.CREATE, () => applyCameraZoom(scene.cameras.main));
+    applyCameraZoom(scene.cameras.main);
   };
+
+  // Recompute buffer size + camera zoom for the live displayed size. Only
+  // resize the game when the buffer dimensions actually change (avoids churn on
+  // spurious resize events) and always re-apply the zoom to every live camera.
+  const recompute = (): void => {
+    const next = planFromDisplay();
+    const changed =
+      next.bufferWidth !== currentPlan.bufferWidth ||
+      next.bufferHeight !== currentPlan.bufferHeight;
+    currentPlan = next;
+    if (changed) {
+      game.scale.resize(next.bufferWidth, next.bufferHeight);
+    }
+    for (const scene of game.scene.scenes) {
+      applyCameraZoom(scene.cameras.main);
+    }
+  };
+
   // The Scene Manager instantiates the config `scene` classes ASYNCHRONOUSLY
   // during boot, so `game.scene.scenes` is empty synchronously after
   // `new Phaser.Game(config)`. Wait for the game READY event (fired once the
@@ -152,6 +212,12 @@ function registerRenderScale(game: Phaser.Game): void {
   game.events.once(Phaser.Core.Events.READY, () => {
     for (const scene of game.scene.scenes) {
       attach(scene);
+    }
+    // Re-measure once now that the canvas is in the DOM (the boot-time measure
+    // may have run before layout settled), then track subsequent resizes.
+    recompute();
+    if (typeof window !== 'undefined') {
+      window.addEventListener('resize', recompute);
     }
   });
 }

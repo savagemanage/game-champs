@@ -3,22 +3,36 @@
  *
  * THE PROBLEM this solves: the whole game is laid out in a fixed 960x540
  * LOGICAL coordinate system (CANVAS in GameConfig). Historically the Phaser
- * drawing buffer was ALSO 960x540 and the browser then scaled that low-res
- * buffer up to the physical display (with `image-rendering: pixelated`), so
- * every glyph was nearest-neighbour-upscaled and looked blurry/jagged. A
- * per-Text `resolution` could not compensate, because the whole backbuffer was
- * capped at 960x540 before the browser upscaled it.
+ * drawing buffer was ALSO 960x540 (or only DPR-scaled) and Scale.FIT then
+ * stretched that low-res buffer up to fill the window (with the browser doing
+ * the upscale), so every glyph was nearest-neighbour/bilinear-upscaled and
+ * looked blurry/jagged. A per-Text `resolution` could not compensate, because
+ * the whole backbuffer was capped before the browser upscaled it.
  *
- * THE FIX: render the backbuffer at (close to) the device's REAL pixel
- * resolution - i.e. size the drawing buffer to `logical size * renderScale`
- * where renderScale tracks window.devicePixelRatio - while a per-scene camera
- * zoom of the same factor keeps the 960x540 logical coordinate system intact
- * (no scene math changes). Text is then rasterized at device pixels and stays
- * sharp; sprites keep NEAREST filtering so they remain crisp pixel-art.
+ * WHY DPR ALONE WAS NOT ENOUGH (the confirmed live bug): the earlier fix keyed
+ * the backbuffer size ONLY off `window.devicePixelRatio`. On the common desktop
+ * case where devicePixelRatio === 1 but the canvas is CSS-scaled UP to fill a
+ * large window (e.g. Scale.FIT stretching 960x540 into 1920x1080, a 2x blow-up),
+ * the buffer stayed 960x540 and the browser upscaled it anyway - so UI/HUD/panel
+ * TEXT was still blurry for most desktop users. The magnification a canvas
+ * undergoes on screen is `devicePixelRatio * (displayedCssSize / logicalSize)`,
+ * NOT just devicePixelRatio.
+ *
+ * THE FIX: render the backbuffer at (close to) the REAL number of physical
+ * pixels the canvas occupies on screen - i.e. size the drawing buffer to
+ * `logical size * renderScale` where renderScale tracks BOTH the device pixel
+ * ratio AND how large the canvas is displayed relative to its logical size
+ * (see {@link resolveRenderScale}). A per-scene camera zoom of the same factor
+ * keeps the 960x540 logical coordinate system intact (no scene math changes).
+ * Text is then rasterized at display resolution and stays sharp regardless of
+ * whether the magnification comes from DPR or from Scale.FIT stretching a small
+ * logical canvas into a big window; sprites keep NEAREST filtering so they
+ * remain crisp pixel-art.
  *
  * This module is deliberately Phaser-free and pure so it is unit-testable in
- * isolation (see renderScale.test.ts). main.ts consumes it to build the Phaser
- * game config and to zoom each scene's main camera.
+ * isolation (see renderScale.test.ts). main.ts consumes it to build the initial
+ * Phaser game config, to zoom each scene's main camera, and to recompute the
+ * plan on every window resize.
  */
 
 /**
@@ -28,32 +42,79 @@
 export const MIN_RENDER_SCALE = 1;
 
 /**
- * Upper bound on the render scale. Rendering much past ~3x device pixels yields
+ * Upper bound on the render scale. Rendering much past ~4x logical pixels yields
  * no visible sharpness gain for UI text but wastes fill-rate/memory (the buffer
- * area grows with the SQUARE of the scale), so we cap it. 3 keeps text crisp on
- * 2x/3x displays while protecting very high-DPR or huge viewports from an
- * enormous backbuffer.
+ * area grows with the SQUARE of the scale), so we cap it. 4 is chosen so that
+ * even a 4K (2160p) window - which needs a 4x blow-up of the 540px-tall logical
+ * canvas - still gets a full-resolution buffer, while protecting against absurd
+ * allocations on even larger/hi-DPI surfaces. This cap is now derived from the
+ * REAL displayed pixel size (see resolveRenderScale), not from DPR alone, so a
+ * dpr=1 1080p window (which needs 2x) is nowhere near the cap and its text is
+ * sharp - the old MAX_RENDER_SCALE=3-keyed-on-DPR was an accomplice to the bug.
  */
-export const MAX_RENDER_SCALE = 3;
+export const MAX_RENDER_SCALE = 4;
 
 /**
- * Compute the integer-ish render scale (backbuffer multiplier) for a given
- * device pixel ratio. We round the DPR to the nearest whole step and clamp it
- * to [MIN_RENDER_SCALE, MAX_RENDER_SCALE]. A whole-number scale keeps the
- * camera zoom an integer, which lets Phaser's roundPixels stay exact for
- * pixel-art sprites (fractional zoom would reintroduce sampling blur on
- * sprites).
+ * Compute the whole-number render scale (backbuffer multiplier) for a canvas
+ * whose LOGICAL size is `logical*` but which is DISPLAYED (via CSS / Scale.FIT
+ * letterboxing) at `displayCss*` CSS pixels on a display with device pixel
+ * ratio `dpr`.
  *
- * @param dpr - window.devicePixelRatio (or any positive number). Non-finite or
- *   non-positive input is treated as 1 (a safe 1x fallback).
+ * The number of PHYSICAL pixels the canvas covers on each axis is
+ * `displayCss * dpr`, so to rasterize at (or above) display resolution the
+ * backbuffer must be at least `displayCss * dpr` on that axis, i.e. a multiple
+ * of the logical size of `(displayCss * dpr) / logical`. We take the LARGER of
+ * the two axis ratios (so neither axis is ever under-sampled), round UP to the
+ * next whole number (never render below display resolution - rounding down
+ * would reintroduce a browser upscale and blur), and clamp to
+ * [MIN_RENDER_SCALE, MAX_RENDER_SCALE].
+ *
+ * A whole-number scale keeps the camera zoom an integer, which lets Phaser's
+ * roundPixels stay exact for pixel-art sprites (a fractional zoom would
+ * reintroduce sampling shimmer on sprites). Because the buffer is then AT LEAST
+ * the displayed physical size, Scale.FIT only ever DOWNSCALES the buffer to the
+ * viewport (a sharp minification), never upscales it.
+ *
+ * Degenerate inputs (non-finite or non-positive logical/display sizes, or dpr)
+ * fall back safely: a bad dpr is treated as 1, and if the display size cannot
+ * be measured the scale collapses to a safe 1x rather than exploding.
+ *
+ * @param logicalWidth   logical (design) canvas width  (e.g. 960)
+ * @param logicalHeight  logical (design) canvas height (e.g. 540)
+ * @param displayCssWidth   CSS pixels the canvas/container is displayed across
+ * @param displayCssHeight  CSS pixels the canvas/container is displayed down
+ * @param dpr  window.devicePixelRatio (or any positive number)
  */
-export function resolveRenderScale(dpr: number): number {
+export function resolveRenderScale(
+  logicalWidth: number,
+  logicalHeight: number,
+  displayCssWidth: number,
+  displayCssHeight: number,
+  dpr: number,
+): number {
   const safeDpr = Number.isFinite(dpr) && dpr > 0 ? dpr : 1;
-  const rounded = Math.round(safeDpr);
-  return Math.min(MAX_RENDER_SCALE, Math.max(MIN_RENDER_SCALE, rounded));
+  const safeLogicalW = Number.isFinite(logicalWidth) && logicalWidth > 0 ? logicalWidth : 0;
+  const safeLogicalH = Number.isFinite(logicalHeight) && logicalHeight > 0 ? logicalHeight : 0;
+  const safeDispW = Number.isFinite(displayCssWidth) && displayCssWidth > 0 ? displayCssWidth : 0;
+  const safeDispH = Number.isFinite(displayCssHeight) && displayCssHeight > 0 ? displayCssHeight : 0;
+
+  // If we cannot measure either the logical or the displayed size, fall back to
+  // a safe 1x buffer (never explode, never divide by zero).
+  const ratioW = safeLogicalW > 0 && safeDispW > 0 ? (safeDispW * safeDpr) / safeLogicalW : 0;
+  const ratioH = safeLogicalH > 0 && safeDispH > 0 ? (safeDispH * safeDpr) / safeLogicalH : 0;
+  const ratio = Math.max(ratioW, ratioH);
+  if (!(ratio > 0) || !Number.isFinite(ratio)) {
+    return MIN_RENDER_SCALE;
+  }
+
+  // Round UP so the buffer is never below display resolution (rounding down
+  // would leave the browser to upscale and re-blur text). Whole number keeps
+  // the camera zoom integer for exact roundPixels on pixel-art sprites.
+  const stepped = Math.ceil(ratio);
+  return Math.min(MAX_RENDER_SCALE, Math.max(MIN_RENDER_SCALE, stepped));
 }
 
-/** The backbuffer + camera-zoom plan for a given logical canvas and DPR. */
+/** The backbuffer + camera-zoom plan for a given logical canvas and display. */
 export interface RenderPlan {
   /** Whole-number backbuffer/camera multiplier from {@link resolveRenderScale}. */
   scale: number;
@@ -75,15 +136,25 @@ export interface RenderPlan {
 
 /**
  * Build the full render plan (buffer size + camera zoom/scroll) for a logical
- * canvas at a given DPR. Keeping this pure means main.ts stays a thin wiring
- * layer and the math is covered by tests rather than only by screenshots.
+ * canvas displayed at `displayCss*` CSS pixels on a display of ratio `dpr`.
+ * Keeping this pure means main.ts stays a thin wiring layer and the math is
+ * covered by tests rather than only by screenshots. Called on boot AND on every
+ * window resize so the buffer/zoom track the live window size.
  */
 export function resolveRenderPlan(
   logicalWidth: number,
   logicalHeight: number,
+  displayCssWidth: number,
+  displayCssHeight: number,
   dpr: number,
 ): RenderPlan {
-  const scale = resolveRenderScale(dpr);
+  const scale = resolveRenderScale(
+    logicalWidth,
+    logicalHeight,
+    displayCssWidth,
+    displayCssHeight,
+    dpr,
+  );
   const bufferWidth = logicalWidth * scale;
   const bufferHeight = logicalHeight * scale;
   // The zoomed camera's world view is (bufferSize / scale) = logical size, but
