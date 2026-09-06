@@ -87,22 +87,39 @@ export const DEFAULT_PROJECTION: Projection = {
 export const HEIGHT_SCALE = 0.5;
 
 /**
- * Uniform scale that maps a raw dimetric coordinate to fitted screen pixels.
+ * Independent horizontal / vertical scales that map a raw dimetric coordinate
+ * to fitted screen pixels.
  *
  * After centring the world about its middle (each axis in [-W/2, W/2]) and
  * applying the rotation `dx = cx - cy`, `dy = (cx + cy) / 2`, the diamond spans
  * `2 * worldSize` in raw-x (dx in [-W, W]) and `worldSize` in raw-y (dy in
- * [-W/2, W/2]). We pick the largest uniform scale that keeps both spans inside
- * the view minus margins, so the whole plane is always visible.
+ * [-W/2, W/2]).
+ *
+ * A single uniform scale would be bound by the (much wider) horizontal span and
+ * leave a large vertical gap above/below the diamond (the raw diamond is only
+ * half as tall as it is wide). To USE the stage we instead fit each axis
+ * independently: `sx` fills the usable width and `sy` fills the usable height,
+ * so the diamond tips reach all four margins. The transform stays a pure
+ * axis-aligned affine map (scale + translate) after the rotation, so
+ * {@link worldToScreen} / {@link screenToWorld} remain exact inverses.
  */
-export function projectionScale(proj: Projection = DEFAULT_PROJECTION): number {
+export interface ProjectionScale {
+  /** Screen px per raw-dimetric unit along X. */
+  sx: number;
+  /** Screen px per raw-dimetric unit along Y. */
+  sy: number;
+}
+
+export function projectionScale(
+  proj: Projection = DEFAULT_PROJECTION,
+): ProjectionScale {
   const usableW = proj.viewWidth - proj.margin * 2;
   const usableH = proj.viewHeight - proj.margin * 2;
   // Raw dimetric extents of the centred world: dx in [-W, W] (span 2W),
   // dy in [-W/2, W/2] (span W).
   const rawWidth = proj.worldSize * 2;
   const rawHeight = proj.worldSize;
-  return Math.min(usableW / rawWidth, usableH / rawHeight);
+  return { sx: usableW / rawWidth, sy: usableH / rawHeight };
 }
 
 /**
@@ -116,7 +133,7 @@ export function worldToScreen(
   p: Vec2,
   proj: Projection = DEFAULT_PROJECTION,
 ): ScreenPoint {
-  const scale = projectionScale(proj);
+  const { sx, sy } = projectionScale(proj);
   const half = proj.worldSize / 2;
   // Centre the world about its middle.
   const cx = p.x - half;
@@ -125,8 +142,8 @@ export function worldToScreen(
   const dx = cx - cy;
   const dy = (cx + cy) / 2;
   return {
-    x: proj.viewWidth / 2 + dx * scale,
-    y: proj.viewHeight / 2 + dy * scale,
+    x: proj.viewWidth / 2 + dx * sx,
+    y: proj.viewHeight / 2 + dy * sy,
   };
 }
 
@@ -143,11 +160,11 @@ export function screenToWorld(
   s: ScreenPoint,
   proj: Projection = DEFAULT_PROJECTION,
 ): Vec2 {
-  const scale = projectionScale(proj);
+  const { sx, sy } = projectionScale(proj);
   const half = proj.worldSize / 2;
-  // Undo translate + scale to recover the raw dimetric coordinates.
-  const dx = (s.x - proj.viewWidth / 2) / scale;
-  const dy = (s.y - proj.viewHeight / 2) / scale;
+  // Undo translate + (per-axis) scale to recover the raw dimetric coordinates.
+  const dx = (s.x - proj.viewWidth / 2) / sx;
+  const dy = (s.y - proj.viewHeight / 2) / sy;
   // Invert the rotation:
   //   dx = cx - cy,  dy = (cx + cy) / 2
   //   => cx = dy + dx / 2,  cy = dy - dx / 2

@@ -140,9 +140,9 @@ const RESOURCE_REGEN = 8; // per second
 // nexus is tallest.
 const CHAMPION_HEIGHT_PX = 26;
 const MINION_HEIGHT_PX = 14;
-const TURRET_HEIGHT_PX = 44;
-const INHIBITOR_HEIGHT_PX = 34;
-const NEXUS_HEIGHT_PX = 60;
+const TURRET_HEIGHT_PX = 30;
+const INHIBITOR_HEIGHT_PX = 22;
+const NEXUS_HEIGHT_PX = 42;
 
 /**
  * Convert a world coordinate (0..3000) to the FLAT gameplay-plane pixel space.
@@ -185,9 +185,14 @@ function depthForPixel(p: Vec2, heightPx = 0): number {
 const DEPTH_TERRAIN = -100000;
 const DEPTH_SHADOW_BIAS = -5000;
 
-/** Convenience wrapper for the shared projection's fit-scale. */
+/**
+ * Convenience wrapper returning a single representative fit-scale for cosmetic
+ * world-unit -> screen-px sizing (lane/river band widths). The projection now
+ * fits X and Y independently, so we use the average of the two axis scales.
+ */
 function projScale(): number {
-  return projectionScale(DEFAULT_PROJECTION);
+  const { sx, sy } = projectionScale(DEFAULT_PROJECTION);
+  return (sx + sy) / 2;
 }
 
 /** Depth for transient VFX so they render above all entities. */

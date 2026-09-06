@@ -77,30 +77,42 @@ export const FOUNTAIN_POSITIONS: Record<MapSide, Vec2> = BASE_POSITIONS;
  *
  * MID is a straight diagonal. TOP and BOT are L-shaped around the map edges.
  */
+/**
+ * How far the top/bot lanes are pushed toward the map edges. A SMALL inset
+ * makes the two side lanes hug the west/north and south/east edges tightly, so
+ * in the dimetric projection they fan away from the central mid lane instead of
+ * bunching near the base diagonal. (Screen-vertical position in the projection
+ * tracks `x + y`, so hugging the edges maximizes the top<->bot separation.)
+ */
+const LANE_EDGE = 300;
+
 export const LANE_WAYPOINTS: Record<Lane, Vec2[]> = {
   // MID: straight diagonal from the ally base corner to the enemy base corner.
   mid: [
-    { x: 520, y: WORLD_SIZE - 520 },
+    { x: 560, y: WORLD_SIZE - 560 },
     { x: WORLD_SIZE * 0.35, y: WORLD_SIZE * 0.65 },
     { x: WORLD_SIZE * 0.5, y: WORLD_SIZE * 0.5 },
     { x: WORLD_SIZE * 0.65, y: WORLD_SIZE * 0.35 },
-    { x: WORLD_SIZE - 520, y: 520 },
+    { x: WORLD_SIZE - 560, y: 560 },
   ],
-  // TOP: go up the west edge, then east along the north edge (L-shape).
+  // TOP: strike NORTH-WEST off the base immediately, hug the west edge, then run
+  // east along the north edge (L-shape pinned to the far corner). Leaving the
+  // base already fanned keeps the near-base turrets clear of the mid diagonal.
   top: [
-    { x: 460, y: WORLD_SIZE - 620 },
-    { x: 360, y: WORLD_SIZE * 0.55 },
-    { x: 360, y: 360 },
-    { x: WORLD_SIZE * 0.45, y: 360 },
-    { x: WORLD_SIZE - 620, y: 460 },
+    { x: 560, y: WORLD_SIZE - 860 },
+    { x: LANE_EDGE, y: WORLD_SIZE * 0.52 },
+    { x: LANE_EDGE, y: LANE_EDGE },
+    { x: WORLD_SIZE * 0.52, y: LANE_EDGE },
+    { x: WORLD_SIZE - 860, y: 560 },
   ],
-  // BOT: go east along the south edge, then up the east edge (L-shape).
+  // BOT: strike SOUTH-EAST off the base immediately, hug the south edge, then
+  // run up the east edge (L-shape pinned to the far corner). Mirror of TOP.
   bot: [
-    { x: 620, y: WORLD_SIZE - 460 },
-    { x: WORLD_SIZE * 0.55, y: WORLD_SIZE - 360 },
-    { x: WORLD_SIZE - 360, y: WORLD_SIZE - 360 },
-    { x: WORLD_SIZE - 360, y: WORLD_SIZE * 0.45 },
-    { x: WORLD_SIZE - 460, y: 620 },
+    { x: 860, y: WORLD_SIZE - 560 },
+    { x: WORLD_SIZE * 0.48, y: WORLD_SIZE - LANE_EDGE },
+    { x: WORLD_SIZE - LANE_EDGE, y: WORLD_SIZE - LANE_EDGE },
+    { x: WORLD_SIZE - LANE_EDGE, y: WORLD_SIZE * 0.48 },
+    { x: WORLD_SIZE - 560, y: WORLD_SIZE - 860 },
   ],
 };
 

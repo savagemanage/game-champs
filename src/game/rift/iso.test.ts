@@ -41,9 +41,22 @@ describe('projection constants', () => {
     expect(MARGIN).toBe(20);
   });
 
-  it('exposes a positive uniform scale and height scale', () => {
-    expect(projectionScale()).toBeGreaterThan(0);
+  it('exposes positive per-axis fit scales and height scale', () => {
+    const { sx, sy } = projectionScale();
+    expect(sx).toBeGreaterThan(0);
+    expect(sy).toBeGreaterThan(0);
     expect(HEIGHT_SCALE).toBeGreaterThan(0);
+  });
+
+  it('fits X and Y independently so the diamond fills the view both ways', () => {
+    const { sx, sy } = projectionScale();
+    // The raw diamond is 2W wide but only W tall, so filling both axes needs a
+    // larger vertical scale than horizontal (this is what removes the big
+    // top/bottom dead margins of the old uniform fit).
+    expect(sy).toBeGreaterThan(sx);
+    // Each axis fills exactly to its usable span (view minus 2*margin).
+    expect(sx).toBeCloseTo((VIEW_W - MARGIN * 2) / (WORLD_SIZE * 2), 6);
+    expect(sy).toBeCloseTo((VIEW_H - MARGIN * 2) / WORLD_SIZE, 6);
   });
 });
 
@@ -193,19 +206,25 @@ describe('projected in-world points stay within the view', () => {
     ];
     for (const p of samples) {
       const s = worldToScreen(p);
+      // With independent X/Y fit the diamond now reaches all four margins, so
+      // every in-world sample stays within the margin box on BOTH axes.
       expect(s.x).toBeGreaterThanOrEqual(MARGIN - EPS);
       expect(s.x).toBeLessThanOrEqual(VIEW_W - MARGIN + EPS);
-      expect(s.y).toBeGreaterThanOrEqual(0 - EPS);
-      expect(s.y).toBeLessThanOrEqual(VIEW_H + EPS);
+      expect(s.y).toBeGreaterThanOrEqual(MARGIN - EPS);
+      expect(s.y).toBeLessThanOrEqual(VIEW_H - MARGIN + EPS);
     }
   });
 
-  it('the diamond fits within the horizontal margins exactly at the tips', () => {
+  it('the diamond fits the margins exactly at all four tips', () => {
     const left = worldToScreen(CORNERS.bottomLeft);
     const right = worldToScreen(CORNERS.topRight);
-    // Horizontal extent is the binding dimension for this view, so the tips sit
-    // at (or inside) the margins.
-    expect(left.x).toBeGreaterThanOrEqual(MARGIN - EPS);
-    expect(right.x).toBeLessThanOrEqual(VIEW_W - MARGIN + EPS);
+    const top = worldToScreen(CORNERS.topLeft);
+    const bottom = worldToScreen(CORNERS.bottomRight);
+    // Horizontal tips sit on the left/right margins.
+    expect(left.x).toBeCloseTo(MARGIN, 6);
+    expect(right.x).toBeCloseTo(VIEW_W - MARGIN, 6);
+    // Vertical tips now sit on the top/bottom margins too (no dead band).
+    expect(top.y).toBeCloseTo(MARGIN, 6);
+    expect(bottom.y).toBeCloseTo(VIEW_H - MARGIN, 6);
   });
 });

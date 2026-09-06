@@ -344,9 +344,11 @@ export class SpriteFactory {
     const pal = derivePalette(hexToInt(spec.accent), TEAM_RIM[spec.team]);
 
     if (spec.tier === 'nexus') {
-      // Tall crystal on a plinth. 22x38 grid -> 66x114 px.
+      // Crystal on a plinth. 22x30 grid -> 66x90 px. Kept shorter than before
+      // so the three lanes' structures don't overlap into a "wall of pillars"
+      // in the dimetric view (see BattleScene lane spacing).
       const GW = 22;
-      const GH = 38;
+      const GH = 30;
       const cx = GW / 2; // 11
       // Plinth.
       grid.rect(2, GH - 6, GW - 4, 5, pal.shadow);
@@ -354,7 +356,7 @@ export class SpriteFactory {
       grid.outlineBox(2, GH - 6, GW - 4, 5, pal.outline);
       // Crystal: a stair-stepped diamond built from horizontal blocks.
       const top = 2;
-      const midY = 18;
+      const midY = 14;
       const botY = GH - 8;
       for (let y = top; y <= botY; y++) {
         // Half-width grows to the middle then shrinks.
@@ -378,9 +380,10 @@ export class SpriteFactory {
     }
 
     if (spec.tier === 'inhibitor') {
-      // A squat pyramid with a glowing core. 16x24 grid -> 48x72 px.
+      // A squat pyramid with a glowing core. 16x18 grid -> 48x54 px (shortened
+      // so lane structures read as separate, not a stacked pillar wall).
       const GW = 16;
-      const GH = 24;
+      const GH = 18;
       const cx = GW / 2; // 8
       // Base.
       grid.rect(2, GH - 5, GW - 4, 4, pal.shadow);
@@ -395,15 +398,17 @@ export class SpriteFactory {
         grid.px(cx + half, y, pal.outline);
       }
       // Glowing core.
-      grid.rect(cx - 2, 10, 4, 4, lighten(pal.base, 0.5));
-      grid.outlineBox(cx - 2, 10, 4, 4, pal.outline);
-      grid.rect(cx - 1, 11, 1, 2, pal.rim);
+      grid.rect(cx - 2, 7, 4, 4, lighten(pal.base, 0.5));
+      grid.outlineBox(cx - 2, 7, 4, 4, pal.outline);
+      grid.rect(cx - 1, 8, 1, 2, pal.rim);
       return { width: GW * TEXEL, height: GH * TEXEL, footY: (GH - 1) * TEXEL };
     }
 
-    // Turret: a stepped tower with a crenellated glowing head. 16x30 -> 48x90.
+    // Turret: a stepped tower with a crenellated glowing head. 16x22 -> 48x66
+    // (shortened from 30 so adjacent lanes' turrets stop overlapping into a
+    // solid vertical wall in the dimetric projection).
     const GW = 16;
-    const GH = 30;
+    const GH = 22;
     const cx = GW / 2; // 8
     // Base foot.
     grid.rect(2, GH - 6, GW - 4, 5, pal.shadow);
