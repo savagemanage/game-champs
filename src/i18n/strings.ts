@@ -181,6 +181,17 @@ export const STRINGS = {
   'building.maxLevel': { en: 'Max level', ko: '최대 레벨' },
   'building.insufficient': { en: 'Not enough resources', ko: '자원이 부족합니다' },
 
+  // Base management scene (FEAT-006).
+  'base.title': { en: 'BASE', ko: '기지' },
+  'base.time': { en: 'Time {time}', ko: '시간 {time}' },
+  'base.remaining': { en: '{time} left', ko: '{time} 남음' },
+  'base.production': { en: '+{rate}/s', ko: '+{rate}/초' },
+  'base.storageBar': { en: '{amount} / {cap}', ko: '{amount} / {cap}' },
+  'base.next': { en: 'To Lv. {level}', ko: 'Lv. {level} 로' },
+  'base.busy': { en: 'Build queue busy', ko: '건설 대기열 사용 중' },
+  'base.started': { en: 'Construction started', ko: '건설을 시작했습니다' },
+  'base.back': { en: 'Back', ko: '뒤로' },
+
   // Hero combat types (type triangle: tank > missile > aircraft > tank).
   'herotype.tank': { en: 'Armor', ko: '기갑' },
   'herotype.missile': { en: 'Missile', ko: '미사일' },
@@ -274,8 +285,12 @@ export const STRINGS = {
   'recruit.pity': { en: 'Guaranteed UR in {count}', ko: '{count}회 내 UR 확정' },
   'recruit.pityHit': { en: 'Pity guarantee!', ko: '천장 확정!' },
   'recruit.new': { en: 'New hero!', ko: '새 영웅!' },
-  'recruit.duplicate': { en: 'Duplicate — +{shards} shards', ko: '중복 — 파편 +{shards}' },
+  'recruit.duplicate': { en: 'Duplicate +{shards} shards', ko: '중복 파편 +{shards}' },
   'recruit.shards': { en: 'Shards: {shards}', ko: '파편: {shards}' },
+  'recruit.pull1': { en: 'Recruit x1', ko: '1회 모집' },
+  'recruit.pull10': { en: 'Recruit x10', ko: '10회 모집' },
+  'recruit.pityCount': { en: 'Pity {count}/{max}', ko: '천장 {count}/{max}' },
+  'recruit.tapToClose': { en: 'Tap to continue', ko: '탭하여 계속' },
 
   // Hero / formation UI.
   'hero.level': { en: 'Lv. {level}', ko: 'Lv. {level}' },
@@ -288,7 +303,27 @@ export const STRINGS = {
   'hero.stat.atk': { en: 'ATK', ko: '공격력' },
   'hero.stat.def': { en: 'DEF', ko: '방어력' },
   'hero.stat.speed': { en: 'SPD', ko: '속도' },
+  'hero.maxed': { en: 'Maxed', ko: '최대' },
+  'hero.cost': { en: '{cost} shards', ko: '파편 {cost}' },
+  'hero.power': { en: 'Power {power}', ko: '전투력 {power}' },
+
+  // Heroes roster scene (FEAT-006).
+  'heroes.title': { en: 'HEROES', ko: '영웅' },
+  'heroes.rosterEmpty': { en: 'No heroes yet. Recruit one!', ko: '아직 영웅이 없습니다. 모집하세요!' },
+  'heroes.owned': { en: 'Owned {count}/{total}', ko: '보유 {count}/{total}' },
+  'heroes.recruitTab': { en: 'Recruit', ko: '모집' },
+  'heroes.rosterTab': { en: 'Roster', ko: '보유' },
+  'heroes.formation': { en: 'Formation', ko: '편성' },
+  'heroes.detail': { en: 'Details', ko: '상세' },
+
   'formation.title': { en: 'FORMATION', ko: '편성' },
+  'formation.teamPower': { en: 'Team Power {power}', ko: '팀 전투력 {power}' },
+  'formation.tapToPlace': { en: 'Tap a hero, then a slot', ko: '영웅을 탭한 뒤 슬롯을 탭하세요' },
+  'formation.dragHint': { en: 'Drag heroes onto slots', ko: '영웅을 슬롯으로 끌어 놓으세요' },
+  'formation.remove': { en: 'Clear', ko: '비우기' },
+  'formation.saved': { en: 'Formation saved', ko: '편성을 저장했습니다' },
+  'formation.selected': { en: 'Selected: {name}', ko: '선택: {name}' },
+  'formation.buffOff': { en: 'Same-type buff inactive', ko: '동일 타입 버프 미적용' },
   'formation.front': { en: 'Front Row', ko: '전열' },
   'formation.back': { en: 'Back Row', ko: '후열' },
   'formation.empty': { en: 'Empty', ko: '빈 자리' },

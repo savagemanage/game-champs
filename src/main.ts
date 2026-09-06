@@ -8,6 +8,9 @@ import { RunScene } from './scenes/RunScene';
 import { ResultsScene } from './scenes/ResultsScene';
 import { UpgradeScene } from './scenes/UpgradeScene';
 import { SettingsScene } from './scenes/SettingsScene';
+import { BaseScene } from './scenes/BaseScene';
+import { HeroesScene } from './scenes/HeroesScene';
+import { FormationScene } from './scenes/FormationScene';
 
 /**
  * Phaser bootstrap for LAST SQUAD (라스트 스쿼드).
@@ -18,9 +21,10 @@ import { SettingsScene } from './scenes/SettingsScene';
  * Season) and launches the Falcon Rescue mini-game: a Run (the core lane
  * gate-runner loop) that resolves to Results, from which the player can
  * Redeploy, spend coins in the Upgrade screen, or return. Settings is reachable
- * from both the Title and the Home hub. The Base/Heroes/Campaign/Missions/
- * Season scenes are added by FEAT-006/007; until then the Home nav guards those
- * hops with a scene-existence check.
+ * from both the Title and the Home hub. Base management, the Heroes roster, and
+ * the squad Formation board (FEAT-006) are registered here and reached from the
+ * Home nav; the Campaign/Missions/Season/Battle scenes are added by FEAT-007
+ * (until then the Home nav guards those hops with a scene-existence check).
  *
  * The canvas is a portrait 540x960 design resolution, scaled to fit while
  * centred, with nearest-neighbour pixel-art upscaling.
@@ -54,6 +58,9 @@ const config: Phaser.Types.Core.GameConfig = {
     ResultsScene,
     UpgradeScene,
     SettingsScene,
+    BaseScene,
+    HeroesScene,
+    FormationScene,
   ],
 };
 

@@ -518,11 +518,16 @@ export const SceneKeys = {
    * (see HomeScene.navTo) so tapping a not-yet-registered tab is a safe no-op
    * until the owning feature registers the scene in src/main.ts.
    *
-   * FEAT-006 MUST register scenes with keys: Base, Heroes.
+   * FEAT-006 MUST register scenes with keys: Base, Heroes, Formation.
    * FEAT-007 MUST register scenes with keys: Campaign, Missions, Season, Battle.
    */
   Base: 'BaseScene',
   Heroes: 'HeroesScene',
+  /**
+   * Squad-formation board (FEAT-006), reached from the Heroes scene. Assigns
+   * owned heroes to the 2-front / 3-back slots and surfaces the same-type buff.
+   */
+  Formation: 'FormationScene',
   Campaign: 'CampaignScene',
   Missions: 'MissionsScene',
   Season: 'SeasonScene',
