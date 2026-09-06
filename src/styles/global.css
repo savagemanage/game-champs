@@ -1243,6 +1243,14 @@ body {
 /* ------------------------------------------------------------------ */
 /* Battle HUD additions (rift)                                         */
 /* ------------------------------------------------------------------ */
+.battle-hud__top {
+  /* Groups the match header + objective ribbon so the flex column's
+     space-between keeps them pinned to the TOP band, above the diamond,
+     instead of letting the objective timers drift into the play area. */
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
 .battle-hud__topbar {
   display: flex;
   align-items: flex-start;
@@ -1257,11 +1265,20 @@ body {
 .battle-hud__timer { font-family: var(--font-display); font-weight: 700; }
 .battle-hud__objectives {
   display: flex;
-  gap: 0.6rem;
+  gap: 0.6rem 1rem;
   justify-content: center;
+  align-items: center;
   flex-wrap: wrap;
-  margin-top: 0.3rem;
+  margin: 0.15rem auto 0;
+  padding: 0.15rem 0.7rem;
+  width: fit-content;
+  max-width: 100%;
   font-size: 0.7rem;
+  /* A subtle ribbon so the timers stay legible against the terrain. */
+  background: rgba(4, 16, 10, 0.62);
+  border: 1px solid var(--color-gold-muted, #6b5a2e);
+  border-radius: 999px;
+  text-shadow: 0 1px 2px #000;
 }
 .battle-hud__objective { color: var(--color-text-muted, #a3b6c9); }
 .battle-hud__objective.is-alive { color: var(--color-gold, #c9a227); font-weight: 700; }

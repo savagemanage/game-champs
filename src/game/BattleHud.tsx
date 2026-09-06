@@ -32,7 +32,9 @@ export default function BattleHud({ onOpenShop }: BattleHudProps) {
 
   return (
     <div className="battle-hud" aria-live="polite">
-      {/* Top objective / structures bar. */}
+      {/* Top band: match header/structures + objective timers, anchored to the
+          top edge so the readout never overlaps the projected battlefield. */}
+      <div className="battle-hud__top">
       <div className="battle-hud__topbar">
         <div className="battle-hud__structures battle-hud__structures--ally">
           <span className="battle-hud__team battle-hud__team--ally">{t(player.nameKey)}</span>
@@ -75,6 +77,7 @@ export default function BattleHud({ onOpenShop }: BattleHudProps) {
         <span className="battle-hud__dragons">
           {t('objective.dragon')} ×{state.dragonStacks}
         </span>
+      </div>
       </div>
 
       {/* Minimap. */}

@@ -83,6 +83,20 @@ const TEAM_RIM: Record<SpriteTeam, number> = {
 
 const OUTLINE = 0x05100a;
 
+/**
+ * Readability tuning multipliers applied to the original billboard designs.
+ *
+ * The projected diamond is width-constrained, so the fitted projection scale is
+ * fixed; to make units read clearly (and look less cramped) in the 2.5D view we
+ * bake the procedural sprites at a larger design size. These are pure texture
+ * sizes and have NO effect on gameplay math (which stays on the flat plane).
+ * Champions/minions get the biggest bump since they cluster in lane; structures
+ * are already tall, so they only get a gentle increase.
+ */
+const CHAMPION_SPRITE_SCALE = 1.35;
+const MINION_SPRITE_SCALE = 1.35;
+const STRUCTURE_SPRITE_SCALE = 1.2;
+
 /** Lighten a packed 0xRRGGBB color toward white by `amount` in [0,1]. */
 function lighten(color: number, amount: number): number {
   const c = Phaser.Display.Color.IntegerToColor(color);
@@ -176,8 +190,12 @@ export class SpriteFactory {
   // -- Champion: upright body + head + an archetype motif ------------------
 
   private drawChampion(g: Phaser.GameObjects.Graphics, spec: ChampionSpriteSpec): SpriteSize {
-    const w = 40;
-    const h = 56;
+    // Readability tuning: champions are drawn ~1.35x larger than the original
+    // 40x56 design so they read clearly in the projected diamond without
+    // becoming a cluttered cluster. All interior coordinates scale with `s`.
+    const s = CHAMPION_SPRITE_SCALE;
+    const w = Math.round(40 * s);
+    const h = Math.round(56 * s);
     const accent = hexToInt(spec.accent);
     const rim = TEAM_RIM[spec.team];
     const cx = w / 2;
@@ -185,30 +203,30 @@ export class SpriteFactory {
     // Cast shadow on the base (small dark oval already handled by BattleScene;
     // here we only draw the standing figure so it can float above the shadow).
     // Cloak / torso: a rounded trapezoid body.
-    const bodyTop = 20;
-    const bodyBottom = h - 4;
+    const bodyTop = 20 * s;
+    const bodyBottom = h - 4 * s;
     g.fillStyle(darken(accent, 0.35), 1);
-    g.fillRoundedRect(cx - 12, bodyTop, 24, bodyBottom - bodyTop, 6);
+    g.fillRoundedRect(cx - 12 * s, bodyTop, 24 * s, bodyBottom - bodyTop, 6 * s);
     // Front lit panel.
     g.fillStyle(accent, 1);
-    g.fillRoundedRect(cx - 9, bodyTop + 2, 18, bodyBottom - bodyTop - 4, 5);
+    g.fillRoundedRect(cx - 9 * s, bodyTop + 2 * s, 18 * s, bodyBottom - bodyTop - 4 * s, 5 * s);
     g.fillStyle(lighten(accent, 0.3), 1);
-    g.fillRoundedRect(cx - 7, bodyTop + 3, 6, bodyBottom - bodyTop - 8, 3);
+    g.fillRoundedRect(cx - 7 * s, bodyTop + 3 * s, 6 * s, bodyBottom - bodyTop - 8 * s, 3 * s);
     // Team rim outline around the torso.
-    g.lineStyle(2, rim, 0.9);
-    g.strokeRoundedRect(cx - 12, bodyTop, 24, bodyBottom - bodyTop, 6);
+    g.lineStyle(2 * s, rim, 0.9);
+    g.strokeRoundedRect(cx - 12 * s, bodyTop, 24 * s, bodyBottom - bodyTop, 6 * s);
 
     // Head.
     g.fillStyle(0xf0e6d2, 1);
-    g.fillCircle(cx, 14, 8);
-    g.lineStyle(2, OUTLINE, 0.8);
-    g.strokeCircle(cx, 14, 8);
+    g.fillCircle(cx, 14 * s, 8 * s);
+    g.lineStyle(2 * s, OUTLINE, 0.8);
+    g.strokeCircle(cx, 14 * s, 8 * s);
 
     // Archetype motif drawn as a held prop, tinted lighter than the accent.
     const motif = lighten(accent, 0.45);
-    this.drawChampionMotif(g, spec.role, cx, motif);
+    this.drawChampionMotif(g, spec.role, cx, motif, s);
 
-    return { width: w, height: h, footY: h - 3 };
+    return { width: w, height: h, footY: h - 3 * s };
   }
 
   private drawChampionMotif(
@@ -216,47 +234,48 @@ export class SpriteFactory {
     role: ChampionRole,
     cx: number,
     motif: number,
+    s: number,
   ) {
-    g.lineStyle(3, motif, 1);
+    g.lineStyle(3 * s, motif, 1);
     switch (role) {
       case 'marksman': {
         // A bow: a curved arc on the right side.
         g.beginPath();
-        g.arc(cx + 16, 30, 16, Phaser.Math.DegToRad(-70), Phaser.Math.DegToRad(70), false);
+        g.arc(cx + 16 * s, 30 * s, 16 * s, Phaser.Math.DegToRad(-70), Phaser.Math.DegToRad(70), false);
         g.strokePath();
-        g.lineStyle(1.5, motif, 1);
-        g.lineBetween(cx + 4, 15, cx + 4, 45); // bowstring
+        g.lineStyle(1.5 * s, motif, 1);
+        g.lineBetween(cx + 4 * s, 15 * s, cx + 4 * s, 45 * s); // bowstring
         break;
       }
       case 'assassin': {
         // Twin blades: two thin daggers crossing.
         g.fillStyle(motif, 1);
-        g.fillTriangle(cx + 10, 42, cx + 14, 42, cx + 20, 12);
-        g.fillTriangle(cx - 10, 42, cx - 14, 42, cx - 20, 12);
+        g.fillTriangle(cx + 10 * s, 42 * s, cx + 14 * s, 42 * s, cx + 20 * s, 12 * s);
+        g.fillTriangle(cx - 10 * s, 42 * s, cx - 14 * s, 42 * s, cx - 20 * s, 12 * s);
         break;
       }
       case 'bruiser': {
         // A shield: a rounded plate on the left arm.
         g.fillStyle(motif, 1);
-        g.fillRoundedRect(cx - 22, 22, 12, 20, 4);
-        g.lineStyle(1.5, OUTLINE, 0.7);
-        g.strokeRoundedRect(cx - 22, 22, 12, 20, 4);
+        g.fillRoundedRect(cx - 22 * s, 22 * s, 12 * s, 20 * s, 4 * s);
+        g.lineStyle(1.5 * s, OUTLINE, 0.7);
+        g.strokeRoundedRect(cx - 22 * s, 22 * s, 12 * s, 20 * s, 4 * s);
         break;
       }
       case 'mage': {
         // A staff with a glowing orb at the top.
-        g.lineStyle(3, motif, 1);
-        g.lineBetween(cx + 16, 12, cx + 16, 48);
+        g.lineStyle(3 * s, motif, 1);
+        g.lineBetween(cx + 16 * s, 12 * s, cx + 16 * s, 48 * s);
         g.fillStyle(lighten(motif, 0.4), 1);
-        g.fillCircle(cx + 16, 10, 6);
+        g.fillCircle(cx + 16 * s, 10 * s, 6 * s);
         break;
       }
       case 'enchanter': {
         // A floating orb / halo above the shoulder.
-        g.lineStyle(2.5, motif, 1);
-        g.strokeCircle(cx + 15, 16, 7);
+        g.lineStyle(2.5 * s, motif, 1);
+        g.strokeCircle(cx + 15 * s, 16 * s, 7 * s);
         g.fillStyle(lighten(motif, 0.5), 0.9);
-        g.fillCircle(cx + 15, 16, 3);
+        g.fillCircle(cx + 15 * s, 16 * s, 3 * s);
         break;
       }
     }
@@ -265,7 +284,8 @@ export class SpriteFactory {
   // -- Minion: a small pawn, bigger for siege/super ------------------------
 
   private drawMinion(g: Phaser.GameObjects.Graphics, spec: MinionSpriteSpec): SpriteSize {
-    const scale = spec.type === 'super' ? 1.5 : spec.type === 'siege' ? 1.25 : 1;
+    const typeScale = spec.type === 'super' ? 1.5 : spec.type === 'siege' ? 1.25 : 1;
+    const scale = typeScale * MINION_SPRITE_SCALE;
     const w = Math.round(22 * scale);
     const h = Math.round(30 * scale);
     const accent = hexToInt(spec.accent);
@@ -298,91 +318,93 @@ export class SpriteFactory {
   private drawStructure(g: Phaser.GameObjects.Graphics, spec: StructureSpriteSpec): SpriteSize {
     const accent = hexToInt(spec.accent);
     const rim = TEAM_RIM[spec.team];
+    // Gentle readability bump; interior coordinates scale with `s`.
+    const s = STRUCTURE_SPRITE_SCALE;
     if (spec.tier === 'nexus') {
       // Tall crystal on a plinth.
-      const w = 56;
-      const h = 96;
+      const w = Math.round(56 * s);
+      const h = Math.round(96 * s);
       const cx = w / 2;
       g.fillStyle(darken(accent, 0.4), 1);
-      g.fillRoundedRect(cx - 22, h - 18, 44, 16, 5); // plinth
-      g.lineStyle(2, rim, 0.8);
-      g.strokeRoundedRect(cx - 22, h - 18, 44, 16, 5);
+      g.fillRoundedRect(cx - 22 * s, h - 18 * s, 44 * s, 16 * s, 5 * s); // plinth
+      g.lineStyle(2 * s, rim, 0.8);
+      g.strokeRoundedRect(cx - 22 * s, h - 18 * s, 44 * s, 16 * s, 5 * s);
       // Crystal body: a tall diamond.
       g.fillStyle(accent, 1);
       g.fillPoints(
         [
-          new Phaser.Geom.Point(cx, 6),
-          new Phaser.Geom.Point(cx + 18, h - 30),
-          new Phaser.Geom.Point(cx, h - 14),
-          new Phaser.Geom.Point(cx - 18, h - 30),
+          new Phaser.Geom.Point(cx, 6 * s),
+          new Phaser.Geom.Point(cx + 18 * s, h - 30 * s),
+          new Phaser.Geom.Point(cx, h - 14 * s),
+          new Phaser.Geom.Point(cx - 18 * s, h - 30 * s),
         ],
         true,
       );
       g.fillStyle(lighten(accent, 0.5), 0.9);
       g.fillPoints(
         [
-          new Phaser.Geom.Point(cx, 6),
-          new Phaser.Geom.Point(cx + 8, h - 34),
-          new Phaser.Geom.Point(cx, h - 20),
-          new Phaser.Geom.Point(cx - 8, h - 34),
+          new Phaser.Geom.Point(cx, 6 * s),
+          new Phaser.Geom.Point(cx + 8 * s, h - 34 * s),
+          new Phaser.Geom.Point(cx, h - 20 * s),
+          new Phaser.Geom.Point(cx - 8 * s, h - 34 * s),
         ],
         true,
       );
-      g.lineStyle(2.5, rim, 1);
+      g.lineStyle(2.5 * s, rim, 1);
       g.strokePoints(
         [
-          new Phaser.Geom.Point(cx, 6),
-          new Phaser.Geom.Point(cx + 18, h - 30),
-          new Phaser.Geom.Point(cx, h - 14),
-          new Phaser.Geom.Point(cx - 18, h - 30),
+          new Phaser.Geom.Point(cx, 6 * s),
+          new Phaser.Geom.Point(cx + 18 * s, h - 30 * s),
+          new Phaser.Geom.Point(cx, h - 14 * s),
+          new Phaser.Geom.Point(cx - 18 * s, h - 30 * s),
         ],
         true,
         true,
       );
-      return { width: w, height: h, footY: h - 4 };
+      return { width: w, height: h, footY: h - 4 * s };
     }
 
     if (spec.tier === 'inhibitor') {
-      const w = 44;
-      const h = 60;
+      const w = Math.round(44 * s);
+      const h = Math.round(60 * s);
       const cx = w / 2;
       g.fillStyle(darken(accent, 0.4), 1);
-      g.fillRoundedRect(cx - 16, h - 14, 32, 12, 4);
+      g.fillRoundedRect(cx - 16 * s, h - 14 * s, 32 * s, 12 * s, 4 * s);
       g.fillStyle(accent, 1);
       g.fillPoints(
         [
-          new Phaser.Geom.Point(cx, 10),
-          new Phaser.Geom.Point(cx + 14, h - 16),
-          new Phaser.Geom.Point(cx - 14, h - 16),
+          new Phaser.Geom.Point(cx, 10 * s),
+          new Phaser.Geom.Point(cx + 14 * s, h - 16 * s),
+          new Phaser.Geom.Point(cx - 14 * s, h - 16 * s),
         ],
         true,
       );
       g.fillStyle(lighten(accent, 0.4), 0.85);
-      g.fillCircle(cx, h - 30, 7);
-      g.lineStyle(2, rim, 0.9);
-      g.strokeCircle(cx, h - 30, 7);
-      return { width: w, height: h, footY: h - 3 };
+      g.fillCircle(cx, h - 30 * s, 7 * s);
+      g.lineStyle(2 * s, rim, 0.9);
+      g.strokeCircle(cx, h - 30 * s, 7 * s);
+      return { width: w, height: h, footY: h - 3 * s };
     }
 
     // Turret: a stepped tower with a glowing top.
-    const w = 40;
-    const h = 76;
+    const w = Math.round(40 * s);
+    const h = Math.round(76 * s);
     const cx = w / 2;
     g.fillStyle(darken(accent, 0.45), 1);
-    g.fillRoundedRect(cx - 16, h - 16, 32, 14, 4); // base
+    g.fillRoundedRect(cx - 16 * s, h - 16 * s, 32 * s, 14 * s, 4 * s); // base
     g.fillStyle(darken(accent, 0.2), 1);
-    g.fillRect(cx - 11, 24, 22, h - 38); // shaft
-    g.lineStyle(2, rim, 0.85);
-    g.strokeRect(cx - 11, 24, 22, h - 38);
+    g.fillRect(cx - 11 * s, 24 * s, 22 * s, h - 38 * s); // shaft
+    g.lineStyle(2 * s, rim, 0.85);
+    g.strokeRect(cx - 11 * s, 24 * s, 22 * s, h - 38 * s);
     // Crenellated head.
     g.fillStyle(accent, 1);
-    g.fillRoundedRect(cx - 14, 12, 28, 16, 4);
+    g.fillRoundedRect(cx - 14 * s, 12 * s, 28 * s, 16 * s, 4 * s);
     // Glowing eye.
     g.fillStyle(lighten(accent, 0.6), 1);
-    g.fillCircle(cx, 20, 5);
-    g.lineStyle(2, rim, 1);
-    g.strokeRoundedRect(cx - 14, 12, 28, 16, 4);
-    return { width: w, height: h, footY: h - 4 };
+    g.fillCircle(cx, 20 * s, 5 * s);
+    g.lineStyle(2 * s, rim, 1);
+    g.strokeRoundedRect(cx - 14 * s, 12 * s, 28 * s, 16 * s, 4 * s);
+    return { width: w, height: h, footY: h - 4 * s };
   }
 
   // -- Markers: jungle camp dot / epic monster silhouette ------------------
