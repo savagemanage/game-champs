@@ -44,18 +44,19 @@ export function subscribe(fn: (lang: Language) => void): () => void {
 }
 
 /**
- * Derive an initial {@link Language} from a browser-like navigator object.
+ * Derive a {@link Language} from a browser-like navigator object.
  *
- * Used only on FIRST RUN, when the player has never chosen (and persisted) a
- * language. If any of the navigator's preferred locales starts with `ko`
- * (case-insensitively) the game opens in Korean; any other locale opens in
- * English. Korean is the fallback when detection is impossible (no navigator,
- * empty locales, e.g. the node/test environment), keeping Kingdom Rise
- * Korean-first.
+ * NOTE: this is NOT used to pick the first-run language anymore. Kingdom Rise
+ * is Korean-first and a brand-new player always starts in Korean regardless of
+ * the browser locale (see SettingsStore.firstRunLanguage), because a fresh
+ * `navigator.language` of 'en-US' used to flip the whole UI to English. This
+ * helper is retained as a pure, exported utility (and for its unit tests): if
+ * any of the navigator's preferred locales starts with `ko` (case-insensitively)
+ * it returns Korean; any other usable locale returns English; Korean is the
+ * fallback when detection is impossible (no navigator, empty locales).
  *
  * The navigator-like object is passed in so this stays a pure, unit-testable
- * function; production callers pass the real `navigator` (guarded with
- * `typeof navigator !== 'undefined'`).
+ * function.
  */
 export function detectBrowserLanguage(
   nav?: { language?: string; languages?: readonly string[] },

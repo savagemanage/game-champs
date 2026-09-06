@@ -96,11 +96,11 @@ Vite가 출력하는 개발 서버 주소(기본값 <http://localhost:5173>)를 
 초기화** 옵션으로 저장을 지우고 새 왕국을 시작할 수 있습니다.
 
 > **언어 설정 (한국어 / English).** 게임은 **한국어 우선**입니다. 저장된 설정이
-> 없는 첫 실행에서는 브라우저 언어를 자동 감지합니다. 브라우저의 선호 언어가
-> `ko`로 시작하면 한국어로, 그 외에는 영어로 시작하며, 감지할 수 없을 때는
-> 한국어로 되돌아갑니다. 한 번이라도 언어를 직접 고르면 그 선택이 저장되어 이후
-> 항상 우선합니다. 언어는 **타이틀 화면 우측 상단의 토글**(◀ 한국어 ▶)이나
-> **설정** 화면에서 언제든 바꿀 수 있으며, 모든 라벨이 즉시 전환됩니다.
+> 없는 첫 실행에서는 브라우저 언어와 무관하게 항상 **한국어**로 시작하며,
+> 직접 언어를 바꾸기 전까지 한국어를 유지합니다. 한 번이라도 언어를 직접 고르면
+> 그 선택이 저장되어 이후 항상 우선합니다(영어를 골랐다면 다음 실행에도 영어).
+> 언어는 **타이틀 화면 우측 상단의 토글**(◀ 한국어 ▶)이나 **설정** 화면에서
+> 언제든 바꿀 수 있으며, 모든 라벨이 즉시 전환됩니다.
 
 ## 저장 / 지속성
 
@@ -128,9 +128,9 @@ tools/             에셋 생성기 (gen_sprites.py, gen_audio.py)
 ```
 
 `systems/`의 클래스에는 **Phaser 의존성이 없어서**, 자원 계산, 업그레이드 비용
-공식, 훈련 대기열 타이밍, 전투 계산, 저장 직렬화, 그리고 설정 로드(브라우저 언어
-자동 감지 포함)가 모두 빠른 `vitest` 유닛 테스트(`src/**/*.test.ts`)로
-검증됩니다.
+공식, 훈련 대기열 타이밍, 전투 계산, 저장 직렬화, 그리고 설정 로드(한국어 우선
+기본값과 저장된 언어 우선 규칙 포함)가 모두 빠른 `vitest`
+유닛 테스트(`src/**/*.test.ts`)로 검증됩니다.
 
 ## 에셋 재생성
 
@@ -200,6 +200,14 @@ upgraded; troops are trained in time-based **queues** at the Barracks; and
 periodic **waves of raiders** must be repelled in an animated, deterministic
 battle. Progress is saved to `localStorage`, with idle gains credited while you
 are away. The UI is **Korean-first** (한국어), with English available.
+
+> **Language settings (한국어 / English).** The game is **Korean-first**. On a
+> brand-new run with no saved settings it always starts in **Korean**,
+> regardless of the browser locale, and stays Korean until you explicitly change
+> the language. Once you pick a language it is persisted and always wins on
+> later loads (choose English and the next run is English). Switch languages any
+> time via the **toggle at the top-right of the Title screen** (◀ 한국어 ▶) or in
+> **Settings**; every label updates instantly.
 
 > **Original work / IP boundary.** Kingdom Rise is an **original** game
 > *inspired by* the base-building / idle-kingdom genre. All names, lore, art, and
@@ -311,8 +319,10 @@ tools/             Asset generators (gen_sprites.py, gen_audio.py)
 ```
 
 The `systems/` classes contain **no Phaser dependency**, so the resource math,
-upgrade-cost formulas, training-queue timing, combat resolution, and save
-serialization are all covered by fast `vitest` unit tests (`src/**/*.test.ts`).
+upgrade-cost formulas, training-queue timing, combat resolution, save
+serialization, and settings loading (the Korean-first default and the
+saved-language-wins rule) are all covered by fast `vitest` unit tests
+(`src/**/*.test.ts`).
 
 ## Regenerating assets
 

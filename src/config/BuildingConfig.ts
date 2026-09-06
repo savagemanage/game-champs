@@ -82,7 +82,11 @@ export const BUILDING_DEFS: Record<BuildingKind, BuildingDef> = {
   },
   barracks: {
     kind: 'barracks',
-    baseCost: { wood: 150, stone: 100 },
+    // Cheaper than the top-tier producers so the early "Town Center Lv.2 ->
+    // Barracks -> train" loop is reachable in a couple of minutes from a fresh
+    // start (see ECONOMY.START). Still gated behind Town Center level 2 so it
+    // is a deliberate second step, not free on turn one.
+    baseCost: { wood: 120, stone: 80 },
     baseOutputPerSec: 0,
     requiresTownCenterLevel: 2,
     maxLevel: BUILDINGS.MAX_LEVEL,

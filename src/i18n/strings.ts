@@ -122,6 +122,11 @@ export const STRINGS = {
   'training.queueEmpty': { en: 'No troops in training', ko: '훈련 중인 병력 없음' },
   'training.queueItem': { en: '{count} {troop} — {seconds}s', ko: '{troop} {count}명 — {seconds}초' },
   'training.noBarracks': { en: 'Build a Barracks to train troops', ko: '병력 훈련하려면 병영을 지으세요' },
+  'training.noBarracksHint': {
+    en: 'Build a Barracks first (requires Town Center Lv.2)',
+    ko: '먼저 병영을 지으세요 (타운 센터 Lv.2 필요)',
+  },
+  'training.notEnough': { en: 'Not enough resources', ko: '자원 부족' },
   'training.cost': { en: 'Cost {cost}', ko: '비용 {cost}' },
   'training.time': { en: '{seconds}s each', ko: '개당 {seconds}초' },
 

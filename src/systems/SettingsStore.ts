@@ -11,7 +11,6 @@
  */
 
 import { LANGUAGES, type Language } from '../i18n/strings';
-import { detectBrowserLanguage } from '../i18n/i18n';
 
 /**
  * Persisted audio + UI settings. Master/SFX/music volumes are [0..1]
@@ -45,25 +44,29 @@ export function clamp01(v: unknown, fallback: number): number {
 }
 
 /**
- * The first-run initial language: derived from the browser when available,
- * falling back to the Korean-first default when `navigator` is absent (e.g. the
- * node/test environment). Only consulted when NO valid saved language exists;
- * once the player has chosen a language the persisted value wins.
+ * The first-run initial language. Kingdom Rise is KOREAN-FIRST and stays
+ * Korean until the player explicitly chooses another language, so a brand-new
+ * player (no valid saved language) always opens in Korean regardless of the
+ * browser locale. Browser-language auto-detection was intentionally removed:
+ * on a fresh run `navigator.language` is typically 'en-US', which used to flip
+ * the whole UI to English right after AudioManager loaded the settings. Only
+ * consulted when NO valid saved language exists; once the player has chosen a
+ * language the persisted value wins.
  */
 export function firstRunLanguage(): Language {
-  return typeof navigator !== 'undefined' ? detectBrowserLanguage(navigator) : SETTINGS_DEFAULTS.language;
+  return SETTINGS_DEFAULTS.language;
 }
 
 /** Read the persisted settings, or sensible defaults on first run / corruption. */
 export function loadSettings(): GameSettings {
   try {
     const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(SETTINGS_STORAGE_KEY) : null;
-    // No saved settings at all -> first run: auto-detect the browser language.
+    // No saved settings at all -> first run: Korean-first default.
     if (!raw) return { ...SETTINGS_DEFAULTS, language: firstRunLanguage() };
     const parsed = JSON.parse(raw) as Partial<GameSettings>;
-    // A valid persisted language always wins; only fall back to detection when
-    // the saved value is missing/invalid (still effectively first run for the
-    // language choice).
+    // A valid persisted language always wins; only fall back to the Korean-first
+    // default when the saved value is missing/invalid (still effectively first
+    // run for the language choice).
     const language: Language =
       parsed.language && LANGUAGES.includes(parsed.language) ? parsed.language : firstRunLanguage();
     return {

@@ -93,8 +93,12 @@ export const ECONOMY = {
   MAX_OFFLINE_SECONDS: 8 * 60 * 60,
   /** Fraction of full production rate granted for offline time (idle games cap this). */
   OFFLINE_EFFICIENCY: 0.5,
-  /** Starting stockpile for a fresh save. */
-  START: { food: 200, wood: 200, stone: 100, gold: 50 },
+  /**
+   * Starting stockpile for a fresh save. Sized so a new player can reach the
+   * early "Town Center Lv.2 -> Barracks -> train first troops" loop within a
+   * couple of minutes without hitting a silent resource wall.
+   */
+  START: { food: 300, wood: 400, stone: 250, gold: 50 },
 } as const;
 
 /**
@@ -110,7 +114,7 @@ export const BUILDINGS = {
   /** Output growth per level for producers. */
   OUTPUT_GROWTH: 1.35,
   /** Base seconds an upgrade takes at level 1 (scales with level). */
-  BASE_BUILD_SECONDS: 5,
+  BASE_BUILD_SECONDS: 4,
   /** Highest level any building can reach. */
   MAX_LEVEL: 20,
 } as const;

@@ -16,6 +16,8 @@ interface TroopRow {
   count: number;
   countLabel: Phaser.GameObjects.Text;
   armyLabel: Phaser.GameObjects.Text;
+  minusButton: MenuButton;
+  plusButton: MenuButton;
   trainButton: MenuButton;
 }
 
@@ -37,6 +39,8 @@ export class TrainingPanel {
   private readonly root: Phaser.GameObjects.Container;
   private readonly rows: TroopRow[] = [];
   private queueText!: Phaser.GameObjects.Text;
+  /** Prominent locked banner shown when the Barracks is not yet built. */
+  private lockedText!: Phaser.GameObjects.Text;
   private _visible = false;
 
   constructor(scene: Phaser.Scene, state: GameState) {
@@ -97,6 +101,21 @@ export class TrainingPanel {
       .setOrigin(0, 0);
     this.root.add(this.queueText);
 
+    // Prominent locked banner shown over the roster when the Barracks is not
+    // built yet, explaining the prerequisite instead of leaving the Train
+    // button silently disabled. Centered near the panel body.
+    this.lockedText = this.scene.add
+      .text(cx, cy, '', textStyle(20, {
+        color: PALETTE.DANGER_CSS,
+        fontStyle: 'bold',
+        align: 'center',
+        wordWrap: { width: panelW - 120 },
+      }))
+      .setOrigin(0.5)
+      .setDepth(1)
+      .setVisible(false);
+    this.root.add(this.lockedText);
+
     const close = Menu.button(this.scene, cx, cy + panelH / 2 - 30, tr('common.close'), () => this.setVisible(false), {
       width: 180,
     });
@@ -132,6 +151,8 @@ export class TrainingPanel {
       count: 1,
       countLabel: this.scene.add.text(selectorX + 60, y + 16, '1', textStyle(20)).setOrigin(0.5),
       armyLabel,
+      minusButton: undefined as unknown as MenuButton,
+      plusButton: undefined as unknown as MenuButton,
       trainButton: undefined as unknown as MenuButton,
     };
 
@@ -145,6 +166,8 @@ export class TrainingPanel {
       height: 36,
       fontSize: 20,
     });
+    row.minusButton = minus;
+    row.plusButton = plus;
     this.root.add(minus.container);
     this.root.add(row.countLabel);
     this.root.add(plus.container);
@@ -196,10 +219,33 @@ export class TrainingPanel {
     const hasBarracks = this.state.buildings.hasBarracks;
     const army = this.state.training.army;
 
+    // Prominent locked banner while the Barracks is missing: explains the
+    // prerequisite instead of leaving the Train button silently disabled.
+    this.lockedText.setVisible(!hasBarracks);
+    if (!hasBarracks) this.lockedText.setText(tr('training.noBarracksHint'));
+
     for (const row of this.rows) {
       row.armyLabel.setText(tr('training.army', { count: army[row.troop] }));
-      row.trainButton.setEnabled(hasBarracks && this.affordable(row));
-      row.trainButton.setText(tr('training.trainCount', { count: row.count }));
+
+      // When the Barracks is not built, keep every control disabled and show
+      // the prerequisite hint on the Train button; the prominent banner above
+      // carries the full explanation.
+      if (!hasBarracks) {
+        row.minusButton.setEnabled(false);
+        row.plusButton.setEnabled(false);
+        row.trainButton.setEnabled(false);
+        row.trainButton.setText(tr('training.noBarracksHint'));
+        continue;
+      }
+
+      // Barracks exists: the +/- selectors are usable, and the Train button is
+      // enabled only when the batch is affordable. When it is not, explain the
+      // disabled state as a distinct "not enough resources" reason.
+      row.minusButton.setEnabled(true);
+      row.plusButton.setEnabled(true);
+      const affordable = this.affordable(row);
+      row.trainButton.setEnabled(affordable);
+      row.trainButton.setText(affordable ? tr('training.trainCount', { count: row.count }) : tr('training.notEnough'));
     }
 
     // Queue readout.

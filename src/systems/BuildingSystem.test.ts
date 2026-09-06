@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { BuildingSystem } from './BuildingSystem';
 import { ResourceStore } from './ResourceStore';
+import { TrainingQueue } from './TrainingQueue';
 import { outputPerSec, upgradeTimeMs } from '../config/BuildingConfig';
+import { ECONOMY } from '../config/GameConfig';
 
 /**
  * Unit tests for the building/upgrade tree: prerequisite + Town-Center gating,
@@ -101,5 +103,61 @@ describe('BuildingSystem', () => {
     expect(restored.townCenterLevel).toBe(2);
     expect(restored.hasBarracks).toBe(true);
     expect(restored.upgradeEndsAt('barracks')).toBe(5000);
+  });
+
+  it('the Barracks is gated behind Town Center level 2 on a fresh game', () => {
+    const bs = new BuildingSystem(); // fresh: Town Center level 1 only.
+    // At Town Center level 1 the Barracks prerequisite is unmet.
+    const blocked = bs.canUpgrade('barracks', richStore());
+    expect(blocked.ok).toBe(false);
+    expect(blocked.reason).toBe('prereq');
+
+    // After raising the Town Center to level 2, the Barracks becomes buildable.
+    const bs2 = new BuildingSystem([{ kind: 'town_center', level: 2, upgradeEndsAt: null }]);
+    const ok = bs2.canUpgrade('barracks', richStore());
+    expect(ok.ok).toBe(true);
+  });
+
+  it('a fresh game can afford the Town Center Lv.2 -> Barracks early loop from the starting stockpile', () => {
+    const bs = new BuildingSystem();
+    const store = new ResourceStore({ ...ECONOMY.START });
+
+    // Step 1: upgrade the Town Center from level 1 to level 2.
+    const tcStart = bs.startUpgrade('town_center', store, 0);
+    expect(tcStart.ok).toBe(true);
+    bs.update(bs.upgradeEndsAt('town_center') ?? 0);
+    expect(bs.townCenterLevel).toBe(2);
+
+    // Step 2: with Town Center level 2, the Barracks prereq is met AND the
+    // remaining starting resources cover its cost (no silent wall).
+    const barracksCheck = bs.canUpgrade('barracks', store);
+    expect(barracksCheck.ok).toBe(true);
+  });
+
+  it('end-to-end: build the Barracks, then TrainingQueue.enqueue succeeds (was no_barracks before)', () => {
+    const bs = new BuildingSystem();
+    const store = new ResourceStore({ food: 99999, wood: 99999, stone: 99999, gold: 99999 });
+    const queue = new TrainingQueue();
+
+    // Before the Barracks exists, enqueue is refused with 'no_barracks'.
+    const before = queue.enqueue('spearman', 1, store, 0, bs.hasBarracks);
+    expect(before.ok).toBe(false);
+    expect(before.reason).toBe('no_barracks');
+
+    // Raise Town Center to level 2 (Barracks prerequisite).
+    bs.startUpgrade('town_center', store, 0);
+    bs.update(bs.upgradeEndsAt('town_center') ?? 0);
+    expect(bs.townCenterLevel).toBe(2);
+
+    // Build the Barracks (start + complete its upgrade).
+    const barracksStart = bs.startUpgrade('barracks', store, 1000);
+    expect(barracksStart.ok).toBe(true);
+    bs.update(bs.upgradeEndsAt('barracks') ?? 0);
+    expect(bs.hasBarracks).toBe(true);
+
+    // Now the Train action enqueues successfully.
+    const after = queue.enqueue('spearman', 1, store, 2000, bs.hasBarracks);
+    expect(after.ok).toBe(true);
+    expect(after.reason).toBeUndefined();
   });
 });
