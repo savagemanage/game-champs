@@ -61,6 +61,7 @@ export const STRINGS = {
   'town.settings': { en: 'Settings', ko: '설정' },
   'town.hint': { en: 'Tap a building to upgrade   R Research   H Heroes   B Battle   S Settings', ko: '건물을 눌러 업그레이드   R 연구   H 영웅   B 전투   S 설정' },
   'town.locked': { en: 'Locked', ko: '잠김' },
+  'town.defense': { en: 'Town Defense: {value}', ko: '마을 방어력: {value}' },
   'town.saved': { en: 'Saved', ko: '저장됨' },
   'town.onboarding': {
     en: 'Welcome! Your buildings gather resources over time. Tap the Town Center to upgrade it, raise a Farm for food, then train troops at the Barracks and march To Battle.',
@@ -76,6 +77,8 @@ export const STRINGS = {
   'building.mine': { en: 'Mine', ko: '광산' },
   'building.barracks': { en: 'Barracks', ko: '병영' },
   'building.research': { en: "Scholars' Hall", ko: '연구소' },
+  'building.wall': { en: 'Ramparts', ko: '성벽' },
+  'building.watchtower': { en: 'Watchtower', ko: '감시탑' },
 
   // Building descriptions.
   'building.town_center.desc': {
@@ -90,6 +93,14 @@ export const STRINGS = {
   'building.research.desc': {
     en: 'Houses your scholars. Its level unlocks higher tiers of the tech tree, empowering your economy and army.',
     ko: '학자들이 머무는 곳. 레벨이 오를수록 기술 트리의 상위 단계를 개방해 경제와 군대를 강화한다.',
+  },
+  'building.wall.desc': {
+    en: 'A stone curtain wall. Each level adds a large block of town defense, helping you hold raids and softening any loss.',
+    ko: '돌로 쌓은 성벽. 레벨마다 마을 방어력을 크게 더해, 침략을 막아 내고 패배의 피해도 줄여 준다.',
+  },
+  'building.watchtower.desc': {
+    en: "Archers' towers that pick off attackers. A second, stacking source of town defense.",
+    ko: '공격자를 저격하는 궁수의 탑. 마을 방어력을 더해 주는 두 번째 방어 수단.',
   },
 
   // Building panel UI.

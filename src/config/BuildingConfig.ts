@@ -13,7 +13,13 @@
  */
 
 import { BUILDINGS } from './GameConfig';
-import type { BuildingKind, ProducerKind, ResourceCost, ResourceKind } from '../types';
+import type {
+  BuildingKind,
+  DefenseKind,
+  ProducerKind,
+  ResourceCost,
+  ResourceKind,
+} from '../types';
 
 /** Static definition for a single building kind. */
 export interface BuildingDef {
@@ -33,6 +39,13 @@ export interface BuildingDef {
   requiresTownCenterLevel: number;
   /** Highest level this building can reach (defaults to the global MAX_LEVEL). */
   maxLevel: number;
+  /**
+   * For DEFENSIVE buildings (wall / watchtower): the town-defense points this
+   * building contributes AT LEVEL 1. Each further level adds this base again
+   * (linear growth; see {@link defenseValue}). 0 / undefined for every
+   * non-defensive building, so they never contribute to town defense.
+   */
+  baseDefense?: number;
 }
 
 /**
@@ -101,6 +114,30 @@ export const BUILDING_DEFS: Record<BuildingKind, BuildingDef> = {
     requiresTownCenterLevel: 3,
     maxLevel: BUILDINGS.MAX_LEVEL,
   },
+  wall: {
+    kind: 'wall',
+    // The Ramparts (성벽): a stone curtain wall. Produces nothing; each level
+    // adds a solid block of town defense. Cheap and reachable early (Town
+    // Center level 2) so a fresh kingdom can start hardening against raids
+    // before the mid-game. Stone-heavy to fit its theme.
+    baseCost: { wood: 90, stone: 140 },
+    baseOutputPerSec: 0,
+    requiresTownCenterLevel: 2,
+    maxLevel: BUILDINGS.MAX_LEVEL,
+    baseDefense: 40,
+  },
+  watchtower: {
+    kind: 'watchtower',
+    // The Watchtower (감시탑): archers' towers that pick off attackers. A
+    // smaller per-level defense bump than the wall, but a second, stacking
+    // defensive source. Gated behind Town Center level 3 so it is the second
+    // defensive step after the wall.
+    baseCost: { wood: 120, stone: 100, gold: 30 },
+    baseOutputPerSec: 0,
+    requiresTownCenterLevel: 3,
+    maxLevel: BUILDINGS.MAX_LEVEL,
+    baseDefense: 25,
+  },
 };
 
 /** All building kinds, in a stable display/iteration order. */
@@ -112,7 +149,16 @@ export const BUILDING_ORDER: readonly BuildingKind[] = [
   'mine',
   'barracks',
   'research',
+  'wall',
+  'watchtower',
 ] as const;
+
+/**
+ * The defensive building kinds, in a stable iteration order. Used by
+ * {@link BuildingSystem.townDefense} to aggregate the town's total defense
+ * across exactly these buildings (and no others).
+ */
+export const DEFENSE_ORDER: readonly DefenseKind[] = ['wall', 'watchtower'] as const;
 
 /** Lookup a building definition (never undefined for a valid kind). */
 export function buildingDef(kind: BuildingKind): BuildingDef {
@@ -122,6 +168,24 @@ export function buildingDef(kind: BuildingKind): BuildingDef {
 /** True when the building is a resource producer (has a `produces` resource). */
 export function isProducer(kind: BuildingKind): kind is ProducerKind {
   return BUILDING_DEFS[kind].produces !== undefined;
+}
+
+/** True when the building contributes to town defense (a wall / watchtower). */
+export function isDefense(kind: BuildingKind): kind is DefenseKind {
+  return (BUILDING_DEFS[kind].baseDefense ?? 0) > 0;
+}
+
+/**
+ * Town-defense points a DEFENSIVE building contributes at a given `level`. Non-
+ * defensive buildings and level 0 (not built) contribute nothing. Defense grows
+ * LINEARLY: `baseDefense * level`, so a level-3 wall is worth three times a
+ * level-1 wall. Pure function of `(kind, level)` so combat and the UI can
+ * compute the town's defense deterministically and unit-test it without Phaser.
+ */
+export function defenseValue(kind: BuildingKind, level: number): number {
+  const base = BUILDING_DEFS[kind].baseDefense ?? 0;
+  if (base <= 0 || level <= 0) return 0;
+  return base * Math.floor(level);
 }
 
 /**

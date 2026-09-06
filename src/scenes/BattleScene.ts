@@ -103,9 +103,13 @@ export class BattleScene extends Phaser.Scene {
     // attack stacks the research combatAttack techs with the active WAR hero's
     // bonus; defense is the research combatDefense techs (heroes do not affect
     // it). Both default neutral when nothing is unlocked / no hero is active.
+    // Town defense (walls / watchtowers) is threaded in alongside the combat
+    // multipliers: it adds flat power to help hold the raid, and on a loss it
+    // both saves a garrison and shields the stockpile from being sacked.
     this.result = CombatSystem.resolve(this.army, this.wave, {
       attackMult: this.state.combatAttackMultiplier(),
       defenseMult: this.state.combatDefenseMultiplier(),
+      townDefense: this.state.townDefense(),
     });
     this.timeline = buildTimeline(this.army, this.result, TIMELINE_STEPS);
 
@@ -301,8 +305,13 @@ export class BattleScene extends Phaser.Scene {
     if (this.result.win) {
       this.state.resources.add(this.result.reward);
       this.state.recordWaveCleared(this.wave);
+    } else {
+      // Loss: raiders sack the town for whatever the (defense-reduced) penalty
+      // exposes. A well-walled town pays little or nothing; a bare town is
+      // looted for the full penalty. Deducted non-atomically (clamped at 0).
+      this.state.resources.subtract(this.result.penalty);
     }
-    // On a win survivors < army (casualties), on a loss survivors are all zero.
+    // On a win survivors < army (casualties); on a loss walls may keep a few.
     this.state.setArmy(this.result.survivors);
     this.state.save(now);
   }

@@ -18,7 +18,13 @@ export type Resources = Record<ResourceKind, number>;
 /** A partial cost/reward bundle (missing kinds are treated as 0). */
 export type ResourceCost = Partial<Resources>;
 
-/** The buildable structure kinds. `town_center` gates the level cap of the rest. */
+/**
+ * The buildable structure kinds. `town_center` gates the level cap of the rest.
+ * `wall` and `watchtower` are non-producer DEFENSIVE buildings: their levels
+ * contribute to the town's aggregate defense value (see BuildingConfig
+ * defenseValue / BuildingSystem.townDefense), which the combat resolver factors
+ * into a raid's outcome.
+ */
 export type BuildingKind =
   | 'town_center'
   | 'farm'
@@ -26,10 +32,22 @@ export type BuildingKind =
   | 'quarry'
   | 'mine'
   | 'barracks'
-  | 'research';
+  | 'research'
+  | 'wall'
+  | 'watchtower';
 
 /** Producer buildings map to the single resource they generate. */
-export type ProducerKind = Exclude<BuildingKind, 'town_center' | 'barracks' | 'research'>;
+export type ProducerKind = Exclude<
+  BuildingKind,
+  'town_center' | 'barracks' | 'research' | 'wall' | 'watchtower'
+>;
+
+/**
+ * The defensive building kinds whose levels feed the town's aggregate defense
+ * value. Kept as a subset of {@link BuildingKind} so the aggregation and config
+ * stay in lock-step.
+ */
+export type DefenseKind = 'wall' | 'watchtower';
 
 /**
  * The trainable troop kinds. Five roles form a soft rock-paper-scissors cycle

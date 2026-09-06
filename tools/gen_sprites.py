@@ -312,6 +312,85 @@ def draw_research(img, ox, oy, fw, fh, tier):
         rect(img, tx, tbot - 1, tx + tw, tbot - 1, GOLD)
 
 
+def draw_wall(img, ox, oy, fw, fh, tier):
+    """The Ramparts: a crenellated stone curtain wall with a timber gate. 48x48.
+    Tier 1 raises the wall, adds a banner and gold trim along the battlement."""
+    draw_ground_pad(img, ox, oy, fw, fh)
+    wall_top = oy + 18 if tier == 0 else oy + 12
+    wbot = oy + fh - 6
+    # main curtain wall
+    rect(img, ox + 6, wall_top, ox + fw - 7, wbot, STONE)
+    rect(img, ox + 6, wall_top, ox + 6, wbot, STONE_LT)
+    rect(img, ox + fw - 7, wall_top, ox + fw - 7, wbot, STONE_DK)
+    # stone courses (horizontal joins)
+    for y in range(wall_top + 4, wbot, 5):
+        rect(img, ox + 7, y, ox + fw - 8, y, STONE_DK)
+    # staggered vertical joins for a brick look
+    for i, y in enumerate(range(wall_top + 2, wbot, 5)):
+        offset = 0 if i % 2 == 0 else 4
+        for x in range(ox + 8 + offset, ox + fw - 8, 8):
+            rect(img, x, y, x, min(y + 4, wbot), STONE_DK)
+    # crenellations along the top
+    for x in range(ox + 6, ox + fw - 7, 8):
+        rect(img, x, wall_top - 4, x + 4, wall_top - 1, STONE)
+        rect(img, x, wall_top - 4, x, wall_top - 1, STONE_LT)
+    # timber gate in the centre
+    cxc = ox + fw // 2
+    rect(img, cxc - 5, wbot - 12, cxc + 4, wbot, WOOD_DK)
+    rect(img, cxc - 5, wbot - 12, cxc + 4, wbot - 11, WOOD)
+    rect(img, cxc - 1, wbot - 12, cxc, wbot, WOOD)  # gate plank seam
+    # iron studs on the gate
+    for gy in range(wbot - 10, wbot, 4):
+        px(img, cxc - 3, gy, STEEL_DK)
+        px(img, cxc + 2, gy, STEEL_DK)
+    if tier == 1:
+        # a banner over the gate + gold trim along the battlement
+        banner(img, cxc - 1, wall_top - 3, 7, FLAG)
+        rect(img, ox + 6, wall_top - 1, ox + fw - 7, wall_top - 1, GOLD)
+
+
+def draw_watchtower(img, ox, oy, fw, fh, tier):
+    """The Watchtower: a tall stone tower with an archer's platform and a
+    conical roof. 48x48. Tier 1 adds a taller roof, a pennant and a lit window."""
+    draw_ground_pad(img, ox, oy, fw, fh)
+    cxc = ox + fw // 2
+    tw = 16
+    tx0 = cxc - tw // 2
+    tx1 = cxc + tw // 2
+    ttop = oy + 16 if tier == 0 else oy + 12
+    tbot = oy + fh - 6
+    # tower shaft
+    rect(img, tx0, ttop, tx1, tbot, STONE)
+    rect(img, tx0, ttop, tx0, tbot, STONE_LT)
+    rect(img, tx1, ttop, tx1, tbot, STONE_DK)
+    for y in range(ttop + 5, tbot, 6):
+        rect(img, tx0 + 1, y, tx1 - 1, y, STONE_DK)
+    # archer's platform (overhang) near the top
+    rect(img, tx0 - 2, ttop, tx1 + 2, ttop + 3, STONE)
+    rect(img, tx0 - 2, ttop, tx1 + 2, ttop, STONE_LT)
+    # crenellations on the platform
+    for x in range(tx0 - 2, tx1 + 2, 5):
+        rect(img, x, ttop - 3, x + 2, ttop - 1, STONE)
+    # arrow-slit window
+    rect(img, cxc - 1, ttop + 8, cxc, ttop + 13, GLASS if tier == 0 else GOLD)
+    # door at the base
+    rect(img, cxc - 2, tbot - 8, cxc + 1, tbot, WOOD_DK)
+    rect(img, cxc - 2, tbot - 8, cxc + 1, tbot - 7, WOOD)
+    # conical roof over the platform
+    roof_base = ttop - 3
+    rh = 6 if tier == 0 else 9
+    for i in range(rh + 1):
+        y = roof_base - i
+        spread = int((tw + 2) * (1 - i / max(1, rh)) / 2)
+        rect(img, cxc - spread, y, cxc + spread, y, ROOF)
+        px(img, cxc - spread, y, ROOF_DK)
+        px(img, cxc + spread, y, ROOF_DK)
+    rect(img, tx0 - 2, roof_base, tx1 + 2, roof_base, ROOF_HI)
+    if tier == 1:
+        # a lookout's pennant on the roof peak
+        banner(img, cxc, roof_base - rh - 1, 6, FLAG)
+
+
 BUILDINGS = [
     ("town_center", 64, 64, draw_town_center),
     ("farm", 48, 48, draw_farm),
@@ -320,6 +399,8 @@ BUILDINGS = [
     ("mine", 48, 48, draw_mine),
     ("barracks", 48, 48, draw_barracks),
     ("research", 48, 48, draw_research),
+    ("wall", 48, 48, draw_wall),
+    ("watchtower", 48, 48, draw_watchtower),
 ]
 
 

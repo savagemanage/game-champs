@@ -19,8 +19,10 @@ const BUILDING_LAYOUT: Record<BuildingKind, { x: number; y: number; scale: numbe
   lumber_mill: { x: 700, y: 300, scale: 1.8 },
   quarry: { x: 170, y: 400, scale: 1.8 },
   mine: { x: 790, y: 400, scale: 1.8 },
-  barracks: { x: 400, y: 430, scale: 1.9 },
-  research: { x: 590, y: 430, scale: 1.8 },
+  barracks: { x: 380, y: 425, scale: 1.9 },
+  research: { x: 560, y: 425, scale: 1.8 },
+  wall: { x: 250, y: 470, scale: 1.7 },
+  watchtower: { x: 700, y: 470, scale: 1.7 },
 };
 
 /** Per-resource live widgets in the top bar. */
@@ -59,6 +61,7 @@ export class TownScene extends Phaser.Scene {
 
   private resourceWidgets: ResourceWidget[] = [];
   private markers: BuildingMarker[] = [];
+  private defenseLabel!: Phaser.GameObjects.Text;
 
   private trainingPanel!: TrainingPanel;
   private researchPanel!: ResearchPanel;
@@ -200,6 +203,13 @@ export class TownScene extends Phaser.Scene {
     });
 
     Menu.label(this, CANVAS.WIDTH / 2, 60, tr('town.hint'), 12, 0.55).setColor(PALETTE.MUTED_CSS);
+
+    // Town-defense readout: the aggregate wall/watchtower defense the combat
+    // resolver factors into every raid. Sits top-right, updated each frame.
+    this.defenseLabel = this.add
+      .text(CANVAS.WIDTH - 12, 52, '', textStyle(13, { color: PALETTE.ACCENT_CSS, fontStyle: 'bold' }))
+      .setOrigin(1, 0.5)
+      .setDepth(5);
   }
 
   private refreshResourceBar(): void {
@@ -209,6 +219,7 @@ export class TownScene extends Phaser.Scene {
       const rate = rates[w.res];
       w.rate.setText(rate > 0 ? tr('resource.perSecond', { amount: rate.toFixed(1) }) : '');
     }
+    this.defenseLabel.setText(tr('town.defense', { value: Math.round(this.state.townDefense()) }));
   }
 
   // ---- Bottom action bar ---------------------------------------------------

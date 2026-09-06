@@ -35,6 +35,8 @@ export const TextureKeys = {
   Mine: 'b_mine',
   Barracks: 'b_barracks',
   Research: 'b_research',
+  Wall: 'b_wall',
+  Watchtower: 'b_watchtower',
 
   // Troop unit sprites (player-side).
   TroopSpearman: 'u_spearman',
@@ -118,6 +120,8 @@ export const SHEETS: readonly SheetAsset[] = [
   { key: TextureKeys.Mine, url: 'assets/sprites/mine.png', frame: { frameWidth: 48, frameHeight: 48 } },
   { key: TextureKeys.Barracks, url: 'assets/sprites/barracks.png', frame: { frameWidth: 48, frameHeight: 48 } },
   { key: TextureKeys.Research, url: 'assets/sprites/research.png', frame: { frameWidth: 48, frameHeight: 48 } },
+  { key: TextureKeys.Wall, url: 'assets/sprites/wall.png', frame: { frameWidth: 48, frameHeight: 48 } },
+  { key: TextureKeys.Watchtower, url: 'assets/sprites/watchtower.png', frame: { frameWidth: 48, frameHeight: 48 } },
   { key: TextureKeys.TroopSpearman, url: 'assets/sprites/troop_spearman.png', frame: { frameWidth: 24, frameHeight: 28 } },
   { key: TextureKeys.TroopArcher, url: 'assets/sprites/troop_archer.png', frame: { frameWidth: 24, frameHeight: 28 } },
   { key: TextureKeys.TroopKnight, url: 'assets/sprites/troop_knight.png', frame: { frameWidth: 24, frameHeight: 28 } },
@@ -171,6 +175,8 @@ export const BUILDING_TEXTURE_BY_KIND: Record<string, TextureKey> = {
   mine: TextureKeys.Mine,
   barracks: TextureKeys.Barracks,
   research: TextureKeys.Research,
+  wall: TextureKeys.Wall,
+  watchtower: TextureKeys.Watchtower,
 };
 
 /**

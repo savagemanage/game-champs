@@ -1,7 +1,9 @@
 import {
   BUILDING_DEFS,
   BUILDING_ORDER,
+  DEFENSE_ORDER,
   buildingDef,
+  defenseValue,
   isProducer,
   outputPerSec,
   upgradeCost,
@@ -180,6 +182,22 @@ export class BuildingSystem {
       rates[def.produces] += outputPerSec(kind, level);
     }
     return rates;
+  }
+
+  /**
+   * The town's aggregate DEFENSE value: the sum of every owned defensive
+   * building's {@link defenseValue} at its current level. A fresh town with no
+   * walls/watchtowers returns 0; each level of a wall or watchtower raises it.
+   * Pure and monotonic in defensive-building levels. The combat resolver reads
+   * this to let a well-fortified town survive raids a bare town would lose (and
+   * to soften a loss it cannot yet win) - see {@link CombatSystem.resolve}.
+   */
+  townDefense(): number {
+    let total = 0;
+    for (const kind of DEFENSE_ORDER) {
+      total += defenseValue(kind, this.level(kind));
+    }
+    return total;
   }
 
   /** Serialize the owned buildings to a plain array. */

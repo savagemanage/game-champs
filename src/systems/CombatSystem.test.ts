@@ -150,6 +150,119 @@ describe('CombatSystem', () => {
     }
   });
 
+  it('town defense is neutral by default (0) and does not change legacy outcomes', () => {
+    // Resolving without a townDefense param behaves exactly as before.
+    const a = army({ knight: 10 });
+    const withoutParam = CombatSystem.resolve(a, 1);
+    const withZero = CombatSystem.resolve(a, 1, { townDefense: 0 });
+    expect(withoutParam).toEqual(withZero);
+    expect(withoutParam.townDefense).toBe(0);
+    // effectiveArmyPower is unchanged when townDefense defaults to 0.
+    expect(CombatSystem.effectiveArmyPower(a, 1)).toBe(
+      CombatSystem.effectiveArmyPower(a, 1, 1, 0),
+    );
+  });
+
+  it('town defense adds flat effective power (a walled town beats a raid a bare one loses)', () => {
+    // Find an army that LOSES a wave with no defense (its effective power is
+    // just below the wave power), then show enough town defense flips it to a
+    // win by adding flat power over the top.
+    const wave = 4;
+    const wavePower = CombatSystem.wavePower(wave);
+    let knights = 1;
+    while (CombatSystem.effectiveArmyPower(army({ knight: knights }), wave) >= wavePower) {
+      knights = Math.max(1, knights - 1);
+      break;
+    }
+    // Shrink until it is a genuine loss with 0 defense.
+    while (CombatSystem.effectiveArmyPower(army({ knight: knights }), wave) >= wavePower && knights > 1) {
+      knights--;
+    }
+    const a = army({ knight: knights });
+    const bare = CombatSystem.resolve(a, wave, { townDefense: 0 });
+    expect(bare.win).toBe(false);
+
+    // The exact defense needed to cover the shortfall turns it into a win.
+    const shortfall = wavePower - CombatSystem.effectiveArmyPower(a, wave);
+    const walled = CombatSystem.resolve(a, wave, { townDefense: shortfall + 1 });
+    expect(walled.win).toBe(true);
+    expect(walled.townDefense).toBe(shortfall + 1);
+  });
+
+  it('a raid LOST with 0 defense is materially cheaper with adequate defense', () => {
+    // A small army that cannot win wave 5, resolved bare vs. well-defended.
+    const wave = 5;
+    const a = army({ spearman: 3 });
+    const bare = CombatSystem.resolve(a, wave, { townDefense: 0 });
+    const wavePower = CombatSystem.wavePower(wave);
+    // "Adequate" but still short of a win: defense covering ~80% of the wave.
+    const armyPow = CombatSystem.effectiveArmyPower(a, wave);
+    const defended = CombatSystem.resolve(a, wave, {
+      townDefense: Math.max(0, wavePower * 0.8 - armyPow),
+    });
+
+    expect(bare.win).toBe(false);
+    expect(defended.win).toBe(false);
+
+    // Casualties: the bare town loses its whole army; walls keep a garrison.
+    const bareCas = bare.casualties.spearman;
+    const defendedCas = defended.casualties.spearman;
+    expect(bareCas).toBe(3);
+    expect(defendedCas).toBeLessThan(bareCas);
+    expect(defended.survivors.spearman).toBeGreaterThan(bare.survivors.spearman);
+
+    // Sack penalty: the bare town is looted; the defended town far less.
+    const bareLoot = bare.penalty.wood ?? 0;
+    const defendedLoot = defended.penalty.wood ?? 0;
+    expect(bareLoot).toBeGreaterThan(0);
+    expect(defendedLoot).toBeLessThan(bareLoot);
+  });
+
+  it('a low-defense loss costs strictly more than a high-defense loss', () => {
+    const wave = 6;
+    const a = army({ spearman: 4 });
+    const armyPow = CombatSystem.effectiveArmyPower(a, wave);
+    const wavePower = CombatSystem.wavePower(wave);
+
+    const low = CombatSystem.resolve(a, wave, { townDefense: 0 });
+    // High defense, but still not enough to win (covers most of the shortfall).
+    const high = CombatSystem.resolve(a, wave, {
+      townDefense: Math.max(0, (wavePower - armyPow) * 0.9),
+    });
+    expect(low.win).toBe(false);
+    expect(high.win).toBe(false);
+
+    const lootOf = (r: typeof low.penalty): number =>
+      (r.food ?? 0) + (r.wood ?? 0) + (r.stone ?? 0) + (r.gold ?? 0);
+    // More resources sacked AND more troops lost with low defense.
+    expect(lootOf(low.penalty)).toBeGreaterThan(lootOf(high.penalty));
+    const lowCas = low.casualties.spearman;
+    const highCas = high.casualties.spearman;
+    expect(lowCas).toBeGreaterThanOrEqual(highCas);
+    expect(low.survivors.spearman).toBeLessThanOrEqual(high.survivors.spearman);
+  });
+
+  it('town defense composes with the research/hero attack multiplier', () => {
+    // Same army + wave: attack multiplier and town defense both raise the
+    // reported effective power, and together beat a raid neither alone wins.
+    const wave = 5;
+    const a = army({ knight: 4 });
+    const base = CombatSystem.effectiveArmyPower(a, wave);
+    const wavePower = CombatSystem.wavePower(wave);
+    expect(base).toBeLessThan(wavePower); // a genuine loss unassisted.
+
+    // Pick a modest attack mult and a modest defense that each alone fall short
+    // but together clear the wave.
+    const attackMult = 1.2;
+    const withAttack = CombatSystem.effectiveArmyPower(a, wave, attackMult);
+    const townDefense = wavePower - withAttack + 1; // just enough on top.
+    expect(townDefense).toBeGreaterThan(0);
+    const composed = CombatSystem.resolve(a, wave, { attackMult, townDefense });
+    expect(composed.win).toBe(true);
+    // The composed power is attack-scaled base plus flat defense.
+    expect(composed.armyPower).toBeCloseTo(withAttack + townDefense, 6);
+  });
+
   it('the new rider enemy appears at higher waves and is exercised in combat', () => {
     // Riders (cavalry-role) join from wave 7, so late waves carry them and the
     // resolver must account for them (a rider-inclusive wave has more power).

@@ -50,6 +50,20 @@ describe('ResourceStore', () => {
     expect(store.get('food')).toBe(before);
   });
 
+  it('subtract deducts non-atomically and clamps each balance at 0', () => {
+    const store = new ResourceStore({ food: 100, wood: 5, stone: 0, gold: 0 });
+    // wood is short of the requested 20; subtract takes only what exists (5),
+    // still deducts the affordable food, and reports what was actually taken.
+    const taken = store.subtract({ food: 30, wood: 20 });
+    expect(taken.food).toBe(30);
+    expect(taken.wood).toBe(5);
+    expect(store.get('food')).toBe(70);
+    expect(store.get('wood')).toBe(0); // clamped, not negative
+    // An empty bundle is a no-op.
+    store.subtract({});
+    expect(store.get('food')).toBe(70);
+  });
+
   it('round-trips through toJSON / fromJSON', () => {
     const store = new ResourceStore({ food: 7, wood: 8, stone: 9, gold: 10 });
     const restored = ResourceStore.fromJSON(store.toJSON());

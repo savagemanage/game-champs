@@ -79,6 +79,25 @@ export class ResourceStore {
   }
 
   /**
+   * Deduct a bundle NON-atomically, clamping each balance at 0 (unlike
+   * {@link spend}, which is all-or-nothing and fails when unaffordable). Used
+   * for penalties the player cannot refuse - e.g. the raiders sacking a poorly-
+   * defended town on a lost battle. Returns what was actually taken.
+   */
+  subtract(bundle: ResourceCost): Resources {
+    const taken = ResourceStore.emptyBundle();
+    for (const res of RESOURCE_ORDER) {
+      const amount = bundle[res] ?? 0;
+      if (amount > 0) {
+        const removed = Math.min(this._balances[res], amount);
+        this._balances[res] -= removed;
+        taken[res] = removed;
+      }
+    }
+    return taken;
+  }
+
+  /**
    * Credit passive production for an elapsed time. `rates` is production per
    * SECOND for each resource; `dtMs` is elapsed milliseconds; `efficiency`
    * scales the whole gain (1 for live play, ECONOMY.OFFLINE_EFFICIENCY when

@@ -198,6 +198,58 @@ describe('SaveManager', () => {
     expect(heroes.economyMultiplier()).toBe(1);
   });
 
+  it('loads an old save without defensive buildings as zero town defense', () => {
+    // Saves written before the defenses feature simply have no wall/watchtower
+    // building states. They must load with those buildings at level 0, so the
+    // town's aggregate defense is 0 (no crash, no undefined).
+    const storage = memoryStorage();
+    const old = {
+      version: 3,
+      resources: { food: 50, wood: 50, stone: 50, gold: 50 },
+      buildings: [
+        { kind: 'town_center', level: 3, upgradeEndsAt: null },
+        { kind: 'farm', level: 2, upgradeEndsAt: null },
+      ],
+      army: { spearman: 1, archer: 0, knight: 0, cavalry: 0, siege: 0 },
+      trainingQueue: [],
+      waveCleared: 1,
+      research: { unlocked: [], active: null },
+      heroes: { recruited: {}, active: null },
+      lastSeenAt: 0,
+      // no wall / watchtower building states
+    };
+    storage.setItem('kingdom-rise:save', JSON.stringify(old));
+    const mgr = new SaveManager(storage);
+
+    const loaded = mgr.load(0);
+    expect(loaded.loaded).toBe(true);
+    expect(loaded.snapshot.buildings.level('wall')).toBe(0);
+    expect(loaded.snapshot.buildings.level('watchtower')).toBe(0);
+    expect(loaded.snapshot.buildings.townDefense()).toBe(0);
+  });
+
+  it('round-trips defensive building levels (town defense) through save -> load', () => {
+    const storage = memoryStorage();
+    const mgr = new SaveManager(storage);
+    const now = 4_000_000;
+
+    const snap = snapshot();
+    // Add a wall and a watchtower to the snapshot's buildings via a fresh set.
+    const buildings = new BuildingSystem([
+      { kind: 'town_center', level: 4, upgradeEndsAt: null },
+      { kind: 'wall', level: 3, upgradeEndsAt: null },
+      { kind: 'watchtower', level: 2, upgradeEndsAt: null },
+    ]);
+    const expected = buildings.townDefense();
+    expect(expected).toBeGreaterThan(0);
+    mgr.save({ ...snap, buildings }, now);
+
+    const loaded = mgr.load(now);
+    expect(loaded.snapshot.buildings.level('wall')).toBe(3);
+    expect(loaded.snapshot.buildings.level('watchtower')).toBe(2);
+    expect(loaded.snapshot.buildings.townDefense()).toBe(expected);
+  });
+
   it('applies offline idle gains capped and scaled by efficiency', () => {
     const storage = memoryStorage();
     const mgr = new SaveManager(storage);

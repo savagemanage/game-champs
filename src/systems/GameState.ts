@@ -126,6 +126,15 @@ export class GameState {
   }
 
   /**
+   * The town's aggregate DEFENSE value from walls / watchtowers, passed into
+   * CombatSystem.resolve at the battle call site alongside the research + hero
+   * combat multipliers. 0 on a fresh town with no defensive buildings.
+   */
+  townDefense(): number {
+    return this.buildings.townDefense();
+  }
+
+  /**
    * The COMPOSED economy/production multiplier: the research production techs
    * multiplied by the active economy hero's bonus. Read at the live production
    * seam ({@link tick}) and the offline reconciliation seam. Neutral (1) on a

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { BuildingSystem } from './BuildingSystem';
 import { ResourceStore } from './ResourceStore';
 import { TrainingQueue } from './TrainingQueue';
-import { outputPerSec, upgradeTimeMs } from '../config/BuildingConfig';
+import { defenseValue, outputPerSec, upgradeTimeMs } from '../config/BuildingConfig';
 import { ECONOMY } from '../config/GameConfig';
 
 /**
@@ -92,6 +92,56 @@ describe('BuildingSystem', () => {
     expect(rates.stone).toBe(0);
     // Higher farm level produces strictly more food.
     expect(outputPerSec('farm', 2)).toBeGreaterThan(outputPerSec('farm', 1));
+  });
+
+  it('townDefense is 0 with no defensive buildings and grows with their levels', () => {
+    // A fresh town (Town Center only) has no walls/watchtowers -> zero defense.
+    const bare = new BuildingSystem();
+    expect(bare.townDefense()).toBe(0);
+
+    // A wall at level 1 contributes its per-level defense; a higher level more.
+    const walled1 = new BuildingSystem([
+      { kind: 'town_center', level: 3, upgradeEndsAt: null },
+      { kind: 'wall', level: 1, upgradeEndsAt: null },
+    ]);
+    expect(walled1.townDefense()).toBe(defenseValue('wall', 1));
+    expect(walled1.townDefense()).toBeGreaterThan(0);
+
+    const walled3 = new BuildingSystem([
+      { kind: 'town_center', level: 3, upgradeEndsAt: null },
+      { kind: 'wall', level: 3, upgradeEndsAt: null },
+    ]);
+    // Defense grows monotonically with level (linear: 3x a level-1 wall).
+    expect(walled3.townDefense()).toBeGreaterThan(walled1.townDefense());
+    expect(walled3.townDefense()).toBe(defenseValue('wall', 3));
+
+    // Walls and watchtowers stack additively into the aggregate.
+    const both = new BuildingSystem([
+      { kind: 'town_center', level: 3, upgradeEndsAt: null },
+      { kind: 'wall', level: 2, upgradeEndsAt: null },
+      { kind: 'watchtower', level: 1, upgradeEndsAt: null },
+    ]);
+    expect(both.townDefense()).toBe(defenseValue('wall', 2) + defenseValue('watchtower', 1));
+  });
+
+  it('non-defensive buildings never contribute to town defense', () => {
+    const bs = new BuildingSystem([
+      { kind: 'town_center', level: 5, upgradeEndsAt: null },
+      { kind: 'farm', level: 5, upgradeEndsAt: null },
+      { kind: 'barracks', level: 3, upgradeEndsAt: null },
+      { kind: 'research', level: 3, upgradeEndsAt: null },
+    ]);
+    expect(bs.townDefense()).toBe(0);
+  });
+
+  it('the Ramparts (wall) are gated behind Town Center level 2', () => {
+    const bs = new BuildingSystem(); // fresh: Town Center level 1.
+    const blocked = bs.canUpgrade('wall', richStore());
+    expect(blocked.ok).toBe(false);
+    expect(blocked.reason).toBe('prereq');
+
+    const bs2 = new BuildingSystem([{ kind: 'town_center', level: 2, upgradeEndsAt: null }]);
+    expect(bs2.canUpgrade('wall', richStore()).ok).toBe(true);
   });
 
   it('round-trips through toJSON / fromJSON', () => {
