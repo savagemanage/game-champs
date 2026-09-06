@@ -109,10 +109,14 @@ export class HomeScene extends Phaser.Scene {
     this.buildBasePlots(store);
     this.buildBottomNav();
 
-    // A cog to reach Settings without occupying a nav tab.
+    // A cog to reach Settings without occupying a nav tab. It's a compact
+    // top-right shortcut (not a primary CTA), so it opts out of the
+    // UI_MIN_FONT_SIZE floor to keep the authored 15px: floored to 18px the
+    // English "Settings" (8 chars) would spill the 76px box.
     Menu.button(this, CANVAS.WIDTH - 44, CANVAS.HEIGHT * 0.07, tr('title.settings'), () => this.navTo(SceneKeys.Settings), {
       width: 76,
       fontSize: 15,
+      allowSmall: true,
     });
 
     // Surface offline construction completions as a toast.
