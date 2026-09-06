@@ -11,6 +11,8 @@ import { SettingsScene } from './scenes/SettingsScene';
 import { BaseScene } from './scenes/BaseScene';
 import { HeroesScene } from './scenes/HeroesScene';
 import { FormationScene } from './scenes/FormationScene';
+import { CampaignScene } from './scenes/CampaignScene';
+import { BattleScene } from './scenes/BattleScene';
 
 /**
  * Phaser bootstrap for LAST SQUAD (라스트 스쿼드).
@@ -61,6 +63,8 @@ const config: Phaser.Types.Core.GameConfig = {
     BaseScene,
     HeroesScene,
     FormationScene,
+    CampaignScene,
+    BattleScene,
   ],
 };
 
