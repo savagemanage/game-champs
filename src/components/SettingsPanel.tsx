@@ -9,13 +9,12 @@ interface SettingsPanelProps {
 
 /** The keybinds documented in the help panel, as [key i18n, action i18n] pairs. */
 const KEYBINDS: { keys: string; actionKey: string }[] = [
-  { keys: 'W A S D', actionKey: 'settings.keybinds.move' },
+  { keys: 'settings.keybinds.clickKey', actionKey: 'settings.keybinds.move' },
   { keys: 'Q', actionKey: 'settings.keybinds.q' },
   { keys: 'W', actionKey: 'settings.keybinds.w' },
   { keys: 'E', actionKey: 'settings.keybinds.e' },
   { keys: 'R', actionKey: 'settings.keybinds.r' },
   { keys: 'B', actionKey: 'settings.keybinds.shop' },
-  { keys: 'settings.keybinds.clickKey', actionKey: 'settings.keybinds.click' },
 ];
 
 /**

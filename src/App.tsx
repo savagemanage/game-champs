@@ -68,6 +68,47 @@ export default function App() {
     }
   };
 
+  // The settings gear + language toggle, shared between the floating overlay
+  // (most screens) and the client nav bar (champion select). Rendering the
+  // exact same element in one place at a time keeps them reachable without
+  // ever duplicating them.
+  const controls = (
+    <>
+      <LanguageToggle />
+      <button
+        type="button"
+        className="app-controls__settings"
+        aria-label={t('settings.openAria')}
+        title={t('settings.open')}
+        onClick={() => setSettingsOpen(true)}
+      >
+        {/* Inline gear icon so the control renders identically regardless of
+           which webfonts load. Uses currentColor to inherit the button's
+           gold color and hover state. */}
+        <svg
+          className="app-controls__gear"
+          viewBox="0 0 24 24"
+          width="20"
+          height="20"
+          aria-hidden="true"
+          focusable="false"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.75"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <circle cx="12" cy="12" r="3.25" />
+          <path d="M12 2.5v3M12 18.5v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M2.5 12h3M18.5 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12" />
+        </svg>
+      </button>
+    </>
+  );
+
+  // On champion select the controls live inside the client nav bar, so the
+  // floating overlay is suppressed there to avoid duplicating them.
+  const controlsInNav = screen === 'select';
+
   return (
     <div className="app-shell">
       {/* Compact floating controls in the top-right corner. This replaces the
@@ -75,36 +116,7 @@ export default function App() {
           edge-to-edge, while keeping language switching visible and the
           settings/help panel one click away on every screen. Kept clear of the
           battle HUD's shop button, minimap and QWER bar, which sit lower/left. */}
-      <div className="app-controls">
-        <LanguageToggle />
-        <button
-          type="button"
-          className="app-controls__settings"
-          aria-label={t('settings.openAria')}
-          title={t('settings.open')}
-          onClick={() => setSettingsOpen(true)}
-        >
-          {/* Inline gear icon so the control renders identically regardless of
-             which webfonts load. Uses currentColor to inherit the button's
-             gold color and hover state. */}
-          <svg
-            className="app-controls__gear"
-            viewBox="0 0 24 24"
-            width="20"
-            height="20"
-            aria-hidden="true"
-            focusable="false"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.75"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <circle cx="12" cy="12" r="3.25" />
-            <path d="M12 2.5v3M12 18.5v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M2.5 12h3M18.5 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12" />
-          </svg>
-        </button>
-      </div>
+      {!controlsInNav && <div className="app-controls">{controls}</div>}
 
       <main className="app-main">
         {screen === 'menu' && <MainMenu onPlay={() => setScreen('mode')} />}
@@ -122,6 +134,7 @@ export default function App() {
             mode={mode}
             onLockIn={handleLockIn}
             onBack={() => setScreen('mode')}
+            navControls={controls}
           />
         )}
 

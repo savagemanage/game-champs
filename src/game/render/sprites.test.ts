@@ -74,15 +74,17 @@ describe('SpriteFactory.ensure', () => {
     expect(size.footY).toBe(Math.round(art.footYFrac * art.viewH));
   });
 
-  it('bakes the backing canvas at 2x the intrinsic resolution for crispness', () => {
+  it('bakes the backing canvas at 3x the intrinsic resolution for crispness', () => {
     const { scene, registered } = makeFakeScene();
     const factory = new SpriteFactory(scene);
     const { key, size } = factory.ensure(CHAMP_SPEC);
     const tex = registered.get(key)!;
-    // The reported display size stays intrinsic, but the texture pixels are 2x.
+    // The reported display size stays intrinsic, but the texture pixels are
+    // baked at RASTER_SCALE (3x) density so vectors stay crisp under the
+    // zoomed-in battle camera.
     expect(tex.kind).toBe('canvas');
-    expect(tex.width).toBe(size.width * 2);
-    expect(tex.height).toBe(size.height * 2);
+    expect(tex.width).toBe(size.width * 3);
+    expect(tex.height).toBe(size.height * 3);
   });
 
   it('caches: a second ensure() for the same spec does not re-register', () => {

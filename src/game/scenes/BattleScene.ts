@@ -48,6 +48,7 @@ import {
   screenToWorld,
   depthFor,
   projectionScale,
+  projectedWorldBounds,
   HEIGHT_SCALE,
   DEFAULT_PROJECTION,
 } from '../rift/iso';
@@ -128,6 +129,21 @@ const MARGIN = 20;
 const SCALE = Math.min(VIEW_W - MARGIN * 2, VIEW_H - MARGIN * 2) / WORLD_SIZE;
 const OFF_X = (VIEW_W - WORLD_SIZE * SCALE) / 2;
 const OFF_Y = (VIEW_H - WORLD_SIZE * SCALE) / 2;
+
+/**
+ * Battle-camera tuning. The projection (see {@link ./rift/iso}) fits the WHOLE
+ * world diamond into the 900x640 view; the Phaser camera is layered on top to
+ * ZOOM IN on the player's champion and FOLLOW it so only a portion of the map
+ * is visible at once (LoL-style). The whole map still lives on the HUD minimap.
+ *   - CAMERA_ZOOM: >1 magnifies; ~2.4 shows a champion + immediate surroundings
+ *     (nearby turret / minions) without revealing the whole map.
+ *   - CAMERA_LERP: follow smoothing (0..1 per axis); small = gentle pan.
+ *   - CAMERA_BOUNDS_PADDING: screen px added around the projected diamond so the
+ *     camera can keep the champion centred near the map edges.
+ */
+const CAMERA_ZOOM = 2.4;
+const CAMERA_LERP = 0.1;
+const CAMERA_BOUNDS_PADDING = 220;
 
 const NEXUS_HP = 5500;
 const NEXUS_TURRET_HP = 2700;
@@ -313,12 +329,6 @@ export default class BattleScene extends Phaser.Scene {
   private inhibitorKillTimes = new Map<string, number>();
 
   private moveTarget: Vec2 | null = null;
-  private keys!: {
-    W: Phaser.Input.Keyboard.Key;
-    A: Phaser.Input.Keyboard.Key;
-    S: Phaser.Input.Keyboard.Key;
-    D: Phaser.Input.Keyboard.Key;
-  };
   private abilityKeys!: Record<CooldownKey, Phaser.Input.Keyboard.Key>;
 
   /** Procedural sprite/texture factory (baked once, cached, reused). */
@@ -407,7 +417,31 @@ export default class BattleScene extends Phaser.Scene {
     this.spawnTeams();
 
     this.setupInput();
+    this.setupCamera();
     this.pushHud();
+  }
+
+  /**
+   * Zoom the battle camera in on the player's champion and follow it, so only a
+   * PORTION of the map is visible at a time (the map feels large). The whole
+   * map still shows on the HUD minimap (screen-fixed React overlay, computed
+   * from full-world fractions, so it is unaffected by this camera transform).
+   *
+   * The camera is layered ON TOP of the fixed fit-projection: bounds cover the
+   * whole projected world diamond (via the pure {@link projectedWorldBounds}
+   * helper) with padding so the champion can stay centred near the edges; zoom
+   * magnifies; startFollow pans smoothly. Cosmetic shake/flash (see
+   * {@link shake} / kill slow-mo / win-lose) are additive to camera scroll and
+   * keep working; none of this touches unit.pos or sim timers (determinism
+   * unchanged). Called AFTER spawnTeams() so {@link player} exists to follow.
+   */
+  private setupCamera() {
+    const cam = this.cameras.main;
+    const bounds = projectedWorldBounds(DEFAULT_PROJECTION, CAMERA_BOUNDS_PADDING);
+    cam.setBounds(bounds.minX, bounds.minY, bounds.width, bounds.height);
+    cam.setZoom(CAMERA_ZOOM);
+    cam.startFollow(this.player.container, true, CAMERA_LERP, CAMERA_LERP);
+    cam.setFollowOffset(0, 0);
   }
 
   /**
@@ -497,13 +531,109 @@ export default class BattleScene extends Phaser.Scene {
       new Phaser.Geom.Point(c2.x, c2.y),
       new Phaser.Geom.Point(c3.x, c3.y),
     ];
-    g.fillStyle(0x0a2417, 1);
+    const mid = w({ x: WORLD_SIZE / 2, y: WORLD_SIZE / 2 });
+
+    // Base ground fill (deep forest floor).
+    g.fillStyle(0x0b2a1a, 1);
     g.fillPoints(diamond, true);
-    g.lineStyle(3, 0x1c4d33, 1);
+
+    // Layered vignette: concentric shrinking diamonds, brightest toward the
+    // center, so the ground reads as a lit clearing fading to dark edges rather
+    // than a flat single-color fill. Drawn cheaply, once, in create().
+    const groundTones = [0x0d3020, 0x104027, 0x134a2d, 0x175433];
+    const worldCorners: Vec2[] = [
+      { x: 0, y: 0 },
+      { x: WORLD_SIZE, y: 0 },
+      { x: WORLD_SIZE, y: WORLD_SIZE },
+      { x: 0, y: WORLD_SIZE },
+    ];
+    for (let i = 0; i < groundTones.length; i++) {
+      const t = (i + 1) / (groundTones.length + 1);
+      const ring = worldCorners
+        .map((p) => ({
+          x: p.x + (WORLD_SIZE / 2 - p.x) * t,
+          y: p.y + (WORLD_SIZE / 2 - p.y) * t,
+        }))
+        .map((p) => w(p))
+        .map((s) => new Phaser.Geom.Point(s.x, s.y));
+      g.fillStyle(groundTones[i], 0.5);
+      g.fillPoints(ring, true);
+    }
+
+    // Crisp rim on the world edge.
+    g.lineStyle(3, 0x2a6b47, 1);
     g.strokePoints(diamond, true, true);
 
-    // Faint isometric tile grid so the ground reads as a 2.5D floor.
-    g.lineStyle(1, 0x11331f, 0.6);
+    // Jungle quadrants (top-left / bottom-right of the diamond): darker greens
+    // with a mottled canopy texture of scattered soft blobs so they read as
+    // dense jungle distinct from the walkable lanes.
+    const jungleTris: Phaser.Geom.Point[][] = [
+      [
+        new Phaser.Geom.Point(c0.x, c0.y),
+        new Phaser.Geom.Point(c1.x, c1.y),
+        new Phaser.Geom.Point(mid.x, mid.y),
+      ],
+      [
+        new Phaser.Geom.Point(c2.x, c2.y),
+        new Phaser.Geom.Point(c3.x, c3.y),
+        new Phaser.Geom.Point(mid.x, mid.y),
+      ],
+    ];
+    g.fillStyle(0x08281a, 0.6);
+    for (const tri of jungleTris) g.fillPoints(tri, true);
+    // Mottled canopy: deterministic scatter of leafy blobs in the two jungle
+    // quadrants (top-left and bottom-right in world space), tinted two greens.
+    const mottle: Array<{ qx: [number, number]; qy: [number, number] }> = [
+      { qx: [0.06, 0.44], qy: [0.06, 0.44] }, // top-left jungle
+      { qx: [0.56, 0.94], qy: [0.56, 0.94] }, // bottom-right jungle
+    ];
+    let seed = 1337;
+    const rand = () => {
+      seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+      return seed / 0x7fffffff;
+    };
+    for (const q of mottle) {
+      for (let i = 0; i < 26; i++) {
+        const wx = (q.qx[0] + rand() * (q.qx[1] - q.qx[0])) * WORLD_SIZE;
+        const wy = (q.qy[0] + rand() * (q.qy[1] - q.qy[0])) * WORLD_SIZE;
+        const p = w({ x: wx, y: wy });
+        const r = (6 + rand() * 10) * projScale();
+        g.fillStyle(rand() > 0.5 ? 0x0f3a24 : 0x18543a, 0.5);
+        g.fillEllipse(p.x, p.y, r * 2.2, r);
+      }
+    }
+
+    // River band along the anti-diagonal: a wide blue base stroke with a
+    // lighter highlight ribbon down its center so the water catches light.
+    const river = RIVER_ANCHORS.map(w);
+    const strokePoly = (pts: Vec2[]) => {
+      g.beginPath();
+      g.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < pts.length; i++) g.lineTo(pts[i].x, pts[i].y);
+      g.strokePath();
+    };
+    g.lineStyle(Math.max(12, 66 * projScale()), 0x123f63, 0.55);
+    strokePoly(river);
+    g.lineStyle(Math.max(8, 48 * projScale()), 0x2b7fc0, 0.45);
+    strokePoly(river);
+    g.lineStyle(Math.max(2, 12 * projScale()), 0x7fd0ff, 0.5);
+    strokePoly(river);
+
+    // Lanes: a soft dark border under a lighter walkable path so the traversable
+    // surface reads distinctly from the jungle.
+    for (const lane of this.lanes) {
+      const pts = LANE_WAYPOINTS[lane].map(w);
+      g.lineStyle(Math.max(10, 52 * projScale()), 0x14311f, 0.7);
+      strokePoly(pts);
+      g.lineStyle(Math.max(8, 42 * projScale()), 0x3c8f60, 0.6);
+      strokePoly(pts);
+      g.lineStyle(Math.max(3, 16 * projScale()), 0x59b07e, 0.4);
+      strokePoly(pts);
+    }
+
+    // Faint isometric tile grid so the ground reads as a 2.5D floor (drawn over
+    // the terrain surfaces, kept very subtle).
+    g.lineStyle(1, 0x1c4a30, 0.4);
     const step = WORLD_SIZE / 12;
     for (let i = 1; i < 12; i++) {
       const a = w({ x: i * step, y: 0 });
@@ -514,53 +644,22 @@ export default class BattleScene extends Phaser.Scene {
       g.lineBetween(c.x, c.y, d.x, d.y);
     }
 
-    // Jungle shading: tint the two off-lane quadrants (top-left / bottom-right
-    // of the diamond) a darker green so the jungle reads distinctly.
-    const mid = w({ x: WORLD_SIZE / 2, y: WORLD_SIZE / 2 });
-    g.fillStyle(0x082013, 0.55);
-    g.fillPoints(
-      [
-        new Phaser.Geom.Point(c0.x, c0.y),
-        new Phaser.Geom.Point(c1.x, c1.y),
-        new Phaser.Geom.Point(mid.x, mid.y),
-      ],
-      true,
-    );
-    g.fillPoints(
-      [
-        new Phaser.Geom.Point(c2.x, c2.y),
-        new Phaser.Geom.Point(c3.x, c3.y),
-        new Phaser.Geom.Point(mid.x, mid.y),
-      ],
-      true,
-    );
-
-    // River band along the anti-diagonal (projected polyline).
-    g.lineStyle(Math.max(10, 60 * projScale()), 0x1b6fb0, 0.4);
-    const river = RIVER_ANCHORS.map(w);
-    g.beginPath();
-    g.moveTo(river[0].x, river[0].y);
-    for (let i = 1; i < river.length; i++) g.lineTo(river[i].x, river[i].y);
-    g.strokePath();
-
-    // Lanes (projected polylines).
-    g.lineStyle(Math.max(8, 44 * projScale()), 0x2f7d52, 0.55);
-    for (const lane of this.lanes) {
-      const pts = LANE_WAYPOINTS[lane].map(w);
-      g.beginPath();
-      g.moveTo(pts[0].x, pts[0].y);
-      for (let i = 1; i < pts.length; i++) g.lineTo(pts[i].x, pts[i].y);
-      g.strokePath();
-    }
-
-    // Base zones: a glowing pad at each fountain.
+    // Base zones: a glowing team-tinted pad at each fountain with a bright rim
+    // and an inner core so the fountains read as energized platforms.
     for (const side of ['ally', 'enemy'] as MapSide[]) {
       const b = w(BASE_POSITIONS[side]);
       const tint = side === 'ally' ? 0x2f6fe0 : 0xe0512f;
-      g.fillStyle(tint, 0.22);
-      g.fillEllipse(b.x, b.y, 120, 60);
-      g.lineStyle(2, tint, 0.7);
-      g.strokeEllipse(b.x, b.y, 120, 60);
+      const rim = side === 'ally' ? 0x8fd7ff : 0xff8a7a;
+      g.fillStyle(tint, 0.14);
+      g.fillEllipse(b.x, b.y, 150, 76);
+      g.fillStyle(tint, 0.26);
+      g.fillEllipse(b.x, b.y, 118, 60);
+      g.fillStyle(rim, 0.2);
+      g.fillEllipse(b.x, b.y, 70, 36);
+      g.lineStyle(2.5, rim, 0.85);
+      g.strokeEllipse(b.x, b.y, 120, 61);
+      g.lineStyle(1.5, rim, 0.5);
+      g.strokeEllipse(b.x, b.y, 150, 76);
     }
 
     // Jungle camp + epic pit markers (Rift only), as depth-sorted billboards.
@@ -755,11 +854,16 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   private attachHpBar(entity: Entity, offsetY: number) {
-    const width = entity.unit.kind === 'minion' ? 14 : entity.unit.kind === 'champion' ? 28 : 24;
-    const bg = this.add.rectangle(0, -offsetY, width, 4, 0x000000, 0.7);
-    const bar = this.add.rectangle(0, -offsetY, width, 4, 0x3ad16a);
+    const isChampion = entity.unit.kind === 'champion';
+    const width = entity.unit.kind === 'minion' ? 14 : isChampion ? 34 : 24;
+    const height = isChampion ? 5 : 4;
+    // A thin dark outline frame behind the track gives contrast against any
+    // terrain/sprite color so the bar stays readable when zoomed in.
+    const outline = this.add.rectangle(0, -offsetY, width + 2, height + 2, 0x000000, 0.85);
+    const bg = this.add.rectangle(0, -offsetY, width, height, 0x201512, 0.9);
+    const bar = this.add.rectangle(0, -offsetY, width, height, 0x3ad16a);
     bar.setData('width', width);
-    entity.container.add([bg, bar]);
+    entity.container.add([outline, bg, bar]);
     entity.hpBarBg = bg;
     entity.hpBar = bar;
   }
@@ -806,26 +910,27 @@ export default class BattleScene extends Phaser.Scene {
 
   private setupInput() {
     const kb = this.input.keyboard!;
-    this.keys = {
-      W: kb.addKey(Phaser.Input.Keyboard.KeyCodes.W),
-      A: kb.addKey(Phaser.Input.Keyboard.KeyCodes.A),
-      S: kb.addKey(Phaser.Input.Keyboard.KeyCodes.S),
-      D: kb.addKey(Phaser.Input.Keyboard.KeyCodes.D),
-    };
+    // LoL-style controls: movement is CLICK-only (below); Q/W/E/R are the sole
+    // keyboard bindings and cast abilities aimed at the cursor. WASD movement is
+    // intentionally NOT bound, so physical W is no longer double-bound.
     this.abilityKeys = {
       Q: kb.addKey(Phaser.Input.Keyboard.KeyCodes.Q),
       W: kb.addKey(Phaser.Input.Keyboard.KeyCodes.W),
       E: kb.addKey(Phaser.Input.Keyboard.KeyCodes.E),
       R: kb.addKey(Phaser.Input.Keyboard.KeyCodes.R),
     };
-    (['Q', 'E', 'R'] as CooldownKey[]).forEach((slot) => {
+    (['Q', 'W', 'E', 'R'] as CooldownKey[]).forEach((slot) => {
       this.abilityKeys[slot].on('down', () => this.tryPlayerCast(slot));
     });
-    this.abilityKeys.W.on('down', () => this.tryPlayerCast('W'));
+
+    // Suppress the browser context menu over the canvas so right-click can be
+    // used to issue move commands (LoL-style) without popping a menu.
+    this.input.mouse?.disableContextMenu();
 
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-      // Convert the click's SCREEN point back to the flat gameplay plane so
-      // click-to-move still lands where the player pointed in world terms.
+      // BOTH left- and right-click issue a move command. Convert the click's
+      // SCREEN point back to the flat gameplay plane so click-to-move still
+      // lands where the player pointed in world terms.
       this.moveTarget = this.pointerToGround(pointer);
     });
   }
@@ -1030,19 +1135,9 @@ export default class BattleScene extends Phaser.Scene {
     }
     if (this.player.stunned > 0) return;
 
-    let vx = 0;
-    let vy = 0;
-    if (this.keys.A.isDown) vx -= 1;
-    if (this.keys.D.isDown) vx += 1;
-    if (this.keys.W.isDown) vy -= 1;
-    if (this.keys.S.isDown) vy += 1;
-
-    if (vx !== 0 || vy !== 0) {
-      this.moveTarget = null;
-      const len = Math.hypot(vx, vy) || 1;
-      u.pos.x = this.clampX(u.pos.x + (vx / len) * u.moveSpeed * dt);
-      u.pos.y = this.clampY(u.pos.y + (vy / len) * u.moveSpeed * dt);
-    } else if (this.moveTarget) {
+    // Movement is click-to-move only (LoL-style): walk toward the last clicked
+    // world point. WASD is intentionally gone so Q/W/E/R stay unambiguous casts.
+    if (this.moveTarget) {
       const d = distance(u.pos, this.moveTarget);
       if (d < 4) {
         this.moveTarget = null;

@@ -198,3 +198,58 @@ export function depthFor(
   // footprint sort just above shorter ones, without leaping past nearer rows.
   return groundY + heightOffset * HEIGHT_SCALE * 0.001;
 }
+
+/** Axis-aligned screen-space bounds, suitable for Phaser's camera setBounds. */
+export interface ScreenBounds {
+  minX: number;
+  minY: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Screen-space bounding box of the fully projected world diamond.
+ *
+ * Projects the four world corners `(0,0)`, `(W,0)`, `(W,W)`, `(0,W)` through
+ * {@link worldToScreen} and returns their axis-aligned min/max extent, expanded
+ * by an optional `padding` on every side. This is a pure, Phaser-free helper so
+ * the battle renderer can hand it straight to `cameras.main.setBounds(...)` and
+ * pan/zoom over the WHOLE projected world (the camera is layered on top of the
+ * fixed fit transform; the projection constants themselves never change).
+ *
+ * With {@link DEFAULT_PROJECTION} the diamond already fills the view to the
+ * margin on all four sides, so (with `padding` 0) this returns essentially the
+ * full `viewWidth x viewHeight` box inset by the projection margin.
+ *
+ * @param proj    projection parameters (defaults to {@link DEFAULT_PROJECTION}).
+ * @param padding extra screen pixels added around the diamond (default 0).
+ */
+export function projectedWorldBounds(
+  proj: Projection = DEFAULT_PROJECTION,
+  padding = 0,
+): ScreenBounds {
+  const { worldSize } = proj;
+  const corners: Vec2[] = [
+    { x: 0, y: 0 },
+    { x: worldSize, y: 0 },
+    { x: worldSize, y: worldSize },
+    { x: 0, y: worldSize },
+  ];
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const c of corners) {
+    const s = worldToScreen(c, proj);
+    if (s.x < minX) minX = s.x;
+    if (s.y < minY) minY = s.y;
+    if (s.x > maxX) maxX = s.x;
+    if (s.y > maxY) maxY = s.y;
+  }
+  return {
+    minX: minX - padding,
+    minY: minY - padding,
+    width: maxX - minX + padding * 2,
+    height: maxY - minY + padding * 2,
+  };
+}

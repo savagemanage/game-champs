@@ -69,6 +69,15 @@ export default function PhaserGame({
     gameRef.current = game;
     game.scene.start('battle', sceneData);
 
+    // Right-click is a move command in-battle (LoL-style), so suppress the
+    // browser context menu over the game canvas. The scene also calls
+    // input.mouse.disableContextMenu(); this listener is a belt-and-suspenders
+    // guard bound to the actual canvas element and removed on teardown so no
+    // stray handler leaks across remounts (StrictMode / rematch).
+    const preventContextMenu = (e: Event) => e.preventDefault();
+    const canvas = game.canvas;
+    canvas?.addEventListener('contextmenu', preventContextMenu);
+
     // Phaser.Scale.FIT measures the parent element once at creation. If the
     // container has not been laid out yet (or was momentarily collapsed), the
     // canvas can lock to a tiny size and never grow. Refresh the scale manager
@@ -85,6 +94,7 @@ export default function PhaserGame({
       window.removeEventListener('resize', refresh);
       cancelAnimationFrame(rafId);
       resizeObserver.disconnect();
+      canvas?.removeEventListener('contextmenu', preventContextMenu);
       gameRef.current?.destroy(true);
       gameRef.current = null;
     };

@@ -112,7 +112,7 @@ export type SpriteSpec =
  * `makeBillboard`/`spawnMarker`), letting Phaser scale the denser texture down
  * at draw time for crisp vectors when Scale.FIT blows up the 900x640 stage.
  */
-const RASTER_SCALE = 2;
+const RASTER_SCALE = 3;
 
 /**
  * True when we can actually decode an SVG to a texture (real browser). jsdom
@@ -249,8 +249,10 @@ export class SpriteFactory {
     // later refresh in place when the SVG decodes.
     if (canRasterize()) {
       // Create the backing canvas at RASTER_SCALE density so the decoded SVG
-      // can be drawn at 2x detail; callers pin the Image display size to the
+      // can be drawn at extra detail; callers pin the Image display size to the
       // intrinsic SpriteSize so the extra pixels are pure crispness, not scale.
+      // The higher density keeps vectors crisp now that the FEAT-002 camera
+      // zoom renders sprites larger on screen.
       this.scene.textures.createCanvas(key, width * RASTER_SCALE, height * RASTER_SCALE);
     } else {
       // jsdom: no working canvas. Register a 1-frame blank so exists()/getFrame

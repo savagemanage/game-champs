@@ -74,6 +74,19 @@ describe('championArt', () => {
     expect(art.svg).toContain(toHex(pal.rim));
   });
 
+  it('declares the shaded gradient defs and a ground-contact shadow', () => {
+    const art = championArt('bruiser', pal);
+    // volume shading + team-rim sheen + soft ground base are all wired
+    expect(art.svg).toContain('linearGradient');
+    expect(art.svg).toContain('radialGradient');
+    expect(art.svg).toContain('-body');
+    expect(art.svg).toContain('-rim');
+    expect(art.svg).toContain('-ground');
+    // the ground base is an ellipse referencing the ground gradient
+    expect(art.svg).toContain('url(#g-ch-bruiser-ground)');
+    expect(art.svg).toContain('<ellipse');
+  });
+
   it('changes color when the accent changes', () => {
     const a = championArt('bruiser', derivePalette(0xff5533, RIM)).svg;
     const b = championArt('bruiser', derivePalette(0x33ff88, RIM)).svg;
@@ -127,6 +140,14 @@ describe('minionArt', () => {
   it('scales bigger minions to larger viewboxes', () => {
     expect(minionArt('super', pal).viewH).toBeGreaterThan(minionArt('melee', pal).viewH);
   });
+
+  it('carries the team rim + a ground shadow so minions read as standing', () => {
+    for (const type of MINION_TYPES) {
+      const svg = minionArt(type, pal).svg;
+      expect(svg).toContain(toHex(pal.rim));
+      expect(svg).toContain(`url(#g-mn-${type}-ground)`);
+    }
+  });
 });
 
 describe('structureArt', () => {
@@ -140,6 +161,16 @@ describe('structureArt', () => {
   it('produces distinct markup per tier', () => {
     const markups = TIERS.map((tier) => structureArt(tier, pal).svg);
     expect(new Set(markups).size).toBe(TIERS.length);
+  });
+
+  it('wires a glowing core and the team rim so structures read as energized', () => {
+    for (const tier of TIERS) {
+      const svg = structureArt(tier, pal).svg;
+      // glowing core references the radial core gradient
+      expect(svg).toContain(`url(#g-st-${tier}-core)`);
+      // team-rim tell present
+      expect(svg).toContain(toHex(pal.rim));
+    }
   });
 });
 
@@ -176,6 +207,17 @@ describe('vfxArt', () => {
     for (const kind of VFX_KINDS) {
       expect(vfxArt(kind, COLOR).svg).toContain(hex);
     }
+  });
+
+  it('declares glow + streak gradient defs so VFX read as authored energy', () => {
+    for (const kind of VFX_KINDS) {
+      const svg = vfxArt(kind, COLOR).svg;
+      expect(svg).toContain('radialGradient');
+      expect(svg).toContain('-glow');
+    }
+    // the aoe telegraph is a dashed ring; the projectile carries a hot trail
+    expect(vfxArt('aoeRing', COLOR).svg).toContain('stroke-dasharray');
+    expect(vfxArt('projectile', COLOR).svg).toContain('<circle');
   });
 
   it('contains a viewBox and requested color together', () => {

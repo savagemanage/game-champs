@@ -80,23 +80,52 @@ function svgDoc(
   const base = toHex(pal.base);
   const light = toHex(pal.light);
   const shadow = toHex(pal.shadow);
+  const rim = toHex(pal.rim);
+  // A soft ground-contact shadow ellipse so billboards read as standing on the
+  // floor rather than floating. Sized to the viewBox and anchored at the foot.
+  const groundRx = viewW * 0.42;
+  const groundRy = Math.max(3, viewH * 0.05);
+  const groundCy = viewH - groundRy - 1;
+  const ground =
+    `<ellipse cx="${(viewW / 2).toFixed(2)}" cy="${groundCy.toFixed(2)}" ` +
+    `rx="${groundRx.toFixed(2)}" ry="${groundRy.toFixed(2)}" fill="url(#${gid}-ground)"/>`;
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${viewW} ${viewH}" ` +
     `width="${viewW}" height="${viewH}">` +
     `<defs>` +
-    `<linearGradient id="${gid}-body" x1="0" y1="0" x2="1" y2="1">` +
-    `<stop offset="0" stop-color="${light}"/>` +
-    `<stop offset="0.55" stop-color="${base}"/>` +
+    // Diagonal body ramp: lit plane -> base -> cast-shadow, for volume.
+    `<linearGradient id="${gid}-body" x1="0.15" y1="0" x2="0.85" y2="1">` +
+    `<stop offset="0" stop-color="${toHex(lighten(pal.light, 0.18))}"/>` +
+    `<stop offset="0.42" stop-color="${light}"/>` +
+    `<stop offset="0.68" stop-color="${base}"/>` +
     `<stop offset="1" stop-color="${shadow}"/>` +
     `</linearGradient>` +
-    `<radialGradient id="${gid}-core" cx="0.5" cy="0.4" r="0.6">` +
-    `<stop offset="0" stop-color="${toHex(lighten(pal.base, 0.55))}"/>` +
+    // Bright core glow for orbs/crystals.
+    `<radialGradient id="${gid}-core" cx="0.5" cy="0.4" r="0.62">` +
+    `<stop offset="0" stop-color="${toHex(lighten(pal.rim, 0.4))}"/>` +
+    `<stop offset="0.5" stop-color="${toHex(lighten(pal.base, 0.55))}"/>` +
     `<stop offset="1" stop-color="${base}"/>` +
     `</radialGradient>` +
+    // A faint team-rim sheen that can wash a lit edge.
+    `<linearGradient id="${gid}-rim" x1="0" y1="0" x2="0" y2="1">` +
+    `<stop offset="0" stop-color="${rim}" stop-opacity="0.9"/>` +
+    `<stop offset="1" stop-color="${rim}" stop-opacity="0"/>` +
+    `</linearGradient>` +
+    // Soft ground contact shadow (dark center fading out).
+    `<radialGradient id="${gid}-ground" cx="0.5" cy="0.5" r="0.5">` +
+    `<stop offset="0" stop-color="#000000" stop-opacity="0.42"/>` +
+    `<stop offset="1" stop-color="#000000" stop-opacity="0"/>` +
+    `</radialGradient>` +
     `</defs>` +
+    ground +
     body +
     `</svg>`
   );
+}
+
+/** The `url(#..-rim)` team-rim sheen gradient reference. */
+function rimFill(id: string): string {
+  return `url(#g-${id}-rim)`;
 }
 
 /** Convenience: the `url(#..-body)` gradient reference for a builder id. */
@@ -141,11 +170,18 @@ function championBase(id: string, pal: SpritePalette): string {
     // torso: a rounded cuirass tapering to the waist
     `<path d="M27 30 C18 32 15 42 18 56 L36 56 C39 42 36 32 27 30 Z" ` +
     `fill="${fill}" stroke="${outline}" stroke-width="1.4"/>` +
+    // soft lit sheen washing the front plane of the cuirass
+    `<path d="M27 31 C20 33 18 42 20 54 L28 54 C29 42 29 33 27 31 Z" ` +
+    `fill="${rimFill(id)}" opacity="0.4"/>` +
     // team-rim highlight down the lit shoulder edge
     `<path d="M22 33 C18 40 18 48 19 55" fill="none" stroke="${rim}" stroke-width="1.6" stroke-linecap="round" opacity="0.9"/>` +
-    // shoulder pauldrons
+    // chest emblem catching the team accent
+    `<circle cx="27" cy="41" r="2.6" fill="${rim}" opacity="0.85"/>` +
+    // shoulder pauldrons with rim-lit crowns
     `<ellipse cx="18" cy="34" rx="6" ry="4.5" fill="${fill}" stroke="${outline}" stroke-width="1"/>` +
     `<ellipse cx="36" cy="34" rx="6" ry="4.5" fill="${fill}" stroke="${outline}" stroke-width="1"/>` +
+    `<path d="M13 33 A6 4.5 0 0 1 23 33" fill="none" stroke="${rim}" stroke-width="1" opacity="0.7"/>` +
+    `<path d="M31 33 A6 4.5 0 0 1 41 33" fill="none" stroke="${rim}" stroke-width="1" opacity="0.7"/>` +
     // neck + head
     `<rect x="24" y="24" width="6" height="6" fill="${skinShade}"/>` +
     `<circle cx="27" cy="18" r="8" fill="${skin}" stroke="${outline}" stroke-width="1.2"/>` +
@@ -311,14 +347,21 @@ export function minionArt(type: MinionType, pal: SpritePalette): SvgArt {
   const by = viewH - bh - 4;
   const head = 12 + big * 3;
 
+  const rim = toHex(pal.rim);
   let body =
     // rounded pawn body
     `<path d="M${bx} ${by + bh} Q${bx} ${by} ${cx} ${by} Q${bx + bw} ${by} ${bx + bw} ${by + bh} Z" ` +
     `fill="${fill}" stroke="${outline}" stroke-width="1.4"/>` +
-    // team-rim edge
-    `<path d="M${bx + 2} ${by + 4} Q${bx + 3} ${by + bh - 4} ${bx + 4} ${by + bh}" fill="none" stroke="${toHex(pal.rim)}" stroke-width="1.4" opacity="0.85"/>` +
-    // head knob
+    // lit sheen down the front
+    `<path d="M${bx + 3} ${by + bh - 2} Q${bx + 3} ${by + 3} ${cx} ${by + 2} L${cx} ${by + bh - 2} Z" ` +
+    `fill="${rimFill(id)}" opacity="0.35"/>` +
+    // team-rim edge (thick so ally/enemy reads at small size)
+    `<path d="M${bx + 2} ${by + 4} Q${bx + 3} ${by + bh - 4} ${bx + 4} ${by + bh}" fill="none" stroke="${rim}" stroke-width="1.6" opacity="0.9"/>` +
+    // a small team-tinted collar band
+    `<path d="M${bx + 3} ${by + 6} Q${cx} ${by + 3} ${bx + bw - 3} ${by + 6}" fill="none" stroke="${rim}" stroke-width="1.4" opacity="0.7"/>` +
+    // head knob with a rim-lit crown
     `<circle cx="${cx}" cy="${by - head / 2 + 2}" r="${head / 2}" fill="${toHex(lighten(pal.base, 0.2))}" stroke="${outline}" stroke-width="1.2"/>` +
+    `<path d="M${cx - head / 2 + 1} ${by - head / 2 + 1} A${head / 2} ${head / 2} 0 0 1 ${cx + head / 2 - 1} ${by - head / 2 + 1}" fill="none" stroke="${rim}" stroke-width="1" opacity="0.6"/>` +
     // little boots
     `<rect x="${cx - bw / 2 + 1}" y="${viewH - 5}" width="${bw / 2 - 1}" height="4" rx="1.5" fill="${outline}"/>` +
     `<rect x="${cx + 1}" y="${viewH - 5}" width="${bw / 2 - 1}" height="4" rx="1.5" fill="${outline}"/>`;
@@ -363,8 +406,11 @@ export function structureArt(
       // inner facet highlights
       `<path d="M${cx} 6 L${cx} ${viewH - 18}" stroke="${rim}" stroke-width="1.4" opacity="0.8"/>` +
       `<path d="M${cx} 6 L${cx - 20} 40 M${cx} 6 L${cx + 20} 40" stroke="${toHex(lighten(pal.base, 0.4))}" stroke-width="1" opacity="0.7"/>` +
-      // glowing core
-      `<circle cx="${cx}" cy="46" r="7" fill="${coreFill(id)}"/>`;
+      // glowing core with soft halo
+      `<circle cx="${cx}" cy="46" r="12" fill="${coreFill(id)}" opacity="0.35"/>` +
+      `<circle cx="${cx}" cy="46" r="7" fill="${coreFill(id)}"/>` +
+      // team-rim sheen on the lit crystal facet
+      `<path d="M${cx} 6 L${cx - 20} 40 L${cx - 12} ${viewH - 18} L${cx} ${viewH - 18} Z" fill="${rimFill(id)}" opacity="0.28"/>`;
     return { svg: svgDoc(id, viewW, viewH, pal, body), viewW, viewH, footYFrac: (viewH - 1) / viewH };
   }
 
@@ -379,8 +425,9 @@ export function structureArt(
       // crystal pyramid
       `<path d="M${cx} 6 L${viewW - 12} ${viewH - 12} L12 ${viewH - 12} Z" ` +
       `fill="${fill}" stroke="${outline}" stroke-width="1.6"/>` +
-      // facet + glowing core
+      // facet + glowing core with soft halo
       `<path d="M${cx} 6 L${cx} ${viewH - 12}" stroke="${rim}" stroke-width="1.2" opacity="0.75"/>` +
+      `<circle cx="${cx}" cy="30" r="10" fill="${coreFill(id)}" opacity="0.35"/>` +
       `<circle cx="${cx}" cy="30" r="6" fill="${coreFill(id)}"/>`;
     return { svg: svgDoc(id, viewW, viewH, pal, body), viewW, viewH, footYFrac: (viewH - 1) / viewH };
   }
@@ -403,7 +450,10 @@ export function structureArt(
     `<rect x="${cx - 12}" y="4" width="5" height="6" fill="${fill}" stroke="${outline}" stroke-width="1"/>` +
     `<rect x="${cx - 2.5}" y="4" width="5" height="6" fill="${fill}" stroke="${outline}" stroke-width="1"/>` +
     `<rect x="${cx + 7}" y="4" width="5" height="6" fill="${fill}" stroke="${outline}" stroke-width="1"/>` +
-    // glowing eye
+    // team-rim sheen down the lit face of the head
+    `<rect x="${cx - 12}" y="8" width="4" height="14" rx="2" fill="${rimFill(id)}" opacity="0.5"/>` +
+    // glowing eye with a soft halo
+    `<circle cx="${cx}" cy="16" r="7" fill="${coreFill(id)}" opacity="0.4"/>` +
     `<circle cx="${cx}" cy="16" r="4" fill="${coreFill(id)}"/>` +
     `<circle cx="${cx - 1}" cy="15" r="1.2" fill="${toHex(lighten(pal.rim, 0.4))}"/>`;
   return { svg: svgDoc(id, viewW, viewH, pal, body), viewW, viewH, footYFrac: (viewH - 1) / viewH };
@@ -454,7 +504,8 @@ export function markerArt(
     `<path d="M14 34 Q20 32 26 33" fill="none" stroke="${rim}" stroke-width="1.4" opacity="0.8"/>` +
     // head
     `<path d="M40 18 Q52 18 50 30 L40 32 L36 24 Z" fill="${fill}" stroke="${outline}" stroke-width="1.4"/>` +
-    // eye
+    // glowing eye with a soft halo
+    `<circle cx="45" cy="24" r="4" fill="${coreFill(id)}" opacity="0.5"/>` +
     `<circle cx="45" cy="24" r="1.8" fill="${toHex(lighten(pal.rim, 0.3))}"/>`;
 
   if (variant === 'dragon' || variant === 'herald') {
@@ -559,26 +610,36 @@ export function vfxArt(kind: VfxKind, color: number): SvgArt {
 
   switch (kind) {
     case 'projectile': {
-      // A glowing orb with a soft comet trail sweeping to the left.
-      const w = 40;
+      // A glowing orb with a sharp hot core and a soft comet trail.
+      const w = 44;
       const h = 24;
       const cy = h / 2;
+      const white = toHex(lighten(color, 0.92));
       const body =
-        `<path d="M4 ${cy} Q18 ${cy - 5} 28 ${cy} Q18 ${cy + 5} 4 ${cy} Z" fill="${glow}" opacity="0.7"/>` +
-        `<circle cx="28" cy="${cy}" r="11" fill="${glow}"/>` +
-        `<circle cx="28" cy="${cy}" r="6" fill="${mid}"/>` +
-        `<circle cx="26" cy="${cy - 2}" r="2.4" fill="${core}"/>`;
+        // long tapered trail
+        `<path d="M2 ${cy} Q16 ${cy - 6} 30 ${cy} Q16 ${cy + 6} 2 ${cy} Z" fill="${glow}" opacity="0.75"/>` +
+        `<path d="M8 ${cy} Q20 ${cy - 2.5} 30 ${cy} Q20 ${cy + 2.5} 8 ${cy} Z" fill="${core}" opacity="0.6"/>` +
+        // orb body
+        `<circle cx="30" cy="${cy}" r="11" fill="${glow}"/>` +
+        `<circle cx="30" cy="${cy}" r="6.5" fill="${mid}"/>` +
+        `<circle cx="30" cy="${cy}" r="3.4" fill="${core}"/>` +
+        // hot specular pin-point
+        `<circle cx="28.5" cy="${cy - 1.5}" r="1.4" fill="${white}"/>`;
       return { svg: vfxDoc(id, w, h, color, body), viewW: w, viewH: h, footYFrac: 1 };
     }
     case 'beam': {
-      // A tapered gradient streak (thin at the source, bright at the tip).
+      // A tapered gradient streak (thin at the source, bright at the tip) with
+      // a crisp hot centerline and a burst at the impact end.
       const w = 48;
       const h = 14;
       const cy = h / 2;
+      const white = toHex(lighten(color, 0.92));
       const body =
-        `<path d="M2 ${cy} L46 ${cy - 4} L46 ${cy + 4} Z" fill="url(#v-${id}-streak)"/>` +
-        `<rect x="2" y="${cy - 1}" width="44" height="2" rx="1" fill="${core}" opacity="0.9"/>` +
-        `<circle cx="46" cy="${cy}" r="4.5" fill="${glow}"/>`;
+        `<path d="M2 ${cy} L46 ${cy - 5} L46 ${cy + 5} Z" fill="url(#v-${id}-streak)"/>` +
+        `<rect x="2" y="${cy - 1.4}" width="44" height="2.8" rx="1.4" fill="${core}" opacity="0.9"/>` +
+        `<rect x="6" y="${cy - 0.5}" width="40" height="1" rx="0.5" fill="${white}" opacity="0.9"/>` +
+        `<circle cx="46" cy="${cy}" r="6" fill="${glow}"/>` +
+        `<circle cx="46" cy="${cy}" r="2.4" fill="${white}"/>`;
       return { svg: vfxDoc(id, w, h, color, body), viewW: w, viewH: h, footYFrac: 1 };
     }
     case 'aoeRing': {
@@ -587,27 +648,35 @@ export function vfxArt(kind: VfxKind, color: number): SvgArt {
       // caller can squash it to any rx/ry.
       const s = 64;
       const c = s / 2;
+      const white = toHex(lighten(color, 0.85));
+      // A dashed outer telegraph ring reads as a targeting decal.
+      const dash = (2 * Math.PI * (c - 3)) / 24;
       const body =
-        `<circle cx="${c}" cy="${c}" r="${c - 3}" fill="${glow}" opacity="0.45"/>` +
-        `<circle cx="${c}" cy="${c}" r="${c - 3}" fill="none" stroke="${core}" stroke-width="3"/>` +
-        `<circle cx="${c}" cy="${c}" r="${c - 10}" fill="none" stroke="${mid}" stroke-width="1.5" opacity="0.7"/>`;
+        `<circle cx="${c}" cy="${c}" r="${c - 3}" fill="${glow}" opacity="0.4"/>` +
+        `<circle cx="${c}" cy="${c}" r="${c - 3}" fill="none" stroke="${core}" stroke-width="3.5"/>` +
+        `<circle cx="${c}" cy="${c}" r="${c - 3}" fill="none" stroke="${white}" stroke-width="1.4" ` +
+        `stroke-dasharray="${dash.toFixed(2)} ${dash.toFixed(2)}" opacity="0.8"/>` +
+        `<circle cx="${c}" cy="${c}" r="${c - 11}" fill="none" stroke="${mid}" stroke-width="1.5" opacity="0.65"/>`;
       return { svg: vfxDoc(id, s, s, color, body), viewW: s, viewH: s, footYFrac: 1 };
     }
     case 'castFlare': {
       // A radiant burst: a central glow behind a spiky star.
       const s = 48;
       const c = s / 2;
+      const white = toHex(lighten(color, 0.9));
       const body =
         `<circle cx="${c}" cy="${c}" r="${c - 2}" fill="${glow}"/>` +
-        `<path d="${starPath(c, c, c - 4, (c - 4) * 0.42, 8)}" fill="${core}" opacity="0.9"/>` +
-        `<circle cx="${c}" cy="${c}" r="4" fill="${core}"/>`;
+        `<path d="${starPath(c, c, c - 3, (c - 3) * 0.36, 8)}" fill="${core}" opacity="0.95"/>` +
+        `<path d="${starPath(c, c, (c - 3) * 0.6, (c - 3) * 0.24, 8)}" fill="${white}" opacity="0.9"/>` +
+        `<circle cx="${c}" cy="${c}" r="4" fill="${white}"/>`;
       return { svg: vfxDoc(id, s, s, color, body), viewW: s, viewH: s, footYFrac: 1 };
     }
     case 'impact': {
       // A spark/shard burst: several tapered shards radiating from the center.
       const s = 32;
       const c = s / 2;
-      let shards = `<circle cx="${c}" cy="${c}" r="5" fill="${glow}"/>`;
+      const white = toHex(lighten(color, 0.9));
+      let shards = `<circle cx="${c}" cy="${c}" r="7" fill="${glow}"/>`;
       const spikes = 6;
       for (let i = 0; i < spikes; i += 1) {
         const a = (Math.PI * 2 * i) / spikes;
@@ -621,6 +690,8 @@ export function vfxArt(kind: VfxKind, color: number): SvgArt {
           `<path d="M${bx1.toFixed(2)} ${by1.toFixed(2)} L${tipX.toFixed(2)} ${tipY.toFixed(2)} ` +
           `L${bx2.toFixed(2)} ${by2.toFixed(2)} Z" fill="${core}"/>`;
       }
+      // hot white flashpoint at the center of the burst
+      shards += `<circle cx="${c}" cy="${c}" r="2.6" fill="${white}"/>`;
       return { svg: vfxDoc(id, s, s, color, shards), viewW: s, viewH: s, footYFrac: 1 };
     }
     case 'heal': {
@@ -653,9 +724,11 @@ export function vfxArt(kind: VfxKind, color: number): SvgArt {
       // A shatter/burst ring: a thick broken ring with radiating shards.
       const s = 48;
       const c = s / 2;
+      const white = toHex(lighten(color, 0.85));
       let body =
-        `<circle cx="${c}" cy="${c}" r="${c - 6}" fill="none" stroke="${core}" stroke-width="3" opacity="0.9"/>` +
-        `<circle cx="${c}" cy="${c}" r="${c - 6}" fill="${glow}" opacity="0.35"/>`;
+        `<circle cx="${c}" cy="${c}" r="${c - 6}" fill="${glow}" opacity="0.4"/>` +
+        `<circle cx="${c}" cy="${c}" r="${c - 6}" fill="none" stroke="${core}" stroke-width="3.4" opacity="0.95"/>` +
+        `<circle cx="${c}" cy="${c}" r="${(c - 6) * 0.5}" fill="none" stroke="${white}" stroke-width="1.6" opacity="0.8"/>`;
       const shards = 8;
       for (let i = 0; i < shards; i += 1) {
         const a = (Math.PI * 2 * i) / shards + 0.2;

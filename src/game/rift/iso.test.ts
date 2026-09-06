@@ -17,6 +17,7 @@ import {
   worldToScreen,
   screenToWorld,
   depthFor,
+  projectedWorldBounds,
   type ScreenPoint,
 } from './iso';
 
@@ -226,5 +227,45 @@ describe('projected in-world points stay within the view', () => {
     // Vertical tips now sit on the top/bottom margins too (no dead band).
     expect(top.y).toBeCloseTo(MARGIN, 6);
     expect(bottom.y).toBeCloseTo(VIEW_H - MARGIN, 6);
+  });
+});
+
+describe('projectedWorldBounds (camera setBounds source)', () => {
+  it('covers the full projected diamond to the four margins with no padding', () => {
+    const b = projectedWorldBounds();
+    // The diamond tips sit on the margins, so the bounding box is the view
+    // inset by the projection margin on all four sides.
+    expect(b.minX).toBeCloseTo(MARGIN, 6);
+    expect(b.minY).toBeCloseTo(MARGIN, 6);
+    expect(b.width).toBeCloseTo(VIEW_W - MARGIN * 2, 6);
+    expect(b.height).toBeCloseTo(VIEW_H - MARGIN * 2, 6);
+  });
+
+  it('contains every projected in-world corner and centre', () => {
+    const b = projectedWorldBounds();
+    const pts: Vec2[] = [
+      CORNERS.topLeft,
+      CORNERS.topRight,
+      CORNERS.bottomLeft,
+      CORNERS.bottomRight,
+      CENTER,
+    ];
+    for (const p of pts) {
+      const s = worldToScreen(p);
+      expect(s.x).toBeGreaterThanOrEqual(b.minX - EPS);
+      expect(s.x).toBeLessThanOrEqual(b.minX + b.width + EPS);
+      expect(s.y).toBeGreaterThanOrEqual(b.minY - EPS);
+      expect(s.y).toBeLessThanOrEqual(b.minY + b.height + EPS);
+    }
+  });
+
+  it('expands symmetrically by the requested padding on every side', () => {
+    const pad = 64;
+    const base = projectedWorldBounds();
+    const padded = projectedWorldBounds(DEFAULT_PROJECTION, pad);
+    expect(padded.minX).toBeCloseTo(base.minX - pad, 6);
+    expect(padded.minY).toBeCloseTo(base.minY - pad, 6);
+    expect(padded.width).toBeCloseTo(base.width + pad * 2, 6);
+    expect(padded.height).toBeCloseTo(base.height + pad * 2, 6);
   });
 });

@@ -26,14 +26,37 @@
     "opponentHeading": "Opponent Champion",
     "randomize": "Randomize",
     "randomOpponent": "Random opponent",
-    "pickHint": "Pick your champion, then choose or randomize an opponent."
+    "pickHint": "Pick your champion, then choose or randomize an opponent.",
+    "findMatch": "Find Match",
+    "you": "You",
+    "spells": "Spells",
+    "yourPick": "Your pick"
+  },
+  "client": {
+    "home": "Home",
+    "tft": "TFT",
+    "clash": "Clash",
+    "essence": "Essence",
+    "riotPoints": "RP",
+    "profile": "Profile",
+    "level": "Level {{value}}",
+    "social": {
+      "title": "Friends",
+      "online": "Online",
+      "inGame": "In Game",
+      "away": "Away",
+      "friend1": "SummonerFox",
+      "friend2": "MidLaneMuse",
+      "friend3": "JungleGank",
+      "friend4": "TopDiff"
+    }
   },
   "battle": {
     "title": "Arena Battle",
     "yourNexus": "Your Nexus",
     "enemyNexus": "Enemy Nexus",
     "resource": "Resource",
-    "controlsHint": "WASD or click to move · Q/W/E/R to cast at cursor · attacks auto-fire in range",
+    "controlsHint": "Left/right-click to move · Q/W/E/R to cast at cursor · attacks auto-fire in range",
     "surrender": "Surrender"
   },
   "result": {
@@ -158,14 +181,14 @@
     "ambient": "Ambient sound",
     "language": "Language",
     "keybinds": {
-      "move": "Move",
+      "move": "Move to the clicked point",
       "q": "Cast Q ability at cursor",
       "w": "Cast W ability at cursor",
       "e": "Cast E ability at cursor",
       "r": "Cast R (ultimate) at cursor",
       "shop": "Open the item shop (in base)",
       "click": "Move to point",
-      "clickKey": "Click"
+      "clickKey": "Left / right click"
     }
   },
   "role": {

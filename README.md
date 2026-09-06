@@ -82,11 +82,16 @@ Choose a mode after the main menu:
 
 1. **Main Menu** – start a match or open **Settings & Help**.
 2. **Mode Select** – pick **Summoner's Rift** or **ARAM**.
-3. **Champion Select** – browse the roster (each card shows the champion's **illustrated
-   inline-SVG figure**, the same vector art used in battle), inspect stats, P/Q/W/E/R abilities,
-   role and **lane role** (top / jungle / mid / bot / support), choose or randomize the
-   opponent, and **Lock In**. The selected-champion detail panel and the post-match **Results**
-   screen show the same character art.
+3. **Champion Select** – a **Hextech client-style lobby**: a top nav bar (hextech wordmark,
+   decorative HOME / TFT / CLASH tabs, essence/RP currency chips, a profile pill, plus the
+   relocated settings gear and language toggle), a row of **five vertical champion cards** with
+   large **circular framed portraits** (each card shows the champion's **illustrated inline-SVG
+   figure** — the same vector art used in battle — its name, role/lane, and a **Q/W/E/R spell
+   slot row**). The **self** card is highlighted and rendered taller/centered. Click a card to
+   pick that champion; the collapsible detail drawer exposes full stats and P/Q/W/E/R ability
+   cards. Choose or randomize the opponent, then hit the glowing centered **Find Match** button.
+   A decorative **social/friends** panel (online / in-game / away status) sits on the right. The
+   post-match **Results** screen shows the same character art.
 4. **Battle** – push lanes, farm minions and jungle camps for gold and XP, level up to **18**,
    buy items from the **shop** while in base, contest Dragon / Herald / Baron for team-wide
    buffs, and destroy structures in order to break through to the enemy Nexus.
@@ -114,14 +119,25 @@ minion** in that lane until the inhibitor respawns (5 minutes).
 
 | Input | Action |
 | --- | --- |
-| `W` `A` `S` `D` / click | Move your champion |
+| Left- / right-click | Move your champion to the clicked point (LoL-style click-to-move) |
 | `Q` `W` `E` `R` | Cast abilities aimed at the cursor (`R` is your ultimate) |
 | `B` | Open the item **shop** (only while in base) |
-| Mouse click | Move to the clicked point |
 
+Movement is **click-to-move only** – both mouse buttons issue a move command, and the browser
+context menu is suppressed over the canvas so right-click can steer. `Q`/`W`/`E`/`R` are the only
+keyboard bindings and exclusively cast abilities, so there is no longer a WASD-vs-QWER key clash.
 Basic attacks auto-fire at the nearest valid target in range. The same keybinds (including
 `B` for the shop) are documented, localized, in the in-game **Settings & Help** panel, which
 also exposes **mute**, **master volume**, an **ambient sound** toggle, and the **language** switch.
+
+### Camera
+
+The battle camera **zooms in on and follows** your champion, so only a portion of the map is
+visible at a time and it pans smoothly as you move (the map feels large). The **whole map** stays
+readable on the HUD **minimap**. The zoom/follow is a Phaser-camera layer on top of the fixed
+`iso.ts` fit-projection: camera bounds cover the full projected world diamond (see
+`projectedWorldBounds`), so the projection math is unchanged and click-to-move / ability aim still
+resolve to the correct world point under the zoomed, following camera.
 
 ---
 

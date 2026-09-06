@@ -26,14 +26,37 @@
     "opponentHeading": "상대 챔피언",
     "randomize": "무작위 선택",
     "randomOpponent": "무작위 상대",
-    "pickHint": "챔피언을 고른 뒤 상대를 직접 선택하거나 무작위로 지정하세요."
+    "pickHint": "챔피언을 고른 뒤 상대를 직접 선택하거나 무작위로 지정하세요.",
+    "findMatch": "게임 찾기",
+    "you": "나",
+    "spells": "스펠",
+    "yourPick": "내 선택"
+  },
+  "client": {
+    "home": "홈",
+    "tft": "전략적 팀 전투",
+    "clash": "격돌",
+    "essence": "정수",
+    "riotPoints": "RP",
+    "profile": "프로필",
+    "level": "레벨 {{value}}",
+    "social": {
+      "title": "친구 목록",
+      "online": "접속 중",
+      "inGame": "게임 중",
+      "away": "자리 비움",
+      "friend1": "소환사여우",
+      "friend2": "미드뮤즈",
+      "friend3": "정글갱커",
+      "friend4": "탑차이"
+    }
   },
   "battle": {
     "title": "아레나 전투",
     "yourNexus": "아군 넥서스",
     "enemyNexus": "적 넥서스",
     "resource": "자원",
-    "controlsHint": "WASD 또는 클릭으로 이동 · Q/W/E/R로 커서 방향에 스킬 사용 · 사거리 내 적을 자동 공격",
+    "controlsHint": "좌/우클릭으로 이동 · Q/W/E/R로 커서 방향에 스킬 사용 · 사거리 내 적을 자동 공격",
     "surrender": "항복"
   },
   "result": {
@@ -158,14 +181,14 @@
     "ambient": "환경음",
     "language": "언어",
     "keybinds": {
-      "move": "이동",
+      "move": "클릭한 지점으로 이동",
       "q": "커서 방향으로 Q 스킬 사용",
       "w": "커서 방향으로 W 스킬 사용",
       "e": "커서 방향으로 E 스킬 사용",
       "r": "커서 방향으로 R(궁극기) 사용",
       "shop": "아이템 상점 열기 (기지 내)",
       "click": "지정 위치로 이동",
-      "clickKey": "클릭"
+      "clickKey": "좌 / 우클릭"
     }
   },
   "role": {
