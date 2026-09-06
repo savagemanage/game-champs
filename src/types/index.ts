@@ -412,6 +412,23 @@ export interface LeagueState {
 }
 
 /**
+ * Onboarding tutorial sub-state (OWNED BY FEAT-003: onboarding).
+ *
+ * The smallest shape that supports "show the first-run tutorial once, but keep
+ * it replayable": `seen` gates the automatic first-run launch (a brand-new game
+ * is `false`, a returning/migrated player is `true`), and `completedSteps`
+ * records the stable step ids the player has advanced past so the overlay can
+ * highlight progress. Replaying the tutorial (see
+ * {@link GameState.tutorial}) clears both back to the fresh state.
+ */
+export interface TutorialState {
+  /** Whether the first-run tutorial has been seen (skipped or completed). */
+  seen: boolean;
+  /** Stable ids of tutorial steps the player has completed. */
+  completedSteps: string[];
+}
+
+/**
  * The complete persisted game state (serialized to localStorage by the save
  * layer, save format v2). It carries the whole expanded single-player game:
  * the gate-runner mini-game meta plus placeholder sub-states for the resource
@@ -441,4 +458,6 @@ export interface GameState {
   campaign: CampaignState;
   /** League / alliance standings (FEAT-004, offline simulation). */
   league: LeagueState;
+  /** First-run onboarding tutorial progress (FEAT-003). */
+  tutorial: TutorialState;
 }

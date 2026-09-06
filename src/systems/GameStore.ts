@@ -665,4 +665,55 @@ export class GameStore {
   dayOf(now: number): number {
     return dayIndex(now);
   }
+
+  /* ------------------------------------------------------------------ */
+  /* FEAT-003: onboarding tutorial (show once, replayable).             */
+  /* ------------------------------------------------------------------ */
+
+  /**
+   * Whether the first-run onboarding tutorial has been seen. A brand-new game
+   * is `false` (so HomeScene auto-shows it once); a returning/migrated player
+   * is `true`. HomeScene gates its first-run launch on this.
+   */
+  tutorialSeen(): boolean {
+    return this.stateInternal.tutorial.seen;
+  }
+
+  /** The stable ids of tutorial steps the player has completed. */
+  tutorialCompletedSteps(): string[] {
+    return [...this.stateInternal.tutorial.completedSteps];
+  }
+
+  /**
+   * Mark the onboarding tutorial as seen (on completion or Skip) and persist,
+   * so it never auto-shows again. Idempotent.
+   */
+  markTutorialSeen(): void {
+    this.stateInternal.tutorial.seen = true;
+    this.persist();
+  }
+
+  /**
+   * Record that a tutorial step (by stable id) has been completed and persist.
+   * Ignores empty ids and de-duplicates, so calling it repeatedly for the same
+   * step is a no-op beyond the first.
+   */
+  markTutorialStep(id: string): void {
+    if (!id) return;
+    const tutorial = this.stateInternal.tutorial;
+    if (!tutorial.completedSteps.includes(id)) {
+      tutorial.completedSteps = [...tutorial.completedSteps, id];
+      this.persist();
+    }
+  }
+
+  /**
+   * Reset the tutorial back to its fresh, unseen state (seen false + no
+   * completed steps) and persist, so a replay entry point can run the guided
+   * sequence again from the start.
+   */
+  resetTutorial(): void {
+    this.stateInternal.tutorial = { seen: false, completedSteps: [] };
+    this.persist();
+  }
 }

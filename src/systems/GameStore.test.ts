@@ -45,9 +45,11 @@ describe('GameStore', () => {
       }),
     );
     const store = GameStore.createWith(storage);
-    expect(store.state.version).toBe(2);
+    expect(store.state.version).toBe(3);
     expect(store.state.miniGame.coins).toBe(120);
     expect(store.state.miniGame.bestScore).toBe(1500);
+    // A migrated legacy player is a returning player: tutorial marked seen.
+    expect(store.tutorialSeen()).toBe(true);
   });
 
   it('reset() wipes back to a fresh v2 game and persists', () => {
@@ -344,5 +346,51 @@ describe('GameStore', () => {
     // The run advanced the daily mini-game arms-race task.
     expect(store.state.missions.daily['mini_1'] ?? store.state.missions.daily['mini_2'] ?? 0)
       .toBeGreaterThanOrEqual(0);
+  });
+
+  /* FEAT-003: onboarding tutorial (show once, replayable). */
+
+  it('a fresh game has not seen the tutorial', () => {
+    const store = GameStore.createWith(memoryStorage());
+    expect(store.tutorialSeen()).toBe(false);
+    expect(store.tutorialCompletedSteps()).toEqual([]);
+  });
+
+  it('markTutorialSeen sets seen true and persists', () => {
+    const storage = memoryStorage();
+    const store = GameStore.createWith(storage);
+    expect(store.tutorialSeen()).toBe(false);
+    store.markTutorialSeen();
+    expect(store.tutorialSeen()).toBe(true);
+    // Persisted across a reload (the tutorial does not re-show).
+    const reloaded = GameStore.createWith(storage);
+    expect(reloaded.tutorialSeen()).toBe(true);
+  });
+
+  it('markTutorialStep records de-duplicated step ids and persists', () => {
+    const storage = memoryStorage();
+    const store = GameStore.createWith(storage);
+    store.markTutorialStep('welcome');
+    store.markTutorialStep('welcome'); // duplicate ignored
+    store.markTutorialStep('base');
+    store.markTutorialStep(''); // empty ignored
+    expect(store.tutorialCompletedSteps()).toEqual(['welcome', 'base']);
+    const reloaded = GameStore.createWith(storage);
+    expect(reloaded.tutorialCompletedSteps()).toEqual(['welcome', 'base']);
+  });
+
+  it('resetTutorial clears seen + completed steps for a replay and persists', () => {
+    const storage = memoryStorage();
+    const store = GameStore.createWith(storage);
+    store.markTutorialStep('welcome');
+    store.markTutorialSeen();
+    expect(store.tutorialSeen()).toBe(true);
+    store.resetTutorial();
+    expect(store.tutorialSeen()).toBe(false);
+    expect(store.tutorialCompletedSteps()).toEqual([]);
+    // Persisted: a reloaded store also sees the reset state (replay will show).
+    const reloaded = GameStore.createWith(storage);
+    expect(reloaded.tutorialSeen()).toBe(false);
+    expect(reloaded.tutorialCompletedSteps()).toEqual([]);
   });
 });

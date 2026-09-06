@@ -3,6 +3,7 @@ import { SceneKeys, PALETTE, CANVAS, RUN } from '../config/GameConfig';
 import { TextureKeys, AudioKeys } from '../config/AssetKeys';
 import { AudioManager } from '../systems/AudioManager';
 import { MetaStore } from '../systems/MetaStore';
+import { GameStore } from '../systems/GameStore';
 import { tr } from '../i18n/i18n';
 import { Menu } from '../ui/Menu';
 import { textStyle } from '../ui/UiText';
@@ -136,11 +137,31 @@ export class TitleScene extends Phaser.Scene {
     }
 
     const overlay = this.add.container(0, 0, [panel, title, ...texts]);
+    // Always-available REPLAY entry point for the guided tutorial (FEAT-003).
+    const replay = Menu.button(this, cx, cy + CANVAS.HEIGHT * 0.18, tr('tutorial.replay'), () => this.replayTutorial(), {
+      width: 260,
+      accent: PALETTE.SQUAD,
+    });
+    overlay.add(replay.container);
     const close = Menu.button(this, cx, cy + CANVAS.HEIGHT * 0.24, tr('common.close'), () => this.toggleHowTo(), {
       width: 160,
     });
     overlay.add(close.container);
     overlay.setDepth(50);
     this.howtoOverlay = overlay;
+  }
+
+  /**
+   * Replay the guided tutorial: reset the persisted "seen" flag so the tutorial
+   * is unseen again, then enter the base hub where HomeScene auto-launches the
+   * onboarding overlay from the first step.
+   */
+  private replayTutorial(): void {
+    GameStore.get().resetTutorial();
+    if (this.howtoOverlay) {
+      this.howtoOverlay.destroy(true);
+      this.howtoOverlay = null;
+    }
+    this.enterHome();
   }
 }

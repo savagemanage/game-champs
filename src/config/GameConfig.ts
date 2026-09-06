@@ -532,6 +532,12 @@ export const SceneKeys = {
   Missions: 'MissionsScene',
   Season: 'SeasonScene',
   Battle: 'BattleScene',
+  /**
+   * First-run onboarding tutorial (FEAT-003). An OVERLAY scene: launched with
+   * scene.launch on top of the current scene (never replacing it) so the guided
+   * sequence draws over the base hub and can be dismissed to reveal it.
+   */
+  Tutorial: 'TutorialScene',
 } as const;
 
 export type SceneKey = (typeof SceneKeys)[keyof typeof SceneKeys];

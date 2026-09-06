@@ -37,6 +37,9 @@ describe('SaveManager', () => {
       missions: SaveManager.freshGame().missions,
       campaign: SaveManager.freshGame().campaign,
       league: SaveManager.freshGame().league,
+      // A round-trip fixture is a "current v3" save; a real player who has
+      // already seen the tutorial.
+      tutorial: { seen: true, completedSteps: [] },
     };
   }
 
@@ -54,13 +57,13 @@ describe('SaveManager', () => {
     };
   }
 
-  it('save version is 2', () => {
-    expect(SAVE_VERSION).toBe(2);
+  it('save version is 3', () => {
+    expect(SAVE_VERSION).toBe(3);
   });
 
-  it('freshGame returns a valid v2 state with all sub-states defaulted', () => {
+  it('freshGame returns a valid v3 state with all sub-states defaulted', () => {
     const fresh = SaveManager.freshGame();
-    expect(fresh.version).toBe(2);
+    expect(fresh.version).toBe(3);
     expect(fresh.miniGame).toEqual({
       coins: 0,
       upgrades: { start_size: 0, damage: 0, fire_rate: 0, coin_bonus: 0 },
@@ -117,6 +120,9 @@ describe('SaveManager', () => {
       losses: 0,
       bestRank: 0,
     });
+    // A brand-new game has NOT seen the onboarding tutorial (shows once).
+    expect(fresh.tutorial).toEqual({ seen: false, completedSteps: [] });
+    expect(fresh.tutorial.seen).toBe(false);
   });
 
   it('loads a fresh game when storage is empty', () => {
@@ -162,7 +168,7 @@ describe('SaveManager', () => {
     storage.setItem(SAVE_KEY, JSON.stringify(v1()));
     const { state, loaded } = new SaveManager(storage).load();
     expect(loaded).toBe(true);
-    expect(state.version).toBe(2);
+    expect(state.version).toBe(3);
     // Old meta block preserved verbatim under miniGame.
     expect(state.miniGame.coins).toBe(350);
     expect(state.miniGame.upgrades).toEqual({
@@ -188,27 +194,77 @@ describe('SaveManager', () => {
     expect(state.missions).toEqual(SaveManager.freshGame().missions);
     expect(state.campaign).toEqual(SaveManager.freshGame().campaign);
     expect(state.league).toEqual(SaveManager.freshGame().league);
+    // A migrated legacy player is a RETURNING player: the tutorial is marked
+    // seen so they are not forced back into first-run onboarding.
+    expect(state.tutorial.seen).toBe(true);
   });
 
-  it('migrates then persists a normalized v2 save (v1 file replaced on next save)', () => {
+  it('migrates then persists a normalized v3 save (v1 file replaced on next save)', () => {
     const storage = memoryStorage();
     storage.setItem(SAVE_KEY, JSON.stringify(v1()));
     const mgr = new SaveManager(storage);
     const migrated = mgr.load().state;
     mgr.save(migrated);
     const reread = JSON.parse(storage.getItem(SAVE_KEY) as string);
-    expect(reread.version).toBe(2);
+    expect(reread.version).toBe(3);
     expect(reread.meta).toBeUndefined();
     expect(reread.miniGame.coins).toBe(350);
   });
 
-  it('falls back to fresh v2 when a v1 save has a missing meta block', () => {
+  it('falls back to fresh v3 when a v1 save has a missing meta block', () => {
     const storage = memoryStorage();
     storage.setItem(SAVE_KEY, JSON.stringify({ version: 1 }));
     const { state, loaded } = new SaveManager(storage).load();
     expect(loaded).toBe(false);
-    expect(state.version).toBe(2);
+    expect(state.version).toBe(3);
     expect(state.miniGame.coins).toBe(0);
+  });
+
+  /* FEAT-003: v2 -> v3 onboarding-tutorial migration. */
+
+  it('migrates an existing v2 save to v3 marking the tutorial as seen (returning player)', () => {
+    const storage = memoryStorage();
+    // A real v2 save: mid-game player, no tutorial block at all.
+    storage.setItem(
+      SAVE_KEY,
+      JSON.stringify({
+        version: 2,
+        miniGame: { coins: 500, upgrades: { start_size: 3 }, bestDistance: 1200, bestScore: 3000, runsPlayed: 8 },
+        heroes: { roster: {}, shards: 40, pity: { sinceHighGrade: 2, totalPulls: 9 }, recruitSeed: 42 },
+      }),
+    );
+    const { state, loaded } = new SaveManager(storage).load();
+    expect(loaded).toBe(true);
+    expect(state.version).toBe(3);
+    // The mid-game data survives the migration...
+    expect(state.miniGame.coins).toBe(500);
+    expect(state.heroes.shards).toBe(40);
+    // ...and the tutorial is SEEN so the returning player is not re-onboarded.
+    expect(state.tutorial).toEqual({ seen: true, completedSteps: [] });
+  });
+
+  it('normalizeTutorial fills a missing / partial tutorial block on a v3 save', () => {
+    const storage = memoryStorage();
+    // A v3 save with a partial / malformed tutorial block.
+    storage.setItem(
+      SAVE_KEY,
+      JSON.stringify({
+        version: SAVE_VERSION,
+        miniGame: { coins: 5 },
+        tutorial: { seen: 'yes-please', completedSteps: ['welcome', 'welcome', '', 3, 'base'] },
+      }),
+    );
+    const { state } = new SaveManager(storage).load();
+    // Non-boolean seen coerced to false; completedSteps deduped + string-only.
+    expect(state.tutorial.seen).toBe(false);
+    expect(state.tutorial.completedSteps).toEqual(['welcome', 'base']);
+  });
+
+  it('defaults a v3 save with NO tutorial block to unseen', () => {
+    const storage = memoryStorage();
+    storage.setItem(SAVE_KEY, JSON.stringify({ version: SAVE_VERSION, miniGame: { coins: 1 } }));
+    const { state } = new SaveManager(storage).load();
+    expect(state.tutorial).toEqual({ seen: false, completedSteps: [] });
   });
 
   it('normalizes partial / floating / negative values on load', () => {

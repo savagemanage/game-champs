@@ -11,6 +11,7 @@ import {
 } from '../config/AssetKeys';
 import { AudioManager } from '../systems/AudioManager';
 import { GameStore } from '../systems/GameStore';
+import { shouldShowTutorialOnFirstRun } from '../systems/Tutorial';
 import { tr } from '../i18n/i18n';
 import type { TrKey } from '../i18n/strings';
 import { Menu } from '../ui/Menu';
@@ -99,6 +100,14 @@ export class HomeScene extends Phaser.Scene {
     if (ticked.completed.length > 0) {
       this.showToast(tr('home.buildComplete'));
       AudioManager.get(this).playSfx(AudioKeys.UpgradeComplete, 0.7);
+    }
+
+    // FIRST-RUN ONBOARDING: a genuinely fresh game (tutorial not seen) is
+    // walked through the guided tutorial once, launched as an OVERLAY on top of
+    // this hub (scene.launch, not start). A returning player - who loads with
+    // seen=true via the save migration - is never re-onboarded.
+    if (shouldShowTutorialOnFirstRun(store.tutorialSeen()) && !this.scene.isActive(SceneKeys.Tutorial)) {
+      this.scene.launch(SceneKeys.Tutorial);
     }
   }
 

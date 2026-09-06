@@ -26,6 +26,7 @@ import type {
   PityState,
   ResourceState,
   SeasonState,
+  TutorialState,
 } from '../types';
 import { freshUpgrades } from './MetaProgress';
 import { heroDef } from '../config/Heroes';
@@ -41,7 +42,7 @@ import {
 import { CAMPAIGN_ORDER, SEASON } from '../config/Progression';
 
 /** Current save-format version. Bump when GameState shape changes. */
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 
 /** Default localStorage key for the single meta save slot. */
 export const SAVE_KEY = 'last-squad:save';
@@ -84,6 +85,7 @@ export class SaveManager {
       missions: freshMissions(),
       campaign: freshCampaign(),
       league: freshLeague(),
+      tutorial: freshTutorial(),
     };
   }
 
@@ -104,6 +106,7 @@ export class SaveManager {
       missions: normalizeMissions(state.missions),
       campaign: normalizeCampaign(state.campaign),
       league: normalizeLeague(state.league),
+      tutorial: normalizeTutorial(state.tutorial),
     };
   }
 
@@ -137,7 +140,7 @@ export class SaveManager {
 
     const version = (parsed as { version?: unknown }).version;
 
-    // Current v2 save: normalize and use as-is.
+    // Current v3 save: normalize and use as-is.
     if (version === SAVE_VERSION) {
       const state = parsed as GameState;
       if (typeof state.miniGame !== 'object' || state.miniGame === null) {
@@ -146,6 +149,17 @@ export class SaveManager {
       // Normalize (fills any missing fields, clamps, coerces) so downstream
       // code always sees a complete, well-formed state.
       return { state: SaveManager.serialize(state), loaded: true };
+    }
+
+    // Existing v2 save: a real player who is already mid-game and predates the
+    // onboarding tutorial. Migrate forward, marking the tutorial as SEEN so a
+    // returning player is NOT forced back through first-run onboarding.
+    if (version === 2) {
+      const state = parsed as GameState;
+      if (typeof state.miniGame !== 'object' || state.miniGame === null) {
+        return { state: SaveManager.freshGame(), loaded: false };
+      }
+      return { state: SaveManager.serialize(migrateV2toV3(state)), loaded: true };
     }
 
     // Legacy v1 save: a top-level `meta` block. Migrate it forward.
@@ -186,6 +200,24 @@ function migrateV1toV2(legacy: GameStateV1): GameState {
     missions: freshMissions(),
     campaign: freshCampaign(),
     league: freshLeague(),
+    // A migrated legacy player is an EXISTING player: mark the onboarding
+    // tutorial as already seen so they are not forced into first-run onboarding.
+    tutorial: seenTutorial(),
+  };
+}
+
+/**
+ * Migrate a v2 {@link GameState} (predating the onboarding tutorial) forward to
+ * v3. The whole existing state is preserved verbatim (normalization runs after)
+ * and the new `tutorial` block is added marked as SEEN: a v2 save belongs to a
+ * real player who is already mid-game, so the first-run tutorial must NOT be
+ * forced on them. Only a brand-new {@link SaveManager.freshGame} starts unseen.
+ */
+function migrateV2toV3(state: GameState): GameState {
+  return {
+    ...state,
+    version: SAVE_VERSION,
+    tutorial: seenTutorial(),
   };
 }
 
@@ -302,6 +334,23 @@ function freshLeague(): LeagueState {
     losses: 0,
     bestRank: 0,
   };
+}
+
+/**
+ * A fresh onboarding-tutorial state (FEAT-003): NOT seen and no steps
+ * completed, so a brand-new game shows the first-run tutorial once.
+ */
+function freshTutorial(): TutorialState {
+  return { seen: false, completedSteps: [] };
+}
+
+/**
+ * An "already seen" onboarding-tutorial state: used when migrating a returning
+ * player (v1 / v2 save) forward so they are never re-onboarded. No per-step
+ * completion is back-filled (that only matters for the replay overlay).
+ */
+function seenTutorial(): TutorialState {
+  return { seen: true, completedSteps: [] };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -592,6 +641,21 @@ function normalizeLeague(league: Partial<LeagueState> | undefined): LeagueState 
     wins: safeInt(league?.wins),
     losses: safeInt(league?.losses),
     bestRank: safeInt(league?.bestRank),
+  };
+}
+
+/**
+ * Coerce a possibly-partial / absent onboarding-tutorial block into a complete
+ * one. A missing block (e.g. an old v2 save reaching this via serialize)
+ * defaults to NOT seen with no completed steps; `seen` is a strict boolean and
+ * `completedSteps` a deduplicated array of non-empty step-id strings. The
+ * migration layer (v1/v2 -> v3) is what flips a returning player to seen=true;
+ * this normalizer only guarantees a well-formed shape.
+ */
+function normalizeTutorial(tutorial: Partial<TutorialState> | undefined): TutorialState {
+  return {
+    seen: tutorial?.seen === true,
+    completedSteps: normalizeStringArray(tutorial?.completedSteps),
   };
 }
 

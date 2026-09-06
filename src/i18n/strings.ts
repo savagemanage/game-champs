@@ -440,6 +440,39 @@ export const STRINGS = {
   'nav.falcon': { en: 'Falcon Rescue', ko: '팔콘 구조대' },
   'nav.hint': { en: 'Tap a tab to open that command.', ko: '탭을 눌러 해당 지휘 화면을 여세요.' },
 
+  // Onboarding tutorial (FEAT-003) - Korean-first first-run guide.
+  'tutorial.next': { en: 'Next', ko: '다음' },
+  'tutorial.back': { en: 'Back', ko: '이전' },
+  'tutorial.skip': { en: 'Skip', ko: '건너뛰기' },
+  'tutorial.done': { en: 'Done', ko: '완료' },
+  'tutorial.progress': { en: '{step}/{total}', ko: '{step}/{total}' },
+  'tutorial.replay': { en: 'Replay Tutorial', ko: '튜토리얼 다시 보기' },
+  'tutorial.step.welcome.title': { en: 'Welcome, Commander', ko: '환영합니다, 사령관' },
+  'tutorial.step.welcome.body': {
+    en: 'Grow your squad and reach the boss. This quick guide shows how to get started.',
+    ko: '분대를 키워 보스에 도달하세요. 이 짧은 안내로 시작 방법을 알려드립니다.',
+  },
+  'tutorial.step.base.title': { en: 'Your Base', ko: '기지' },
+  'tutorial.step.base.body': {
+    en: 'Tap 기지 to manage your base. Upgrade buildings to produce more resources over time.',
+    ko: '기지 탭을 눌러 베이스를 관리하세요. 건물을 업그레이드하면 시간이 지날수록 더 많은 자원을 생산합니다.',
+  },
+  'tutorial.step.heroes.title': { en: 'Recruit Heroes', ko: '영웅 모집' },
+  'tutorial.step.heroes.body': {
+    en: 'Open 영웅 to recruit heroes and set your 5-slot squad formation before battle.',
+    ko: '영웅 탭에서 영웅을 모집하고 전투 전에 5칸 분대 편성을 구성하세요.',
+  },
+  'tutorial.step.battle.title': { en: 'Deploy the Squad', ko: '분대 출격' },
+  'tutorial.step.battle.body': {
+    en: 'Enter a Campaign battle, or tap 팔콘 구조대 to launch the Falcon Rescue runner.',
+    ko: '전역 전투에 진입하거나 팔콘 구조대 탭을 눌러 팔콘 구조대 러너를 시작하세요.',
+  },
+  'tutorial.step.runner.title': { en: 'Runner Controls', ko: '러너 조작법' },
+  'tutorial.step.runner.body': {
+    en: 'Drag or use ← → to slide between two lanes. Pass +/-/x/÷ gates to resize your squad; it auto-fires at enemies. Reach the boss to win.',
+    ko: '드래그하거나 ← → 로 두 차선 사이를 이동하세요. +/-/x/÷ 게이트를 통과해 분대 규모를 조절하고, 병사들은 적을 자동 사격합니다. 보스에 도달하면 승리합니다.',
+  },
+
   // Save / load feedback.
   'save.saved': { en: 'Saved', ko: '저장됨' },
   'save.loaded': { en: 'Progress loaded', ko: '진행 불러옴' },
