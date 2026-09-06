@@ -1,0 +1,13 @@
+node_modules
+dist
+dist-ssr
+coverage
+*.local
+.DS_Store
+*.log
+.vite
+
+# tsc -b / composite build artifacts
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts

@@ -1,0 +1,36 @@
+{
+  "id": "FEAT-001",
+  "type": "chore",
+  "description": "Scaffold the Vite + React + TypeScript project configured for GitHub Pages under the /game-champs/ subpath, set up react-i18next with Korean (mandatory) and English locales plus a persisted language toggle, add Vitest for unit testing, and add the GitHub Pages deploy workflow. This establishes a buildable, testable baseline that renders a minimal app shell so all later features build on a green baseline. Independent foundation feature; everything else depends on it.",
+  "status": "completed",
+  "steps": [
+    "Initialize package.json in game-champs/ with scripts: dev (vite), build (tsc -b && vite build), preview (vite preview), test (vitest), typecheck (tsc --noEmit). Dependencies: react, react-dom, phaser, react-i18next, i18next, i18next-browser-languagedetector. Dev deps: vite, @vitejs/plugin-react, typescript, @types/react, @types/react-dom, vitest, @testing-library/react, @testing-library/jest-dom, jsdom.",
+    "Create vite.config.ts with @vitejs/plugin-react and base: '/game-champs/'. Configure vitest test block (environment: 'jsdom', globals: true, setupFiles for jest-dom).",
+    "Create tsconfig.json and tsconfig.node.json (standard Vite React TS strict config, target ES2020, jsx react-jsx, moduleResolution bundler).",
+    "Create index.html with #root div, korean-friendly font links (e.g., Noto Sans KR via Google Fonts), lang attribute, and a title. Reference /src/main.tsx.",
+    "Create src/main.tsx that imports ./i18n, mounts <App/> into #root with React 18 createRoot.",
+    "Create src/i18n/index.ts initializing i18next + react-i18next + LanguageDetector, with resources loaded from locales/ko.json and locales/en.json, fallbackLng 'en', detection order ['localStorage','navigator'] and caches ['localStorage'] under key 'lol-lang'. Default supported languages ko and en.",
+    "Create src/i18n/locales/ko.json and en.json with initial keys for app shell: app.title, nav.play, nav.language, and a small set of common keys. Both files must have identical key structure.",
+    "Create src/components/LanguageToggle.tsx: a button/segmented control that switches i18n.language between 'ko' and 'en' and persists it (i18next detector handles localStorage).",
+    "Create src/App.tsx rendering a minimal shell: app title (translated), the LanguageToggle, and a placeholder area. Provide a screen router state (useState union: 'menu' | 'select' | 'battle' | 'result') that later features will use; for now just render a menu placeholder.",
+    "Create src/styles/global.css with a dark, League-of-Legends-inspired theme baseline (dark background, gold/blue accent variables) and import it in main.tsx.",
+    "Create src/setupTests.ts importing @testing-library/jest-dom.",
+    "Add a smoke test src/App.test.tsx that renders <App/> and asserts the translated app title appears, and a test src/i18n/i18n.test.ts asserting ko and en resource bundles have identical key sets (deep key comparison).",
+    "Create .gitignore (node_modules, dist, coverage, .DS_Store) and .github/workflows/deploy.yml: a GitHub Pages workflow triggered on push to main that runs npm ci, npm run build, uploads dist/ via actions/upload-pages-artifact and deploys via actions/deploy-pages, with permissions pages:write and id-token:write and concurrency group 'pages'."
+  ],
+  "acceptance_criteria": [
+    "npm install completes without errors in game-champs/.",
+    "npm run build produces game-champs/dist/index.html and assets referenced with the /game-champs/ base prefix.",
+    "npm run test -- --run passes including the App smoke test and the i18n key-parity test.",
+    "npx tsc --noEmit reports no type errors.",
+    "Switching the LanguageToggle changes visible text between Korean and English (verified via a unit test or by inspecting rendered output)."
+  ],
+  "verification": [
+    "cd game-champs && npm install",
+    "cd game-champs && npm run build && grep -R \"/game-champs/\" dist/index.html",
+    "cd game-champs && npm run test -- --run",
+    "cd game-champs && npx tsc --noEmit"
+  ],
+  "blocked_reason": null,
+  "findings": "Scaffolded the Vite 5 + React 18 + TS (strict) SPA at the repo root (game-champs/ == repo root; app files are NOT nested in a further game-champs/ subdir). All four verification commands pass: npm install (266 pkgs), npm run build (dist/index.html references assets with the /game-champs/ prefix -- confirmed via grep), npm run test -- --run (3 tests pass: App smoke, language switch ko/en, i18n key-parity), npx tsc --noEmit clean.\n\nKey decisions / notes for later features:\n- App title chosen as 'Arena Champions' (ko: '아레나 챔피언스'). app.title/app.subtitle exist in both locales.\n- Screen router: src/App.tsx exports `type Screen = 'menu' | 'select' | 'battle' | 'result'` via useState. Currently only 'menu' has real UI; other screens fall through to a placeholder. Later features should extend App.tsx / add src/screens/.\n- i18n: src/i18n/index.ts exports SUPPORTED_LANGUAGES (['ko','en']), SupportedLanguage type, and `resources`. LanguageDetector persists to localStorage key 'lol-lang', fallbackLng 'en', order ['localStorage','navigator']. Add new keys to BOTH ko.json and en.json or the i18n.test.ts key-parity test fails.\n- Deps already installed include phaser@^3.80 (for the future battle scene) even though it is unused so far.\n- tsc -b (composite build via tsconfig.node.json) emits vite.config.js, vite.config.d.ts, and *.tsbuildinfo into the tree; these are gitignored. node_modules and dist are gitignored too.\n- Deploy workflow at .github/workflows/deploy.yml deploys to GitHub Pages on push to main (npm ci -> npm run build -> upload-pages-artifact(dist) -> deploy-pages) with pages:write + id-token:write and concurrency group 'pages'.\n- Google Fonts (Noto Sans KR for Korean, Cinzel for display) linked in index.html; global theme vars (dark bg, gold/blue accents) in src/styles/global.css.\n- Per orchestrator instructions this feature was NOT committed; working tree only."
+}

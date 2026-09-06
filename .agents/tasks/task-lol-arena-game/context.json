@@ -1,0 +1,33 @@
+{
+  "project_type": "Static single-page web game (League of Legends-style champion select + arena battle) built as a React SPA with a Phaser 3 game canvas, deployed to GitHub Pages.",
+  "language": "TypeScript",
+  "build_system": "Vite 5 (npm). Greenfield project - all config created from scratch. base path MUST be '/game-champs/' because this is a GitHub project page served from a subpath.",
+  "test_framework": "Vitest + @testing-library/react for React/logic unit tests. Pure game-logic modules (damage formulas, cooldowns, AI decisions) are written framework-agnostic so they are unit-testable without a canvas.",
+  "build_command": "cd game-champs && npm run build",
+  "test_command": "cd game-champs && npm run test -- --run",
+  "verification_instructions": "1) npm install succeeds. 2) npm run build produces dist/ with index.html and hashed assets whose URLs are prefixed with /game-champs/. 3) npm run test -- --run passes. 4) npx tsc --noEmit type-checks clean. 5) Optionally npm run preview to smoke-test.",
+  "snapshot_or_generated_files": "None. dist/ is the build output and is gitignored (GitHub Actions workflow builds and deploys it).",
+  "setup_instructions": "cd game-champs && npm install",
+  "environment_constraints": "OPEN_INTERNET: full network access, npm registry reachable, Phaser and React installable. Node 22.23, npm 11.4 available. No browser display in sandbox so gameplay cannot be visually run headfully; rely on build success, TypeScript type-check, and unit tests on pure logic modules for verification.",
+  "contribution_requirements": "No CONTRIBUTING.md (empty repo). Do NOT commit or push - orchestrator handles git. Just create the working tree. Deployment target is GitHub Pages under /game-champs/ subpath.",
+  "key_patterns": "React 18 + TS + Vite. State via lightweight React context/zustand for UI screens (menu, champion select, in-game HUD, results). Phaser 3 mounts into a div for the battle Scene. i18n via react-i18next with ko + en JSON resource bundles and a persisted language toggle (localStorage). Champion data is a typed data module (id, name/i18n keys, stats, 4 abilities + passive). Game logic (combat math, cooldowns, simple bot AI) lives in src/game/ as pure TS separate from Phaser rendering where practical.",
+  "relevant_files": [
+    "game-champs/package.json",
+    "game-champs/vite.config.ts",
+    "game-champs/tsconfig.json",
+    "game-champs/index.html",
+    "game-champs/src/main.tsx",
+    "game-champs/src/App.tsx",
+    "game-champs/src/i18n/index.ts",
+    "game-champs/src/i18n/locales/ko.json",
+    "game-champs/src/i18n/locales/en.json",
+    "game-champs/src/data/champions.ts",
+    "game-champs/src/game/PhaserGame.tsx",
+    "game-champs/src/game/scenes/BattleScene.ts",
+    "game-champs/src/game/combat.ts",
+    "game-champs/src/game/ai.ts",
+    "game-champs/.github/workflows/deploy.yml",
+    "game-champs/README.md"
+  ],
+  "directory_structure": "game-champs/ = repo root. src/ = React app + Phaser game. src/screens/ = menu, champion-select, results React screens. src/game/ = Phaser scenes + pure combat/AI logic. src/data/ = champion definitions. src/i18n/ = react-i18next setup + ko/en locale JSON. src/styles/ = CSS. public/ = static assets. .github/workflows/ = Pages deploy workflow."
+}

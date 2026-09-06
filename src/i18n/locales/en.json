@@ -1,0 +1,245 @@
+{
+  "app": {
+    "title": "Arena Champions",
+    "subtitle": "A League-inspired arena brawl"
+  },
+  "nav": {
+    "play": "Play",
+    "language": "Language"
+  },
+  "menu": {
+    "heading": "Welcome to the Arena",
+    "description": "Choose your champion and battle for glory.",
+    "start": "Start Battle",
+    "tagline": "Five champions. One arena. Endless glory.",
+    "play": "Play Now"
+  },
+  "select": {
+    "heading": "Choose Your Champion",
+    "rosterLabel": "Champion roster",
+    "empty": "Select a champion to view their kit.",
+    "statsHeading": "Base Stats",
+    "abilitiesHeading": "Abilities",
+    "lockIn": "Lock In",
+    "yourChampion": "Your Champion",
+    "opponent": "Opponent",
+    "opponentHeading": "Opponent Champion",
+    "randomize": "Randomize",
+    "randomOpponent": "Random opponent",
+    "pickHint": "Pick your champion, then choose or randomize an opponent."
+  },
+  "battle": {
+    "title": "Arena Battle",
+    "yourNexus": "Your Nexus",
+    "enemyNexus": "Enemy Nexus",
+    "resource": "Resource",
+    "controlsHint": "WASD or click to move · Q/W/E/R to cast at cursor · attacks auto-fire in range",
+    "surrender": "Surrender"
+  },
+  "result": {
+    "title": "Match Result",
+    "victory": "Victory",
+    "defeat": "Defeat",
+    "winSubtitle": "The arena is yours. Glory to the champion.",
+    "loseSubtitle": "The nexus has fallen. Regroup and try again.",
+    "vs": "vs",
+    "duration": "Duration",
+    "championKills": "Champion Takedowns",
+    "minionKills": "Minions Slain",
+    "damageDealt": "Damage Dealt",
+    "rematch": "Rematch",
+    "toMenu": "Main Menu"
+  },
+  "settings": {
+    "open": "Settings",
+    "title": "Settings & Help",
+    "close": "Close",
+    "done": "Done",
+    "controls": "Controls",
+    "audio": "Audio",
+    "mute": "Mute all audio",
+    "volume": "Master volume",
+    "ambient": "Ambient sound",
+    "language": "Language",
+    "keybinds": {
+      "move": "Move",
+      "q": "Cast Q ability at cursor",
+      "w": "Cast W ability at cursor",
+      "e": "Cast E ability at cursor",
+      "r": "Cast R (ultimate) at cursor",
+      "click": "Move to point",
+      "clickKey": "Click"
+    }
+  },
+  "role": {
+    "marksman": "Marksman",
+    "assassin": "Assassin",
+    "bruiser": "Bruiser",
+    "mage": "Mage",
+    "enchanter": "Enchanter"
+  },
+  "stat": {
+    "hp": "Health",
+    "hpRegen": "Health Regen",
+    "moveSpeed": "Move Speed",
+    "attackDamage": "Attack Damage",
+    "attackRange": "Attack Range",
+    "attackSpeed": "Attack Speed"
+  },
+  "ability": {
+    "passive": "Passive",
+    "cooldown": "Cooldown",
+    "cost": "Cost",
+    "range": "Range",
+    "damage": "Damage",
+    "seconds": "{{value}}s",
+    "behavior": {
+      "skillshot": "Skillshot",
+      "dash": "Dash",
+      "buff": "Buff",
+      "aoe": "Area of Effect",
+      "heal": "Heal",
+      "stun": "Stun"
+    }
+  },
+  "slot": {
+    "P": "P",
+    "Q": "Q",
+    "W": "W",
+    "E": "E",
+    "R": "R"
+  },
+  "champions": {
+    "ashborne": {
+      "name": "Ashborne",
+      "title": "the Ember Archer",
+      "P": {
+        "name": "Cinder Mark",
+        "desc": "Every third basic attack burns the target, dealing bonus fire damage over 2 seconds."
+      },
+      "Q": {
+        "name": "Piercing Arrow",
+        "desc": "Fire a charged arrow in a line that pierces the first enemy it strikes, dealing heavy damage."
+      },
+      "W": {
+        "name": "Scattering Volley",
+        "desc": "Loose a fan of arrows across an area, damaging all enemies caught within."
+      },
+      "E": {
+        "name": "Nimble Roll",
+        "desc": "Roll a short distance, refreshing Cinder Mark and gaining brief attack speed."
+      },
+      "R": {
+        "name": "Sunfall Barrage",
+        "desc": "Channel a devastating long-range arrow that detonates on the first enemy hit, dealing massive damage."
+      }
+    },
+    "nightveil": {
+      "name": "Nightveil",
+      "title": "the Silent Blade",
+      "P": {
+        "name": "Shadowstep",
+        "desc": "Attacks from behind an enemy deal bonus damage and briefly grant camouflage out of combat."
+      },
+      "Q": {
+        "name": "Twin Fang",
+        "desc": "Strike with paired daggers in a short cone, dealing burst physical damage."
+      },
+      "W": {
+        "name": "Smoke Cloak",
+        "desc": "Vanish into smoke, becoming untargetable for a moment and gaining movement speed."
+      },
+      "E": {
+        "name": "Phantom Lunge",
+        "desc": "Dash to a target location, slashing the first enemy passed for damage."
+      },
+      "R": {
+        "name": "Killing Shadow",
+        "desc": "Blink behind the lowest-health enemy and unleash an execute strike for massive damage."
+      }
+    },
+    "ironhold": {
+      "name": "Ironhold",
+      "title": "the Bulwark",
+      "P": {
+        "name": "Living Fortress",
+        "desc": "Gains stacking armor the longer Ironhold stays in combat, up to a hardened cap."
+      },
+      "Q": {
+        "name": "Shield Bash",
+        "desc": "Slam the ground with a shield, damaging and slowing nearby enemies."
+      },
+      "W": {
+        "name": "Bracing Wall",
+        "desc": "Raise a bulwark that grants a temporary shield absorbing incoming damage."
+      },
+      "E": {
+        "name": "Grappling Charge",
+        "desc": "Charge forward to the first enemy hit, dealing damage and knocking them back."
+      },
+      "R": {
+        "name": "Seismic Anchor",
+        "desc": "Drive an anchor into the earth, stunning all nearby enemies and dealing damage."
+      }
+    },
+    "embermage": {
+      "name": "Embermage",
+      "title": "the Cinderweaver",
+      "P": {
+        "name": "Kindling",
+        "desc": "Damaging spells leave embers that ignite for extra magic damage on the next hit."
+      },
+      "Q": {
+        "name": "Flame Bolt",
+        "desc": "Hurl a bolt of fire in a line, dealing magic damage to the first enemy struck."
+      },
+      "W": {
+        "name": "Meteor Fall",
+        "desc": "Call a meteor onto a target area, dealing heavy magic damage to everyone in the blast."
+      },
+      "E": {
+        "name": "Searing Chains",
+        "desc": "Bind an enemy in fiery chains, rooting them in place and dealing damage over time."
+      },
+      "R": {
+        "name": "Infernal Nova",
+        "desc": "Unleash a ring of fire that erupts outward, dealing catastrophic magic damage around Embermage."
+      }
+    },
+    "dawnsong": {
+      "name": "Dawnsong",
+      "title": "the Radiant Muse",
+      "P": {
+        "name": "Guiding Light",
+        "desc": "Healing an ally also grants them a small burst of movement speed toward Dawnsong."
+      },
+      "Q": {
+        "name": "Starlance",
+        "desc": "Send a bolt of starlight in a line, dealing magic damage to the first enemy it hits."
+      },
+      "W": {
+        "name": "Mending Chorus",
+        "desc": "Restore health to a targeted ally and cleanse a minor slow effect."
+      },
+      "E": {
+        "name": "Aegis Hymn",
+        "desc": "Shield an ally and briefly increase their movement speed to reposition safely."
+      },
+      "R": {
+        "name": "Dawnbreak",
+        "desc": "Bathe all nearby allies in dawnlight, healing them greatly and briefly boosting their defenses."
+      }
+    }
+  },
+  "common": {
+    "loading": "Loading...",
+    "back": "Back",
+    "next": "Next",
+    "confirm": "Confirm",
+    "cancel": "Cancel"
+  },
+  "language": {
+    "ko": "한국어",
+    "en": "English"
+  }
+}
