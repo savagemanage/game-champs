@@ -57,12 +57,15 @@ import type { VfxKind } from '../render/svgArt';
 import {
   classifyHit,
   shakeForHit,
+  shouldShake,
   structureDestructionShake,
   sparkCountForHit,
   knockbackForHit,
   knockbackDir,
   popupStyleForHit,
+  MAX_SHAKE_INTENSITY,
   type HitImportance,
+  type ShakeSpec,
 } from '../render/juice';
 import {
   buildStructureGraph,
@@ -338,6 +341,13 @@ export default class BattleScene extends Phaser.Scene {
   private ended = false;
   /** Guards the cosmetic kill slow-mo so rapid kills cannot stack/strand it. */
   private slowMoActive = false;
+  /**
+   * Real-time timestamp (performance clock, ms) of the last camera shake that
+   * actually fired. Used to throttle shakes so the constant 5v5 combat cannot
+   * coalesce into a permanent tremor. -Infinity so the first shake never
+   * throttles.
+   */
+  private lastShakeAt = Number.NEGATIVE_INFINITY;
   /**
    * Per-frame living-unit snapshot, rebuilt once at the top of {@link update}
    * before the champion/minion/turret loops that call {@link findTarget}. This
@@ -1291,6 +1301,7 @@ export default class BattleScene extends Phaser.Scene {
       this.registerKill(u, target, res.lethal);
       this.onDamage(this.entityForUnit(target), target.pos, res.dealt, 0xffcc55, res.lethal, {
         fromPos: u.pos,
+        attacker: u,
       });
       this.drawBeam(u.pos, target.pos, 0xffcc55);
       resetAttackCooldown(u);
@@ -1317,6 +1328,7 @@ export default class BattleScene extends Phaser.Scene {
     this.registerKill(u, target, res.lethal);
     this.onDamage(this.entityForUnit(target), target.pos, res.dealt, 0xf0e6d2, res.lethal, {
       fromPos: u.pos,
+      attacker: u,
     });
     if (u.attackRange > 220 * SCALE) this.drawProjectile(u.pos, target.pos, 0xf0e6d2);
     resetAttackCooldown(u);
@@ -1416,6 +1428,7 @@ export default class BattleScene extends Phaser.Scene {
             fromPos: caster.unit.pos,
             ability: true,
             ult: slot === 'R',
+            attacker: caster.unit,
           });
           if (effect.stunDuration > 0) {
             e.stunned = effect.stunDuration;
@@ -1641,7 +1654,47 @@ export default class BattleScene extends Phaser.Scene {
 
   private shake(intensity: number, duration = 160) {
     if (intensity <= 0 || duration <= 0) return;
-    this.cameras.main.shake(duration, Phaser.Math.Clamp(intensity, 0.002, 0.03));
+    // Ceiling lowered well below the old 0.03 so even a legitimate on-screen
+    // shake is a gentle bump, never a lurch. Matches juice.MAX_SHAKE_INTENSITY.
+    this.cameras.main.shake(duration, Phaser.Math.Clamp(intensity, 0.002, MAX_SHAKE_INTENSITY));
+    this.lastShakeAt = this.time.now;
+  }
+
+  /**
+   * Guarded entry point for ALL camera shake. A shake only fires when the pure
+   * {@link shouldShake} policy allows it: it must have real magnitude, be
+   * PERCEIVABLE by the player (the player champion is attacker/victim, or the
+   * hit is inside the camera's visible {@link Phaser.Cameras.Scene2D.Camera.worldView}),
+   * and pass the throttle (no new shake within {@link SHAKE_MIN_INTERVAL_MS}
+   * unless strictly stronger, and never restart a shake weaker than the one
+   * currently playing). This is what keeps off-screen bot fights and rapid hits
+   * from turning the camera into a permanent tremor. `worldPos` is the flat
+   * gameplay-plane position of the hit; we project it into the same screen space
+   * the camera scrolls over to test on-screen. Purely cosmetic.
+   */
+  private tryShake(spec: ShakeSpec, worldPos: Vec2, involvesPlayer: boolean) {
+    if (spec.intensity <= 0 || spec.duration <= 0) return;
+    const cam = this.cameras.main;
+    const screen = project(worldPos);
+    const onScreen = cam.worldView.contains(screen.x, screen.y);
+    const effect = cam.shakeEffect;
+    const running = effect.isRunning;
+    // Shake.intensity is a Vector2 (per-axis); we drive both axes equally so x
+    // is representative of the currently-playing magnitude.
+    const runningIntensity = running ? effect.intensity.x : 0;
+    if (
+      !shouldShake({
+        intensity: spec.intensity,
+        involvesPlayer,
+        onScreen,
+        sinceLastMs: this.time.now - this.lastShakeAt,
+        running,
+        runningIntensity,
+      })
+    ) {
+      return;
+    }
+    this.shake(spec.intensity, spec.duration);
   }
 
   /**
@@ -1657,10 +1710,16 @@ export default class BattleScene extends Phaser.Scene {
     amount: number,
     color: number,
     lethal: boolean,
-    opts: { fromPos?: Vec2; ability?: boolean; ult?: boolean } = {},
+    opts: { fromPos?: Vec2; ability?: boolean; ult?: boolean; attacker?: Unit } = {},
   ) {
     const fraction = target ? amount / target.unit.maxHp : 0;
     const importance = classifyHit({ fraction, ability: opts.ability, ult: opts.ult, lethal });
+    // Does the player's champion feel this hit (as attacker or victim)? Used to
+    // decide whether camera shake / kill slow-mo may fire even when off-screen.
+    const playerUnit = this.player?.unit;
+    const involvesPlayer =
+      !!playerUnit &&
+      ((target?.unit === playerUnit) || (opts.attacker !== undefined && opts.attacker === playerUnit));
 
     this.floatingDamage(pos, amount, color, '', importance);
     if (target) {
@@ -1674,19 +1733,21 @@ export default class BattleScene extends Phaser.Scene {
     if (lethal) {
       audio.play('death');
       if (target) this.deathBurst(target, color);
-      // A champion takedown earns a brief, cosmetic slow-mo moment.
-      if (target && target.unit.kind === 'champion') this.killSlowMo();
+      // Kill slow-mo is a rare, dramatic beat: only the player's own takedowns
+      // or the player's death earn it, never the many bot-vs-bot deaths that
+      // happen constantly across a 5v5 map.
+      if (target && target.unit.kind === 'champion' && involvesPlayer) this.killSlowMo();
     }
 
-    // Screen shake scales with importance; chip hits do not shake. Structure
-    // deaths get their own stronger shake below.
+    // Camera shake only for combat the player can perceive, throttled and
+    // magnitude-capped via tryShake so constant/off-screen fighting can never
+    // turn the camera into a permanent tremor. Chip and normal (autoattack)
+    // hits produce a zero-intensity spec and are dropped inside tryShake.
     if (target && (target.unit.kind === 'champion' || lethal)) {
-      const s = shakeForHit(importance, fraction);
-      this.shake(s.intensity, s.duration);
+      this.tryShake(shakeForHit(importance, fraction), pos, involvesPlayer);
     }
     if (lethal && target && (target.unit.kind === 'turret' || target.unit.kind === 'nexus')) {
-      const s = structureDestructionShake();
-      this.shake(s.intensity, s.duration);
+      this.tryShake(structureDestructionShake(), pos, involvesPlayer);
     }
   }
 
@@ -1952,7 +2013,16 @@ export default class BattleScene extends Phaser.Scene {
       ease: 'Cubic.easeOut',
       onComplete: () => flare.destroy(),
     });
-    if (ultimate) this.shake(0.006);
+    // Ult cast bump: gated/throttled like every other shake so the ten bots
+    // ulting around the map cannot rattle the player's camera. Only the
+    // player's own ult, or one cast on-screen, gives a subtle bump.
+    if (ultimate) {
+      this.tryShake(
+        { intensity: 0.006, duration: 150 },
+        caster.unit.pos,
+        caster.unit === this.player?.unit,
+      );
+    }
   }
 
   private stunSpin(entity: Entity, color: number) {

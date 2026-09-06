@@ -2,11 +2,14 @@ import { describe, expect, it } from 'vitest';
 import {
   BIG_HIT_FRACTION,
   CHIP_HIT_FRACTION,
+  MAX_SHAKE_INTENSITY,
+  SHAKE_MIN_INTERVAL_MS,
   classifyHit,
   knockbackDir,
   knockbackForHit,
   popupStyleForHit,
   shakeForHit,
+  shouldShake,
   sparkCountForHit,
   structureDestructionShake,
   type HitImportance,
@@ -35,26 +38,85 @@ describe('classifyHit', () => {
 });
 
 describe('shakeForHit', () => {
-  it('does not shake on chip hits', () => {
+  it('does not shake on chip or normal hits', () => {
     expect(shakeForHit('chip')).toEqual({ duration: 0, intensity: 0 });
+    // Ordinary autoattack trading (normal) must not move the camera at all so
+    // constant 5v5 combat cannot turn into a permanent tremor.
+    expect(shakeForHit('normal')).toEqual({ duration: 0, intensity: 0 });
   });
 
-  it('increases intensity monotonically with importance', () => {
-    const intensities = ORDER.map((i) => shakeForHit(i, 0.12).intensity);
+  it('increases intensity monotonically for the tiers that shake', () => {
+    const shaking: HitImportance[] = ['ability', 'ult', 'big'];
+    const intensities = shaking.map((i) => shakeForHit(i, 0.12).intensity);
     for (let k = 1; k < intensities.length; k += 1) {
       expect(intensities[k]).toBeGreaterThan(intensities[k - 1]);
     }
+    // The lowest shaking tier is still stronger than the non-shaking ones.
+    expect(shakeForHit('ability').intensity).toBeGreaterThan(shakeForHit('normal').intensity);
   });
 
-  it('clamps big-hit intensity so the camera never lurches too far', () => {
-    expect(shakeForHit('big', 999).intensity).toBeLessThanOrEqual(0.03);
-    expect(shakeForHit('big', 0).intensity).toBeGreaterThanOrEqual(0.011);
+  it('clamps big-hit intensity to the subtle ceiling so the camera never lurches', () => {
+    expect(shakeForHit('big', 999).intensity).toBeLessThanOrEqual(MAX_SHAKE_INTENSITY);
+    expect(shakeForHit('big', 0).intensity).toBeGreaterThan(0);
   });
 
-  it('structure destruction shake is strong and time-bounded', () => {
+  it('structure destruction shake is the strongest hit shake and time-bounded', () => {
     const s = structureDestructionShake();
-    expect(s.intensity).toBeGreaterThan(shakeForHit('ult').intensity);
+    expect(s.intensity).toBeGreaterThanOrEqual(shakeForHit('ult').intensity);
+    expect(s.intensity).toBeLessThanOrEqual(MAX_SHAKE_INTENSITY);
     expect(s.duration).toBeGreaterThan(0);
+  });
+});
+
+describe('shouldShake', () => {
+  const base = {
+    intensity: 0.006,
+    involvesPlayer: true,
+    onScreen: true,
+    sinceLastMs: SHAKE_MIN_INTERVAL_MS + 1,
+    running: false,
+    runningIntensity: 0,
+  };
+
+  it('fires for a perceivable, un-throttled shake with real magnitude', () => {
+    expect(shouldShake(base)).toBe(true);
+  });
+
+  it('never fires for a zero-intensity shake', () => {
+    expect(shouldShake({ ...base, intensity: 0 })).toBe(false);
+  });
+
+  it('skips shakes the player cannot perceive (off-screen and not involved)', () => {
+    expect(shouldShake({ ...base, involvesPlayer: false, onScreen: false })).toBe(false);
+    // On-screen alone is enough even without the player.
+    expect(shouldShake({ ...base, involvesPlayer: false, onScreen: true })).toBe(true);
+    // Player involvement is enough even off-screen (e.g. player just off-view).
+    expect(shouldShake({ ...base, involvesPlayer: true, onScreen: false })).toBe(true);
+  });
+
+  it('drops a rapid follow-up shake within the min interval', () => {
+    const recent = { ...base, sinceLastMs: 10 };
+    // Nothing currently playing but still inside the throttle window: dropped,
+    // even for a bigger hit, so rapid hits cannot stack into a tremor.
+    expect(shouldShake(recent)).toBe(false);
+    expect(shouldShake({ ...recent, intensity: base.intensity + 0.005 })).toBe(false);
+  });
+
+  it('lets a shake through once the min interval has elapsed', () => {
+    expect(shouldShake({ ...base, sinceLastMs: SHAKE_MIN_INTERVAL_MS + 1 })).toBe(true);
+  });
+
+  it('does not restart a shake weaker-or-equal to the one currently playing', () => {
+    const running = { ...base, running: true, runningIntensity: 0.01 };
+    expect(shouldShake({ ...running, intensity: 0.005 })).toBe(false);
+    expect(shouldShake({ ...running, intensity: 0.01 })).toBe(false);
+    expect(shouldShake({ ...running, intensity: 0.011 })).toBe(true);
+  });
+
+  it('lets a strictly stronger hit punch through the throttle over a weaker in-flight shake', () => {
+    const recentRunning = { ...base, sinceLastMs: 10, running: true, runningIntensity: 0.004 };
+    expect(shouldShake({ ...recentRunning, intensity: 0.004 })).toBe(false);
+    expect(shouldShake({ ...recentRunning, intensity: 0.009 })).toBe(true);
   });
 });
 

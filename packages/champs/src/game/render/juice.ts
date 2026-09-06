@@ -53,10 +53,28 @@ export interface ShakeSpec {
 }
 
 /**
+ * Hard ceiling on any single shake's intensity. The scene clamps to this too;
+ * kept here so the pure math and the Phaser layer agree on "the camera can
+ * never lurch more than this". Deliberately well below the old 0.03 so even a
+ * legitimate on-screen big hit is a gentle bump, not a lurch.
+ */
+export const MAX_SHAKE_INTENSITY = 0.012;
+
+/**
+ * Minimum real-time gap (ms) between two camera shakes. In a 5v5 with ten
+ * champions in constant combat, hits land many times per second; without a
+ * floor the shakes coalesce into a permanent tremor. A new shake that arrives
+ * inside this window is dropped (unless it is strictly stronger -- see
+ * {@link shouldShake}) so the camera settles between bumps.
+ */
+export const SHAKE_MIN_INTERVAL_MS = 220;
+
+/**
  * Screen-shake magnitude scaled by importance and (for the heaviest tiers)
- * damage fraction. Chip hits do not shake at all; each higher band shakes
- * noticeably more. The intensity is clamped so a monster nuke can never lurch
- * the camera off-screen.
+ * damage fraction. Chip AND normal hits do not shake at all -- only abilities,
+ * ults and big/lethal blows do -- so ordinary autoattack trading never moves
+ * the camera. The intensity is clamped to {@link MAX_SHAKE_INTENSITY} so even a
+ * monster nuke stays a subtle bump.
  */
 export function shakeForHit(importance: HitImportance, fraction = 0): ShakeSpec {
   const frac = Number.isFinite(fraction) ? Math.max(0, fraction) : 0;
@@ -64,19 +82,63 @@ export function shakeForHit(importance: HitImportance, fraction = 0): ShakeSpec 
     case 'chip':
       return { duration: 0, intensity: 0 };
     case 'normal':
-      return { duration: 90, intensity: 0.0025 };
+      return { duration: 0, intensity: 0 };
     case 'ability':
-      return { duration: 130, intensity: 0.005 };
+      return { duration: 110, intensity: 0.003 };
     case 'ult':
-      return { duration: 180, intensity: 0.009 };
+      return { duration: 150, intensity: 0.006 };
     case 'big':
-      return { duration: 220, intensity: clamp(0.011 + frac * 0.045, 0.011, 0.03) };
+      return { duration: 180, intensity: clamp(0.007 + frac * 0.02, 0.007, MAX_SHAKE_INTENSITY) };
   }
 }
 
-/** A dedicated, deliberately strong shake for structure (turret/nexus) death. */
+/** A dedicated, slightly stronger shake for structure (turret/nexus) death. */
 export function structureDestructionShake(): ShakeSpec {
-  return { duration: 320, intensity: 0.022 };
+  return { duration: 240, intensity: MAX_SHAKE_INTENSITY };
+}
+
+/**
+ * Pure decision for whether a requested camera shake should actually fire,
+ * given everything the scene knows about it. Keeping this Phaser-free lets it
+ * be unit-tested; the scene supplies the live inputs (on-screen test from the
+ * camera worldView, time since the last shake, and the currently-playing
+ * shake's intensity from the shake effect).
+ *
+ * A shake fires only when it has real magnitude AND it is perceivable by the
+ * player (either the player's champion is involved, or the hit is on-screen),
+ * AND it is not being throttled. Throttling drops a shake that arrives within
+ * {@link SHAKE_MIN_INTERVAL_MS} of the previous one UNLESS it is strictly
+ * stronger than what is already playing (so a big hit can still punch through a
+ * lingering weak tremor, but a weak hit can never restart/extend a stronger
+ * one).
+ */
+export function shouldShake(opts: {
+  /** Requested shake intensity (already looked up from the band). */
+  intensity: number;
+  /** Is the player's champion the attacker or the victim of this hit? */
+  involvesPlayer: boolean;
+  /** Is the hit's projected position inside the camera's visible view? */
+  onScreen: boolean;
+  /** Real-time ms elapsed since the last shake actually fired. */
+  sinceLastMs: number;
+  /** Is a shake currently playing on the camera? */
+  running: boolean;
+  /** Intensity of the currently-playing shake (0 when none). */
+  runningIntensity: number;
+}): boolean {
+  if (!(opts.intensity > 0)) return false;
+  // Only shake for combat the player can perceive.
+  if (!opts.involvesPlayer && !opts.onScreen) return false;
+  // Never restart/extend a shake weaker than the one currently playing.
+  if (opts.running && opts.intensity <= opts.runningIntensity) return false;
+  // Throttle bursts: within the min interval, only a shake strictly stronger
+  // than what is currently playing punches through (so a big hit can still be
+  // felt over a lingering weak tremor). A shake with nothing playing but inside
+  // the interval is dropped, so rapid hits cannot stack into a permanent shake.
+  if (opts.sinceLastMs < SHAKE_MIN_INTERVAL_MS) {
+    if (!opts.running || opts.intensity <= opts.runningIntensity) return false;
+  }
+  return true;
 }
 
 /**
