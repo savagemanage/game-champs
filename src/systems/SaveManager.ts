@@ -16,19 +16,23 @@ import type {
   FormationState,
   GameState,
   GameStateV1,
+  HeroInstance,
   HeroState,
   MetaUpgradeState,
   MiniGameMeta,
   MissionState,
+  PityState,
   ResourceState,
   SeasonState,
 } from '../types';
 import { freshUpgrades } from './MetaProgress';
+import { heroDef } from '../config/Heroes';
 import {
   BUILDING_ORDER,
   BUILDINGS,
   ECONOMY,
   GAME_STATE,
+  HEROES,
   RESOURCE_ORDER,
   UPGRADE_ORDER,
 } from '../config/GameConfig';
@@ -216,9 +220,14 @@ function freshBuildings(): BuildingState {
   return { levels, queue: [] };
 }
 
-/** Empty-but-valid hero roster (no heroes recruited). */
+/** Empty-but-valid hero roster (no heroes recruited, no shards, fresh pity). */
 function freshHeroes(): HeroState {
-  return { roster: {} };
+  return { roster: {}, shards: 0, pity: freshPity() };
+}
+
+/** A fresh recruit pity state (no dry streak, no pulls made). */
+function freshPity(): PityState {
+  return { sinceHighGrade: 0, totalPulls: 0 };
 }
 
 /** Empty-but-valid formation: front/back rows sized from config, all unassigned. */
@@ -346,12 +355,57 @@ function normalizeQueue(input: unknown): BuildingUpgrade[] {
 }
 
 /**
- * Coerce a possibly-partial hero state into a complete one. Hero entries are
- * opaque here (owned by a later FEAT); this only guarantees a plain object.
+ * Coerce a possibly-partial hero instance into a well-formed one, clamped to
+ * its grade's progression caps. Returns null for an unknown catalog hero id so
+ * the roster only ever holds real heroes. Level/stars/skill are floored to
+ * their minimums and capped at the grade ceilings.
+ */
+function normalizeHeroInstance(id: string, raw: unknown): HeroInstance | null {
+  const def = heroDef(id);
+  if (!def) return null;
+  const grade = HEROES.GRADES[def.grade];
+  const src = (raw && typeof raw === 'object' ? raw : {}) as Partial<HeroInstance>;
+  const clamp = (v: unknown, min: number, max: number): number => {
+    const n = Math.floor(Number(v));
+    if (!Number.isFinite(n) || n < min) return min;
+    return Math.min(n, max);
+  };
+  return {
+    id,
+    level: clamp(src.level, 1, grade.maxLevel),
+    stars: clamp(src.stars, HEROES.START_STARS, grade.maxStars),
+    skillLevel: clamp(src.skillLevel, HEROES.START_SKILL_LEVEL, HEROES.MAX_SKILL_LEVEL),
+    dupes: Math.max(0, safeInt(src.dupes)),
+  };
+}
+
+/**
+ * Coerce a possibly-partial hero state into a complete one: every roster entry
+ * normalized to a valid, cap-clamped {@link HeroInstance} (unknown hero ids
+ * dropped), a non-negative shard balance, and a well-formed pity counter.
  */
 function normalizeHeroes(heroes: Partial<HeroState> | undefined): HeroState {
-  const roster = heroes?.roster;
-  return { roster: roster && typeof roster === 'object' ? { ...roster } : {} };
+  const roster: Record<string, HeroInstance> = {};
+  const rawRoster = heroes?.roster;
+  if (rawRoster && typeof rawRoster === 'object') {
+    for (const [id, raw] of Object.entries(rawRoster as Record<string, unknown>)) {
+      const instance = normalizeHeroInstance(id, raw);
+      if (instance) roster[id] = instance;
+    }
+  }
+  return {
+    roster,
+    shards: safeInt(heroes?.shards),
+    pity: normalizePity(heroes?.pity),
+  };
+}
+
+/** Coerce a possibly-partial pity state into a complete one. */
+function normalizePity(pity: Partial<PityState> | undefined): PityState {
+  return {
+    sinceHighGrade: safeInt(pity?.sinceHighGrade),
+    totalPulls: safeInt(pity?.totalPulls),
+  };
 }
 
 /**
@@ -360,7 +414,14 @@ function normalizeHeroes(heroes: Partial<HeroState> | undefined): HeroState {
  * with null so the row lengths always match the config.
  */
 function normalizeFormation(formation: Partial<FormationState> | undefined): FormationState {
-  const slot = (v: unknown): string | null => (typeof v === 'string' ? v : null);
+  // A hero occupies at most one slot: track ids seen so a duplicate (or an
+  // unknown catalog id) is dropped to null rather than persisted twice.
+  const seen = new Set<string>();
+  const slot = (v: unknown): string | null => {
+    if (typeof v !== 'string' || !heroDef(v) || seen.has(v)) return null;
+    seen.add(v);
+    return v;
+  };
   const row = (input: unknown, size: number): (string | null)[] => {
     const src = Array.isArray(input) ? input : [];
     return Array.from({ length: size }, (_, i) => slot(src[i]));

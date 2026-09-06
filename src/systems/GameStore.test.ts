@@ -126,4 +126,76 @@ describe('GameStore', () => {
     store.grantResources({ circuitry: 1e9 });
     expect(store.resource('circuitry')).toBe(cap);
   });
+
+  /* FEAT-003: hero roster / recruit / progression / formation. */
+
+  it('recruitOne adds a new hero and persists', () => {
+    const storage = memoryStorage();
+    const store = GameStore.createWith(storage);
+    const res = store.recruitOne(1234);
+    expect(store.ownsHero(res.heroId)).toBe(true);
+    expect(res.duplicate).toBe(false);
+    // Persisted: a reloaded store sees the same roster + pity total.
+    const reloaded = GameStore.createWith(storage);
+    expect(reloaded.ownsHero(res.heroId)).toBe(true);
+    expect(reloaded.state.heroes.pity.totalPulls).toBe(1);
+  });
+
+  it('recruitOne converts a duplicate to shards', () => {
+    const storage = memoryStorage();
+    const store = GameStore.createWith(storage);
+    // Pull the same seed twice -> second is a guaranteed duplicate.
+    const first = store.recruitOne(4242);
+    const shardsBefore = store.shards();
+    const second = store.recruitOne(4242);
+    expect(second.heroId).toBe(first.heroId);
+    expect(second.duplicate).toBe(true);
+    expect(second.shardsGained).toBeGreaterThan(0);
+    expect(store.shards()).toBe(shardsBefore + second.shardsGained);
+    expect(store.hero(first.heroId)!.dupes).toBe(1);
+  });
+
+  it('hero progression spends shards and persists', () => {
+    const storage = memoryStorage();
+    const store = GameStore.createWith(storage);
+    const res = store.recruitOne(1);
+    // Grant plenty of shards directly for the test.
+    store.state.heroes.shards = 100000;
+    store.persist();
+    const before = store.hero(res.heroId)!.level;
+    expect(store.levelUpHero(res.heroId)).toBe(true);
+    expect(store.hero(res.heroId)!.level).toBe(before + 1);
+    expect(store.starUpHero(res.heroId)).toBe(true);
+    expect(store.hero(res.heroId)!.stars).toBeGreaterThan(1);
+    expect(store.skillUpHero(res.heroId)).toBe(true);
+    // A non-owned hero cannot be progressed.
+    expect(store.levelUpHero('not-owned')).toBe(false);
+  });
+
+  it('hero progression fails with insufficient shards', () => {
+    const storage = memoryStorage();
+    const store = GameStore.createWith(storage);
+    const res = store.recruitOne(2);
+    store.state.heroes.shards = 0;
+    store.persist();
+    expect(store.levelUpHero(res.heroId)).toBe(false);
+    expect(store.hero(res.heroId)!.level).toBe(1);
+  });
+
+  it('setFormationSlot only places owned heroes and persists', () => {
+    const storage = memoryStorage();
+    const store = GameStore.createWith(storage);
+    const res = store.recruitOne(3);
+    // Cannot place a hero that is not owned.
+    expect(store.setFormationSlot('front', 0, 'ironward-not-owned')).toBe(false);
+    // Can place an owned hero.
+    expect(store.setFormationSlot('front', 0, res.heroId)).toBe(true);
+    expect(store.formation().front[0]).toBe(res.heroId);
+    // Persisted across reload.
+    const reloaded = GameStore.createWith(storage);
+    expect(reloaded.formation().front[0]).toBe(res.heroId);
+    // Clearing works.
+    expect(store.setFormationSlot('front', 0, null)).toBe(true);
+    expect(store.formation().front[0]).toBeNull();
+  });
 });

@@ -13,7 +13,14 @@
  * pure system.
  */
 
-import type { BuildingId, GameState, ResourceBag, ResourceKind } from '../types';
+import type {
+  BuildingId,
+  FormationState,
+  GameState,
+  HeroInstance,
+  ResourceBag,
+  ResourceKind,
+} from '../types';
 import { SaveManager, browserStorage, type KeyValueStorage } from './SaveManager';
 import {
   accrueSince,
@@ -29,6 +36,10 @@ import {
   startUpgrade,
   type UpgradeBlockReason,
 } from './Buildings';
+import { duplicateShards, recruit, type RecruitResult } from './Recruit';
+import { levelUp, makeHeroInstance, skillUp, starUp } from './Heroes';
+import { placeHero, validateFormation, type Row } from './Formation';
+import { makeRng } from './Rng';
 
 /** Singleton wrapper around the full persisted v2 {@link GameState}. */
 export class GameStore {
@@ -181,5 +192,108 @@ export class GameStore {
     resources.stockpiles = addResources(resources.stockpiles, gain, buildings.levels);
     this.persist();
     return this.resources();
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* FEAT-003: hero roster, recruit, progression, formation.            */
+  /* ------------------------------------------------------------------ */
+
+  /** Spendable hero progression shards. */
+  shards(): number {
+    return this.stateInternal.heroes.shards;
+  }
+
+  /** The owned hero instance for an id (undefined if not owned). */
+  hero(id: string): HeroInstance | undefined {
+    return this.stateInternal.heroes.roster[id];
+  }
+
+  /** Whether a hero id is owned. */
+  ownsHero(id: string): boolean {
+    return this.stateInternal.heroes.roster[id] !== undefined;
+  }
+
+  /**
+   * Perform one seeded recruit pull, applying the roster / shard / pity
+   * mutation and persisting. A brand-new hero is added at level 1; a duplicate
+   * instead converts to shards (grade shardValue + bonus) and bumps the owned
+   * instance's `dupes`. Pass a `seed` so the pull is deterministic and testable.
+   * Returns the recruit outcome plus whether it was a duplicate + shards gained.
+   */
+  recruitOne(seed: number): RecruitResult & { duplicate: boolean; shardsGained: number } {
+    const heroes = this.stateInternal.heroes;
+    const rng = makeRng(seed);
+    const result = recruit(rng, heroes.pity);
+    heroes.pity = result.newPityState;
+
+    const existing = heroes.roster[result.heroId];
+    let duplicate = false;
+    let shardsGained = 0;
+    if (existing) {
+      duplicate = true;
+      shardsGained = duplicateShards(result.grade);
+      heroes.shards += shardsGained;
+      existing.dupes += 1;
+    } else {
+      heroes.roster[result.heroId] = makeHeroInstance(result.heroId);
+    }
+    this.persist();
+    return { ...result, duplicate, shardsGained };
+  }
+
+  /**
+   * Spend shards to level up an owned hero by one. Returns true on success
+   * (affordable + not capped) and persists; false otherwise.
+   */
+  levelUpHero(id: string): boolean {
+    return this.progressHero(id, levelUp);
+  }
+
+  /** Spend shards to raise an owned hero's star-tier by one. */
+  starUpHero(id: string): boolean {
+    return this.progressHero(id, starUp);
+  }
+
+  /** Spend shards to raise an owned hero's skill level by one. */
+  skillUpHero(id: string): boolean {
+    return this.progressHero(id, skillUp);
+  }
+
+  /** Shared spend-shards-to-progress helper for the three hero tracks. */
+  private progressHero(
+    id: string,
+    op: (
+      instance: HeroInstance,
+      shards: number,
+    ) => { ok: boolean; instance: HeroInstance; shards: number },
+  ): boolean {
+    const heroes = this.stateInternal.heroes;
+    const instance = heroes.roster[id];
+    if (!instance) return false;
+    const res = op(instance, heroes.shards);
+    if (!res.ok) return false;
+    heroes.roster[id] = res.instance;
+    heroes.shards = res.shards;
+    this.persist();
+    return true;
+  }
+
+  /** The current squad formation. */
+  formation(): FormationState {
+    return this.stateInternal.formation;
+  }
+
+  /**
+   * Place (or clear with null) a hero in a formation row slot, then persist.
+   * Only owned heroes may be placed; a hero occupies at most one slot. Returns
+   * true when the resulting formation is valid and was stored.
+   */
+  setFormationSlot(row: Row, index: number, heroId: string | null): boolean {
+    if (heroId !== null && !this.ownsHero(heroId)) return false;
+    const next = placeHero(this.stateInternal.formation, row, index, heroId);
+    if (!validateFormation(next).ok) return false;
+    this.stateInternal.formation = next;
+    this.persist();
+    return true;
   }
 }

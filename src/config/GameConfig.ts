@@ -335,6 +335,140 @@ export const BUILDINGS = {
 } as const;
 
 /**
+ * Hero / RPG-core tuning (FEAT-003). LAST SQUAD's heroes span three combat
+ * TYPES in a rock-paper-scissors triangle, three battlefield ROLES, and three
+ * GRADES. Star-tier + level + skill progression fold into final stats. All
+ * numbers are Phaser-free `as const` data shared by the pure hero, recruit,
+ * formation, and combat systems and their tests.
+ *
+ * Type triangle (advantage): tank > missile > aircraft > tank. Attacking a type
+ * you are strong against multiplies damage by {@link COMBAT.ADVANTAGE_MULT};
+ * attacking a type you are weak to multiplies by {@link COMBAT.DISADVANTAGE_MULT};
+ * a neutral matchup is 1x.
+ */
+export const HEROES = {
+  /**
+   * Per-grade base multipliers + progression caps. `statMult` scales a hero's
+   * catalog base stats (so a UR is innately stronger than an SR of the same
+   * catalog stats), `maxLevel` / `maxStars` cap progression, and `shardValue`
+   * is how many progression shards a duplicate of that grade converts into.
+   */
+  GRADES: {
+    UR: { statMult: 1.4, maxLevel: 80, maxStars: 6, shardValue: 40 },
+    SSR: { statMult: 1.15, maxLevel: 70, maxStars: 5, shardValue: 20 },
+    SR: { statMult: 1.0, maxLevel: 60, maxStars: 4, shardValue: 10 },
+  },
+  /**
+   * Level progression. A hero at level L (1-based) has its base stats scaled by
+   * `1 + LEVEL_STAT_GROWTH * (L - 1)`. Levelling from L to L+1 costs
+   * `round(LEVEL_COST_BASE * LEVEL_COST_GROWTH^(L-1))` progression shards.
+   */
+  LEVEL_STAT_GROWTH: 0.08,
+  LEVEL_COST_BASE: 20,
+  LEVEL_COST_GROWTH: 1.12,
+  /**
+   * Star-tier progression. Each star grants a flat `STAR_STAT_BONUS` fractional
+   * bonus to all stats (additive with the level bonus). Rising from star S to
+   * S+1 costs `round(STAR_COST_BASE * STAR_COST_GROWTH^S)` shards. Heroes start
+   * at 1 star.
+   */
+  START_STARS: 1,
+  STAR_STAT_BONUS: 0.15,
+  STAR_COST_BASE: 100,
+  STAR_COST_GROWTH: 1.8,
+  /**
+   * Skill progression. Skills start at level 1. Each skill level adds
+   * `SKILL_POTENCY_PER_LEVEL` to a skill's effect potency and the whole hero's
+   * stats gain `SKILL_STAT_BONUS_PER_LEVEL` per skill level beyond the first.
+   * Raising a skill from level K to K+1 costs
+   * `round(SKILL_COST_BASE * SKILL_COST_GROWTH^(K-1))` shards.
+   */
+  START_SKILL_LEVEL: 1,
+  MAX_SKILL_LEVEL: 10,
+  SKILL_POTENCY_PER_LEVEL: 0.1,
+  SKILL_STAT_BONUS_PER_LEVEL: 0.03,
+  SKILL_COST_BASE: 50,
+  SKILL_COST_GROWTH: 1.25,
+  /** Same-type squad buff: +20% HP/ATK/DEF when all 5 heroes share one type. */
+  SAME_TYPE_BUFF: 0.2,
+} as const;
+
+/**
+ * Recruit / gacha tuning (FEAT-003). A single pull rolls a grade against
+ * {@link RECRUIT.RATES} (which must sum to 1) using the seeded {@link Rng}, then
+ * picks a hero of that grade. A PITY counter guarantees a UR pull once
+ * {@link RECRUIT.PITY_THRESHOLD} consecutive non-UR pulls have accrued: the pull
+ * AT the threshold is forced to UR and the counter resets. Duplicates convert to
+ * progression shards using the grade's {@link HEROES.GRADES}.shardValue.
+ */
+export const RECRUIT = {
+  /** Grade drop rates for a normal pull. Must sum to 1. */
+  RATES: { UR: 0.03, SSR: 0.15, SR: 0.82 },
+  /**
+   * Consecutive non-UR pulls after which the NEXT pull is forced to UR. With 20,
+   * pull #21 (the 21st in a dry streak) is guaranteed UR if none dropped before.
+   */
+  PITY_THRESHOLD: 20,
+  /** Shards awarded on a duplicate, added on top of the grade shardValue. */
+  DUPLICATE_BONUS_SHARDS: 5,
+} as const;
+
+/**
+ * Combat resolver tuning (FEAT-003). A deterministic turn-based auto-battle.
+ * Turn order is by descending speed (ties broken deterministically by slot).
+ * Damage = `attacker.atk * typeMult * roleMult * variance - defender.def * DEF_FACTOR`,
+ * floored at {@link COMBAT.MIN_DAMAGE}. The type triangle multiplies damage; the
+ * variance is drawn from the seeded RNG within [1 - VARIANCE, 1 + VARIANCE].
+ */
+export const COMBAT = {
+  /** Damage multiplier when the attacker's type beats the defender's. */
+  ADVANTAGE_MULT: 1.5,
+  /** Damage multiplier when the attacker's type loses to the defender's. */
+  DISADVANTAGE_MULT: 0.6,
+  /** Damage multiplier for a neutral (same/other) matchup. */
+  NEUTRAL_MULT: 1.0,
+  /** Fraction of the defender's DEF subtracted from raw damage. */
+  DEF_FACTOR: 0.5,
+  /** Minimum damage any landed attack deals (chip damage floor). */
+  MIN_DAMAGE: 1,
+  /** Half-width of the random damage variance band (+/-). */
+  VARIANCE: 0.1,
+  /** A dealer's outgoing-damage multiplier (focus fire). */
+  DEALER_DAMAGE_MULT: 1.35,
+  /** A tank's outgoing-damage multiplier (soaks more than it hits). */
+  TANK_DAMAGE_MULT: 0.7,
+  /** A support's outgoing-damage multiplier. */
+  SUPPORT_DAMAGE_MULT: 0.85,
+  /** Fraction of a support's ATK healed to the lowest-HP ally on its turn. */
+  SUPPORT_HEAL_FACTOR: 1.1,
+  /** Hard cap on rounds so a stalemate always terminates deterministically. */
+  MAX_ROUNDS: 40,
+} as const;
+
+/**
+ * Ordered tuple of hero combat types (rock-paper-scissors). The HeroType union
+ * is derived in src/types. Triangle: tank > missile > aircraft > tank.
+ */
+export const HERO_TYPES = ['tank', 'missile', 'aircraft'] as const;
+
+/** Ordered tuple of hero roles. The HeroRole union is derived in src/types. */
+export const HERO_ROLES = ['dealer', 'tank', 'support'] as const;
+
+/** Ordered tuple of hero grades (best first). The HeroGrade union is derived in src/types. */
+export const HERO_GRADES = ['UR', 'SSR', 'SR'] as const;
+
+/**
+ * Which type each type BEATS (deals advantage damage to). Encodes the triangle
+ * tank > missile > aircraft > tank; the loser side is derived by inversion in
+ * the combat system.
+ */
+export const TYPE_ADVANTAGE = {
+  tank: 'missile',
+  missile: 'aircraft',
+  aircraft: 'tank',
+} as const;
+
+/**
  * Ordered tuple of resource ids so UI and iteration share one canonical order.
  * The ResourceKind union type is derived in src/types.
  */

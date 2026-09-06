@@ -28,7 +28,7 @@ describe('SaveManager', () => {
       },
       resources: freshResources(),
       buildings: freshBuildings(),
-      heroes: { roster: {} },
+      heroes: { roster: {}, shards: 0, pity: { sinceHighGrade: 0, totalPulls: 0 } },
       formation: {
         front: new Array<string | null>(GAME_STATE.FORMATION.FRONT_SLOTS).fill(null),
         back: new Array<string | null>(GAME_STATE.FORMATION.BACK_SLOTS).fill(null),
@@ -75,7 +75,11 @@ describe('SaveManager', () => {
     expect(fresh.buildings.levels.hq).toBe(1);
     expect(fresh.buildings.levels.barracks).toBe(0);
     expect(fresh.buildings.queue).toEqual([]);
-    expect(fresh.heroes).toEqual({ roster: {} });
+    expect(fresh.heroes).toEqual({
+      roster: {},
+      shards: 0,
+      pity: { sinceHighGrade: 0, totalPulls: 0 },
+    });
     expect(fresh.formation.front).toHaveLength(GAME_STATE.FORMATION.FRONT_SLOTS);
     expect(fresh.formation.back).toHaveLength(GAME_STATE.FORMATION.BACK_SLOTS);
     expect(fresh.formation.front.every((s) => s === null)).toBe(true);
@@ -142,7 +146,11 @@ describe('SaveManager', () => {
     // New sub-states initialized to fresh defaults.
     expect(state.resources).toEqual(freshResources());
     expect(state.buildings).toEqual(freshBuildings());
-    expect(state.heroes).toEqual({ roster: {} });
+    expect(state.heroes).toEqual({
+      roster: {},
+      shards: 0,
+      pity: { sinceHighGrade: 0, totalPulls: 0 },
+    });
     expect(state.formation.front).toHaveLength(GAME_STATE.FORMATION.FRONT_SLOTS);
     expect(state.formation.back).toHaveLength(GAME_STATE.FORMATION.BACK_SLOTS);
     expect(state.season).toEqual({ current: 0, progress: 0 });
@@ -202,7 +210,7 @@ describe('SaveManager', () => {
         miniGame: { coins: 5 },
         resources: { stockpiles: { rations: 10.9, steel: -4, bogus: 99 }, lastTickTimestamp: -1 },
         buildings: { levels: { hq: 2.7, barracks: -1 }, queue: 'nope' },
-        formation: { front: ['h1', 'h2', 'h3'], back: 'nope' },
+        formation: { front: ['ironward', 'stormvolley', 'skytalon'], back: 'nope' },
         season: { current: 2.9, progress: 40 },
         missions: { daily: { arms: 3.6 }, weekly: 'bad' },
       }),
@@ -221,8 +229,9 @@ describe('SaveManager', () => {
     expect(state.buildings.levels.hq).toBe(2); // floored
     expect(state.buildings.levels.barracks).toBe(0); // negative -> 0
     expect(state.buildings.queue).toEqual([]);
-    // Extra front slot dropped to config size; back reset to nulls.
-    expect(state.formation.front).toEqual(['h1', 'h2']);
+    // Extra front slot dropped to config size (real catalog heroes kept);
+    // back reset to nulls.
+    expect(state.formation.front).toEqual(['ironward', 'stormvolley']);
     expect(state.formation.back).toEqual([null, null, null]);
     expect(state.season).toEqual({ current: 2, progress: 40 });
     expect(state.missions.daily).toEqual({ arms: 3 });
@@ -265,5 +274,71 @@ describe('SaveManager', () => {
     mgr.save(state());
     mgr.clear();
     expect(mgr.load().loaded).toBe(false);
+  });
+
+  /* FEAT-003: hero roster / pity / formation persistence. */
+
+  it('round-trips a populated hero roster, shards, pity, and formation', () => {
+    const storage = memoryStorage();
+    const mgr = new SaveManager(storage);
+    const populated: GameState = {
+      ...state(),
+      heroes: {
+        roster: {
+          ironward: { id: 'ironward', level: 12, stars: 3, skillLevel: 4, dupes: 2 },
+          stormvolley: { id: 'stormvolley', level: 5, stars: 1, skillLevel: 1, dupes: 0 },
+        },
+        shards: 640,
+        pity: { sinceHighGrade: 7, totalPulls: 33 },
+      },
+      formation: { front: ['ironward', null], back: ['stormvolley', null, null] },
+    };
+    mgr.save(populated);
+    const { state: loaded } = mgr.load();
+    expect(loaded.heroes.roster.ironward).toEqual({
+      id: 'ironward',
+      level: 12,
+      stars: 3,
+      skillLevel: 4,
+      dupes: 2,
+    });
+    expect(loaded.heroes.shards).toBe(640);
+    expect(loaded.heroes.pity).toEqual({ sinceHighGrade: 7, totalPulls: 33 });
+    expect(loaded.formation.front).toEqual(['ironward', null]);
+    expect(loaded.formation.back).toEqual(['stormvolley', null, null]);
+  });
+
+  it('drops unknown heroes and clamps hero progression to grade caps on load', () => {
+    const storage = memoryStorage();
+    storage.setItem(
+      SAVE_KEY,
+      JSON.stringify({
+        version: SAVE_VERSION,
+        miniGame: { coins: 1 },
+        heroes: {
+          roster: {
+            ironward: { id: 'ironward', level: 99999, stars: 99, skillLevel: 99, dupes: -1 },
+            'ghost-hero': { id: 'ghost-hero', level: 5 },
+          },
+          shards: -50,
+          pity: { sinceHighGrade: -2, totalPulls: 3.9 },
+        },
+        formation: { front: ['ironward', 'ironward'], back: ['ghost-hero', null, null] },
+      }),
+    );
+    const { state } = new SaveManager(storage).load();
+    // Unknown hero id dropped from the roster.
+    expect(state.heroes.roster['ghost-hero']).toBeUndefined();
+    // Real hero clamped to its UR grade caps (level 80 / 6 stars / skill 10).
+    const ironward = state.heroes.roster.ironward;
+    expect(ironward.level).toBe(80);
+    expect(ironward.stars).toBe(6);
+    expect(ironward.skillLevel).toBe(10);
+    expect(ironward.dupes).toBe(0);
+    expect(state.heroes.shards).toBe(0);
+    expect(state.heroes.pity).toEqual({ sinceHighGrade: 0, totalPulls: 3 });
+    // Duplicate placement de-duped, unknown hero cleared to null.
+    expect(state.formation.front).toEqual(['ironward', null]);
+    expect(state.formation.back).toEqual([null, null, null]);
   });
 });

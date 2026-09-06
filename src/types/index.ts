@@ -8,10 +8,95 @@
  * config stays the single source of truth.
  */
 
-import { BUILDING_ORDER, GATE_OPS, RESOURCE_ORDER, UPGRADE_ORDER } from '../config/GameConfig';
+import {
+  BUILDING_ORDER,
+  GATE_OPS,
+  HERO_GRADES,
+  HERO_ROLES,
+  HERO_TYPES,
+  RESOURCE_ORDER,
+  UPGRADE_ORDER,
+} from '../config/GameConfig';
 
 /** A math gate operation. Derived from the canonical GATE_OPS tuple. */
 export type GateOp = (typeof GATE_OPS)[number];
+
+/** A hero combat type (rock-paper-scissors). Derived from HERO_TYPES. */
+export type HeroType = (typeof HERO_TYPES)[number];
+
+/** A hero battlefield role. Derived from HERO_ROLES. */
+export type HeroRole = (typeof HERO_ROLES)[number];
+
+/** A hero rarity grade (best first). Derived from HERO_GRADES. */
+export type HeroGrade = (typeof HERO_GRADES)[number];
+
+/** The four base stats every hero carries. */
+export interface HeroStats {
+  /** Hit points (survivability). */
+  hp: number;
+  /** Attack power (raw outgoing damage before defenses). */
+  atk: number;
+  /** Defense (reduces incoming damage). */
+  def: number;
+  /** Turn-order speed (higher acts earlier). */
+  speed: number;
+}
+
+/**
+ * A single hero skill definition (catalog data). `nameKey` / `descKey` are
+ * i18n keys; `potency` is the base effect magnitude the combat/skill math reads
+ * (scaled by skill level via {@link HEROES.SKILL_POTENCY_PER_LEVEL}).
+ */
+export interface HeroSkill {
+  /** Stable skill id (unique within a hero). */
+  id: string;
+  /** i18n key for the skill's display name. */
+  nameKey: string;
+  /** i18n key for the skill's one-line description. */
+  descKey: string;
+  /** Base effect magnitude (fraction or multiplier depending on the skill). */
+  potency: number;
+}
+
+/**
+ * A catalog hero definition (immutable design data in src/config/Heroes.ts).
+ * Original names/lore only; nothing is drawn from any existing IP.
+ */
+export interface HeroDef {
+  /** Stable hero id (used as the roster key and formation slot reference). */
+  id: string;
+  /** i18n key for the hero's display name. */
+  nameKey: string;
+  /** i18n key for the hero's one-line lore. */
+  loreKey: string;
+  /** Combat type (type triangle). */
+  type: HeroType;
+  /** Battlefield role. */
+  role: HeroRole;
+  /** Rarity grade. */
+  grade: HeroGrade;
+  /** Base stats at level 1 / 1 star / skill level 1 (before grade multiplier). */
+  base: HeroStats;
+  /** 1-2 skills. */
+  skills: HeroSkill[];
+}
+
+/**
+ * A single owned hero's mutable progression state (persisted in the roster).
+ * `id` references a {@link HeroDef}; the rest is progression the player raises.
+ */
+export interface HeroInstance {
+  /** Catalog hero id this instance progresses. */
+  id: string;
+  /** Current level (>= 1). */
+  level: number;
+  /** Current star-tier (>= 1). */
+  stars: number;
+  /** Current skill level (>= 1), applied to all of the hero's skills. */
+  skillLevel: number;
+  /** How many duplicate pulls have been folded in (for display / accounting). */
+  dupes: number;
+}
 
 /** A survival resource id. Derived from the canonical RESOURCE_ORDER tuple. */
 export type ResourceKind = (typeof RESOURCE_ORDER)[number];
@@ -176,26 +261,45 @@ export interface BuildingState {
 }
 
 /**
- * Hero roster sub-state (OWNED BY A LATER FEAT: heroes).
+ * Recruit pity sub-state (OWNED BY FEAT-003: recruit/gacha).
  *
- * Placeholder for the owned hero collection (grade / star-tier / level / skill
- * progression). Empty-but-valid now (no heroes recruited).
+ * `sinceHighGrade` counts consecutive pulls that did NOT yield a UR; when it
+ * reaches {@link RECRUIT.PITY_THRESHOLD} the next pull is forced to UR and the
+ * counter resets. `totalPulls` is a lifetime counter for display.
  */
-export interface HeroState {
-  /** Owned heroes keyed by hero id (empty until a FEAT populates it). */
-  roster: Record<string, unknown>;
+export interface PityState {
+  /** Consecutive non-UR pulls accrued toward the pity guarantee. */
+  sinceHighGrade: number;
+  /** Lifetime number of pulls made. */
+  totalPulls: number;
 }
 
 /**
- * Squad-formation sub-state (OWNED BY A LATER FEAT: formation/combat).
+ * Hero roster sub-state (OWNED BY FEAT-003: heroes).
  *
- * Placeholder for the 5-slot squad layout (2 front row + 3 back row) that
- * references heroes by id. Empty-but-valid now (no slots assigned).
+ * Holds every owned hero's progression keyed by hero id, the spendable
+ * progression shard currency (earned from duplicates), and the recruit pity
+ * counter. Empty-but-valid on a fresh save (no heroes recruited, 0 shards).
+ */
+export interface HeroState {
+  /** Owned heroes keyed by hero id. */
+  roster: Record<string, HeroInstance>;
+  /** Spendable progression currency earned from duplicate pulls. */
+  shards: number;
+  /** Recruit pity counter state. */
+  pity: PityState;
+}
+
+/**
+ * Squad-formation sub-state (OWNED BY FEAT-003: formation/combat).
+ *
+ * The 5-slot squad layout: 2 front-row + 3 back-row slots, each a hero id or
+ * null when empty. A hero id must appear at most once across all five slots.
  */
 export interface FormationState {
-  /** Front-row hero-id slots (later: length 2). */
+  /** Front-row hero-id slots (length {@link GAME_STATE}.FORMATION.FRONT_SLOTS = 2). */
   front: (string | null)[];
-  /** Back-row hero-id slots (later: length 3). */
+  /** Back-row hero-id slots (length {@link GAME_STATE}.FORMATION.BACK_SLOTS = 3). */
   back: (string | null)[];
 }
 
