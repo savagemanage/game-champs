@@ -141,9 +141,12 @@ const RESOURCE_REGEN = 8; // per second
 // nexus is tallest.
 const CHAMPION_HEIGHT_PX = 26;
 const MINION_HEIGHT_PX = 14;
-const TURRET_HEIGHT_PX = 30;
-const INHIBITOR_HEIGHT_PX = 22;
-const NEXUS_HEIGHT_PX = 42;
+// Structures are lifted LESS than before so they don't stack into a vertical
+// "wall of towers"; combined with the smaller baked structure sprites this
+// keeps champions the focal figures (size-balance tuning pass).
+const TURRET_HEIGHT_PX = 20;
+const INHIBITOR_HEIGHT_PX = 15;
+const NEXUS_HEIGHT_PX = 30;
 
 /**
  * Convert a world coordinate (0..3000) to the FLAT gameplay-plane pixel space.

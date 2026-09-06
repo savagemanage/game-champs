@@ -98,9 +98,12 @@ function coreFill(id: string): string {
 // Champion figures (54 x 78 baked). Distinct illustrated silhouette per role.
 // ---------------------------------------------------------------------------
 
-const CH_W = 54;
-const CH_H = 78;
-const CH_FOOT = 76 / CH_H; // ground contact near the very bottom
+// Champions are drawn as the FOCAL figures of the scene, so they are baked a
+// touch larger than the supporting structures/minions to keep them prominent
+// and readable across the lane map (see the size-balance tuning pass).
+const CH_W = 64;
+const CH_H = 92;
+const CH_FOOT = 90 / CH_H; // ground contact near the very bottom
 
 /**
  * Shared champion body: legs, torso, head + a neutral cloak, all shaded from
@@ -237,10 +240,24 @@ const CHAMPION_BUILDERS: Record<ChampionRole, (id: string, pal: SpritePalette) =
   enchanter,
 };
 
+/**
+ * Intrinsic coordinate space the champion body markup is authored in. The
+ * builders below draw with hard-coded coordinates in this 54x78 box; the whole
+ * figure is then uniformly scaled up into the (larger) {@link CH_W}x{@link CH_H}
+ * baked viewBox via a `<g transform>` so champions read as the focal figures
+ * without re-authoring every path coordinate.
+ */
+const CH_ART_W = 54;
+const CH_ART_H = 78;
+
 /** Build the illustrated SVG for a champion of the given role. */
 export function championArt(role: ChampionRole, pal: SpritePalette): SvgArt {
   const id = `ch-${role}`;
-  const body = CHAMPION_BUILDERS[role](id, pal);
+  const inner = CHAMPION_BUILDERS[role](id, pal);
+  // Uniformly scale the 54x78-authored figure up into the larger baked box.
+  const sx = (CH_W / CH_ART_W).toFixed(4);
+  const sy = (CH_H / CH_ART_H).toFixed(4);
+  const body = `<g transform="scale(${sx} ${sy})">${inner}</g>`;
   return { svg: svgDoc(id, CH_W, CH_H, pal, body), viewW: CH_W, viewH: CH_H, footYFrac: CH_FOOT };
 }
 
@@ -252,8 +269,10 @@ export function championArt(role: ChampionRole, pal: SpritePalette): SvgArt {
 export function minionArt(type: MinionType, pal: SpritePalette): SvgArt {
   const id = `mn-${type}`;
   const big = type === 'super' ? 2 : type === 'siege' ? 1 : 0;
-  const viewW = 42 + big * 6;
-  const viewH = 54 + big * 9;
+  // Baked a touch larger than the old 42x54 so minions stay readable next to
+  // the now-more-prominent champions (see the size-balance tuning pass).
+  const viewW = 46 + big * 6;
+  const viewH = 60 + big * 9;
   const outline = toHex(pal.outline);
   const fill = bodyFill(id);
   const cx = viewW / 2;
@@ -300,8 +319,10 @@ export function structureArt(
   const rim = toHex(pal.rim);
 
   if (tier === 'nexus') {
-    const viewW = 66;
-    const viewH = 90;
+    // Structures are baked SMALLER than before so they read as landmarks
+    // rather than towering over the champions (size-balance tuning pass).
+    const viewW = 56;
+    const viewH = 74;
     const cx = viewW / 2;
     const body =
       // stone plinth
@@ -319,8 +340,8 @@ export function structureArt(
   }
 
   if (tier === 'inhibitor') {
-    const viewW = 48;
-    const viewH = 54;
+    const viewW = 40;
+    const viewH = 44;
     const cx = viewW / 2;
     const body =
       // base
@@ -336,8 +357,8 @@ export function structureArt(
   }
 
   // Turret: tapered tower with a crenellated glowing head.
-  const viewW = 48;
-  const viewH = 66;
+  const viewW = 40;
+  const viewH = 52;
   const cx = viewW / 2;
   const body =
     // foot
