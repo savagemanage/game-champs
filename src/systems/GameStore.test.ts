@@ -59,7 +59,14 @@ describe('GameStore', () => {
     expect(store.state.miniGame.coins).toBe(0);
 
     const stored = JSON.parse(storage.getItem(SAVE_KEY) as string);
-    expect(stored).toEqual(SaveManager.freshGame());
+    // The recruit-entropy seed is randomized per fresh game, so compare every
+    // other sub-state against a fresh baseline and check the seed shape apart.
+    const baseline = SaveManager.freshGame();
+    expect(stored.heroes.recruitSeed).toBeGreaterThan(0);
+    expect({ ...stored, heroes: { ...stored.heroes, recruitSeed: 0 } }).toEqual({
+      ...baseline,
+      heroes: { ...baseline.heroes, recruitSeed: 0 },
+    });
   });
 
   it('tick() accrues production against the stored timestamp and persists', () => {
@@ -76,6 +83,25 @@ describe('GameStore', () => {
     const reloaded = GameStore.createWith(storage);
     expect(reloaded.resource('rations')).toBe(store.resource('rations'));
     expect(reloaded.state.resources.lastTickTimestamp).toBe(101_000);
+  });
+
+  it('a brand-new save does NOT credit a full offline window on the first tick', () => {
+    const storage = memoryStorage();
+    const store = GameStore.createWith(storage);
+    // A fresh save has lastTickTimestamp 0. Entering Home a full day into the
+    // epoch must NOT back-credit ~24h of production from timestamp 0.
+    expect(store.state.resources.lastTickTimestamp).toBe(0);
+    const startRations = store.resource('rations');
+    const now = 86_400_000; // one full day past the epoch
+    store.tick(now);
+    // First tick only establishes the baseline; nothing is granted.
+    expect(store.resource('rations')).toBe(startRations);
+    expect(store.state.resources.lastTickTimestamp).toBe(now);
+
+    // A subsequent real gap DOES accrue (proves production still works after
+    // the baseline is seeded, so we did not simply disable accrual).
+    store.tick(now + 100_000);
+    expect(store.resource('rations')).toBeGreaterThan(startRations);
   });
 
   it('tryStartUpgrade spends resources, queues the timed upgrade, and persists', () => {

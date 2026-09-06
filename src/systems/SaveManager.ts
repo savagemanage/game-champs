@@ -229,9 +229,18 @@ function freshBuildings(): BuildingState {
   return { levels, queue: [] };
 }
 
-/** Empty-but-valid hero roster (no heroes recruited, no shards, fresh pity). */
+/**
+ * Empty-but-valid hero roster (no heroes recruited, no shards, fresh pity),
+ * seeded with a random per-account recruit-entropy value so a brand-new game's
+ * pulls are not identical to another fresh game's.
+ */
 function freshHeroes(): HeroState {
-  return { roster: {}, shards: 0, pity: freshPity() };
+  return { roster: {}, shards: 0, pity: freshPity(), recruitSeed: randomSeed() };
+}
+
+/** A fresh random 32-bit unsigned recruit-entropy seed. */
+function randomSeed(): number {
+  return (Math.floor(Math.random() * 0x100000000) >>> 0);
 }
 
 /** A fresh recruit pity state (no dry streak, no pulls made). */
@@ -441,7 +450,20 @@ function normalizeHeroes(heroes: Partial<HeroState> | undefined): HeroState {
     roster,
     shards: safeInt(heroes?.shards),
     pity: normalizePity(heroes?.pity),
+    recruitSeed: normalizeSeed(heroes?.recruitSeed),
   };
+}
+
+/**
+ * Coerce a persisted recruit-entropy seed into a valid 32-bit unsigned int.
+ * A missing / non-finite / zero value (e.g. an older v2 save that predates the
+ * field) generates a fresh random seed once so the account gains stable
+ * entropy from that point on; a valid value is clamped to 32 bits and kept.
+ */
+function normalizeSeed(value: unknown): number {
+  const n = Math.floor(Number(value));
+  if (!Number.isFinite(n) || n <= 0) return randomSeed();
+  return n >>> 0;
 }
 
 /** Coerce a possibly-partial pity state into a complete one. */

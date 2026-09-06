@@ -325,9 +325,13 @@ export class HeroesScene extends Phaser.Scene {
 
     const results: (RecruitResult & { duplicate: boolean; shardsGained: number })[] = [];
     for (let i = 0; i < count; i += 1) {
-      // Seed each pull from the running total-pulls counter so it is stable +
-      // deterministic; the store advances pity/roster/shards on each call.
-      const seed = (store.state.heroes.pity.totalPulls * 2654435761 + i * 40503) >>> 0;
+      // Seed each pull by mixing the persisted per-account recruit-entropy seed
+      // with the running total-pulls counter so the roll is stable + deterministic
+      // WITHIN an account yet differs across fresh accounts (not trivially
+      // re-rollable). recruitOne stays deterministic given this final seed; the
+      // store advances pity/roster/shards on each call.
+      const recruitSeed = store.state.heroes.recruitSeed >>> 0;
+      const seed = (((store.state.heroes.pity.totalPulls * 2654435761) >>> 0) ^ recruitSeed ^ (i * 40503)) >>> 0;
       results.push(store.recruitOne(seed));
     }
 

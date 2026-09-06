@@ -28,7 +28,7 @@ describe('SaveManager', () => {
       },
       resources: freshResources(),
       buildings: freshBuildings(),
-      heroes: { roster: {}, shards: 0, pity: { sinceHighGrade: 0, totalPulls: 0 } },
+      heroes: { roster: {}, shards: 0, pity: { sinceHighGrade: 0, totalPulls: 0 }, recruitSeed: 123456789 },
       formation: {
         front: new Array<string | null>(GAME_STATE.FORMATION.FRONT_SLOTS).fill(null),
         back: new Array<string | null>(GAME_STATE.FORMATION.BACK_SLOTS).fill(null),
@@ -77,11 +77,14 @@ describe('SaveManager', () => {
     expect(fresh.buildings.levels.hq).toBe(1);
     expect(fresh.buildings.levels.barracks).toBe(0);
     expect(fresh.buildings.queue).toEqual([]);
-    expect(fresh.heroes).toEqual({
-      roster: {},
-      shards: 0,
-      pity: { sinceHighGrade: 0, totalPulls: 0 },
-    });
+    expect(fresh.heroes.roster).toEqual({});
+    expect(fresh.heroes.shards).toBe(0);
+    expect(fresh.heroes.pity).toEqual({ sinceHighGrade: 0, totalPulls: 0 });
+    // A fresh game seeds a random per-account recruit-entropy seed (a positive
+    // 32-bit int) rather than leaving it 0.
+    expect(Number.isInteger(fresh.heroes.recruitSeed)).toBe(true);
+    expect(fresh.heroes.recruitSeed).toBeGreaterThan(0);
+    expect(fresh.heroes.recruitSeed).toBeLessThanOrEqual(0xffffffff);
     expect(fresh.formation.front).toHaveLength(GAME_STATE.FORMATION.FRONT_SLOTS);
     expect(fresh.formation.back).toHaveLength(GAME_STATE.FORMATION.BACK_SLOTS);
     expect(fresh.formation.front.every((s) => s === null)).toBe(true);
@@ -174,11 +177,11 @@ describe('SaveManager', () => {
     // New sub-states initialized to fresh defaults.
     expect(state.resources).toEqual(freshResources());
     expect(state.buildings).toEqual(freshBuildings());
-    expect(state.heroes).toEqual({
-      roster: {},
-      shards: 0,
-      pity: { sinceHighGrade: 0, totalPulls: 0 },
-    });
+    expect(state.heroes.roster).toEqual({});
+    expect(state.heroes.shards).toBe(0);
+    expect(state.heroes.pity).toEqual({ sinceHighGrade: 0, totalPulls: 0 });
+    // Migration seeds a valid recruit-entropy seed too.
+    expect(state.heroes.recruitSeed).toBeGreaterThan(0);
     expect(state.formation.front).toHaveLength(GAME_STATE.FORMATION.FRONT_SLOTS);
     expect(state.formation.back).toHaveLength(GAME_STATE.FORMATION.BACK_SLOTS);
     expect(state.season).toEqual(SaveManager.freshGame().season);
@@ -331,6 +334,7 @@ describe('SaveManager', () => {
         },
         shards: 640,
         pity: { sinceHighGrade: 7, totalPulls: 33 },
+        recruitSeed: 0xabcdef12,
       },
       formation: { front: ['ironward', null], back: ['stormvolley', null, null] },
     };
@@ -345,8 +349,34 @@ describe('SaveManager', () => {
     });
     expect(loaded.heroes.shards).toBe(640);
     expect(loaded.heroes.pity).toEqual({ sinceHighGrade: 7, totalPulls: 33 });
+    // The persisted recruit-entropy seed is present and STABLE across the
+    // round-trip (a valid seed is kept verbatim, not re-randomized).
+    expect(loaded.heroes.recruitSeed).toBe(0xabcdef12);
+    const { state: loadedAgain } = mgr.load();
+    expect(loadedAgain.heroes.recruitSeed).toBe(0xabcdef12);
     expect(loaded.formation.front).toEqual(['ironward', null]);
     expect(loaded.formation.back).toEqual(['stormvolley', null, null]);
+  });
+
+  it('generates a recruit seed when an older v2 save lacks one, then keeps it stable', () => {
+    const storage = memoryStorage();
+    // A v2 save that predates the recruitSeed field (no seed persisted).
+    storage.setItem(
+      SAVE_KEY,
+      JSON.stringify({
+        version: SAVE_VERSION,
+        miniGame: { coins: 10 },
+        heroes: { roster: {}, shards: 0, pity: { sinceHighGrade: 0, totalPulls: 0 } },
+      }),
+    );
+    const mgr = new SaveManager(storage);
+    const first = mgr.load().state;
+    expect(first.heroes.recruitSeed).toBeGreaterThan(0);
+    expect(first.heroes.recruitSeed).toBeLessThanOrEqual(0xffffffff);
+    // Persist the migrated-in seed, then confirm it is stable on the next load.
+    mgr.save(first);
+    const second = mgr.load().state;
+    expect(second.heroes.recruitSeed).toBe(first.heroes.recruitSeed);
   });
 
   it('drops unknown heroes and clamps hero progression to grade caps on load', () => {

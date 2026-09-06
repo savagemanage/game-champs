@@ -137,7 +137,13 @@ export class GameStore {
     buildings.queue = resolved.queue;
 
     // 2) Accrue production for the elapsed wall-clock gap, clamped to storage.
+    //    On a brand-new save lastTickTimestamp is 0 (no baseline recorded yet):
+    //    seed it to `now` so the FIRST tick establishes the baseline and grants
+    //    nothing, rather than back-crediting a full offline window from epoch 0.
     const resources = this.stateInternal.resources;
+    if (!resources.lastTickTimestamp) {
+      resources.lastTickTimestamp = now;
+    }
     const accrued = accrueSince(
       resources.stockpiles,
       buildings.levels,

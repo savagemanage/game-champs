@@ -84,7 +84,8 @@ export const STRINGS = {
   'result.upgrades': { en: 'Upgrades', ko: '업그레이드' },
   'result.retry': { en: 'Redeploy', ko: '재출격' },
   'result.title': { en: 'Main Menu', ko: '메인 메뉴' },
-  'result.keyhint': { en: 'R Redeploy    U Upgrades    SPACE Menu', ko: 'R 재출격    U 업그레이드    SPACE 메뉴' },
+  'result.keyhint': { en: 'R Redeploy    U Upgrades    SPACE Base', ko: 'R 재출격    U 업그레이드    SPACE 기지' },
+  'result.army': { en: 'Sent to the army: {reward}', ko: '군대에 보급: {reward}' },
 
   // Upgrade / meta screen.
   'upgrade.title': { en: 'UPGRADES', ko: '업그레이드' },

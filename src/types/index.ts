@@ -292,6 +292,15 @@ export interface HeroState {
   shards: number;
   /** Recruit pity counter state. */
   pity: PityState;
+  /**
+   * Persisted per-account recruit entropy seed (a 32-bit unsigned int). Set
+   * once to a random value on a fresh game / v1 migration and stable across
+   * save round-trips thereafter. The recruit scene mixes this into each pull's
+   * derived seed so identical pull counts across fresh sessions do not always
+   * yield the same heroes, while keeping the pure recruit roll deterministic
+   * given its final seed.
+   */
+  recruitSeed: number;
 }
 
 /**
