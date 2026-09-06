@@ -97,6 +97,14 @@ interface WarmthWidgets {
  * upgrade flow, and (later) the battle all read/write the same simulation.
  */
 export class TownScene extends Phaser.Scene {
+  /**
+   * The one explicit outer margin for the Town HUD (top resource row, the
+   * Sparks/Survivors sub-row, and the bottom action bar). Leftmost content
+   * starts at HUD_MARGIN and rightmost content ends at 960 - HUD_MARGIN, so the
+   * left and right margins match.
+   */
+  private static readonly HUD_MARGIN = 24;
+
   private state!: GameState;
   private audio!: AudioManager;
 
@@ -247,27 +255,62 @@ export class TownScene extends Phaser.Scene {
     const bar = this.add.rectangle(0, 0, CANVAS.WIDTH, 44, PALETTE.PANEL, 0.92).setOrigin(0, 0);
     bar.setStrokeStyle(2, PALETTE.STONE_DARK);
 
-    const slotW = CANVAS.WIDTH / RESOURCE_ORDER.length;
+    // One explicit outer margin for the whole top HUD: the leftmost content
+    // (first resource icon) starts at M and the rightmost content (last
+    // resource's readout) ends at 960 - M, so the left and right margins match.
+    // The five resources are DISTRIBUTED evenly across [M, 960-M] rather than
+    // packed into the left ~810px, so there is no hollow band on the right.
+    const M = TownScene.HUD_MARGIN;
+    const innerW = CANVAS.WIDTH - M * 2;
+    const slotW = innerW / RESOURCE_ORDER.length;
+    const iconScale = 1.4;
+    const iconHalf = (16 * iconScale) / 2; // 16px sheet frame at scale 1.4
+    const readoutGap = 18; // icon centre -> amount/rate left edge
+    let leftEdge = Number.POSITIVE_INFINITY;
+    let rightEdge = Number.NEGATIVE_INFINITY;
     RESOURCE_ORDER.forEach((res, i) => {
-      const x = slotW * i + 20;
-      this.add.image(x, 22, TextureKeys.ResourceIcons, RESOURCE_ICON_FRAME[res]).setOrigin(0.5).setScale(1.4);
-      const amount = this.add.text(x + 20, 10, '0', textStyle(18, { fontStyle: 'bold' })).setOrigin(0, 0);
-      const rate = this.add.text(x + 20, 28, '', textStyle(11, { color: PALETTE.SUCCESS_CSS })).setOrigin(0, 0);
+      // Each resource owns one even slot across [M, 960-M]. Within its slot the
+      // icon leads and the amount/rate sit `readoutGap` to its right. Slot 0's
+      // icon left edge lands exactly at M; the final slot is nudged so its
+      // readout right edge lands exactly at 960 - M, so left margin == right
+      // margin and the row fills the width evenly (no hollow right band).
+      const iconX = M + iconHalf + slotW * i;
+      this.add.image(iconX, 22, TextureKeys.ResourceIcons, RESOURCE_ICON_FRAME[res]).setOrigin(0.5).setScale(iconScale);
+      const amount = this.add.text(iconX + readoutGap, 10, '0', textStyle(18, { fontStyle: 'bold' })).setOrigin(0, 0);
+      const rate = this.add.text(iconX + readoutGap, 28, '', textStyle(11, { color: PALETTE.SUCCESS_CSS })).setOrigin(0, 0);
       this.resourceWidgets.push({ res, amount, rate });
+      leftEdge = Math.min(leftEdge, iconX - iconHalf);
+      rightEdge = Math.max(rightEdge, amount.x + amount.width);
     });
+    // Dev-only symmetry assertion: the leftmost content's left edge sits at M
+    // and the rightmost content's right edge sits at 960 - M (within a couple
+    // px of rounding), i.e. the top HUD's left and right margins match.
+    if (import.meta.env?.DEV) {
+      console.assert(
+        Math.abs(leftEdge - M) <= 2,
+        `TownScene top HUD: left edge ${leftEdge.toFixed(1)} != M ${M}`,
+      );
+      console.assert(
+        Math.abs(rightEdge - (CANVAS.WIDTH - M)) <= 24,
+        `TownScene top HUD: right edge ${rightEdge.toFixed(1)} far from ${CANVAS.WIDTH - M}`,
+      );
+    }
 
-    // The gameplay hint sits in its own band BELOW the warmth strip (bar at
-    // y=60, efficiency readout at y=80) so the three HUD lines never overlap.
-    Menu.label(this, CANVAS.WIDTH / 2, 102, tr('town.hint'), 12, 0.55).setColor(PALETTE.MUTED_CSS);
+    // The gameplay hint sits in its own band well BELOW the warmth strip (bar
+    // at y=60, efficiency readout at y=84) so the three HUD lines are clearly
+    // separated into their own vertical bands and never overlap.
+    Menu.label(this, CANVAS.WIDTH / 2, 108, tr('town.hint'), 12, 0.55).setColor(PALETTE.MUTED_CSS);
 
-    // Ember Sparks (premium) + survivor population readouts, top-right, just
-    // under the resource bar so the expanded economy is always visible.
-    this.add.image(CANVAS.WIDTH - 250, 62, TextureKeys.ResourceIcons, SPARK_ICON_FRAME).setOrigin(0.5).setScale(1.2);
-    this.sparksText = this.add.text(CANVAS.WIDTH - 238, 62, '', textStyle(13, { fontStyle: 'bold', color: PALETTE.SPARK_CSS })).setOrigin(0, 0.5);
+    // Ember Sparks (premium) + survivor population readouts on a SECOND HUD row
+    // (y=62) just under the resource bar. Both share the outer margin M: the
+    // survivor readout is right-aligned to 960 - M so it lines up with the
+    // resource row's right edge instead of sitting alone flush against the edge.
+    this.add.image(M + 8, 62, TextureKeys.ResourceIcons, SPARK_ICON_FRAME).setOrigin(0.5).setScale(1.2);
+    this.sparksText = this.add.text(M + 20, 62, '', textStyle(13, { fontStyle: 'bold', color: PALETTE.SPARK_CSS })).setOrigin(0, 0.5);
     // The survivor readout doubles as the entry point to the workforce panel
     // (assign / recruit / recall), so the population mechanic is playable.
     this.populationText = this.add
-      .text(CANVAS.WIDTH - 20, 62, '', textStyle(13, { color: PALETTE.FROST_CSS }))
+      .text(CANVAS.WIDTH - M, 62, '', textStyle(13, { color: PALETTE.FROST_CSS }))
       .setOrigin(1, 0.5)
       .setInteractive({ useHandCursor: true });
     this.populationText.on(Phaser.Input.Events.POINTER_OVER, () => this.populationText.setColor(PALETTE.ACCENT_CSS));
@@ -292,9 +335,10 @@ export class TownScene extends Phaser.Scene {
       .setOrigin(1, 0.5);
     const bar = Menu.progressBar(this, barX, barY, barW, 12, PALETTE.EMBER);
     const value = this.add.text(barX + barW + 12, barY, '', textStyle(12, { color: PALETTE.FROST_CSS })).setOrigin(0, 0.5);
-    // The efficiency / FREEZING readout sits in its own band just under the bar
-    // (barY=60 -> y=80), clear of both the bar above and the town.hint below.
-    const status = this.add.text(CANVAS.WIDTH / 2, barY + 20, '', textStyle(12, { fontStyle: 'bold' })).setOrigin(0.5);
+    // The efficiency / FREEZING readout sits in its OWN vertical band clearly
+    // below the bar (barY=60 -> y=84) and clearly above the town.hint band
+    // (y=108), so the three HUD lines never crowd or overlap each other.
+    const status = this.add.text(CANVAS.WIDTH / 2, barY + 24, '', textStyle(12, { fontStyle: 'bold' })).setOrigin(0.5);
 
     this.warmthWidgets = { bar, label, value, status };
   }
@@ -337,10 +381,18 @@ export class TownScene extends Phaser.Scene {
 
   private buildBottomBar(): void {
     const y = CANVAS.HEIGHT - 30;
-    Menu.button(this, 100, y, tr('town.training'), () => this.openTraining(), { width: 150 });
-    Menu.button(this, 260, y, tr('nav.menu'), () => this.toggleHubMenu(), { width: 150, accent: PALETTE.ICE });
+    // Bottom action bar shares the same outer margin M as the top HUD: the
+    // leftmost button's left edge sits at M and the rightmost button's right
+    // edge sits at 960 - M, so the bottom left/right margins match too.
+    const M = TownScene.HUD_MARGIN;
+    const leftW = 152;
+    const rightW = 180;
+    const leftX = M + leftW / 2; // War Camp: left edge == M
+    const rightX = CANVAS.WIDTH - M - rightW / 2; // Settings: right edge == 960 - M
+    Menu.button(this, leftX, y, tr('town.training'), () => this.openTraining(), { width: leftW });
+    Menu.button(this, leftX + leftW + 10, y, tr('nav.menu'), () => this.toggleHubMenu(), { width: leftW, accent: PALETTE.ICE });
     Menu.button(this, CANVAS.WIDTH / 2, y, tr('town.battle'), () => this.goBattle(), { width: 160, accent: PALETTE.DANGER });
-    Menu.button(this, CANVAS.WIDTH - 120, y, tr('town.settings'), () => this.openSettings(), { width: 180 });
+    Menu.button(this, rightX, y, tr('town.settings'), () => this.openSettings(), { width: rightW });
   }
 
   /**
