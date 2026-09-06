@@ -69,6 +69,17 @@ interface Actor {
 }
 
 /**
+ * Composite key for the actor map: a unit is uniquely identified by its
+ * `(side, id)` pair, NOT by id alone. Combat.BattleEvent carries the side of
+ * every referenced unit (attackerSide/targetSide/healerSide, death `side`), so
+ * keying and resolving by side removes the latent hazard of a hero id colliding
+ * with an enemy formation id and animating the wrong sprite.
+ */
+function actorKey(side: Side, id: string): string {
+  return `${side}:${id}`;
+}
+
+/**
  * BattleScene - the reusable animated REPLAY of an already-resolved battle
  * (FEAT-002). It lays the player squad along the bottom and the enemy squad
  * along the top over the battle backdrop, draws an HP bar per unit, then steps
@@ -182,7 +193,7 @@ export class BattleScene extends Phaser.Scene {
     const container = this.add.container(x, y, [bg, portrait, frame, nameText, barBg, hpBarFill]);
     container.setSize(56, 56);
 
-    this.actorsById.set(member.id, {
+    this.actorsById.set(actorKey(side, member.id), {
       id: member.id,
       side,
       maxHp: member.maxHp,
@@ -222,14 +233,14 @@ export class BattleScene extends Phaser.Scene {
     } else if (event.kind === 'heal') {
       this.playHeal(event);
     } else {
-      this.playDeath(event.unit);
+      this.playDeath(event.side, event.unit);
     }
   }
 
   /** Lunge the attacker, spawn FX, play the hit SFX, and shrink the HP bar. */
   private playAttack(event: Extract<BattleEvent, { kind: 'attack' }>): void {
-    const attacker = this.actorsById.get(event.attacker);
-    const target = this.actorsById.get(event.target);
+    const attacker = this.actorsById.get(actorKey(event.attackerSide, event.attacker));
+    const target = this.actorsById.get(actorKey(event.targetSide, event.target));
     if (target) {
       this.applyDamage(target, event.damage);
       this.spawnFx(target.x, target.y, TextureKeys.FxHit);
@@ -252,7 +263,7 @@ export class BattleScene extends Phaser.Scene {
 
   /** Pop a green heal number and regrow the ally's HP bar by the exact amount. */
   private playHeal(event: Extract<BattleEvent, { kind: 'heal' }>): void {
-    const target = this.actorsById.get(event.target);
+    const target = this.actorsById.get(actorKey(event.targetSide, event.target));
     if (!target || target.dead) return;
     target.hp = Math.min(target.maxHp, target.hp + event.amount);
     this.setHpBar(target);
@@ -261,8 +272,8 @@ export class BattleScene extends Phaser.Scene {
   }
 
   /** Fade a downed unit out. */
-  private playDeath(unitId: string): void {
-    const actor = this.actorsById.get(unitId);
+  private playDeath(side: Side, unitId: string): void {
+    const actor = this.actorsById.get(actorKey(side, unitId));
     if (!actor || actor.dead) return;
     actor.dead = true;
     this.tweens.add({
