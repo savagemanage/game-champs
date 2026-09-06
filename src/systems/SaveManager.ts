@@ -1,9 +1,12 @@
 import { ECONOMY, POPULATION } from '../config/GameConfig';
 import type { Army, GameState, TroopKind } from '../types';
 import { BuildingSystem } from './BuildingSystem';
+import { CampaignSystem } from './CampaignSystem';
+import { HeroRoster } from './HeroRoster';
 import { PopulationSystem } from './PopulationSystem';
 import { PremiumWallet } from './PremiumWallet';
 import { ResourceStore } from './ResourceStore';
+import { SummonSystem } from './SummonSystem';
 import { TrainingQueue } from './TrainingQueue';
 import { WarmthSystem, type WarmthTickResult } from './WarmthSystem';
 
@@ -18,10 +21,14 @@ import { WarmthSystem, type WarmthTickResult } from './WarmthSystem';
  *   roster (Shelter Row / Frost Vault / Forge Hall / Envoy Hall / Warming Ward
  *   / Ember Archive / class yards).
  *
+ * - v4: the FEAT-003 hero + summon + campaign layer - the collectible hero
+ *   roster (levels/stars/skills/shards + lead picks), the deterministic summon
+ *   gacha (pity state), and staged campaign progress.
+ *
  * A save with any older version is treated as a mismatch and falls back to a
  * fresh frozen settlement rather than mis-mapping old kinds.
  */
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 
 /** Default localStorage key for the single save slot (Frosthold namespace). */
 export const SAVE_KEY = 'frosthold:save';
@@ -45,6 +52,9 @@ export interface GameSnapshot {
   warmth: WarmthSystem;
   population: PopulationSystem;
   premium: PremiumWallet;
+  heroes: HeroRoster;
+  summon: SummonSystem;
+  campaign: CampaignSystem;
   waveCleared: number;
 }
 
@@ -86,6 +96,9 @@ export class SaveManager {
       resources: snapshot.resources.toJSON(),
       premiumCurrency: snapshot.premium.toJSON(),
       population: snapshot.population.toJSON(),
+      heroes: snapshot.heroes.toJSON(),
+      summon: snapshot.summon.toJSON(),
+      campaign: snapshot.campaign.toJSON(),
       warmth: snapshot.warmth.toJSON(),
       buildings: snapshot.buildings.toJSON(),
       army: snapshot.training.army,
@@ -111,6 +124,11 @@ export class SaveManager {
     // The survivor workforce + premium wallet (both tolerate missing fields).
     const population = PopulationSystem.fromJSON(state.population);
     const premium = PremiumWallet.fromJSON(state.premiumCurrency);
+    // Hero roster, summon (gacha) state, and campaign progress (all tolerate
+    // missing fields so a partial / older-shaped save loads gracefully).
+    const heroes = HeroRoster.fromJSON(state.heroes);
+    const summon = SummonSystem.fromJSON(state.summon);
+    const campaign = CampaignSystem.fromJSON(state.campaign);
 
     // Training that finished while away joins the army. (Trained troops do not
     // produce resources, so this ordering has no bearing on offline gains.)
@@ -156,7 +174,18 @@ export class SaveManager {
     buildings.update(now);
 
     return {
-      snapshot: { resources, buildings, training, warmth, population, premium, waveCleared: state.waveCleared ?? 0 },
+      snapshot: {
+        resources,
+        buildings,
+        training,
+        warmth,
+        population,
+        premium,
+        heroes,
+        summon,
+        campaign,
+        waveCleared: state.waveCleared ?? 0,
+      },
       loaded: true,
       offlineSeconds,
       offlineGains,
@@ -172,6 +201,9 @@ export class SaveManager {
       warmth: new WarmthSystem(),
       population: new PopulationSystem(),
       premium: new PremiumWallet(),
+      heroes: new HeroRoster(),
+      summon: new SummonSystem(),
+      campaign: new CampaignSystem(),
       waveCleared: 0,
     };
   }

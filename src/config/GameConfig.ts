@@ -322,6 +322,89 @@ export function populationOutputMultiplier(satisfaction: number, staffingRatio: 
   return satFactor * staffFactor;
 }
 
+/**
+ * HEROES - the collectible-hero progression layer (FEAT-003). Heroes level up
+ * with XP, star up by spending shards, and their aggregate bonuses (from the
+ * LEAD picks) feed BOTH idle production and combat power so heroes MATTER. Pure
+ * per-hero data + the base bonus tables live in HeroConfig.ts; these are the
+ * shared curve knobs so nothing hardcodes a magic number in the systems.
+ */
+export const HEROES = {
+  /** How many lead heroes contribute their bonuses to the whole hold at once. */
+  MAX_LEAD: 3,
+  /** Base XP to go from level 1 -> 2 (scales geometrically by LEVEL_XP_GROWTH). */
+  BASE_LEVEL_XP: 100,
+  /** Geometric growth of the level-up XP cost per level. */
+  LEVEL_XP_GROWTH: 1.35,
+  /** Hard level ceiling any hero can reach at max stars. */
+  MAX_LEVEL: 60,
+  /**
+   * Level ceiling granted PER star. A 1-star hero caps at LEVEL_CAP_PER_STAR,
+   * a 2-star at 2x, etc., clamped to MAX_LEVEL. Investing shards to star up
+   * therefore unlocks more levels (mirrors the genre's star/level gate).
+   */
+  LEVEL_CAP_PER_STAR: 10,
+  /** Multiplicative power gained per level above 1 (e.g. 0.06 = +6%/level). */
+  POWER_PER_LEVEL: 0.06,
+  /** Multiplicative power gained per star above 1 (e.g. 0.25 = +25%/star). */
+  POWER_PER_STAR: 0.25,
+  /**
+   * Shards needed to raise a hero from star s -> s+1 = BASE_STAR_SHARDS *
+   * STAR_SHARD_GROWTH^(s-1), scaled per rarity by HERO_RARITY_DEFS.shardScale.
+   * The FIRST copy (owning the hero) also costs BASE_STAR_SHARDS * scale shards
+   * when crafted from loose shards instead of pulled.
+   */
+  BASE_STAR_SHARDS: 10,
+  STAR_SHARD_GROWTH: 1.8,
+  /**
+   * A hero's skill of index i unlocks at star (i+1): skill 0 from 1 star, skill
+   * 1 from 2 stars, skill 2 from 3 stars. Skill level tracks the hero's star at
+   * unlock time and rises with further star-ups, capped at the star rank.
+   */
+} as const;
+
+/**
+ * SUMMON - the deterministic gacha (FEAT-003). A pull costs Ember Sparks (the
+ * PremiumWallet premium currency) or a summon ticket, rolls a rarity by weights,
+ * and grants either a new hero (first copy) or shards (duplicate). A PITY
+ * guarantee forces at least an epic after PITY_THRESHOLD misses so a dry streak
+ * can't go forever. Deterministic under an injected seed (SummonSystem never
+ * calls Math.random) so tests are stable.
+ */
+export const SUMMON = {
+  /** Ember Sparks spent per single summon. */
+  SPARK_COST: 100,
+  /**
+   * Draw weights per rarity (need not sum to 1; normalized at roll time). Tuned
+   * so commons dominate and legendaries are rare, mirroring the genre.
+   */
+  RARITY_WEIGHTS: { common: 60, rare: 28, epic: 10, legendary: 2 } as const,
+  /**
+   * Consecutive non-(epic+) pulls after which the NEXT pull is guaranteed to be
+   * at least epic. Resets to 0 whenever an epic+ is pulled (by luck or pity).
+   */
+  PITY_THRESHOLD: 20,
+  /** Shards granted when a summon rolls a hero already owned (a duplicate). */
+  DUPLICATE_SHARDS: { common: 4, rare: 6, epic: 10, legendary: 20 } as const,
+} as const;
+
+/**
+ * CAMPAIGN - the staged story/exploration mode (FEAT-003). Stages are gated by
+ * the highest cleared stage, validated by a deterministic power comparison
+ * (reusing the CombatSystem power model where possible), and grant first-clear
+ * rewards (resources / Ember Sparks / hero shards) exactly once. Per-stage data
+ * lives in CampaignConfig.ts; this is the shared knob.
+ */
+export const CAMPAIGN = {
+  /**
+   * The army-power margin (as a fraction of the stage's required power) an
+   * attempt must MEET or exceed to clear. 1.0 = must match the stage power;
+   * <1 would let under-power attempts win. Kept at 1.0 so the recommended power
+   * is honest.
+   */
+  CLEAR_POWER_MARGIN: 1.0,
+} as const;
+
 /** Scene keys used across the game. Centralized to avoid magic strings. */
 export const SceneKeys = {
   Boot: 'BootScene',

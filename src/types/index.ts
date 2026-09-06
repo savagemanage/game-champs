@@ -116,14 +116,104 @@ export interface PopulationState {
   assignments: Partial<Record<BuildingKind, number>>;
 }
 
+// --- FEAT-003: heroes, summon (gacha) and story campaign ---------------------
+
+/**
+ * A hero's combat CLASS, the same soft rock-paper-scissors triangle the troops
+ * use (FEAT-004 formalizes troop tiers): infantry > lancer > marksman >
+ * infantry. A hero leads and buffs its own class, so class composition of the
+ * lead heroes matters. Kept as its own union (distinct from TroopKind) so the
+ * two vocabularies can diverge later.
+ */
+export type HeroClass = 'infantry' | 'lancer' | 'marksman';
+
+/**
+ * Hero rarity tiers, low to high. Rarity drives base power, star ceiling, the
+ * shards a duplicate summon grants, and the summon draw weights. Ordered tuple
+ * so UI/iteration share one canonical order; the union is derived from it.
+ */
+export const HERO_RARITY_ORDER = ['common', 'rare', 'epic', 'legendary'] as const;
+export type HeroRarity = (typeof HERO_RARITY_ORDER)[number];
+
+/**
+ * The original collectible hero roster ids. All names/lore are ORIGINAL (see
+ * HeroConfig + i18n). The union is derived from HERO_IDS so config, systems and
+ * the persisted state can never drift out of sync.
+ */
+export const HERO_IDS = [
+  'ember_warden', // common infantry
+  'snow_picket', // common marksman
+  'drift_runner', // common lancer
+  'iron_bulwark', // rare infantry
+  'glacier_lance', // rare lancer
+  'frost_archer', // rare marksman
+  'aurora_sentinel', // epic infantry
+  'stormpike_rider', // epic lancer
+  'winters_eye', // epic marksman
+  'the_kindled_queen', // legendary infantry
+  'wyrmspear_valdis', // legendary lancer
+  'the_pale_marksman', // legendary marksman
+] as const;
+export type HeroId = (typeof HERO_IDS)[number];
+
+/**
+ * A single owned hero's persisted state. A hero is "owned" once summoned; before
+ * that it may still have accumulated `shards` from duplicate pulls / campaign
+ * rewards toward its first copy. `level` and `stars` drive power; `skillLevels`
+ * mirrors the hero's skill ids -> level.
+ */
+export interface OwnedHeroState {
+  id: HeroId;
+  /** True once the first full copy has been obtained (summon or shard craft). */
+  owned: boolean;
+  /** Current level (>=1 once owned). */
+  level: number;
+  /** Accumulated XP toward the next level. */
+  xp: number;
+  /** Star rank (>=1 once owned), gated by rarity ceiling. */
+  stars: number;
+  /** Loose hero shards held (toward first copy, or toward the next star-up). */
+  shards: number;
+  /** Per-skill level, keyed by the hero's skill ids. */
+  skillLevels: Record<string, number>;
+}
+
+/** The persisted hero roster: every touched hero keyed by id, plus lead picks. */
+export interface HeroRosterState {
+  heroes: Partial<Record<HeroId, OwnedHeroState>>;
+  /** The lead heroes whose bonuses apply to the whole hold (ordered, capped). */
+  lead: HeroId[];
+}
+
+/** The persisted summon/gacha state: total pulls and the pity miss counter. */
+export interface SummonState {
+  /** Total summons ever performed (for stats / UI). */
+  totalPulls: number;
+  /** Draws since the last high-rarity (epic+) pull; drives the pity guarantee. */
+  pityCounter: number;
+}
+
+/** The persisted campaign progress: highest cleared stage index + claimed rewards. */
+export interface CampaignState {
+  /**
+   * Highest cleared stage ORDER index (0 = nothing cleared, 1 = first stage
+   * cleared). Gating uses this; a stage is attemptable iff its order <=
+   * highestCleared + 1.
+   */
+  highestCleared: number;
+  /** Stage ids whose first-clear reward has already been granted. */
+  claimed: string[];
+}
+
 /** The complete persisted game state (serialized to localStorage by the save feature). */
 export interface GameState {
   /**
-   * Save-format version so future migrations can be detected. Bumped to 3 for
-   * the FEAT-002 economy/city expansion (refined `steel` resource, Ember Sparks
-   * premium currency, survivor population, and the enlarged building roster).
-   * Older saves (v1 medieval, v2 pre-expansion) are detected as a version
-   * mismatch and fall back to a fresh frozen settlement rather than mis-mapping.
+   * Save-format version so future migrations can be detected. Bumped to 4 for
+   * the FEAT-003 hero + summon + campaign layer (collectible heroes, gacha pity
+   * state, and staged campaign progress) on top of the v3 economy/city
+   * expansion. Older saves (v1 medieval, v2 pre-expansion, v3 pre-heroes) are
+   * detected as a version mismatch and fall back to a fresh frozen settlement
+   * rather than mis-mapping.
    */
   version: number;
   resources: Resources;
@@ -131,6 +221,12 @@ export interface GameState {
   premiumCurrency: number;
   /** The survivor workforce (housing, growth, per-building assignment). */
   population: PopulationState;
+  /** The collectible hero roster (FEAT-003): owned heroes + lead picks. */
+  heroes: HeroRosterState;
+  /** The summon/gacha state (FEAT-003): total pulls + pity counter. */
+  summon: SummonState;
+  /** Story campaign progress (FEAT-003): highest cleared stage + claimed rewards. */
+  campaign: CampaignState;
   /**
    * Current Furnace warmth level (the signature frozen-survival mechanic).
    * Persisted so warmth carries across sessions and is reconciled over the

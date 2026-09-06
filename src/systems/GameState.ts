@@ -1,9 +1,13 @@
 import { POPULATION } from '../config/GameConfig';
-import type { Army, TroopKind } from '../types';
+import type { Army, HeroId, ResourceCost, TroopKind } from '../types';
 import { BuildingSystem } from './BuildingSystem';
+import { CampaignSystem, type CampaignAttemptResult } from './CampaignSystem';
+import { CombatSystem } from './CombatSystem';
+import { HeroRoster } from './HeroRoster';
 import { PopulationSystem } from './PopulationSystem';
 import { PremiumWallet } from './PremiumWallet';
 import { ResourceStore } from './ResourceStore';
+import { SummonSystem, type Rng, type SummonResult } from './SummonSystem';
 import { TrainingQueue } from './TrainingQueue';
 import { WarmthSystem } from './WarmthSystem';
 import {
@@ -41,6 +45,9 @@ export class GameState {
   readonly warmth: WarmthSystem;
   readonly population: PopulationSystem;
   readonly premium: PremiumWallet;
+  readonly heroes: HeroRoster;
+  readonly summon: SummonSystem;
+  readonly campaign: CampaignSystem;
   private _waveCleared: number;
 
   private readonly saver: SaveManager;
@@ -60,6 +67,9 @@ export class GameState {
     this.warmth = result.snapshot.warmth;
     this.population = result.snapshot.population;
     this.premium = result.snapshot.premium;
+    this.heroes = result.snapshot.heroes;
+    this.summon = result.snapshot.summon;
+    this.campaign = result.snapshot.campaign;
     this._waveCleared = result.snapshot.waveCleared;
     this.saver = saver;
     this.loaded = result.loaded;
@@ -113,6 +123,67 @@ export class GameState {
     return (Object.keys(a) as TroopKind[]).reduce((sum, k) => sum + a[k], 0);
   }
 
+  /**
+   * The hold's total effective ARMY power against wave `wave`, INCLUDING the
+   * lead heroes' aggregate army bonus. This is the value combat / campaign
+   * checks compare, so heroes matter in battle as well as production.
+   */
+  effectiveArmyPower(wave: number): number {
+    return CombatSystem.effectiveArmyPower(this.army, wave) * this.heroes.armyPowerMultiplier();
+  }
+
+  /**
+   * The hold's hero-boosted combat power for campaign validation: the raw army
+   * power (matchup-neutral) lifted by the lead heroes' army bonus plus the total
+   * owned-hero power. Deterministic; feeds {@link attemptCampaignStage}.
+   */
+  campaignPower(): number {
+    const rawArmy = CombatSystem.armyPower(this.army);
+    return rawArmy * this.heroes.armyPowerMultiplier() + this.heroes.totalPower();
+  }
+
+  /**
+   * Perform ONE summon: spend Ember Sparks (returns null if unaffordable), roll
+   * a hero via the injected deterministic {@link Rng}, and apply the result to
+   * the roster (a first copy, or shards for a duplicate). Returns the outcome.
+   */
+  summonOnce(rng: Rng): SummonResult | null {
+    if (!this.premium.spend(this.summon.sparkCost)) return null;
+    const result = this.summon.pull(rng, (id) => this.heroes.isOwned(id));
+    if (result.outcome === 'hero') this.heroes.grantHero(result.hero);
+    else this.heroes.addShards(result.hero, result.shards);
+    return result;
+  }
+
+  /**
+   * Attempt a campaign stage with the current hero-boosted power. On a FIRST
+   * clear the stage's reward is granted exactly once: resources to the store,
+   * Ember Sparks to the wallet, and hero shards to the roster. Returns the full
+   * attempt result (rewards already applied).
+   */
+  attemptCampaignStage(stageId: string): CampaignAttemptResult {
+    const result = this.campaign.attempt(stageId, this.campaignPower());
+    if (result.win && result.firstClear && result.reward) {
+      this.grantCampaignReward(result.reward);
+    }
+    return result;
+  }
+
+  /** Apply a campaign reward bundle to the resource store / wallet / roster. */
+  private grantCampaignReward(reward: {
+    resources?: ResourceCost;
+    sparks?: number;
+    shards?: Partial<Record<HeroId, number>>;
+  }): void {
+    if (reward.resources) this.resources.add(reward.resources);
+    if (reward.sparks) this.premium.grant(reward.sparks);
+    if (reward.shards) {
+      for (const [id, amount] of Object.entries(reward.shards) as [HeroId, number][]) {
+        this.heroes.addShards(id, amount);
+      }
+    }
+  }
+
   /** A serializable snapshot of the live systems for the save layer. */
   snapshot(): GameSnapshot {
     return {
@@ -122,6 +193,9 @@ export class GameState {
       warmth: this.warmth,
       population: this.population,
       premium: this.premium,
+      heroes: this.heroes,
+      summon: this.summon,
+      campaign: this.campaign,
       waveCleared: this._waveCleared,
     };
   }
@@ -150,7 +224,10 @@ export class GameState {
         extraHousing,
         this.buildings.totalProducerLevels() * POPULATION.STAFF_PER_PRODUCER_LEVEL,
       );
-      const efficiency = warmthMult * popMult;
+      // Lead heroes' aggregate ECONOMY bonus lifts idle output on top of warmth
+      // x population, so investing in heroes visibly matters for production.
+      const heroEconMult = this.heroes.economyMultiplier();
+      const efficiency = warmthMult * popMult * heroEconMult;
       this.resources.applyProduction(this.buildings.productionRates(), deltaMs, efficiency);
       // Refine raw stock into steel (consumes iron + coal), scaled the same way.
       this.buildings.refineryConversion(this.resources, deltaMs, efficiency);

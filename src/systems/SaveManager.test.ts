@@ -6,6 +6,9 @@ import { TrainingQueue } from './TrainingQueue';
 import { WarmthSystem } from './WarmthSystem';
 import { PopulationSystem } from './PopulationSystem';
 import { PremiumWallet } from './PremiumWallet';
+import { HeroRoster } from './HeroRoster';
+import { SummonSystem } from './SummonSystem';
+import { CampaignSystem } from './CampaignSystem';
 import { ECONOMY, WARMTH, POPULATION } from '../config/GameConfig';
 import { outputPerSec } from '../config/BuildingConfig';
 import { troopDef } from '../config/TroopConfig';
@@ -70,6 +73,9 @@ describe('SaveManager', () => {
       warmth: new WarmthSystem(),
       population: fullWorkforce(),
       premium: new PremiumWallet(),
+      heroes: new HeroRoster(),
+      summon: new SummonSystem(),
+      campaign: new CampaignSystem(),
       waveCleared: 5,
     };
   }
@@ -84,7 +90,7 @@ describe('SaveManager', () => {
 
   it('uses the Frosthold save namespace', () => {
     expect(SAVE_KEY).toBe('frosthold:save');
-    expect(SAVE_VERSION).toBe(3);
+    expect(SAVE_VERSION).toBe(4);
   });
 
   it('produces a versioned plain JSON object on serialize', () => {
@@ -133,7 +139,7 @@ describe('SaveManager', () => {
     const population = atCapWorkforce(buildings, { hunters_hut: 99 });
     const pm = popMult(buildings, population);
     mgr.save(
-      { resources, buildings, training, warmth: new WarmthSystem(), population, premium: new PremiumWallet(), waveCleared: 5 },
+      { resources, buildings, training, warmth: new WarmthSystem(), population, premium: new PremiumWallet(), heroes: new HeroRoster(), summon: new SummonSystem(), campaign: new CampaignSystem(), waveCleared: 5 },
       saveTime,
     );
 
@@ -176,7 +182,7 @@ describe('SaveManager', () => {
     // each from a buildings snapshot at the matching level.
     const population = atCapWorkforce(buildings, { hunters_hut: 99 });
     mgr.save(
-      { resources, buildings, training, warmth: new WarmthSystem(), population, premium: new PremiumWallet(), waveCleared: 0 },
+      { resources, buildings, training, warmth: new WarmthSystem(), population, premium: new PremiumWallet(), heroes: new HeroRoster(), summon: new SummonSystem(), campaign: new CampaignSystem(), waveCleared: 0 },
       t0,
     );
 
@@ -294,7 +300,7 @@ describe('SaveManager', () => {
     ]);
     const training = new TrainingQueue(undefined, { trapper: 0, marksman: 0, vanguard: 0 });
     mgr.save(
-      { resources, buildings, training, warmth: new WarmthSystem(WARMTH.MAX_WARMTH), population: fullWorkforce(), premium: new PremiumWallet(), waveCleared: 0 },
+      { resources, buildings, training, warmth: new WarmthSystem(WARMTH.MAX_WARMTH), population: fullWorkforce(), premium: new PremiumWallet(), heroes: new HeroRoster(), summon: new SummonSystem(), campaign: new CampaignSystem(), waveCleared: 0 },
       0,
     );
 
@@ -330,7 +336,7 @@ describe('SaveManager', () => {
     const population = atCapWorkforce(buildings, { sawmill: 99, coal_pit: 99 });
     const pm = popMult(buildings, population);
     mgr.save(
-      { resources, buildings, training, warmth: new WarmthSystem(WARMTH.MAX_WARMTH), population, premium: new PremiumWallet(), waveCleared: 0 },
+      { resources, buildings, training, warmth: new WarmthSystem(WARMTH.MAX_WARMTH), population, premium: new PremiumWallet(), heroes: new HeroRoster(), summon: new SummonSystem(), campaign: new CampaignSystem(), waveCleared: 0 },
       0,
     );
 
@@ -381,7 +387,7 @@ describe('SaveManager', () => {
     ]);
     const training = new TrainingQueue(undefined, { trapper: 0, marksman: 0, vanguard: 0 });
     mgr.save(
-      { resources, buildings, training, warmth: new WarmthSystem(WARMTH.MAX_WARMTH), population: fullWorkforce(), premium: new PremiumWallet(), waveCleared: 0 },
+      { resources, buildings, training, warmth: new WarmthSystem(WARMTH.MAX_WARMTH), population: fullWorkforce(), premium: new PremiumWallet(), heroes: new HeroRoster(), summon: new SummonSystem(), campaign: new CampaignSystem(), waveCleared: 0 },
       0,
     );
 
@@ -410,7 +416,7 @@ describe('SaveManager', () => {
     const population = atCapWorkforce(buildings, { hunters_hut: 99 });
     const pm = popMult(buildings, population);
     mgr.save(
-      { resources, buildings, training, warmth: new WarmthSystem(WARMTH.MAX_WARMTH), population, premium: new PremiumWallet(), waveCleared: 0 },
+      { resources, buildings, training, warmth: new WarmthSystem(WARMTH.MAX_WARMTH), population, premium: new PremiumWallet(), heroes: new HeroRoster(), summon: new SummonSystem(), campaign: new CampaignSystem(), waveCleared: 0 },
       0,
     );
 
@@ -447,8 +453,8 @@ describe('SaveManager', () => {
 
   // --- FEAT-002: steel resource, premium currency, population, migration ---
 
-  it('bumps SAVE_VERSION to 3 for the economy/city expansion', () => {
-    expect(SAVE_VERSION).toBe(3);
+  it('bumps SAVE_VERSION to 4 for the hero/summon/campaign layer', () => {
+    expect(SAVE_VERSION).toBe(4);
   });
 
   it('treats a pre-expansion version-2 save as a mismatch and starts fresh', () => {
@@ -493,6 +499,9 @@ describe('SaveManager', () => {
       warmth: new WarmthSystem(),
       population,
       premium: new PremiumWallet(42),
+      heroes: new HeroRoster(),
+      summon: new SummonSystem(),
+      campaign: new CampaignSystem(),
       waveCleared: 0,
     };
     // Serialized JSON carries the new fields.
@@ -527,6 +536,9 @@ describe('SaveManager', () => {
       warmth: new WarmthSystem(WARMTH.MAX_WARMTH),
       population: atCapWorkforce(buildings),
       premium: new PremiumWallet(0),
+      heroes: new HeroRoster(),
+      summon: new SummonSystem(),
+      campaign: new CampaignSystem(),
       waveCleared: 0,
     };
     mgr.save(snap, 0);
