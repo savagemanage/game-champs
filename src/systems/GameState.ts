@@ -1,7 +1,10 @@
 import { RESOURCE_ORDER } from '../config/GameConfig';
-import type { Army, TroopKind } from '../types';
+import { BUILDING_ORDER } from '../config/BuildingConfig';
+import { QUEST_DEFS, type QuestId, type QuestProgress } from '../config/QuestConfig';
+import type { Army, BuildingKind, TroopKind } from '../types';
 import { BuildingSystem } from './BuildingSystem';
 import { HeroSystem } from './HeroSystem';
+import { QuestSystem } from './QuestSystem';
 import { ResearchSystem } from './ResearchSystem';
 import { ResourceStore } from './ResourceStore';
 import { TrainingQueue } from './TrainingQueue';
@@ -39,7 +42,12 @@ export class GameState {
   readonly training: TrainingQueue;
   readonly research: ResearchSystem;
   readonly heroes: HeroSystem;
+  readonly quests: QuestSystem;
   private _waveCleared: number;
+  /** Cumulative troops trained over the game's lifetime (a quest counter). */
+  private _troopsTrained: number;
+  /** Cumulative battles won over the game's lifetime (a quest counter). */
+  private _battlesWon: number;
 
   private readonly saver: SaveManager;
   private msSinceSave = 0;
@@ -57,7 +65,13 @@ export class GameState {
     this.training = result.snapshot.training;
     this.research = result.snapshot.research;
     this.heroes = result.snapshot.heroes;
+    this.quests = result.snapshot.quests;
     this._waveCleared = result.snapshot.waveCleared;
+    this._troopsTrained = result.snapshot.troopsTrained;
+    this._battlesWon = result.snapshot.battlesWon;
+    // Seed the derived quest statuses from the loaded progress immediately so
+    // the UI has correct locked/active/completable state before the first tick.
+    this.quests.refresh(this.questProgress());
     this.saver = saver;
     this.loaded = result.loaded;
     this.offlineSeconds = result.offlineSeconds;
@@ -92,6 +106,63 @@ export class GameState {
   /** Record a newly-cleared wave (monotonic). */
   recordWaveCleared(wave: number): void {
     if (wave > this._waveCleared) this._waveCleared = wave;
+  }
+
+  /** Cumulative troops trained over the game's lifetime (a quest counter). */
+  get troopsTrained(): number {
+    return this._troopsTrained;
+  }
+
+  /** Cumulative battles won over the game's lifetime (a quest counter). */
+  get battlesWon(): number {
+    return this._battlesWon;
+  }
+
+  /**
+   * Record a battle victory: increments the lifetime `battlesWon` counter and
+   * refreshes the quest statuses so a "win N battles" quest can become
+   * completable. Called from the BattleScene win path alongside
+   * {@link recordWaveCleared}.
+   */
+  recordBattleWon(): void {
+    this._battlesWon += 1;
+    this.quests.refresh(this.questProgress());
+  }
+
+  /**
+   * Assemble the plain progress snapshot the quest conditions are evaluated
+   * against, derived from BuildingSystem / ResearchSystem / the cumulative
+   * counters. Kept a pure data object so QuestSystem never touches a live
+   * system.
+   */
+  questProgress(): QuestProgress {
+    const buildingLevels: Partial<Record<BuildingKind, number>> = {};
+    for (const kind of BUILDING_ORDER) buildingLevels[kind] = this.buildings.level(kind);
+    return {
+      buildingLevels,
+      townCenterLevel: this.buildings.townCenterLevel,
+      troopsTrained: this._troopsTrained,
+      battlesWon: this._battlesWon,
+      techsUnlocked: this.research.unlocked.length,
+      unlockedTechIds: this.research.unlocked,
+    };
+  }
+
+  /**
+   * Claim a completable quest's reward: applies its resources to the
+   * ResourceStore and its hero shards via HeroSystem.addShards, marks the quest
+   * claimed (so it can never pay twice), refreshes statuses (unlocking the next
+   * quest in the chain), and persists. Returns true when a reward was applied.
+   */
+  claimQuest(questId: QuestId): boolean {
+    if (!QUEST_DEFS[questId]) return false;
+    const reward = this.quests.claim(questId);
+    if (!reward) return false;
+    if (reward.resources) this.resources.add(reward.resources);
+    if (reward.shards) this.heroes.addShards(reward.shards.heroId, reward.shards.shards);
+    this.quests.refresh(this.questProgress());
+    this.save(Date.now());
+    return true;
   }
 
   /** Replace the standing army with post-battle survivors (applies casualties). */
@@ -152,7 +223,10 @@ export class GameState {
       training: this.training,
       research: this.research,
       heroes: this.heroes,
+      quests: this.quests,
       waveCleared: this._waveCleared,
+      troopsTrained: this._troopsTrained,
+      battlesWon: this._battlesWon,
     };
   }
 
@@ -181,6 +255,19 @@ export class GameState {
     const buildingsDone = this.buildings.update(now);
     const trainingDone = this.training.advance(now);
     const researchDone = this.research.update(now);
+
+    // Any troops that finished training this tick add to the lifetime
+    // `troopsTrained` counter that the "train N troops" quests read.
+    let trainedThisTick = 0;
+    for (const kind of Object.keys(trainingDone) as TroopKind[]) {
+      trainedThisTick += Math.max(0, Math.floor(trainingDone[kind] ?? 0));
+    }
+    if (trainedThisTick > 0) this._troopsTrained += trainedThisTick;
+
+    // Recompute quest statuses each tick from the live progress snapshot so a
+    // freshly-built building / completed research / trained batch flips the
+    // relevant quest to 'completable' promptly.
+    this.quests.refresh(this.questProgress());
 
     this.msSinceSave += deltaMs;
     if (this.msSinceSave >= AUTOSAVE_INTERVAL_MS) {

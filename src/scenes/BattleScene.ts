@@ -305,6 +305,8 @@ export class BattleScene extends Phaser.Scene {
     if (this.result.win) {
       this.state.resources.add(this.result.reward);
       this.state.recordWaveCleared(this.wave);
+      // Count this victory toward the "win N battles" progression quests.
+      this.state.recordBattleWon();
     } else {
       // Loss: raiders sack the town for whatever the (defense-reduced) penalty
       // exposes. A well-walled town pays little or nothing; a bare town is

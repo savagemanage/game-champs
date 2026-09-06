@@ -3,6 +3,7 @@ import { TROOP_ORDER } from '../config/TroopConfig';
 import type { Army, GameState } from '../types';
 import { BuildingSystem } from './BuildingSystem';
 import { HeroSystem } from './HeroSystem';
+import { QuestSystem } from './QuestSystem';
 import { ResearchSystem } from './ResearchSystem';
 import { ResourceStore } from './ResourceStore';
 import { TrainingQueue } from './TrainingQueue';
@@ -21,11 +22,16 @@ import { TrainingQueue } from './TrainingQueue';
  * v3: adds the `heroes` field (hero roster + active hero). A v1/v2 save (no
  *     heroes) still loads: deserialize() default-constructs a fresh, empty
  *     HeroSystem when the field is missing, exactly like research did.
+ * v4: adds the `quests` field (claimed progression-quest ids) plus the
+ *     cumulative `troopsTrained` / `battlesWon` counters the quest conditions
+ *     read. A v1/v2/v3 save (no quests/counters) still loads: deserialize()
+ *     default-constructs a fresh, empty QuestSystem and zeroes the counters
+ *     when the fields are missing, exactly like the earlier migrations.
  */
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 
 /** Save versions this build can load and migrate forward from. */
-export const SUPPORTED_SAVE_VERSIONS: readonly number[] = [1, 2, 3];
+export const SUPPORTED_SAVE_VERSIONS: readonly number[] = [1, 2, 3, 4];
 
 /** Default localStorage key for the single save slot. */
 export const SAVE_KEY = 'kingdom-rise:save';
@@ -48,7 +54,12 @@ export interface GameSnapshot {
   training: TrainingQueue;
   research: ResearchSystem;
   heroes: HeroSystem;
+  quests: QuestSystem;
   waveCleared: number;
+  /** Cumulative troops trained over the game's lifetime (a quest counter). */
+  troopsTrained: number;
+  /** Cumulative battles won over the game's lifetime (a quest counter). */
+  battlesWon: number;
 }
 
 /** Extra info returned from a load so the caller can surface offline gains. */
@@ -87,6 +98,9 @@ export class SaveManager {
       waveCleared: snapshot.waveCleared,
       research: snapshot.research.toJSON(),
       heroes: snapshot.heroes.toJSON(),
+      quests: snapshot.quests.toJSON(),
+      troopsTrained: Math.max(0, Math.floor(snapshot.troopsTrained)),
+      battlesWon: Math.max(0, Math.floor(snapshot.battlesWon)),
       lastSeenAt: now,
     };
   }
@@ -112,6 +126,12 @@ export class SaveManager {
     // fresh, empty roster when the field is missing/malformed, so the migration
     // never crashes.
     const heroes = HeroSystem.fromJSON(state.heroes);
+    // v1/v2/v3 saves omit `quests` + the counters; QuestSystem.fromJSON
+    // default-constructs a fresh (nothing-claimed) log when missing/malformed,
+    // and the counters default to 0, so the migration never crashes.
+    const quests = QuestSystem.fromJSON(state.quests);
+    const troopsTrained = Math.max(0, Math.floor(state.troopsTrained ?? 0));
+    const battlesWon = Math.max(0, Math.floor(state.battlesWon ?? 0));
 
     // Production multipliers applied to offline reconciliation:
     //  - production:  research production techs AND the active economy hero
@@ -173,7 +193,17 @@ export class SaveManager {
     buildings.update(now);
 
     return {
-      snapshot: { resources, buildings, training, research, heroes, waveCleared: state.waveCleared ?? 0 },
+      snapshot: {
+        resources,
+        buildings,
+        training,
+        research,
+        heroes,
+        quests,
+        waveCleared: state.waveCleared ?? 0,
+        troopsTrained,
+        battlesWon,
+      },
       loaded: true,
       offlineSeconds,
       offlineGains,
@@ -188,7 +218,10 @@ export class SaveManager {
       training: new TrainingQueue(),
       research: new ResearchSystem(),
       heroes: new HeroSystem(),
+      quests: new QuestSystem(),
       waveCleared: 0,
+      troopsTrained: 0,
+      battlesWon: 0,
     };
   }
 

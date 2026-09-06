@@ -9,6 +9,7 @@ import { Menu, type MenuButton, type ProgressBar } from '../ui/Menu';
 import { TrainingPanel } from '../ui/TrainingPanel';
 import { ResearchPanel } from '../ui/ResearchPanel';
 import { HeroPanel } from '../ui/HeroPanel';
+import { QuestPanel } from '../ui/QuestPanel';
 import { textStyle } from '../ui/UiText';
 import { tr } from '../i18n/i18n';
 
@@ -66,6 +67,7 @@ export class TownScene extends Phaser.Scene {
   private trainingPanel!: TrainingPanel;
   private researchPanel!: ResearchPanel;
   private heroPanel!: HeroPanel;
+  private questPanel!: QuestPanel;
 
   // Upgrade panel widgets (rebuilt per selected building).
   private upgradePanel!: Phaser.GameObjects.Container;
@@ -101,12 +103,14 @@ export class TownScene extends Phaser.Scene {
     this.trainingPanel = new TrainingPanel(this, this.state);
     this.researchPanel = new ResearchPanel(this, this.state);
     this.heroPanel = new HeroPanel(this, this.state);
+    this.questPanel = new QuestPanel(this, this.state);
 
-    // Keyboard shortcuts.
+    // Keyboard shortcuts (non-conflicting single keys).
     this.input.keyboard?.on('keydown-B', () => this.goBattle());
     this.input.keyboard?.on('keydown-S', () => this.openSettings());
     this.input.keyboard?.on('keydown-R', () => this.openResearch());
     this.input.keyboard?.on('keydown-H', () => this.openHeroes());
+    this.input.keyboard?.on('keydown-Q', () => this.openQuests());
     this.input.keyboard?.on('keydown-ESC', () => this.closeUpgradePanel());
 
     this.audio.playMusic(AudioKeys.MusicLoop);
@@ -146,6 +150,7 @@ export class TownScene extends Phaser.Scene {
     this.trainingPanel.update();
     this.researchPanel.update();
     this.heroPanel.update();
+    this.questPanel.update();
   }
 
   // ---- Buildings -----------------------------------------------------------
@@ -225,12 +230,25 @@ export class TownScene extends Phaser.Scene {
   // ---- Bottom action bar ---------------------------------------------------
 
   private buildBottomBar(): void {
-    const y = CANVAS.HEIGHT - 30;
-    Menu.button(this, 95, y, tr('town.training'), () => this.openTraining(), { width: 140 });
-    Menu.button(this, 245, y, tr('town.research'), () => this.openResearch(), { width: 140 });
-    Menu.button(this, 395, y, tr('town.heroes'), () => this.openHeroes(), { width: 140 });
-    Menu.button(this, CANVAS.WIDTH / 2 + 150, y, tr('town.battle'), () => this.goBattle(), { width: 160, accent: PALETTE.DANGER });
-    Menu.button(this, CANVAS.WIDTH - 100, y, tr('town.settings'), () => this.openSettings(), { width: 140 });
+    // Six actions now share the bottom bar (Barracks / Research / Heroes /
+    // Quests / Battle / Settings). Lay them out as one evenly-spaced compact
+    // row across the 960px canvas so nothing overlaps or runs off the edge.
+    // Battle is accented (danger) as the primary action.
+    const y = CANVAS.HEIGHT - 28;
+    const entries: { label: string; action: () => void; accent?: number }[] = [
+      { label: tr('town.training'), action: () => this.openTraining() },
+      { label: tr('town.research'), action: () => this.openResearch() },
+      { label: tr('town.heroes'), action: () => this.openHeroes() },
+      { label: tr('town.quests'), action: () => this.openQuests() },
+      { label: tr('town.battle'), action: () => this.goBattle(), accent: PALETTE.DANGER },
+      { label: tr('town.settings'), action: () => this.openSettings() },
+    ];
+    const slotW = CANVAS.WIDTH / entries.length;
+    const btnW = slotW - 14;
+    entries.forEach((e, i) => {
+      const x = slotW * i + slotW / 2;
+      Menu.button(this, x, y, e.label, e.action, { width: btnW, height: 40, fontSize: 15, accent: e.accent });
+    });
   }
 
   // ---- Upgrade panel -------------------------------------------------------
@@ -383,25 +401,36 @@ export class TownScene extends Phaser.Scene {
 
   // ---- Navigation ----------------------------------------------------------
 
+  /** Close every overlay panel except the one being opened. */
+  private closeOtherPanels(except: 'training' | 'research' | 'heroes' | 'quests'): void {
+    if (except !== 'training' && this.trainingPanel.visible) this.trainingPanel.setVisible(false);
+    if (except !== 'research' && this.researchPanel.visible) this.researchPanel.setVisible(false);
+    if (except !== 'heroes' && this.heroPanel.visible) this.heroPanel.setVisible(false);
+    if (except !== 'quests' && this.questPanel.visible) this.questPanel.setVisible(false);
+  }
+
   private openTraining(): void {
     this.closeUpgradePanel();
-    if (this.researchPanel.visible) this.researchPanel.setVisible(false);
-    if (this.heroPanel.visible) this.heroPanel.setVisible(false);
+    this.closeOtherPanels('training');
     this.trainingPanel.toggle();
   }
 
   private openResearch(): void {
     this.closeUpgradePanel();
-    if (this.trainingPanel.visible) this.trainingPanel.setVisible(false);
-    if (this.heroPanel.visible) this.heroPanel.setVisible(false);
+    this.closeOtherPanels('research');
     this.researchPanel.toggle();
   }
 
   private openHeroes(): void {
     this.closeUpgradePanel();
-    if (this.trainingPanel.visible) this.trainingPanel.setVisible(false);
-    if (this.researchPanel.visible) this.researchPanel.setVisible(false);
+    this.closeOtherPanels('heroes');
     this.heroPanel.toggle();
+  }
+
+  private openQuests(): void {
+    this.closeUpgradePanel();
+    this.closeOtherPanels('quests');
+    this.questPanel.toggle();
   }
 
   private goBattle(): void {

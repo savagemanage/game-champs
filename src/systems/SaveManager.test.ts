@@ -5,6 +5,7 @@ import { BuildingSystem } from './BuildingSystem';
 import { TrainingQueue } from './TrainingQueue';
 import { ResearchSystem } from './ResearchSystem';
 import { HeroSystem } from './HeroSystem';
+import { QuestSystem } from './QuestSystem';
 import { ECONOMY } from '../config/GameConfig';
 import { outputPerSec } from '../config/BuildingConfig';
 import { troopDef } from '../config/TroopConfig';
@@ -24,7 +25,18 @@ describe('SaveManager', () => {
     const training = new TrainingQueue(undefined, { spearman: 4, archer: 1, knight: 0 });
     const research = new ResearchSystem();
     const heroes = new HeroSystem();
-    return { resources, buildings, training, research, heroes, waveCleared: 5 };
+    const quests = new QuestSystem();
+    return {
+      resources,
+      buildings,
+      training,
+      research,
+      heroes,
+      quests,
+      waveCleared: 5,
+      troopsTrained: 0,
+      battlesWon: 0,
+    };
   }
 
   /** A full army bundle over every troop kind (new kinds default to zero). */
@@ -198,6 +210,62 @@ describe('SaveManager', () => {
     expect(heroes.economyMultiplier()).toBe(1);
   });
 
+  it('migrates a v3 save (no quests/counters) into a fresh valid quest log', () => {
+    // A version-3 save predates the quests feature and has no `quests`,
+    // `troopsTrained`, or `battlesWon` fields. It must load without crashing
+    // and yield an empty-but-valid QuestSystem with zeroed counters.
+    const storage = memoryStorage();
+    const v3 = {
+      version: 3,
+      resources: { food: 50, wood: 50, stone: 50, gold: 50 },
+      buildings: [{ kind: 'town_center', level: 2, upgradeEndsAt: null }],
+      army: { spearman: 1, archer: 0, knight: 0 },
+      trainingQueue: [],
+      waveCleared: 1,
+      research: { unlocked: [], active: null },
+      heroes: { recruited: {}, active: null },
+      lastSeenAt: 0,
+      // no `quests` / `troopsTrained` / `battlesWon` keys
+    };
+    storage.setItem('kingdom-rise:save', JSON.stringify(v3));
+    const mgr = new SaveManager(storage);
+
+    const loaded = mgr.load(0);
+    expect(loaded.loaded).toBe(true);
+    expect(loaded.snapshot.quests.claimed).toEqual([]);
+    expect(loaded.snapshot.quests.status('raise_a_farm')).not.toBe('claimed');
+    expect(loaded.snapshot.troopsTrained).toBe(0);
+    expect(loaded.snapshot.battlesWon).toBe(0);
+  });
+
+  it('round-trips quest claim status + lifetime counters through save -> load', () => {
+    const storage = memoryStorage();
+    const mgr = new SaveManager(storage);
+    const now = 4_000_000;
+
+    const snap = snapshot();
+    // Refresh with a progress that satisfies the first quest, then claim it.
+    snap.quests.refresh({
+      buildingLevels: { farm: 1 },
+      townCenterLevel: 1,
+      troopsTrained: 0,
+      battlesWon: 0,
+      techsUnlocked: 0,
+      unlockedTechIds: [],
+    });
+    snap.quests.claim('raise_a_farm'); // mark the first quest claimed
+    snap.troopsTrained = 17;
+    snap.battlesWon = 3;
+    expect(snap.quests.isClaimed('raise_a_farm')).toBe(true);
+
+    mgr.save(snap, now);
+    const loaded = mgr.load(now);
+    expect(loaded.snapshot.quests.claimed).toEqual(['raise_a_farm']);
+    expect(loaded.snapshot.quests.isClaimed('raise_a_farm')).toBe(true);
+    expect(loaded.snapshot.troopsTrained).toBe(17);
+    expect(loaded.snapshot.battlesWon).toBe(3);
+  });
+
   it('loads an old save without defensive buildings as zero town defense', () => {
     // Saves written before the defenses feature simply have no wall/watchtower
     // building states. They must load with those buildings at level 0, so the
@@ -284,7 +352,20 @@ describe('SaveManager', () => {
       { kind: 'farm', level: 2, upgradeEndsAt: t0 + boundaryOffset * 1000 },
     ]);
     const training = new TrainingQueue(undefined, { spearman: 0, archer: 0, knight: 0 });
-    mgr.save({ resources, buildings, training, research: new ResearchSystem(), heroes: new HeroSystem(), waveCleared: 0 }, t0);
+    mgr.save(
+      {
+        resources,
+        buildings,
+        training,
+        research: new ResearchSystem(),
+        heroes: new HeroSystem(),
+        quests: new QuestSystem(),
+        waveCleared: 0,
+        troopsTrained: 0,
+        battlesWon: 0,
+      },
+      t0,
+    );
 
     const loaded = mgr.load(t0 + windowSec * 1000);
     expect(loaded.offlineSeconds).toBe(windowSec);

@@ -124,6 +124,19 @@ export interface HeroStateSave {
   active: string | null;
 }
 
+/**
+ * Persisted quest state: the ids of quests whose reward has been claimed. Every
+ * other quest status is derived at runtime from the live progress snapshot, so
+ * only the claimed set needs persisting. Kept as a structural type here (rather
+ * than importing the systems layer) so this dependency-light types module stays
+ * leaf-level. OLD saves written before the quests feature simply omit this
+ * field; the save layer default-constructs a fresh (empty) quest log when it is
+ * missing.
+ */
+export interface QuestStateSave {
+  claimed: string[];
+}
+
 /** The complete persisted game state (serialized to localStorage by the save feature). */
 export interface GameState {
   /** Save-format version so future migrations can be detected. */
@@ -147,6 +160,22 @@ export interface GameState {
    * missing value as a fresh (empty) hero roster.
    */
   heroes?: HeroStateSave;
+  /**
+   * Progression-quest log (claimed quest ids). OPTIONAL for backward
+   * compatibility: saves predating the quests feature omit it, so the save
+   * layer treats a missing value as a fresh (empty) quest log.
+   */
+  quests?: QuestStateSave;
+  /**
+   * Cumulative count of troops trained over the game's lifetime (a quest
+   * counter). OPTIONAL: defaults to 0 for saves predating the quests feature.
+   */
+  troopsTrained?: number;
+  /**
+   * Cumulative count of battles won over the game's lifetime (a quest counter).
+   * OPTIONAL: defaults to 0 for saves predating the quests feature.
+   */
+  battlesWon?: number;
   /** Epoch ms of the last simulation update (drives offline reconciliation). */
   lastSeenAt: number;
 }

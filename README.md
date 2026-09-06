@@ -9,9 +9,13 @@
 자동으로 생산하고, 중앙의 **중앙 청사(Town Center)** 레벨이 다른 모든 건물의
 업그레이드 한계를 결정합니다. 병력은 병영에서 시간이 걸리는 **훈련 대기열**로
 양성하며, 주기적으로 몰려오는 **침략자 웨이브**를 애니메이션으로 연출되는
-결정론적 전투로 막아내야 합니다. 진행 상황은 `localStorage`에 저장되며, 자리를
-비운 동안의 방치 수익도 다시 접속할 때 정산됩니다. UI는 **한국어 우선**이며
-영어도 지원합니다.
+결정론적 전투로 막아내야 합니다. 다섯 병종(**창병·궁병·기사·기병·공성 병기**)이
+가위바위보식 상성 고리를 이루고, **연구소(연구·기술 트리)**로 경제와 군대를
+영구 강화하며, **영웅**을 영입해 출전시키면 전투력이나 생산량 보너스를 얻고,
+**성벽·감시탑** 방어 건물이 마을 방어력을 더해 줍니다. **임무(퀘스트)** 체인이
+초반 진행을 안내하고 자원·영웅 조각 보상을 지급합니다. 진행 상황은
+`localStorage`에 저장되며, 자리를 비운 동안의 방치 수익도 다시 접속할 때
+정산됩니다. UI는 **한국어 우선**이며 영어도 지원합니다.
 
 > **오리지널 창작물 / IP 경계.** 킹덤 라이즈는 기지 건설 / 방치형 왕국 장르에서
 > *영감을 받은* **오리지널** 게임입니다. 모든 이름, 세계관, 아트, 오디오는 이
@@ -66,6 +70,9 @@ Vite가 출력하는 개발 서버 주소(기본값 <http://localhost:5173>)를 
 | -------------------- | ------------------------------------------------------------- |
 | **건물 클릭**        | 업그레이드 패널 열기 (레벨, 다음 비용/시간, 업그레이드)        |
 | **병영 / 병영 버튼** | 병력 훈련 패널 열기                                           |
+| `R`                  | **연구** 패널 열기 (마을에서)                                 |
+| `H`                  | **영웅** 패널 열기 (마을에서)                                 |
+| `Q`                  | **임무** 패널 열기 (마을에서)                                 |
 | `B`                  | **전투로** 진군 (마을에서)                                    |
 | `S`                  | **설정** 열기 (타이틀 또는 마을에서)                          |
 | `L`                  | 언어 전환 (타이틀 화면의 언어 토글과 동일)                    |
@@ -81,14 +88,21 @@ Vite가 출력하는 개발 서버 주소(기본값 <http://localhost:5173>)를 
 2. **업그레이드.** 모든 건물은 기하급수적으로 늘어나는 비용과 건설 타이머를 두고
    업그레이드됩니다. **중앙 청사** 레벨이 다른 모든 건물의 레벨 상한을 정하므로,
    진행의 중추가 됩니다.
-3. **훈련.** 병영에서 **창병·궁병·기사**를 묶음 단위로 대기열에 넣으면, 각 묶음이
-   훈련 시간이 지난 뒤 완성되어 보유 병력에 합류합니다.
-4. **전투.** 병력을 전투로 보내 점점 강해지는 침략자 웨이브(**침략자·광전사·공성
-   망치**)를 막아냅니다. 결과는 전투 시스템이 결정론적으로 계산한 뒤 애니메이션
-   으로 연출됩니다. 승리하면 자원 보상을 얻고 웨이브 진행이 올라가며, 패배하면
-   병력은 잃지만 마을은 건재합니다. 전투 HUD의 **건너뛰기**와 **속도**로 진행
-   속도를 조절할 수 있습니다.
-5. **더 어렵게, 반복.** 웨이브를 하나 격파할 때마다 다음 웨이브의 난이도가
+3. **훈련.** 병영에서 **창병·궁병·기사·기병·공성 병기** 다섯 병종을 묶음 단위로
+   대기열에 넣으면, 각 묶음이 훈련 시간이 지난 뒤 완성되어 보유 병력에 합류합니다.
+   병종은 소프트 가위바위보 상성 고리를 이루어, 조합에 따라 전투 결과가 실제로
+   달라집니다.
+4. **연구·영웅·방어.** **연구소(연구소 건물)**에서 군사·경제 기술 트리를 연구해
+   공격력·생산량·훈련 속도 등을 영구 강화합니다. **영웅**을 영입·레벨업·승급하고
+   한 명을 출전시키면 역할(전쟁/경제)에 따라 전투력 또는 생산량 보너스를 받습니다.
+   **성벽·감시탑**을 지으면 마을 방어력이 올라 침략에 더 잘 버티고 패배 피해도
+   줄어듭니다. **임무** 패널의 진행 체인을 완료하면 자원과 영웅 조각을 받습니다.
+5. **전투.** 병력을 전투로 보내 점점 강해지는 침략자 웨이브(**침략자·광전사·공성
+   망치·기습병**)를 막아냅니다. 결과는 전투 시스템이 연구·영웅·마을 방어력 보너스를
+   합산해 결정론적으로 계산한 뒤 애니메이션으로 연출됩니다. 승리하면 자원 보상을
+   얻고 웨이브 진행이 올라가며, 패배하면 병력은 잃지만 마을은 건재합니다. 전투
+   HUD의 **건너뛰기**와 **속도**로 진행 속도를 조절할 수 있습니다.
+6. **더 어렵게, 반복.** 웨이브를 하나 격파할 때마다 다음 웨이브의 난이도가
    올라갑니다. 마지막으로 설정된 웨이브를 격파하면 전체 캠페인 승리입니다.
 
 **설정**에서는 전체 / 효과음 / 음악 볼륨 슬라이더와 언어 토글(한국어 / English)을
@@ -118,9 +132,10 @@ src/
   scenes/          Boot, Preload, Title, Town, Battle, GameOver, Settings
   entities/        Battler (애니메이션되는 단일 전투 유닛)
   systems/         순수 로직 시스템: ResourceStore, BuildingSystem, TrainingQueue,
-                   CombatSystem, CasualtyTimeline, SaveManager, GameState + AudioManager,
-                   SettingsStore
-  ui/              공용 픽셀 UI 헬퍼: Menu, TrainingPanel, BattleHud, UiText
+                   CombatSystem, CasualtyTimeline, ResearchSystem, HeroSystem, QuestSystem,
+                   SaveManager, GameState + AudioManager, SettingsStore
+  ui/              공용 픽셀 UI 헬퍼: Menu, TrainingPanel, ResearchPanel, HeroPanel,
+                   QuestPanel, BattleHud, UiText
   types/           공용 횡단 타입
   i18n/            한국어 우선 KO/EN 문자열 테이블 + 소형 런타임
 public/assets/     오리지널 스프라이트, 배경, UI, FX, 오디오
@@ -198,8 +213,14 @@ small settlement: resource buildings passively generate **food, wood, stone, and
 gold**; a central **Town Center** gates how far every other building can be
 upgraded; troops are trained in time-based **queues** at the Barracks; and
 periodic **waves of raiders** must be repelled in an animated, deterministic
-battle. Progress is saved to `localStorage`, with idle gains credited while you
-are away. The UI is **Korean-first** (한국어), with English available.
+battle. Five troop types (**Spearman, Archer, Knight, Cavalry, Siege Engine**)
+form a rock-paper-scissors counter cycle; a **Scholars' Hall (research / tech
+tree)** permanently strengthens your economy and army; recruitable **Heroes**
+grant a combat or production bonus when set active; and **Ramparts and
+Watchtowers** add town defense. A chain of **Quests** guides early progression
+and pays out resources and hero shards. Progress is saved to `localStorage`,
+with idle gains credited while you are away. The UI is **Korean-first** (한국어),
+with English available.
 
 > **Language settings (한국어 / English).** The game is **Korean-first**. On a
 > brand-new run with no saved settings it always starts in **Korean**,
@@ -262,6 +283,9 @@ on-screen buttons.
 | -------------------- | ------------------------------------------------------------- |
 | **Click a building** | Open its upgrade panel (level, next cost/time, Upgrade)       |
 | **Click Barracks / Barracks button** | Open the troop training panel               |
+| `R`                  | Open the **Research** panel (from the Town)                   |
+| `H`                  | Open the **Heroes** panel (from the Town)                     |
+| `Q`                  | Open the **Quests** panel (from the Town)                     |
 | `B`                  | March **To Battle** (from the Town)                           |
 | `S`                  | Open **Settings** (from the Title or Town)                    |
 | `Esc`                | Close the open panel / skip the battle animation              |
@@ -277,15 +301,26 @@ on-screen buttons.
 2. **Upgrade.** Every building upgrades for a geometrically growing cost and a
    build timer. The **Town Center** level caps the level of every other
    building, so it is the backbone of your progression.
-3. **Train.** Queue batches of **Spearmen, Archers, and Knights** at the
-   Barracks; each batch completes after its training time and joins your
-   standing army.
-4. **Battle.** Send your army To Battle to repel escalating waves of raiders
-   (**Raider, Brute, Battering Ram**). The outcome is resolved deterministically
-   by the combat system and then animated; on a win you earn resource rewards
-   and advance your wave progress, on a loss your army is lost but the town
-   stands. Use **Skip** and **Speed** in the battle HUD to control pacing.
-5. **Repeat, harder.** Each cleared wave raises the difficulty of the next.
+3. **Train.** Queue batches of all five troop types (**Spearman, Archer, Knight,
+   Cavalry, Siege Engine**) at the Barracks; each batch completes after its
+   training time and joins your standing army. The types form a soft
+   rock-paper-scissors counter cycle, so composition genuinely changes battle
+   outcomes.
+4. **Research, Heroes, Defenses.** Research the military and economic tech tree
+   at the **Scholars' Hall** to permanently boost attack, production, training
+   speed, and more. Recruit, level, and star up **Heroes** and set one active
+   for a role-based (war/economy) combat or production bonus. Build **Ramparts
+   and Watchtowers** to raise town defense, which helps you hold raids and
+   softens losses. Complete the **Quests** chain for resource and hero-shard
+   rewards.
+5. **Battle.** Send your army To Battle to repel escalating waves of raiders
+   (**Raider, Brute, Battering Ram, Rider**). The outcome is resolved
+   deterministically by the combat system — composing your research, active
+   hero, and town-defense bonuses — and then animated; on a win you earn
+   resource rewards and advance your wave progress, on a loss your army is lost
+   but the town stands. Use **Skip** and **Speed** in the battle HUD to control
+   pacing.
+6. **Repeat, harder.** Each cleared wave raises the difficulty of the next.
    Clearing the final configured wave is a full-campaign victory.
 
 **Settings** offers master / SFX / music volume sliders and a language toggle
@@ -309,9 +344,10 @@ src/
   scenes/          Boot, Preload, Title, Town, Battle, GameOver, Settings
   entities/        Battler (a single animated combat unit)
   systems/         Pure-logic systems: ResourceStore, BuildingSystem, TrainingQueue,
-                   CombatSystem, CasualtyTimeline, SaveManager, GameState + AudioManager,
-                   SettingsStore
-  ui/              Shared pixel-UI helpers: Menu, TrainingPanel, BattleHud, UiText
+                   CombatSystem, CasualtyTimeline, ResearchSystem, HeroSystem, QuestSystem,
+                   SaveManager, GameState + AudioManager, SettingsStore
+  ui/              Shared pixel-UI helpers: Menu, TrainingPanel, ResearchPanel, HeroPanel,
+                   QuestPanel, BattleHud, UiText
   types/           Shared cross-cutting types
   i18n/            Korean-first KO/EN string table + tiny runtime
 public/assets/     Original sprites, backgrounds, UI, FX, and audio
