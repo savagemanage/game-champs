@@ -1,11 +1,13 @@
 import { useEffect, useRef } from 'react';
 import Phaser from 'phaser';
 import BattleScene, { type BattleSceneData } from './scenes/BattleScene';
-import type { BattleOutcome } from './battleStore';
+import type { BattleOutcome, GameMode } from './battleStore';
 
 interface PhaserGameProps {
   playerChampionId: string;
   enemyChampionId: string;
+  /** Which mode the battle runs (3-lane Rift or single-lane ARAM). */
+  mode: GameMode;
   /**
    * Incremented by App on every battle entry. Including it in the effect deps
    * guarantees a fresh scene even when the same matchup is replayed (a rematch
@@ -15,8 +17,8 @@ interface PhaserGameProps {
   onGameEnd: (outcome: BattleOutcome) => void;
 }
 
-const GAME_WIDTH = 1280;
-const GAME_HEIGHT = 420;
+const GAME_WIDTH = 900;
+const GAME_HEIGHT = 640;
 
 /**
  * Mounts a single Phaser.Game into a container div and tears it down on
@@ -27,6 +29,7 @@ const GAME_HEIGHT = 420;
 export default function PhaserGame({
   playerChampionId,
   enemyChampionId,
+  mode,
   matchNonce,
   onGameEnd,
 }: PhaserGameProps) {
@@ -44,6 +47,7 @@ export default function PhaserGame({
     const sceneData: BattleSceneData = {
       playerChampionId,
       enemyChampionId,
+      mode,
       onGameEnd: (outcome) => onGameEndRef.current(outcome),
     };
 
@@ -70,7 +74,7 @@ export default function PhaserGame({
       gameRef.current = null;
     };
     // Recreate when participants change OR when the match nonce bumps (rematch).
-  }, [playerChampionId, enemyChampionId, matchNonce]);
+  }, [playerChampionId, enemyChampionId, mode, matchNonce]);
 
   return <div className="phaser-game" ref={containerRef} aria-hidden="true" />;
 }

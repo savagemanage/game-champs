@@ -35,6 +35,25 @@ export type ChampionRole =
   | 'mage'
   | 'enchanter';
 
+/**
+ * The Summoner's Rift position a champion is expected to play. Drives champion
+ * select flavor, AI lane assignment, and (indirectly) which lane a champion is
+ * dropped into for the full 3-lane mode.
+ */
+export type LaneRole = 'top' | 'jungle' | 'mid' | 'bot' | 'support';
+
+/**
+ * Per-level stat growth. Applied linearly by the economy/loadout modules so a
+ * champion's effective stats scale from level 1 to {@link MAX_LEVEL}.
+ */
+export interface ChampionGrowth {
+  hpPerLevel: number;
+  hpRegenPerLevel: number;
+  adPerLevel: number;
+  armorPerLevel: number;
+  attackSpeedPerLevel: number;
+}
+
 /** A single champion ability. Numbers feed the combat engine in FEAT-003. */
 export interface Ability {
   slot: AbilitySlot;
@@ -73,9 +92,13 @@ export interface Champion {
   /** i18n key resolving to the champion's title / epithet. */
   titleKey: string;
   role: ChampionRole;
+  /** The lane/position this champion plays on Summoner's Rift. */
+  laneRole: LaneRole;
   /** Accent color used for CSS art / theming in the UI. */
   accentColor: string;
   stats: ChampionStats;
+  /** Per-level stat growth applied by the economy/loadout math. */
+  growth: ChampionGrowth;
   /** The always-on passive (slot 'P'). */
   passive: Ability;
   /** Exactly four active abilities in slot order Q, W, E, R. */
@@ -93,6 +116,7 @@ export const CHAMPIONS: readonly Champion[] = [
     nameKey: 'champions.ashborne.name',
     titleKey: 'champions.ashborne.title',
     role: 'marksman',
+    laneRole: 'bot',
     accentColor: '#e8703a',
     stats: {
       hp: 540,
@@ -101,6 +125,13 @@ export const CHAMPIONS: readonly Champion[] = [
       attackDamage: 62,
       attackRange: 575,
       attackSpeed: 0.68,
+    },
+    growth: {
+      hpPerLevel: 101,
+      hpRegenPerLevel: 0.55,
+      adPerLevel: 3.5,
+      armorPerLevel: 4.2,
+      attackSpeedPerLevel: 0.04,
     },
     passive: {
       slot: 'P',
@@ -160,6 +191,7 @@ export const CHAMPIONS: readonly Champion[] = [
     nameKey: 'champions.nightveil.name',
     titleKey: 'champions.nightveil.title',
     role: 'assassin',
+    laneRole: 'mid',
     accentColor: '#8a4fff',
     stats: {
       hp: 590,
@@ -168,6 +200,13 @@ export const CHAMPIONS: readonly Champion[] = [
       attackDamage: 68,
       attackRange: 150,
       attackSpeed: 0.72,
+    },
+    growth: {
+      hpPerLevel: 96,
+      hpRegenPerLevel: 0.65,
+      adPerLevel: 3.3,
+      armorPerLevel: 4,
+      attackSpeedPerLevel: 0.035,
     },
     passive: {
       slot: 'P',
@@ -227,6 +266,7 @@ export const CHAMPIONS: readonly Champion[] = [
     nameKey: 'champions.ironhold.name',
     titleKey: 'champions.ironhold.title',
     role: 'bruiser',
+    laneRole: 'top',
     accentColor: '#c9a227',
     stats: {
       hp: 720,
@@ -235,6 +275,13 @@ export const CHAMPIONS: readonly Champion[] = [
       attackDamage: 60,
       attackRange: 175,
       attackSpeed: 0.62,
+    },
+    growth: {
+      hpPerLevel: 115,
+      hpRegenPerLevel: 0.85,
+      adPerLevel: 3.6,
+      armorPerLevel: 4.8,
+      attackSpeedPerLevel: 0.032,
     },
     passive: {
       slot: 'P',
@@ -294,6 +341,7 @@ export const CHAMPIONS: readonly Champion[] = [
     nameKey: 'champions.embermage.name',
     titleKey: 'champions.embermage.title',
     role: 'mage',
+    laneRole: 'jungle',
     accentColor: '#2fa8e0',
     stats: {
       hp: 510,
@@ -302,6 +350,13 @@ export const CHAMPIONS: readonly Champion[] = [
       attackDamage: 52,
       attackRange: 525,
       attackSpeed: 0.6,
+    },
+    growth: {
+      hpPerLevel: 92,
+      hpRegenPerLevel: 0.5,
+      adPerLevel: 3.1,
+      armorPerLevel: 3.9,
+      attackSpeedPerLevel: 0.02,
     },
     passive: {
       slot: 'P',
@@ -361,6 +416,7 @@ export const CHAMPIONS: readonly Champion[] = [
     nameKey: 'champions.dawnsong.name',
     titleKey: 'champions.dawnsong.title',
     role: 'enchanter',
+    laneRole: 'support',
     accentColor: '#3ad6a5',
     stats: {
       hp: 500,
@@ -369,6 +425,13 @@ export const CHAMPIONS: readonly Champion[] = [
       attackDamage: 50,
       attackRange: 550,
       attackSpeed: 0.625,
+    },
+    growth: {
+      hpPerLevel: 88,
+      hpRegenPerLevel: 0.6,
+      adPerLevel: 3,
+      armorPerLevel: 3.8,
+      attackSpeedPerLevel: 0.022,
     },
     passive: {
       slot: 'P',

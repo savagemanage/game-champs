@@ -11,7 +11,11 @@ import {
 import AbilityCard from '../components/AbilityCard';
 import ChampionCard from '../components/ChampionCard';
 
+import type { GameMode } from '../App';
+
 interface ChampionSelectProps {
+  /** The chosen game mode (affects the pick hint). Defaults to Rift. */
+  mode?: GameMode;
   /** Called with the chosen player + enemy ids when the player locks in. */
   onLockIn: (playerId: string, enemyId: string) => void;
   onBack?: () => void;
@@ -31,7 +35,11 @@ const STAT_ORDER: (keyof ChampionStats)[] = [
  * detail panel with localized P/Q/W/E/R ability cards, picks (or randomizes)
  * an opponent, and locks in to start the battle.
  */
-export default function ChampionSelect({ onLockIn, onBack }: ChampionSelectProps) {
+export default function ChampionSelect({
+  mode = 'rift',
+  onLockIn,
+  onBack,
+}: ChampionSelectProps) {
   const { t } = useTranslation();
   const [selectedId, setSelectedId] = useState<string>(CHAMPIONS[0].id);
   const [enemyId, setEnemyId] = useState<string>(() =>
@@ -65,7 +73,11 @@ export default function ChampionSelect({ onLockIn, onBack }: ChampionSelectProps
         <h2 className="screen__heading champion-select__heading">
           {t('select.heading')}
         </h2>
-        <p className="champion-select__hint">{t('select.pickHint')}</p>
+        <p className="champion-select__hint">
+          {t('select.pickHint')}
+          {' · '}
+          {t(`mode.${mode}`)}
+        </p>
       </div>
 
       <div className="champion-select__body">
@@ -97,11 +109,16 @@ export default function ChampionSelect({ onLockIn, onBack }: ChampionSelectProps
                     {t(selected.titleKey)}
                   </p>
                 </div>
-                <span
-                  className="champion-detail__role"
-                  style={{ color: selected.accentColor }}
-                >
-                  {t(`role.${selected.role}`)}
+                <span className="champion-detail__tags">
+                  <span
+                    className="champion-detail__role"
+                    style={{ color: selected.accentColor }}
+                  >
+                    {t(`role.${selected.role}`)}
+                  </span>
+                  <span className="champion-detail__lane">
+                    {t(`laneRole.${selected.laneRole}`)}
+                  </span>
                 </span>
               </header>
 

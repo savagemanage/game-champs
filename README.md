@@ -1,13 +1,15 @@
 # Arena Champions
 
-A **League of Legends-inspired** web game: pick a champion in a stylized champion-select
-screen, then fight a bot opponent in a fast single-lane **arena battle** where you push
-minion waves, dodge skillshots, and race to destroy the enemy Nexus. Built as a
-React + TypeScript single-page app with a **Phaser 3** game canvas, fully bilingual
-(**한국어 / English**), and deployed to **GitHub Pages**.
+A **League of Legends-inspired** web game built around a full **Summoner's Rift**: pick
+your mode and champion, then battle across a **three-lane 5v5 map** complete with turrets,
+inhibitors and Nexus, minion waves, a jungle with buff camps, and epic monsters (Dragon,
+Rift Herald, Baron Nashor). Earn gold and experience, level up to 18, and shop for items,
+all the way to cracking the enemy Nexus. Built as a React + TypeScript single-page app with
+a **Phaser 3** game canvas, fully bilingual (**한국어 / English**, Korean is the default),
+and deployed to **GitHub Pages**.
 
-> **Not affiliated with Riot Games.** All champion names, titles, abilities, and lore in
-> this project are **original** and inspired only by generic MOBA archetypes (marksman,
+> **Not affiliated with Riot Games.** All champion names, titles, abilities, items, and lore
+> in this project are **original** and inspired only by generic MOBA archetypes (marksman,
 > assassin, bruiser, mage, enchanter). "League of Legends" is a trademark of Riot Games,
 > Inc.; this is an independent, non-commercial fan-style project and is not endorsed by or
 > associated with Riot Games.
@@ -23,77 +25,122 @@ React + TypeScript single-page app with a **Phaser 3** game canvas, fully biling
 - **Web Audio API** – 100% procedural sound effects (no binary audio files)
 - **Vitest** + **@testing-library/react** – unit tests for pure game logic, i18n parity, and components
 
-The pure game logic (`src/game/combat.ts`, `src/game/ai.ts`) is deliberately **Phaser-free**
-so damage formulas, cooldowns, and bot decisions can be unit-tested without a canvas.
+---
+
+## Architecture: pure logic vs. rendering
+
+The core design rule is a strict split between **pure, Phaser-free, unit-tested game logic**
+and the **Phaser rendering layer**. Phaser only draws shapes/tweens and calls the pure
+helpers; it never owns the math. This keeps every formula testable in plain node/jsdom
+without a canvas.
+
+Pure, unit-tested modules:
+
+- `src/game/combat.ts` – armor mitigation, cooldowns, ability resolution, structure-gated targeting
+- `src/game/ai.ts` – deterministic bot decision logic
+- `src/game/rift/map.ts` – the 3000×3000 world: lanes, waypoints, structure/jungle/river/epic anchors, path math
+- `src/game/rift/structures.ts` – the turret → inhibitor → nexus-turret → nexus gating graph + inhibitor respawn
+- `src/game/rift/minions.ts` – wave cadence/composition, super minions, per-type stats, lane navigation
+- `src/game/rift/economy.ts` – gold, XP, the level-1..18 curve, and all bounty tables
+- `src/game/rift/jungle.ts` – neutral camps, respawn timers, and Blue/Red buffs
+- `src/game/rift/objectives.ts` – Dragon (stacking), Rift Herald (one-time push), Baron (timed buff) as team modifiers
+- `src/game/rift/loadout.ts` – folds base stats + per-level growth + items + team modifiers into effective stats
+- `src/data/items.ts` – the 12-item shop catalog
+
+`src/game/scenes/BattleScene.ts` is the Phaser scene: it builds combat `Unit` records, routes
+movement/damage/wave/economy math through the pure helpers above (e.g. `advanceMinion`,
+`computeEffectiveStats`, `nextWaveNumberAt`, `isStructureTargetable`, `isInhibitorAlive`,
+`heraldReward`), and mirrors positions onto containers each frame. The React HUD reads a
+shared external store (`src/game/battleStore.ts`) via `useSyncExternalStore`.
+
+---
+
+## Modes
+
+Choose a mode after the main menu:
+
+- **Summoner's Rift** – the full three-lane 5v5 experience: three lanes with the complete
+  structure chain, minion waves, jungle camps and buffs, and epic monsters.
+- **ARAM** (All Random All Mid) – a single mid lane with randomized champions for constant
+  skirmishing.
 
 ---
 
 ## How the game plays
 
 1. **Main Menu** – start a match or open **Settings & Help**.
-2. **Champion Select** – browse the roster, inspect a champion's stats and P/Q/W/E/R
-   abilities, choose (or randomize) your opponent, and **Lock In**.
-3. **Arena Battle** – a single lane with a Nexus and turret per side. Minion waves spawn
-   periodically. Defeat the enemy champion, push with your minions, and destroy the enemy
-   Nexus to win. Your bot rival is driven by the AI in `src/game/ai.ts`.
-4. **Results** – a Victory/Defeat summary with match stats (duration, takedowns, minions
-   slain, damage dealt). **Rematch** replays the same matchup; **Main Menu** returns home.
+2. **Mode Select** – pick **Summoner's Rift** or **ARAM**.
+3. **Champion Select** – browse the roster, inspect stats, P/Q/W/E/R abilities, role and
+   **lane role** (top / jungle / mid / bot / support), choose or randomize the opponent, and **Lock In**.
+4. **Battle** – push lanes, farm minions and jungle camps for gold and XP, level up to **18**,
+   buy items from the **shop** while in base, contest Dragon / Herald / Baron for team-wide
+   buffs, and destroy structures in order to break through to the enemy Nexus.
+5. **Results** – a Victory/Defeat summary with match stats (duration, takedowns, minions
+   slain, damage dealt, final level, gold). **Rematch** replays; **Main Menu** returns home.
+
+### Structures and gating
+
+Each side has, per lane, an **outer turret → inner turret → inhibitor turret → inhibitor**,
+then two **nexus turrets** and the **Nexus**. A structure can only be attacked once the
+structures shielding it have fallen; the nexus turrets unlock once any inhibitor is down,
+and the Nexus unlocks once its nexus turrets fall. Destroying an inhibitor spawns a **super
+minion** in that lane until the inhibitor respawns (5 minutes).
+
+### Minions, jungle, and epic monsters
+
+- **Minions**: melee + caster every wave, a siege minion every third wave, and super minions
+  after an inhibitor is destroyed. First wave at 1:05, then every 30s.
+- **Jungle**: Blue/Red buff camps plus Gromp/Wolves/Raptors/Krugs and Scuttle, with respawn
+  timers and gold/XP bounties.
+- **Dragon** (from 5:00): permanent stacking team bonus. **Rift Herald** (8:00–19:45): a
+  one-time structure-damage push. **Baron Nashor** (from 20:00): a timed team combat buff.
 
 ### Controls
 
 | Input | Action |
 | --- | --- |
-| `W` `A` `S` `D` | Move your champion |
-| `Q` | Cast the Q ability toward the cursor |
-| `W` | Cast the W ability toward the cursor |
-| `E` | Cast the E ability toward the cursor |
-| `R` | Cast the R (ultimate) toward the cursor |
+| `W` `A` `S` `D` / click | Move your champion |
+| `Q` `W` `E` `R` | Cast abilities aimed at the cursor (`R` is your ultimate) |
+| `B` | Open the item **shop** (only while in base) |
 | Mouse click | Move to the clicked point |
 
-Basic attacks auto-fire at the nearest enemy in range. The same keybinds are documented,
-localized, in the in-game **Settings & Help** panel (reachable from the header on every
-screen), which also exposes **mute**, **master volume**, an **ambient sound** toggle, and
-the **language** switch.
+Basic attacks auto-fire at the nearest valid target in range. The same keybinds (including
+`B` for the shop) are documented, localized, in the in-game **Settings & Help** panel, which
+also exposes **mute**, **master volume**, an **ambient sound** toggle, and the **language** switch.
 
 ---
 
 ## Champion roster
 
-Five original champions, one per archetype:
+Five original champions, one per archetype, each with a default lane role:
 
-| Champion | Title | Role |
-| --- | --- | --- |
-| **Ashborne** | the Ember Archer | Marksman |
-| **Nightveil** | the Silent Blade | Assassin |
-| **Ironhold** | the Bulwark | Bruiser |
-| **Embermage** | the Cinderweaver | Mage |
-| **Dawnsong** | the Radiant Muse | Enchanter |
+| Champion | Title | Role | Lane |
+| --- | --- | --- | --- |
+| **Ashborne** | the Ember Archer | Marksman | Bot |
+| **Nightveil** | the Silent Blade | Assassin | Mid |
+| **Ironhold** | the Bulwark | Bruiser | Top |
+| **Embermage** | the Cinderweaver | Mage | Jungle |
+| **Dawnsong** | the Radiant Muse | Enchanter | Support |
 
-Each champion has a passive plus four abilities (Q/W/E/R) with tuned cooldowns, costs,
-ranges, and damage. Full definitions live in `src/data/champions.ts`; all display text is
-stored as i18n keys, not literal strings, so the roster is fully localizable.
+Each champion has a passive plus four abilities (Q/W/E/R) with tuned cooldowns, costs, ranges,
+and damage, plus per-level **growth** used by the leveling math. Full definitions live in
+`src/data/champions.ts`; the item catalog lives in `src/data/items.ts`. All display text is
+stored as i18n keys so everything is fully localizable.
 
 ---
 
 ## Internationalization (i18n)
 
 The game ships in **Korean (한국어)** and **English**, switchable at runtime via the toggle
-in the header or the Settings panel.
+in the header or the Settings panel. **Korean is the mandatory default** (`fallbackLng: 'ko'`):
+a first-time visitor with no saved choice loads Korean.
 
 - Locale bundles: `src/i18n/locales/ko.json` and `src/i18n/locales/en.json`.
-- The two files **must** have an identical key structure. The parity test in
-  `src/i18n/i18n.test.ts` fails the build if a key is missing from either locale.
-- The active language is detected from `localStorage` (key `lol-lang`) then the browser,
-  and cached back to `localStorage` so the choice persists across reloads.
-
-### Adding a new locale
-
-1. Copy `src/i18n/locales/en.json` to `src/i18n/locales/<lang>.json` and translate every value.
-2. Register it in `src/i18n/index.ts`: add `<lang>` to `SUPPORTED_LANGUAGES` and add
-   `<lang>: { translation: <lang>Json }` to the `resources` map.
-3. Add a display label under the `language.<lang>` key in **every** locale file.
-4. Run `npm run test -- --run` to confirm key parity (note: the current parity test compares
-   `ko` and `en`; extend it if you add more locales).
+- The two files **must** have an identical key set. The parity test in `src/i18n/i18n.test.ts`
+  fails the build if a key is missing from either locale, and asserts the Korean `app.title`
+  resolves to `아레나 챔피언스`.
+- Every new UI / champion / ability / item / buff / objective / structure / HUD string is an
+  i18n key present in **both** locales.
 
 ---
 
@@ -102,13 +149,12 @@ in the header or the Settings panel.
 Requires **Node 22** and npm.
 
 ```bash
-npm install          # install dependencies
-npm run dev          # start the Vite dev server (hot reload)
-npm run build        # type-check (tsc -b) then produce dist/
-npm run preview      # serve the production build locally
-npm run test         # run unit tests in watch mode
+npm install            # install dependencies
+npm run dev            # start the Vite dev server (hot reload)
+npm run build          # type-check (tsc -b) then produce dist/
+npm run preview        # serve the production build locally
 npm run test -- --run  # run unit tests once (CI mode)
-npm run typecheck    # tsc --noEmit type-check only
+npm run typecheck      # tsc --noEmit type-check only
 ```
 
 ---
@@ -116,7 +162,7 @@ npm run typecheck    # tsc --noEmit type-check only
 ## GitHub Pages deployment
 
 This app is served from the **`/game-champs/`** subpath because it is a GitHub **project
-page** (not a user/organization root page). That subpath is configured in `vite.config.ts`:
+page**. That subpath is configured in `vite.config.ts`:
 
 ```ts
 export default defineConfig({
@@ -125,21 +171,14 @@ export default defineConfig({
 });
 ```
 
-Deployment is automated by `.github/workflows/deploy.yml`:
-
-- On every push to `main` (or a manual `workflow_dispatch`), the workflow installs
-  dependencies with `npm ci`, runs `npm run build`, and uploads the `dist/` folder as a
-  Pages artifact, then deploys it with `actions/deploy-pages`.
-- Enable it once under **Settings → Pages → Build and deployment → Source: GitHub Actions**.
-
-Once deployed, the site is available at:
+Deployment is automated by `.github/workflows/deploy.yml`: on every push to `main`, it runs
+`npm ci`, `npm run build`, and deploys `dist/` with `actions/deploy-pages`. Enable it once
+under **Settings → Pages → Build and deployment → Source: GitHub Actions**. The site is then
+available at:
 
 ```
 https://savagemanage.github.io/game-champs/
 ```
-
-(Replace `savagemanage` with your GitHub username/org if you fork the project. If you rename
-the repository, update `base` in `vite.config.ts` to match the new subpath.)
 
 ---
 
@@ -147,30 +186,36 @@ the repository, update `base` in `vite.config.ts` to match the new subpath.)
 
 ```
 src/
-  App.tsx                     # app shell + screen router (menu | select | battle | result)
-  main.tsx                    # React entry: imports i18n + global styles
+  App.tsx                       # app shell + router (menu | mode | select | battle | result)
+  main.tsx                      # React entry: imports i18n + global styles
   components/
-    AbilityCard.tsx           # ability tooltip card
-    ChampionCard.tsx          # roster tile (CSS-art portrait)
-    LanguageToggle.tsx        # ko/en segmented switch
-    SettingsPanel.tsx         # localized settings + help modal (keybinds, audio, language)
+    AbilityCard.tsx             # ability tooltip card
+    ChampionCard.tsx            # roster tile (CSS-art portrait)
+    LanguageToggle.tsx          # ko/en segmented switch
+    SettingsPanel.tsx           # localized settings + help modal (keybinds incl. B, audio, language)
+    ShopPanel.tsx               # in-battle item shop (reads gold/owned items from the store)
   screens/
-    MainMenu.tsx              # landing screen
-    ChampionSelect.tsx        # roster browse + lock-in
-    BattleScreen.tsx          # hosts the Phaser canvas + React HUD
-    ResultScreen.tsx          # win/lose summary + rematch / menu
+    MainMenu.tsx                # landing screen
+    ModeSelect.tsx              # Summoner's Rift vs ARAM
+    ChampionSelect.tsx          # roster browse + role/lane + lock-in
+    BattleScreen.tsx            # hosts the Phaser canvas + HUD + shop
+    ResultScreen.tsx            # win/lose summary + rematch / menu
   game/
-    combat.ts                 # pure combat math (Phaser-free, unit-tested)
-    ai.ts                     # pure bot decision logic (Phaser-free, unit-tested)
-    audio.ts                  # procedural WebAudio SFX engine + persisted settings
-    battleStore.ts            # external store bridging the scene and the React HUD
-    BattleHud.tsx             # React overlay HUD (useSyncExternalStore)
-    PhaserGame.tsx            # mounts a single Phaser.Game, StrictMode-safe
-    scenes/BattleScene.ts     # the arena scene: units, waves, VFX, camera juice
-  data/champions.ts           # typed champion roster (i18n keys, stats, abilities)
-  i18n/                       # react-i18next setup + ko/en locale JSON
-  styles/global.css           # dark/gold LoL-inspired theme + responsive layout
-.github/workflows/deploy.yml  # GitHub Pages build + deploy
+    combat.ts                   # pure combat math (Phaser-free, unit-tested)
+    ai.ts                       # pure bot decision logic (Phaser-free, unit-tested)
+    audio.ts                    # procedural WebAudio SFX engine + persisted settings
+    battleStore.ts              # external store bridging the scene and the React HUD
+    BattleHud.tsx               # React overlay HUD (gold, level/XP, buffs, objectives, minimap)
+    PhaserGame.tsx              # mounts a single Phaser.Game, StrictMode-safe
+    scenes/BattleScene.ts       # the Rift scene: renders the map + routes math through rift/
+    rift/                       # pure, unit-tested Summoner's Rift modules
+      map.ts economy.ts minions.ts structures.ts jungle.ts objectives.ts loadout.ts
+  data/
+    champions.ts                # typed champion roster (i18n keys, stats, growth, lane roles)
+    items.ts                    # 12-item shop catalog
+  i18n/                         # react-i18next setup + ko/en locale JSON (ko default)
+  styles/global.css             # dark/gold LoL-inspired theme + responsive layout
+.github/workflows/deploy.yml    # GitHub Pages build + deploy
 ```
 
 ---
@@ -178,8 +223,7 @@ src/
 ## Notes on assets and audio
 
 There are **no binary art or audio assets**. Champion portraits are CSS gradients with
-initials, the battle is drawn entirely with Phaser shapes/tweens, and all sound effects
-(ability cast, hit, death, victory/defeat stings, and an optional ambient drone) are
+initials, the battle is drawn entirely with Phaser shapes/tweens, and all sound effects are
 synthesized at runtime with the Web Audio API. The audio engine degrades to a no-op in
 headless/test environments where `AudioContext` is unavailable, so builds and unit tests
 stay green.

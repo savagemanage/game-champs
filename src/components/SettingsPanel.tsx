@@ -14,6 +14,7 @@ const KEYBINDS: { keys: string; actionKey: string }[] = [
   { keys: 'W', actionKey: 'settings.keybinds.w' },
   { keys: 'E', actionKey: 'settings.keybinds.e' },
   { keys: 'R', actionKey: 'settings.keybinds.r' },
+  { keys: 'B', actionKey: 'settings.keybinds.shop' },
   { keys: 'settings.keybinds.clickKey', actionKey: 'settings.keybinds.click' },
 ];
 

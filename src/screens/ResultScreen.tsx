@@ -30,7 +30,9 @@ export default function ResultScreen({
       className={`screen result-screen result-screen--${outcome.win ? 'win' : 'lose'}`}
       aria-label={t('result.title')}
     >
-      <p className="result-screen__eyebrow">{t('result.title')}</p>
+      <p className="result-screen__eyebrow">
+        {t('result.title')} · {t(`mode.${outcome.mode}`)}
+      </p>
       <h2 className="result-screen__banner">
         {outcome.win ? t('result.victory') : t('result.defeat')}
       </h2>
@@ -70,6 +72,14 @@ export default function ResultScreen({
         <div className="result-screen__stat">
           <dt>{t('result.damageDealt')}</dt>
           <dd>{outcome.stats.damageDealt}</dd>
+        </div>
+        <div className="result-screen__stat">
+          <dt>{t('result.level')}</dt>
+          <dd>{outcome.stats.level}</dd>
+        </div>
+        <div className="result-screen__stat">
+          <dt>{t('result.gold')}</dt>
+          <dd>{outcome.stats.gold}</dd>
         </div>
       </dl>
 

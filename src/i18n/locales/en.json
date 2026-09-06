@@ -48,7 +48,102 @@
     "minionKills": "Minions Slain",
     "damageDealt": "Damage Dealt",
     "rematch": "Rematch",
-    "toMenu": "Main Menu"
+    "toMenu": "Main Menu",
+    "level": "Final Level",
+    "gold": "Gold Earned"
+  },
+  "mode": {
+    "heading": "Choose Your Mode",
+    "hint": "Pick how you want to battle on the Rift.",
+    "select": "Select",
+    "rift": "Summoner's Rift",
+    "riftDesc": "The full three-lane 5v5: structures, minions, jungle, dragons and Baron.",
+    "aram": "ARAM",
+    "aramDesc": "All random, all mid: one lane, randomized champions, endless teamfights."
+  },
+  "shop": {
+    "open": "Shop",
+    "title": "Item Shop",
+    "buy": "Buy",
+    "owned": "Owned",
+    "notEnoughGold": "Not enough gold",
+    "recommended": "Recommended",
+    "close": "Close",
+    "gold": "Gold"
+  },
+  "items": {
+    "huntersRelic": {
+      "name": "Hunter's Relic",
+      "desc": "A sturdy starter granting a little health and attack damage for the early game."
+    },
+    "swiftBoots": {
+      "name": "Swift Boots",
+      "desc": "Lightweight boots that greatly increase your movement speed."
+    },
+    "shortsword": {
+      "name": "Shortsword",
+      "desc": "A basic blade that adds a modest amount of attack damage."
+    },
+    "sunfireGreatblade": {
+      "name": "Sunfire Greatblade",
+      "desc": "A legendary blade granting heavy attack damage, attack speed and cooldown reduction."
+    },
+    "emberRod": {
+      "name": "Ember Rod",
+      "desc": "A smoldering rod that grants a solid boost to ability power."
+    },
+    "archmageCrown": {
+      "name": "Archmage Crown",
+      "desc": "A legendary crown granting huge ability power, mana and cooldown reduction."
+    },
+    "ironVest": {
+      "name": "Iron Vest",
+      "desc": "Heavy plating that grants bonus health and armor."
+    },
+    "aegisColossus": {
+      "name": "Aegis of the Colossus",
+      "desc": "A legendary bulwark granting massive health, armor and cooldown reduction."
+    },
+    "vampiricEdge": {
+      "name": "Vampiric Edge",
+      "desc": "A hungry blade granting attack damage and attack speed for sustained fights."
+    },
+    "bloodreaver": {
+      "name": "Bloodreaver",
+      "desc": "A legendary lifesteal weapon granting heavy attack damage, attack speed and health."
+    },
+    "manaCrystal": {
+      "name": "Mana Crystal",
+      "desc": "A crystal that expands your resource pool and trims cooldowns."
+    },
+    "chronoCore": {
+      "name": "Chrono Core",
+      "desc": "A legendary core granting a huge resource pool, ability power and cooldown reduction."
+    }
+  },
+  "buff": {
+    "blue": "Blue Buff",
+    "red": "Red Buff",
+    "baron": "Baron Buff"
+  },
+  "objective": {
+    "dragon": "Dragon",
+    "herald": "Rift Herald",
+    "baron": "Baron Nashor"
+  },
+  "laneRole": {
+    "top": "Top",
+    "jungle": "Jungle",
+    "mid": "Mid",
+    "bot": "Bot",
+    "support": "Support"
+  },
+  "hud": {
+    "turrets": "Turrets",
+    "inhibitors": "Inhibitors",
+    "minimap": "Minimap",
+    "xp": "XP",
+    "alive": "Up"
   },
   "settings": {
     "open": "Settings",
@@ -67,6 +162,7 @@
       "w": "Cast W ability at cursor",
       "e": "Cast E ability at cursor",
       "r": "Cast R (ultimate) at cursor",
+      "shop": "Open the item shop (in base)",
       "click": "Move to point",
       "clickKey": "Click"
     }

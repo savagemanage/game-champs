@@ -3,23 +3,29 @@ import { useTranslation } from 'react-i18next';
 import LanguageToggle from './components/LanguageToggle';
 import SettingsPanel from './components/SettingsPanel';
 import MainMenu from './screens/MainMenu';
+import ModeSelect from './screens/ModeSelect';
 import ChampionSelect from './screens/ChampionSelect';
 import BattleScreen from './screens/BattleScreen';
 import ResultScreen from './screens/ResultScreen';
-import type { BattleOutcome } from './game/battleStore';
+import type { BattleOutcome, GameMode } from './game/battleStore';
 
-/** The high-level screens the app can display. Later features fill these in. */
-export type Screen = 'menu' | 'select' | 'battle' | 'result';
+/** Re-export so screens can import the shared game-mode type from `../App`. */
+export type { GameMode } from './game/battleStore';
 
-/** The champions chosen in select, passed down to the battle screen. */
+/** The high-level screens the app can display. */
+export type Screen = 'menu' | 'mode' | 'select' | 'battle' | 'result';
+
+/** The champions + mode chosen in select, passed down to the battle screen. */
 export interface MatchSetup {
   playerChampionId: string;
   enemyChampionId: string;
+  mode: GameMode;
 }
 
 export default function App() {
   const { t } = useTranslation();
   const [screen, setScreen] = useState<Screen>('menu');
+  const [mode, setMode] = useState<GameMode>('rift');
   const [match, setMatch] = useState<MatchSetup | null>(null);
   const [outcome, setOutcome] = useState<BattleOutcome | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -29,8 +35,13 @@ export default function App() {
   // same across a rematch.
   const [matchNonce, setMatchNonce] = useState(0);
 
+  const handleModeSelect = (chosen: GameMode) => {
+    setMode(chosen);
+    setScreen('select');
+  };
+
   const handleLockIn = (playerChampionId: string, enemyChampionId: string) => {
-    setMatch({ playerChampionId, enemyChampionId });
+    setMatch({ playerChampionId, enemyChampionId, mode });
     setOutcome(null);
     setMatchNonce((n) => n + 1);
     setScreen('battle');
@@ -47,7 +58,7 @@ export default function App() {
       setMatchNonce((n) => n + 1);
       setScreen('battle');
     } else {
-      setScreen('select');
+      setScreen('mode');
     }
   };
 
@@ -71,12 +82,21 @@ export default function App() {
       </header>
 
       <main className="app-main">
-        {screen === 'menu' && <MainMenu onPlay={() => setScreen('select')} />}
+        {screen === 'menu' && <MainMenu onPlay={() => setScreen('mode')} />}
+
+        {screen === 'mode' && (
+          <ModeSelect
+            selected={mode}
+            onSelect={handleModeSelect}
+            onBack={() => setScreen('menu')}
+          />
+        )}
 
         {screen === 'select' && (
           <ChampionSelect
+            mode={mode}
             onLockIn={handleLockIn}
-            onBack={() => setScreen('menu')}
+            onBack={() => setScreen('mode')}
           />
         )}
 
