@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { SceneKeys, PALETTE, CANVAS } from '../config/GameConfig';
 import { AUDIO, IMAGES, SHEETS, assetPath } from '../config/AssetKeys';
 import { tr } from '../i18n/i18n';
+import { UI_FONT_FAMILY } from '../ui/UiText';
 
 /**
  * PreloadScene loads every runtime asset (building/troop/enemy spritesheets,
@@ -50,7 +51,7 @@ export class PreloadScene extends Phaser.Scene {
 
     this.add
       .text(cx, barY - 44, tr('brand.name'), {
-        fontFamily: 'monospace',
+        fontFamily: UI_FONT_FAMILY,
         fontSize: '32px',
         color: PALETTE.TEXT_CSS,
         fontStyle: 'bold',
@@ -59,7 +60,7 @@ export class PreloadScene extends Phaser.Scene {
 
     const label = this.add
       .text(cx, barY + 32, tr('preload.loading', { pct: 0 }), {
-        fontFamily: 'monospace',
+        fontFamily: UI_FONT_FAMILY,
         fontSize: '16px',
         color: PALETTE.TEXT_CSS,
       })

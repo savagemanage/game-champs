@@ -5,6 +5,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>킹덤 라이즈</title>
     <style>
+      /*
+       * Self-hosted Korean-capable pixel webfont (Galmuri11, SIL OFL-1.1).
+       * Kingdom Rise is Korean-first, but the previous Latin-only monospace UI
+       * stack rendered every Hangul glyph as a missing-glyph box. Galmuri11 is a
+       * bitmap/pixel Hangul face that matches the pixel-art look and covers the
+       * full Korean syllable range. The URL is RELATIVE (no leading slash) so it
+       * resolves under both the dev base ("/") and the GitHub Pages base
+       * ("/game-kingshot/") with NO runtime CDN/network dependency — the file
+       * ships in public/fonts/ and is served from our own origin.
+       */
+      @font-face {
+        font-family: 'Galmuri11';
+        src: url('fonts/Galmuri11.woff2') format('woff2');
+        font-weight: normal;
+        font-style: normal;
+        font-display: block;
+      }
       :root {
         color-scheme: dark;
       }

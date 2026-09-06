@@ -27,13 +27,51 @@ export const TEXT_RESOLUTION = Math.max(
 );
 
 /**
- * Font stack for all UI text. Naming concrete, widely-shipped monospace faces
- * first gives a consistent, sharp glyph grid across platforms and only falls
- * back to the generic keyword last (a bare `monospace` often resolves to a
- * blurry platform default).
+ * Font stack for all UI text. Kingdom Rise is KOREAN-FIRST, so the self-hosted
+ * pixel Hangul face (Galmuri11, SIL OFL-1.1, declared via @font-face in
+ * index.html and loaded before the first text-bearing scene renders — see
+ * {@link ensureUiFontLoaded}) MUST come first: it covers the full Korean
+ * syllable range, so Hangul renders as real glyphs instead of missing-glyph
+ * boxes. The Latin monospace faces stay after it as fallbacks; Galmuri11 also
+ * carries clean ASCII, so English keeps the crisp pixel grid.
  */
 export const UI_FONT_FAMILY =
-  '"DejaVu Sans Mono", "Consolas", "Liberation Mono", "Menlo", "Courier New", monospace';
+  '"Galmuri11", "DejaVu Sans Mono", "Consolas", "Liberation Mono", "Menlo", "Courier New", monospace';
+
+/** The family name that must be resolvable before any UI text is rasterized. */
+export const UI_FONT_LOAD_SPEC = '16px "Galmuri11"';
+
+/**
+ * Ensure the Korean-capable UI webfont is loaded and ready BEFORE Phaser
+ * rasterizes any text. Phaser renders Text to a canvas glyph texture on first
+ * paint; if the font is not yet available at that moment the browser draws
+ * missing-glyph boxes and Phaser CACHES that boxed texture, so late-arriving
+ * fonts never fix the already-painted labels. Gating the first text-bearing
+ * scene on this promise guarantees the very first paint uses real glyphs.
+ *
+ * Resolves (never rejects) so a font hiccup can never wedge the boot flow: on
+ * any failure or in a non-DOM/test environment we fall through and let Phaser
+ * paint with the fallback stack rather than hang forever.
+ */
+export function ensureUiFontLoaded(timeoutMs = 4000): Promise<void> {
+  if (typeof document === 'undefined' || !('fonts' in document)) {
+    return Promise.resolve();
+  }
+  const fonts = document.fonts as FontFaceSet;
+  const load = Promise.all([
+    fonts.load(UI_FONT_LOAD_SPEC),
+    // A Hangul sample forces the browser to fetch the Korean coverage, not just
+    // the (possibly synthesizable) ASCII subset.
+    fonts.load(`${UI_FONT_LOAD_SPEC}`, '가나다'),
+  ])
+    .then(() => fonts.ready)
+    .then(() => undefined)
+    .catch(() => undefined);
+  const timeout = new Promise<void>((resolve) => {
+    setTimeout(resolve, timeoutMs);
+  });
+  return Promise.race([load, timeout]);
+}
 
 /**
  * Build a monospace text style with the crisp text resolution baked in, using

@@ -15,10 +15,13 @@ this repository:
 - Audio (SFX + music): [`tools/gen_audio.py`](../tools/gen_audio.py) (Python
   standard library synthesis — no samples, no third-party audio)
 
-Because everything is original, there are **no third-party downloads** to
-attribute. No CC0/CC-BY external assets were used. Should any external asset be
-added later, it must be CC0 or clearly redistribution-permitting FREE, and its
-file path, name, author, source URL, and license must be recorded below.
+Every **art and audio** asset is original. The single third-party asset is the
+Korean-capable UI **webfont** (see the *Fonts* section below): Kingdom Rise is
+Korean-first, and rendering Hangul requires a font whose glyph coverage includes
+the Korean syllabary. It is a redistribution-permitting (SIL OFL-1.1) font,
+self-hosted from our own origin. Any external asset added later must be CC0 or
+clearly redistribution-permitting FREE, and its file path, name, author, source
+URL, and license must be recorded below.
 
 ## License
 
@@ -92,6 +95,25 @@ All audio is procedurally synthesized (16-bit PCM WAV, 22.05 kHz mono) by
 | `audio/victory.wav` | SFX — victory fanfare | **Original** |
 | `audio/defeat.wav` | SFX — defeat cadence | **Original** |
 | `audio/music_loop.wav` | Music — looping medieval strategy bed (D-minor, ~23 s) | **Original** |
+
+## Fonts — `public/fonts/`
+
+The UI is Korean-first, so it needs a font with full Hangul coverage. We ship a
+self-hosted pixel/bitmap Korean webfont that matches the pixel-art look; it is
+declared via `@font-face` in `index.html` and loaded before the first text-bearing
+scene renders (see `src/ui/UiText.ts` → `ensureUiFontLoaded` and
+`src/scenes/BootScene.ts`). It is served entirely from our own origin — there is
+**no** runtime CDN/Google Fonts dependency, so Korean renders offline on GitHub
+Pages.
+
+| File | Name | Author | Source | License |
+| --- | --- | --- | --- | --- |
+| `public/fonts/Galmuri11.woff2` | Galmuri11 (갈무리11) — pixel Hangul + Latin font, v2.40.3 | Quiple (하리보) | https://galmuri.quiple.dev · https://github.com/quiple/galmuri | **SIL Open Font License 1.1 (OFL-1.1)** |
+
+The SIL OFL-1.1 explicitly permits bundling and redistribution of the font
+files with software (the font is not sold on its own and retains its OFL notice
+at the source above). Fetched at authoring time from the `galmuri` npm package
+(via jsDelivr) and committed as a local file.
 
 ---
 

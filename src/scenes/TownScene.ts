@@ -72,6 +72,15 @@ export class TownScene extends Phaser.Scene {
   private heroPanel!: HeroPanel;
   private questPanel!: QuestPanel;
 
+  /**
+   * Dismisses the first-run onboarding card when set (non-null only while the
+   * card is on screen). Any panel/battle/settings action calls
+   * {@link dismissOnboardingIfOpen} FIRST, so the card is torn down before a
+   * panel can open — the two can never visibly overlap — while the requested
+   * action still proceeds (so hotkeys keep working, not silently swallowed).
+   */
+  private onboardingDismiss: (() => void) | null = null;
+
   // Upgrade panel widgets (rebuilt per selected building).
   private upgradePanel!: Phaser.GameObjects.Container;
   private selected: BuildingKind | null = null;
@@ -91,6 +100,19 @@ export class TownScene extends Phaser.Scene {
   create(): void {
     this.state = GameState.get();
     this.audio = AudioManager.get(this);
+
+    // Phaser reuses the SAME scene instance across scene.start/restart, so any
+    // per-create accumulator arrays survive the transition still holding the
+    // PREVIOUS run's GameObjects. Those old objects were destroyed on SHUTDOWN
+    // (their Text frame data is now null), so if buildBuildings()/buildTopBar()
+    // merely push onto them, update() would iterate the stale, destroyed
+    // widgets and crash (e.g. setColor -> updateText -> null frame.drawImage on
+    // returning from Settings). Reset them to empty on every create so we only
+    // ever hold freshly-built objects.
+    this.resourceWidgets = [];
+    this.markers = [];
+    this.selected = null;
+    this.onboardingDismiss = null;
 
     this.cameras.main.setBackgroundColor(PALETTE.BG_SKY_CSS);
     Menu.fadeIn(this);
@@ -450,37 +472,53 @@ export class TownScene extends Phaser.Scene {
   }
 
   private openTraining(): void {
+    this.dismissOnboardingIfOpen();
     this.closeUpgradePanel();
     this.closeOtherPanels('training');
     this.trainingPanel.toggle();
   }
 
   private openResearch(): void {
+    this.dismissOnboardingIfOpen();
     this.closeUpgradePanel();
     this.closeOtherPanels('research');
     this.researchPanel.toggle();
   }
 
   private openHeroes(): void {
+    this.dismissOnboardingIfOpen();
     this.closeUpgradePanel();
     this.closeOtherPanels('heroes');
     this.heroPanel.toggle();
   }
 
   private openQuests(): void {
+    this.dismissOnboardingIfOpen();
     this.closeUpgradePanel();
     this.closeOtherPanels('quests');
     this.questPanel.toggle();
   }
 
   private goBattle(): void {
+    this.dismissOnboardingIfOpen();
     this.saveNow();
     Menu.fadeTo(this, () => this.scene.start(SceneKeys.Battle));
   }
 
   private openSettings(): void {
+    this.dismissOnboardingIfOpen();
     this.saveNow();
     Menu.fadeTo(this, () => this.scene.start(SceneKeys.Settings, { returnTo: SceneKeys.Town }));
+  }
+
+  /**
+   * Tear down the first-run onboarding card immediately if it is on screen.
+   * Called at the top of every panel/battle/settings action so a panel never
+   * opens underneath the onboarding overlay. A no-op once the card is gone.
+   */
+  private dismissOnboardingIfOpen(): void {
+    const dismiss = this.onboardingDismiss;
+    if (dismiss) dismiss();
   }
 
   private saveNow(): void {
@@ -509,6 +547,10 @@ export class TownScene extends Phaser.Scene {
       .setLineSpacing(6);
 
     const dismiss = (): void => {
+      // Idempotent: opening a panel and clicking the button can both fire this,
+      // and it may run again while the fade-out tween is still in flight.
+      if (this.onboardingDismiss === null) return;
+      this.onboardingDismiss = null;
       this.tweens.add({
         targets: [overlay, card],
         alpha: 0,
@@ -519,6 +561,9 @@ export class TownScene extends Phaser.Scene {
         },
       });
     };
+    // Registering the dismiss marks onboarding as "on screen": any panel/battle/
+    // settings action tears it down first (see dismissOnboardingIfOpen).
+    this.onboardingDismiss = dismiss;
     const ok = Menu.button(this, cx, cy + h / 2 - 34, tr('town.onboardingDismiss'), dismiss, { width: 200 });
 
     card.add([panel, title, body, ok.container]);

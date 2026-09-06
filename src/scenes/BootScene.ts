@@ -1,10 +1,17 @@
 import Phaser from 'phaser';
 import { SceneKeys, PALETTE } from '../config/GameConfig';
+import { ensureUiFontLoaded } from '../ui/UiText';
 
 /**
  * BootScene is the very first scene. It shows a minimal loading indicator for
  * any tiny boot-time assets, then hands off to PreloadScene which loads the
  * full art/audio bundle before the Title screen.
+ *
+ * Crucially, BootScene draws NO text of its own, so it is the correct place to
+ * gate on the Korean-capable UI webfont: it waits for {@link ensureUiFontLoaded}
+ * to resolve before starting PreloadScene (the first scene that renders text).
+ * That guarantees every downstream label's FIRST paint uses real Hangul glyphs
+ * instead of the missing-glyph boxes Phaser would otherwise cache.
  */
 export class BootScene extends Phaser.Scene {
   constructor() {
@@ -33,6 +40,11 @@ export class BootScene extends Phaser.Scene {
   }
 
   create(): void {
-    this.scene.start(SceneKeys.Preload);
+    // Hold on the (text-free) boot indicator until the Korean UI webfont is
+    // ready, then advance to PreloadScene. ensureUiFontLoaded always resolves
+    // (with an internal timeout) so a font hiccup can never wedge the boot.
+    void ensureUiFontLoaded().then(() => {
+      this.scene.start(SceneKeys.Preload);
+    });
   }
 }
