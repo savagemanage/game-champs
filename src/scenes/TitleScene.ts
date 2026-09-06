@@ -103,10 +103,13 @@ export class TitleScene extends Phaser.Scene {
 
     // Keep the whole control inside the 960-wide canvas with room to spare: the
     // ▶ button (34px wide) is centered so its right edge sits well under 944.
-    const nextX = CANVAS.WIDTH - 40; // 920 -> right edge 937 (>=16px margin)
-    const valueX = nextX - 48; // 872: current-language name (centered)
-    const prevX = valueX - 48; // 824: ◀ button
-    const labelX = prevX - 30; // 794: right-aligned label ends here
+    // The ◀ and ▶ buttons are spaced ~120px apart so the centered value
+    // ("한국어" / "English", ~86px wide) fits fully between them with clear
+    // space and never overlaps either button.
+    const nextX = CANVAS.WIDTH - 34; // 926 -> right edge 943 (>=16px margin)
+    const prevX = nextX - 120; // 806: ◀ button, 120px gap from ▶
+    const valueX = (prevX + nextX) / 2; // 866: current-language name centered in the gap
+    const labelX = prevX - 30; // 776: right-aligned label ends here
 
     Menu.label(this, labelX, y, tr('settings.language'), 14, 0.7).setOrigin(1, 0.5);
     this.add.text(valueX, y, tr(`language.${lang}`), textStyle(16)).setOrigin(0.5);
