@@ -69,7 +69,22 @@ export default function PhaserGame({
     gameRef.current = game;
     game.scene.start('battle', sceneData);
 
+    // Phaser.Scale.FIT measures the parent element once at creation. If the
+    // container has not been laid out yet (or was momentarily collapsed), the
+    // canvas can lock to a tiny size and never grow. Refresh the scale manager
+    // whenever the container resizes so the canvas always fills `.battle-stage`
+    // at its full 900x640 aspect ratio, and once more after first layout.
+    const container = containerRef.current;
+    const refresh = () => gameRef.current?.scale.refresh();
+    const resizeObserver = new ResizeObserver(refresh);
+    resizeObserver.observe(container);
+    const rafId = requestAnimationFrame(refresh);
+    window.addEventListener('resize', refresh);
+
     return () => {
+      window.removeEventListener('resize', refresh);
+      cancelAnimationFrame(rafId);
+      resizeObserver.disconnect();
       gameRef.current?.destroy(true);
       gameRef.current = null;
     };
