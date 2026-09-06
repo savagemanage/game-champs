@@ -86,22 +86,137 @@ export interface RunResult {
 }
 
 /**
+ * The gate-runner (Falcon Rescue mini-game) meta-progression block: coins,
+ * purchased upgrade levels, personal bests, and total runs played. In the v1
+ * save this lived at the top level under `meta`; from v2 it is nested under
+ * {@link GameState.miniGame} so the rest of the expanded game state can live
+ * alongside it. Its shape is unchanged so the existing gate-runner scenes and
+ * {@link MetaStore} keep working against it verbatim.
+ */
+export interface MiniGameMeta {
+  /** Spendable meta-currency. */
+  coins: number;
+  /** Purchased level of every upgrade. */
+  upgrades: MetaUpgradeState;
+  /** Best distance reached across all runs. */
+  bestDistance: number;
+  /** Best score across all runs. */
+  bestScore: number;
+  /** Total number of runs played. */
+  runsPlayed: number;
+}
+
+/**
+ * The legacy v1 persisted state: purely the gate-runner meta-progression under
+ * a top-level `meta` key. Retained only so the save layer can recognize and
+ * migrate a real v1 save forward to {@link GameState}; new code should never
+ * produce this shape.
+ */
+export interface GameStateV1 {
+  /** Save-format version (always 1 for this shape). */
+  version: number;
+  /** The gate-runner meta block, in its original top-level position. */
+  meta: MiniGameMeta;
+}
+
+/**
+ * Resource economy sub-state (OWNED BY A LATER FEAT: buildings/economy).
+ *
+ * Placeholder for the four survival resources plus their storage caps that the
+ * base-building economy will drive. Kept empty-but-valid (all zero) now so the
+ * save round-trips and later features can populate concrete fields.
+ */
+export interface ResourceState {
+  /** Per-resource stockpiles, keyed by resource id (empty until FEAT adds them). */
+  stockpiles: Record<string, number>;
+}
+
+/**
+ * Base-building sub-state (OWNED BY A LATER FEAT: buildings/economy).
+ *
+ * Placeholder for HQ + tech center / parade ground / hospital / barracks /
+ * drone center levels and their in-progress timed upgrades. Empty-but-valid
+ * now (no buildings constructed).
+ */
+export interface BuildingState {
+  /** Building level keyed by building id (empty until a FEAT populates it). */
+  levels: Record<string, number>;
+}
+
+/**
+ * Hero roster sub-state (OWNED BY A LATER FEAT: heroes).
+ *
+ * Placeholder for the owned hero collection (grade / star-tier / level / skill
+ * progression). Empty-but-valid now (no heroes recruited).
+ */
+export interface HeroState {
+  /** Owned heroes keyed by hero id (empty until a FEAT populates it). */
+  roster: Record<string, unknown>;
+}
+
+/**
+ * Squad-formation sub-state (OWNED BY A LATER FEAT: formation/combat).
+ *
+ * Placeholder for the 5-slot squad layout (2 front row + 3 back row) that
+ * references heroes by id. Empty-but-valid now (no slots assigned).
+ */
+export interface FormationState {
+  /** Front-row hero-id slots (later: length 2). */
+  front: (string | null)[];
+  /** Back-row hero-id slots (later: length 3). */
+  back: (string | null)[];
+}
+
+/**
+ * Season / battle-pass sub-state (OWNED BY A LATER FEAT: season/league).
+ *
+ * Placeholder for the current season id and pass progress. Empty-but-valid now
+ * (season 0, no progress).
+ */
+export interface SeasonState {
+  /** Current season identifier (0 = no season started). */
+  current: number;
+  /** Accumulated season/pass progress points. */
+  progress: number;
+}
+
+/**
+ * Daily / weekly mission sub-state (OWNED BY A LATER FEAT: missions).
+ *
+ * Placeholder for arms-race (daily) and alliance-duel (weekly) task progress.
+ * Empty-but-valid now (no tasks tracked).
+ */
+export interface MissionState {
+  /** Daily "arms race" task progress keyed by task id. */
+  daily: Record<string, number>;
+  /** Weekly "alliance duel" task progress keyed by task id. */
+  weekly: Record<string, number>;
+}
+
+/**
  * The complete persisted game state (serialized to localStorage by the save
- * layer). Purely meta-progression; a run itself is transient and never saved.
+ * layer, save format v2). It carries the whole expanded single-player game:
+ * the gate-runner mini-game meta plus placeholder sub-states for the resource
+ * economy, base buildings, hero roster, squad formation, season progression,
+ * and daily/weekly missions. Each sub-state is defined minimally here and
+ * populated by the later feature that owns it. A run itself is transient and
+ * never saved.
  */
 export interface GameState {
   /** Save-format version so future migrations can be detected. */
   version: number;
-  meta: {
-    /** Spendable meta-currency. */
-    coins: number;
-    /** Purchased level of every upgrade. */
-    upgrades: MetaUpgradeState;
-    /** Best distance reached across all runs. */
-    bestDistance: number;
-    /** Best score across all runs. */
-    bestScore: number;
-    /** Total number of runs played. */
-    runsPlayed: number;
-  };
+  /** Gate-runner (Falcon Rescue) meta-progression, moved here in v2. */
+  miniGame: MiniGameMeta;
+  /** Resource economy (later FEAT). */
+  resources: ResourceState;
+  /** Base buildings (later FEAT). */
+  buildings: BuildingState;
+  /** Hero roster (later FEAT). */
+  heroes: HeroState;
+  /** Squad formation (later FEAT). */
+  formation: FormationState;
+  /** Season / battle-pass progression (later FEAT). */
+  season: SeasonState;
+  /** Daily / weekly missions (later FEAT). */
+  missions: MissionState;
 }

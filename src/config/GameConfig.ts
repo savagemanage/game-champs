@@ -203,6 +203,29 @@ export const META = {
 } as const;
 
 /**
+ * Expanded single-player game state tuning. FEAT-001 only needs the shape of a
+ * fresh save (empty-but-valid sub-states); later features flesh out each
+ * system's real tuning. Kept here so the fresh-default builder never hardcodes
+ * magic numbers. The squad formation is a 5-slot layout: 2 front + 3 back.
+ */
+export const GAME_STATE = {
+  /** Squad-formation slot counts (front row + back row). */
+  FORMATION: {
+    /** Front-row slots. */
+    FRONT_SLOTS: 2,
+    /** Back-row slots. */
+    BACK_SLOTS: 3,
+  },
+  /** Season progression starting point (0 = no season started yet). */
+  SEASON: {
+    /** Current season id for a fresh game. */
+    START_SEASON: 0,
+    /** Season progress points for a fresh game. */
+    START_PROGRESS: 0,
+  },
+} as const;
+
+/**
  * Ordered tuple of meta-upgrade kinds so UI and iteration share one canonical
  * order. The MetaUpgradeKind union type is derived in src/types.
  */
