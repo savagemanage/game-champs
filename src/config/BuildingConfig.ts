@@ -207,6 +207,52 @@ export function buildingDef(kind: BuildingKind): BuildingDef {
   return BUILDING_DEFS[kind];
 }
 
+/**
+ * Why a building is currently locked at a given Furnace level, if it is. This
+ * is the pure, Phaser-free source of the human-facing "Furnace Lv.N required"
+ * label the Town shows in place of a bare "Locked".
+ *
+ * - `locked` is false when the building could be built/upgraded now (the caller
+ *   still checks affordability separately - this only reports the Furnace gate).
+ * - `reason` is `'prereq'` (mirroring {@link BuildingSystem.canUpgrade}) when the
+ *   Furnace gate is unmet, either because the hard `requiresFurnaceLevel` is not
+ *   yet reached OR because a non-Furnace building may never exceed the current
+ *   Furnace level (the "soft gate").
+ * - `requiredFurnaceLevel` is the Furnace level the player must reach for the
+ *   building to become buildable/upgradable at its CURRENT level: the max of the
+ *   hard prerequisite and (currentLevel + 1) for the soft gate. It is the number
+ *   the UI renders in `town.lockedRequires`.
+ *
+ * The Furnace itself is never gated (it is the gate), so it always returns
+ * `{ locked: false }`.
+ */
+export interface UnlockRequirement {
+  locked: boolean;
+  reason?: 'prereq';
+  /** Furnace level required to (build or) upgrade this building right now. */
+  requiredFurnaceLevel: number;
+}
+
+export function unlockRequirement(
+  kind: BuildingKind,
+  currentLevel: number,
+  furnaceLevel: number,
+): UnlockRequirement {
+  const def = BUILDING_DEFS[kind];
+  if (kind === 'furnace') {
+    // The Furnace is the gate; it is never gated by itself.
+    return { locked: false, requiredFurnaceLevel: 0 };
+  }
+  // Hard prerequisite: enough Furnace level to own this at all. Soft gate: a
+  // non-Furnace building's level may never exceed the Furnace's, so to advance
+  // to (currentLevel + 1) the Furnace must be at least that high.
+  const required = Math.max(def.requiresFurnaceLevel, currentLevel + 1);
+  if (furnaceLevel < required) {
+    return { locked: true, reason: 'prereq', requiredFurnaceLevel: required };
+  }
+  return { locked: false, requiredFurnaceLevel: required };
+}
+
 /** True when the building is a resource producer (has a `produces` resource). */
 export function isProducer(kind: BuildingKind): kind is ProducerKind {
   return BUILDING_DEFS[kind].produces !== undefined;

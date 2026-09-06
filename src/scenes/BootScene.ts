@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { SceneKeys, PALETTE } from '../config/GameConfig';
+import { SceneKeys, PALETTE, CANVAS } from '../config/GameConfig';
 
 /**
  * BootScene is the very first scene. It shows a minimal loading indicator for
@@ -13,8 +13,11 @@ export class BootScene extends Phaser.Scene {
 
   preload(): void {
     // A tiny loading indicator so the boot step is visible even before assets
-    // exist. The full asset bundle is loaded in PreloadScene.
-    const { width, height } = this.scale;
+    // exist. The full asset bundle is loaded in PreloadScene. Use the LOGICAL
+    // canvas size (CANVAS) rather than this.scale: the backbuffer is sized to
+    // device pixels for crisp text (see main.ts) and the main camera is zoomed
+    // to keep the 960x540 logical coordinate system, so layout must use CANVAS.
+    const { WIDTH: width, HEIGHT: height } = CANVAS;
     const barWidth = Math.floor(width * 0.5);
     const barX = Math.floor((width - barWidth) / 2);
     const barY = Math.floor(height / 2);

@@ -29,6 +29,7 @@ import {
   type KeyValueStorage,
   type LoadResult,
 } from './SaveManager';
+import type { OnboardingState } from '../types';
 
 /** How often the state auto-persists to storage, milliseconds. */
 export const AUTOSAVE_INTERVAL_MS = 15_000;
@@ -68,6 +69,12 @@ export class GameState {
   readonly quests: QuestSystem;
   readonly vip: VipSystem;
   private _waveCleared: number;
+  /**
+   * New-player onboarding / tutorial state (FEAT-003). Mutable so the Town can
+   * mark the intro card dismissed and the guided flow complete; persisted via
+   * the snapshot so a returning player is never re-onboarded.
+   */
+  private _onboarding: OnboardingState;
 
   private readonly saver: SaveManager;
   private msSinceSave = 0;
@@ -99,6 +106,7 @@ export class GameState {
     this.quests = result.snapshot.quests;
     this.vip = result.snapshot.vip;
     this._waveCleared = result.snapshot.waveCleared;
+    this._onboarding = result.snapshot.onboarding;
     this.saver = saver;
     this.loaded = result.loaded;
     this.offlineSeconds = result.offlineSeconds;
@@ -132,6 +140,32 @@ export class GameState {
   /** Highest battle wave cleared. */
   get waveCleared(): number {
     return this._waveCleared;
+  }
+
+  /** The current new-player onboarding / tutorial state (defensive copy). */
+  get onboarding(): OnboardingState {
+    return { ...this._onboarding };
+  }
+
+  /**
+   * Mark the short first-run welcome card as dismissed and persist immediately.
+   * Idempotent; safe to call more than once.
+   */
+  markIntroDismissed(now: number = Date.now()): void {
+    if (this._onboarding.introDismissed) return;
+    this._onboarding.introDismissed = true;
+    this.save(now);
+  }
+
+  /**
+   * Mark the guided objective flow as complete (or skipped) and persist. Once
+   * set, a returning player sees no banner/pointer (except the low-warmth
+   * advisory). Idempotent.
+   */
+  markGuidedComplete(now: number = Date.now()): void {
+    if (this._onboarding.guidedComplete) return;
+    this._onboarding.guidedComplete = true;
+    this.save(now);
   }
 
   /**
@@ -411,6 +445,7 @@ export class GameState {
       quests: this.quests,
       vip: this.vip,
       waveCleared: this._waveCleared,
+      onboarding: this._onboarding,
     };
   }
 

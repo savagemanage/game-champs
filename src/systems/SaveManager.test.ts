@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { SaveManager, memoryStorage, SAVE_VERSION, SAVE_KEY, type GameSnapshot } from './SaveManager';
+import { SaveManager, memoryStorage, SAVE_VERSION, SAVE_KEY, freshOnboarding, normalizeOnboarding, type GameSnapshot } from './SaveManager';
 import { ResourceStore } from './ResourceStore';
 import { BuildingSystem } from './BuildingSystem';
 import { TrainingQueue } from './TrainingQueue';
@@ -91,6 +91,7 @@ describe('SaveManager', () => {
       quests: new QuestSystem(),
       vip: new VipSystem(),
       waveCleared: 5,
+      onboarding: { introDismissed: true, guidedComplete: true },
     };
   }
 
@@ -104,7 +105,7 @@ describe('SaveManager', () => {
 
   it('uses the Frosthold save namespace', () => {
     expect(SAVE_KEY).toBe('frosthold:save');
-    expect(SAVE_VERSION).toBe(7);
+    expect(SAVE_VERSION).toBe(8);
   });
 
   it('produces a versioned plain JSON object on serialize', () => {
@@ -153,7 +154,7 @@ describe('SaveManager', () => {
     const population = atCapWorkforce(buildings, { hunters_hut: 99 });
     const pm = popMult(buildings, population);
     mgr.save(
-      { resources, buildings, training, warmth: new WarmthSystem(), population, premium: new PremiumWallet(), heroes: new HeroRoster(), summon: new SummonSystem(), campaign: new CampaignSystem(), research: new ResearchSystem(), gear: new GearSystem(), rally: new RallySystem(), arena: new ArenaSystem(), alliance: new AllianceSystem(), quests: new QuestSystem(), vip: new VipSystem(), waveCleared: 5 },
+      { resources, buildings, training, warmth: new WarmthSystem(), population, premium: new PremiumWallet(), heroes: new HeroRoster(), summon: new SummonSystem(), campaign: new CampaignSystem(), research: new ResearchSystem(), gear: new GearSystem(), rally: new RallySystem(), arena: new ArenaSystem(), alliance: new AllianceSystem(), quests: new QuestSystem(), vip: new VipSystem(), waveCleared: 5, onboarding: freshOnboarding() },
       saveTime,
     );
 
@@ -196,7 +197,7 @@ describe('SaveManager', () => {
     // each from a buildings snapshot at the matching level.
     const population = atCapWorkforce(buildings, { hunters_hut: 99 });
     mgr.save(
-      { resources, buildings, training, warmth: new WarmthSystem(), population, premium: new PremiumWallet(), heroes: new HeroRoster(), summon: new SummonSystem(), campaign: new CampaignSystem(), research: new ResearchSystem(), gear: new GearSystem(), rally: new RallySystem(), arena: new ArenaSystem(), alliance: new AllianceSystem(), quests: new QuestSystem(), vip: new VipSystem(), waveCleared: 0 },
+      { resources, buildings, training, warmth: new WarmthSystem(), population, premium: new PremiumWallet(), heroes: new HeroRoster(), summon: new SummonSystem(), campaign: new CampaignSystem(), research: new ResearchSystem(), gear: new GearSystem(), rally: new RallySystem(), arena: new ArenaSystem(), alliance: new AllianceSystem(), quests: new QuestSystem(), vip: new VipSystem(), waveCleared: 0, onboarding: freshOnboarding() },
       t0,
     );
 
@@ -314,7 +315,7 @@ describe('SaveManager', () => {
     ]);
     const training = new TrainingQueue(undefined, { trapper: 0, marksman: 0, vanguard: 0 });
     mgr.save(
-      { resources, buildings, training, warmth: new WarmthSystem(WARMTH.MAX_WARMTH), population: fullWorkforce(), premium: new PremiumWallet(), heroes: new HeroRoster(), summon: new SummonSystem(), campaign: new CampaignSystem(), research: new ResearchSystem(), gear: new GearSystem(), rally: new RallySystem(), arena: new ArenaSystem(), alliance: new AllianceSystem(), quests: new QuestSystem(), vip: new VipSystem(), waveCleared: 0 },
+      { resources, buildings, training, warmth: new WarmthSystem(WARMTH.MAX_WARMTH), population: fullWorkforce(), premium: new PremiumWallet(), heroes: new HeroRoster(), summon: new SummonSystem(), campaign: new CampaignSystem(), research: new ResearchSystem(), gear: new GearSystem(), rally: new RallySystem(), arena: new ArenaSystem(), alliance: new AllianceSystem(), quests: new QuestSystem(), vip: new VipSystem(), waveCleared: 0, onboarding: freshOnboarding() },
       0,
     );
 
@@ -350,7 +351,7 @@ describe('SaveManager', () => {
     const population = atCapWorkforce(buildings, { sawmill: 99, coal_pit: 99 });
     const pm = popMult(buildings, population);
     mgr.save(
-      { resources, buildings, training, warmth: new WarmthSystem(WARMTH.MAX_WARMTH), population, premium: new PremiumWallet(), heroes: new HeroRoster(), summon: new SummonSystem(), campaign: new CampaignSystem(), research: new ResearchSystem(), gear: new GearSystem(), rally: new RallySystem(), arena: new ArenaSystem(), alliance: new AllianceSystem(), quests: new QuestSystem(), vip: new VipSystem(), waveCleared: 0 },
+      { resources, buildings, training, warmth: new WarmthSystem(WARMTH.MAX_WARMTH), population, premium: new PremiumWallet(), heroes: new HeroRoster(), summon: new SummonSystem(), campaign: new CampaignSystem(), research: new ResearchSystem(), gear: new GearSystem(), rally: new RallySystem(), arena: new ArenaSystem(), alliance: new AllianceSystem(), quests: new QuestSystem(), vip: new VipSystem(), waveCleared: 0, onboarding: freshOnboarding() },
       0,
     );
 
@@ -401,7 +402,7 @@ describe('SaveManager', () => {
     ]);
     const training = new TrainingQueue(undefined, { trapper: 0, marksman: 0, vanguard: 0 });
     mgr.save(
-      { resources, buildings, training, warmth: new WarmthSystem(WARMTH.MAX_WARMTH), population: fullWorkforce(), premium: new PremiumWallet(), heroes: new HeroRoster(), summon: new SummonSystem(), campaign: new CampaignSystem(), research: new ResearchSystem(), gear: new GearSystem(), rally: new RallySystem(), arena: new ArenaSystem(), alliance: new AllianceSystem(), quests: new QuestSystem(), vip: new VipSystem(), waveCleared: 0 },
+      { resources, buildings, training, warmth: new WarmthSystem(WARMTH.MAX_WARMTH), population: fullWorkforce(), premium: new PremiumWallet(), heroes: new HeroRoster(), summon: new SummonSystem(), campaign: new CampaignSystem(), research: new ResearchSystem(), gear: new GearSystem(), rally: new RallySystem(), arena: new ArenaSystem(), alliance: new AllianceSystem(), quests: new QuestSystem(), vip: new VipSystem(), waveCleared: 0, onboarding: freshOnboarding() },
       0,
     );
 
@@ -430,7 +431,7 @@ describe('SaveManager', () => {
     const population = atCapWorkforce(buildings, { hunters_hut: 99 });
     const pm = popMult(buildings, population);
     mgr.save(
-      { resources, buildings, training, warmth: new WarmthSystem(WARMTH.MAX_WARMTH), population, premium: new PremiumWallet(), heroes: new HeroRoster(), summon: new SummonSystem(), campaign: new CampaignSystem(), research: new ResearchSystem(), gear: new GearSystem(), rally: new RallySystem(), arena: new ArenaSystem(), alliance: new AllianceSystem(), quests: new QuestSystem(), vip: new VipSystem(), waveCleared: 0 },
+      { resources, buildings, training, warmth: new WarmthSystem(WARMTH.MAX_WARMTH), population, premium: new PremiumWallet(), heroes: new HeroRoster(), summon: new SummonSystem(), campaign: new CampaignSystem(), research: new ResearchSystem(), gear: new GearSystem(), rally: new RallySystem(), arena: new ArenaSystem(), alliance: new AllianceSystem(), quests: new QuestSystem(), vip: new VipSystem(), waveCleared: 0, onboarding: freshOnboarding() },
       0,
     );
 
@@ -467,8 +468,83 @@ describe('SaveManager', () => {
 
   // --- FEAT-002: steel resource, premium currency, population, migration ---
 
-  it('bumps SAVE_VERSION to 7 for the tiered-army review wiring', () => {
-    expect(SAVE_VERSION).toBe(7);
+  it('bumps SAVE_VERSION to 8 for the onboarding/guidance layer', () => {
+    expect(SAVE_VERSION).toBe(8);
+  });
+
+  // --- FEAT-003: onboarding / tutorial persistence ---
+
+  it('round-trips the onboarding state through save -> load', () => {
+    const storage = memoryStorage();
+    const mgr = new SaveManager(storage);
+    const snap: GameSnapshot = { ...snapshot(), onboarding: { introDismissed: true, guidedComplete: false } };
+    mgr.save(snap, 0);
+    const loaded = mgr.load(0);
+    expect(loaded.snapshot.onboarding).toEqual({ introDismissed: true, guidedComplete: false });
+  });
+
+  it('serializes the onboarding field into the plain state object', () => {
+    const state = SaveManager.serialize({ ...snapshot(), onboarding: freshOnboarding() }, 0);
+    expect(state.onboarding).toEqual({ introDismissed: false, guidedComplete: false });
+  });
+
+  it('freshGame starts a brand-new player (nothing onboarded yet)', () => {
+    const fresh = SaveManager.freshGame();
+    expect(fresh.onboarding).toEqual({ introDismissed: false, guidedComplete: false });
+  });
+
+  it('treats an in-version save MISSING onboarding as a returning player (not re-onboarded)', () => {
+    const storage = memoryStorage();
+    const mgr = new SaveManager(storage);
+    // Serialize a current-version save, then strip onboarding to mimic a payload
+    // written before the field existed. It must load without crashing and be
+    // treated as a returning player (both flags true) so the intro never re-runs.
+    const serialized = SaveManager.serialize(snapshot(), 0);
+    delete (serialized as { onboarding?: unknown }).onboarding;
+    storage.setItem(SAVE_KEY, JSON.stringify(serialized));
+    const loaded = mgr.load(0);
+    expect(loaded.loaded).toBe(true);
+    expect(loaded.snapshot.onboarding).toEqual({ introDismissed: true, guidedComplete: true });
+  });
+
+  it('normalizeOnboarding coerces partial/garbage records safely', () => {
+    // Missing -> returning player.
+    expect(normalizeOnboarding(undefined)).toEqual({ introDismissed: true, guidedComplete: true });
+    // Partial -> only the present flag is honoured, the rest default false.
+    expect(normalizeOnboarding({ introDismissed: true })).toEqual({ introDismissed: true, guidedComplete: false });
+    // Non-boolean garbage -> coerced to false.
+    expect(normalizeOnboarding({ introDismissed: 1 as unknown as boolean })).toEqual({ introDismissed: false, guidedComplete: false });
+  });
+
+  it('treats a pre-onboarding version-7 save as a mismatch and starts fresh', () => {
+    const storage = memoryStorage();
+    const v7 = {
+      version: 7,
+      resources: { food: 500, wood: 500, coal: 500, iron: 500, steel: 100 },
+      premiumCurrency: 300,
+      population: { total: 20, assignments: {} },
+      heroes: { heroes: {}, lead: [] },
+      summon: { totalPulls: 0, pityCounter: 0 },
+      campaign: { highestCleared: 0, claimed: [] },
+      research: { completed: [], active: null },
+      gear: { slots: {} },
+      rally: { bosses: {} },
+      arena: { rank: 50, wins: 0, losses: 0, seed: 1 },
+      alliance: { techPoints: 0, helpsAvailable: 0 },
+      quests: { dailyDayIndex: 0, daily: {}, milestones: {}, activeEventId: null, eventEndsAt: 0 },
+      vip: { points: 0 },
+      warmth: 80,
+      buildings: [{ kind: 'furnace', level: 4, upgradeEndsAt: null }],
+      army: { trapper: 3, marksman: 2, vanguard: 1 },
+      armyTiers: {},
+      trainingQueue: [],
+      waveCleared: 9,
+      lastSeenAt: 0,
+    };
+    storage.setItem(SAVE_KEY, JSON.stringify(v7));
+    const loaded = new SaveManager(storage).load(0);
+    expect(loaded.loaded).toBe(false);
+    expect(loaded.snapshot.buildings.furnaceLevel).toBe(1);
   });
 
   it('treats a pre-endgame version-5 save as a mismatch and starts fresh', () => {
@@ -656,6 +732,7 @@ describe('SaveManager', () => {
       quests: new QuestSystem(),
       vip: new VipSystem(),
       waveCleared: 0,
+      onboarding: freshOnboarding(),
     };
     mgr.save(snap, 0);
     const loaded = mgr.load(0);
@@ -692,6 +769,7 @@ describe('SaveManager', () => {
       quests: new QuestSystem(),
       vip: new VipSystem(),
       waveCleared: 0,
+      onboarding: freshOnboarding(),
     };
     // Serialized JSON carries the new fields.
     const state = SaveManager.serialize(snap, 0);
@@ -736,6 +814,7 @@ describe('SaveManager', () => {
       quests: new QuestSystem(),
       vip: new VipSystem(),
       waveCleared: 0,
+      onboarding: freshOnboarding(),
     };
     mgr.save(snap, 0);
 

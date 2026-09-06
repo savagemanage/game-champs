@@ -155,10 +155,36 @@ async function main() {
   await sleep(1800); // town fade-in + onboarding card
 
   // The first-run onboarding card sits on a full-screen overlay that intercepts
-  // clicks; dismiss it (button centred at cy + h/2 - 34 = 346) before driving
-  // the Town UI. Shown on every fresh-hold Town entry, so re-dismiss on return.
+  // clicks; dismiss it before driving the Town UI. The dismiss button is centred
+  // at logical (480, cy + h/2 - 12) = (480, 346) in TownScene.showOnboarding
+  // (keep this coordinate in sync with that method). Dismissing runs a ~250ms
+  // fade-out tween and persists `onboarding.introDismissed` to the save, so we
+  // treat that flag as the source of truth: click, poll the persisted save until
+  // the intro is marked dismissed (re-clicking if the first press didn't land),
+  // then wait out the fade so the card is fully gone before any screenshot.
+  //
+  // The card only appears for a genuine new player (introDismissed === false),
+  // so on a Town RE-entry where it was already dismissed this is a cheap no-op:
+  // the flag is already true and we skip straight to the settle wait.
+  const introDismissedInSave = () =>
+    page.evaluate(() => {
+      try {
+        const raw = localStorage.getItem('frosthold:save');
+        if (!raw) return false;
+        return JSON.parse(raw)?.onboarding?.introDismissed === true;
+      } catch {
+        return false;
+      }
+    });
   const dismissOnboarding = async () => {
-    await clickLogical(480, 346);
+    for (let attempt = 0; attempt < 4; attempt++) {
+      if (await introDismissedInSave()) break;
+      await clickLogical(480, 346);
+      // clickLogical already sleeps 700ms; give the click a beat to persist.
+      await sleep(150);
+    }
+    // Let the dismiss fade-out tween (250ms) fully finish so no partially-faded
+    // welcome card is caught in the next screenshot.
     await sleep(500);
   };
   await dismissOnboarding();
