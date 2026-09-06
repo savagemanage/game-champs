@@ -1,0 +1,104 @@
+import Phaser from 'phaser';
+import { PALETTE } from '../config/GameConfig';
+
+/**
+ * UiText - crisp-text strategy for the UI/HUD/menu layer.
+ *
+ * The game renders at a low logical resolution (540x960) and is scaled to the
+ * viewport with Scale.FIT, almost always at a NON-INTEGER factor. The canvas is
+ * scaled SMOOTHLY (bilinear) - `pixelArt` is off and `image-rendering:
+ * pixelated` is NOT applied - so this high-resolution text stays sharp rather
+ * than being nearest-neighbour-crushed by the fractional resample. Text uses a
+ * self-hosted vector Hangul webfont (see UI_FONT_FAMILY) so glyph outlines stay
+ * legible at small sizes, and to keep them sharp we render Phaser Text at a
+ * higher DPI via the `resolution` style property: the glyph texture is
+ * rasterized at `resolution` times the logical size, so it stays crisp when the
+ * canvas is scaled up and on high-DPI displays. The world pixel-art sprites are
+ * kept crisp separately via per-texture NEAREST filtering in PreloadScene.
+ */
+
+/**
+ * Text resolution multiplier. Text is rasterized to its OWN glyph texture at
+ * `resolution` times the logical size, independently of the world's per-texture
+ * NEAREST pixel-art filtering. We scale with the device pixel ratio and floor
+ * at 3x so HUD/menu glyphs stay crisp on both 1x monitors (where Scale.FIT can
+ * fractionally up/down-scale the canvas) and HiDPI displays. The world art
+ * stays pixel-art; only text sharpens.
+ */
+export const TEXT_RESOLUTION = Math.max(
+  3,
+  Math.ceil((typeof window !== 'undefined' ? window.devicePixelRatio : 1) || 1) * 2,
+);
+
+/**
+ * Font stack for all UI text. The game is Korean-first (한국어), so the stack
+ * MUST lead with a Hangul-capable face or every Korean glyph renders as a tofu
+ * box (□) on environments without a Korean system font (headless Chromium, many
+ * user machines). We ship "NotoSansKR" - a self-hosted VECTOR (outline) Korean
+ * webfont (Noto Sans KR Regular, SIL OFL-1.1, instantiated at wght=400 and
+ * subset to the full modern Hangul syllable block + the Latin/symbol glyphs the
+ * UI uses; bundled under public/assets/fonts and declared via @font-face in
+ * index.html). A vector face replaces the previous pixel/bitmap font because
+ * the UI draws small Korean text (~12-16px): a bitmap font is only crisp at its
+ * native pixel size and turns to mush at other sizes under Scale.FIT, whereas
+ * this outline font stays legible at every size. The sans/system faces after it
+ * are fallbacks used only for the brief window before the webfont loads (render
+ * is gated on document.fonts in main.ts); the generic `sans-serif` keyword is
+ * last.
+ *
+ * IMPORTANT: the leading family name here must match the @font-face
+ * `font-family` in index.html exactly (NotoSansKR).
+ */
+export const UI_FONT_FAMILY =
+  '"NotoSansKR", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", "DejaVu Sans", "Helvetica Neue", Arial, sans-serif';
+
+/**
+ * Minimum body/label font size, in 540-wide logical px.
+ *
+ * The whole UI is authored in a fixed 540x960 logical space that Scale.FIT
+ * stretches to fill the viewport. On a large desktop window that logical space
+ * is displayed much bigger than 540px wide, so a "10-13px" logical label - once
+ * comfortable on a phone-sized canvas - reads as uncomfortably tiny relative to
+ * the rest of the (now crisp, thanks to the FEAT-001 backing-buffer fix) UI. We
+ * therefore floor every body/label style at this minimum so no ordinary text
+ * ever renders below ~18 logical px. Genuinely decorative micro-labels that
+ * must stay smaller (e.g. a tiny diagram chip caption that would otherwise not
+ * fit its shape) opt out explicitly via the `allowSmall` override; large
+ * headings already pass sizes well above the floor and are unaffected.
+ */
+export const UI_MIN_FONT_SIZE = 18;
+
+/**
+ * Build a monospace text style with the crisp text resolution baked in, using
+ * the shared palette. Callers pass a font size (in logical px, already sized
+ * for the 540x960 canvas) plus optional overrides (colour/align/weight win).
+ *
+ * The effective font size is floored at {@link UI_MIN_FONT_SIZE} so body/label
+ * text stays legible on a large desktop window. Callers that intentionally need
+ * a smaller size (e.g. a tight diagram chip caption) pass `allowSmall: true` in
+ * the overrides to opt out of the floor; `allowSmall` is a UiText-only hint and
+ * is never forwarded into the returned Phaser style object.
+ */
+export function textStyle(
+  fontSize: number,
+  overrides: Phaser.Types.GameObjects.Text.TextStyle & { allowSmall?: boolean } = {},
+): Phaser.Types.GameObjects.Text.TextStyle {
+  const { allowSmall, ...styleOverrides } = overrides;
+  const effectiveSize = allowSmall ? fontSize : Math.max(fontSize, UI_MIN_FONT_SIZE);
+  return {
+    fontFamily: UI_FONT_FAMILY,
+    fontSize: `${effectiveSize}px`,
+    color: PALETTE.TEXT_CSS,
+    resolution: TEXT_RESOLUTION,
+    padding: { x: 2, y: 2 },
+    shadow: {
+      offsetX: 0,
+      offsetY: 1,
+      color: '#000000',
+      blur: 0,
+      fill: true,
+      stroke: false,
+    },
+    ...styleOverrides,
+  };
+}

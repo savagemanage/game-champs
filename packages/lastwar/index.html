@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>라스트 스쿼드 · LAST SQUAD</title>
+    <!--
+      Inline SVG favicon (data URI) so a static, subpath-hosted deploy never
+      requests /favicon.ico (which 404s on GitHub Pages). Original amber "L"
+      target mark on the dark HUD background.
+    -->
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%2311151c'/%3E%3Crect x='3' y='3' width='2' height='9' fill='%23ffb020'/%3E%3Crect x='5' y='10' width='6' height='2' fill='%23ffb020'/%3E%3C/svg%3E"
+    />
+    <!--
+      Self-hosted Hangul-capable VECTOR (outline) webfont: Noto Sans KR
+      (Regular, SIL OFL-1.1), instantiated at wght=400 and subset to the full
+      modern Hangul syllable block plus the Latin/symbol glyphs the UI uses
+      (see tools/build_font.py). A vector face is used instead of a pixel/bitmap
+      font because the UI draws small Korean text (~12-16px) that a bitmap font
+      can only render crisply at its native pixel size; the outline font stays
+      legible at every size under Scale.FIT. Bundled under public/assets/fonts
+      so it ships with the build and resolves under the Vite base path
+      (/game-lastwar/) with no external CDN / network at runtime. The @font-face
+      family name (NotoSansKR) must match UI_FONT_FAMILY in src/ui/UiText.ts.
+      Text rendering is gated on document.fonts in main.ts so Phaser rasterizes
+      glyphs with this font.
+    -->
+    <style>
+      @font-face {
+        font-family: 'NotoSansKR';
+        font-style: normal;
+        font-weight: 400;
+        font-display: block;
+        /*
+          Relative URL (no leading slash) so it resolves against the document
+          URL, which is served under the Vite base ('/' in dev,
+          '/game-lastwar/' in production). The file lives in public/assets/fonts
+          and Vite copies public/ to the base root at build time.
+        */
+        src: url('assets/fonts/NotoSansKR-Regular.subset.woff2') format('woff2');
+      }
+      :root {
+        color-scheme: dark;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        /*
+          DESKTOP-FRAMING backdrop (Complaint #1 "전체 화면에서 가운데가 아니다"):
+          under Scale.FIT the portrait 540x960 canvas is centered by the #game
+          flexbox, but on a WIDE viewport that leaves big margins. A flat
+          #11151c fill made those margins look like an unintentional letterbox
+          strip. Instead we paint the whole page with a themed radial vignette
+          built from the game PALETTE (BG_HORIZON #1c2733 lifted toward the
+          center, BG_SKY #11151c at the edges) so the centered play-area reads
+          as deliberately framed. The base #11151c is kept as a solid fallback
+          so narrow/portrait phones (where the canvas fills the screen and the
+          gradient is barely visible) look exactly as before.
+        */
+        background-color: #11151c;
+        background-image: radial-gradient(
+          ellipse 90% 70% at 50% 42%,
+          #1c2733 0%,
+          #161b23 45%,
+          #11151c 100%
+        );
+        overflow: hidden;
+      }
+      #game {
+        width: 100vw;
+        height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      /*
+        CENTERING owner: the #game flexbox above is the SOLE mechanism that
+        centers the canvas in the viewport (Phaser's autoCenter is set to
+        NO_CENTER in src/main.ts to avoid double-centering, which pushed the
+        canvas ~207px right on wide viewports). This rule keeps the canvas
+        margin at 0 so no stale inline margin from Phaser can re-offset it, and
+        `display:block` removes the inline-element baseline gap. The flex parent
+        then centers it both horizontally and vertically at every window size.
+      */
+      #game canvas {
+        margin: 0;
+        display: block;
+      }
+      /*
+        The canvas is scaled by Phaser's Scale.FIT to the viewport, which is
+        almost always a NON-INTEGER factor (e.g. 0.75x on a narrow phone). We
+        deliberately do NOT set `image-rendering: pixelated` here: nearest-
+        neighbour resampling of a fractionally scaled canvas smears/breaks the
+        Phaser Text glyphs (dense Hangul strokes become blurry and mis-aligned).
+        Letting the browser scale the canvas with its default SMOOTH (bilinear)
+        interpolation keeps the high-resolution text crisp at every size. Pixel-
+        art sprites stay crisp via per-texture NEAREST filtering (PreloadScene),
+        not by pixelating the whole canvas.
+      */
+      /*
+        DESKTOP-ONLY device frame. On viewports at least as wide as they are
+        tall (min-aspect-ratio: 1/1) the portrait canvas is a narrow strip with
+        wide themed margins, so we treat it as a framed "device": a thin lifted
+        hairline (LANE_LINE #4a5666 at low alpha) plus a soft drop-shadow to
+        separate it from the backdrop, and a small border-radius. This is purely
+        cosmetic: margin stays 0 so the #game flexbox remains the SOLE centering
+        owner (box-shadow/border-radius paint outside the layout box and do not
+        offset the canvas or affect Scale.FIT / pointer input). The media query
+        GUARDS mobile: on narrow/portrait phones the canvas fills the screen, so
+        no frame is applied and the presentation is unchanged from before.
+      */
+      @media (min-aspect-ratio: 1/1) {
+        #game canvas {
+          box-shadow:
+            0 0 0 1px rgba(74, 86, 102, 0.6),
+            0 24px 80px rgba(0, 0, 0, 0.6);
+          border-radius: 6px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="game"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
