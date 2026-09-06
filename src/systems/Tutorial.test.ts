@@ -5,6 +5,7 @@ import {
   isLastStep,
   nextStep,
   prevStep,
+  shouldShowStartHint,
   shouldShowTutorialOnFirstRun,
   stepById,
   stepIndex,
@@ -74,6 +75,11 @@ describe('Tutorial', () => {
   it('shouldShowTutorialOnFirstRun is true only when unseen', () => {
     expect(shouldShowTutorialOnFirstRun(false)).toBe(true);
     expect(shouldShowTutorialOnFirstRun(true)).toBe(false);
+  });
+
+  it('shouldShowStartHint (FEAT-004) is true only for a fresh, unseen save', () => {
+    expect(shouldShowStartHint(false)).toBe(true);
+    expect(shouldShowStartHint(true)).toBe(false);
   });
 
   it('every step title/body i18n key exists in STRINGS', () => {

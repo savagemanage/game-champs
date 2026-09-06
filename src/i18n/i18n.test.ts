@@ -56,6 +56,32 @@ describe('i18n tr()', () => {
     (STRINGS['title.play'] as { ko: string }).ko = original;
   });
 
+  it('has the FEAT-004 onboarding start/how-to keys in both ko and en', () => {
+    const keys = [
+      'title.start',
+      'title.startHint',
+      'howto.goal',
+      'howto.loopTitle',
+      'howto.loop.base',
+      'howto.loop.heroes',
+      'howto.loop.battle',
+      'howto.loop.falcon',
+      'howto.controlsTitle',
+      'howto.laneLabel',
+      'howto.gateGood',
+      'howto.gateBad',
+      'howto.startTutorial',
+    ] as const;
+    for (const key of keys) {
+      const entry = STRINGS[key];
+      expect(entry, `missing entry for ${key}`).toBeTruthy();
+      expect(entry.ko, `ko missing for ${key}`).toBeTruthy();
+      expect(entry.en, `en missing for ${key}`).toBeTruthy();
+    }
+    // Korean-first: the primary start hint reads as the exact spec string.
+    expect(STRINGS['title.startHint'].ko).toBe('여기를 눌러 시작하세요');
+  });
+
   it('has non-empty en AND ko for every key', () => {
     for (const [key, entry] of Object.entries(STRINGS)) {
       expect(entry.en, `en missing for ${key}`).toBeTruthy();

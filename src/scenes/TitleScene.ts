@@ -4,6 +4,7 @@ import { TextureKeys, AudioKeys } from '../config/AssetKeys';
 import { AudioManager } from '../systems/AudioManager';
 import { MetaStore } from '../systems/MetaStore';
 import { GameStore } from '../systems/GameStore';
+import { shouldShowStartHint } from '../systems/Tutorial';
 import { tr } from '../i18n/i18n';
 import { Menu } from '../ui/Menu';
 import { textStyle } from '../ui/UiText';
@@ -58,7 +59,19 @@ export class TitleScene extends Phaser.Scene {
     // Home bottom-nav and via the direct SPACE/ENTER shortcut below.
     let y = CANVAS.HEIGHT * 0.46;
     const step = 66;
-    Menu.button(this, cx, y, tr('title.play'), () => this.enterHome(), { width: 260, fontSize: 24, accent: PALETTE.SQUAD });
+    // PRIMARY call-to-action: dominant width + font, SQUAD accent, a '▶ 시작하기'
+    // emphasis, and a subtle breathing pulse/glow so a first-timer's eye lands
+    // here immediately. SPACE/ENTER remain wired to the same enterHome() path.
+    const primary = Menu.button(this, cx, y, tr('title.start'), () => this.enterHome(), {
+      width: 300,
+      fontSize: 28,
+      accent: PALETTE.SQUAD,
+    });
+    this.emphasizePrimary(primary.container);
+    // First-run pointer: only for a brand-new save (tutorial not yet seen).
+    if (shouldShowStartHint(GameStore.get().tutorialSeen())) {
+      this.spawnStartHint(cx, y);
+    }
     y += step;
     Menu.button(this, cx, y, tr('title.upgrades'), () => this.go(SceneKeys.Upgrade), { width: 260 });
     y += step;
@@ -109,11 +122,74 @@ export class TitleScene extends Phaser.Scene {
     Menu.fadeTo(this, () => this.scene.start(SceneKeys.Home));
   }
 
+  /**
+   * Make the primary START button unmistakable: a slow "breathing" scale pulse
+   * plus a soft SQUAD-tinted glow rectangle behind it that pulses in sync. This
+   * is purely cosmetic and never gates the click (the button still fires on
+   * press) so the SPACE/ENTER shortcut and pointer both keep working.
+   */
+  private emphasizePrimary(container: Phaser.GameObjects.Container): void {
+    const { width, height } = container;
+    const glow = this.add
+      .rectangle(container.x, container.y, width + 22, height + 22, PALETTE.SQUAD, 0.18)
+      .setOrigin(0.5)
+      .setStrokeStyle(2, PALETTE.SQUAD)
+      .setDepth(container.depth - 1);
+    this.tweens.add({
+      targets: glow,
+      alpha: { from: 0.1, to: 0.32 },
+      scaleX: { from: 1, to: 1.06 },
+      scaleY: { from: 1, to: 1.12 },
+      duration: 900,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
+    this.tweens.add({
+      targets: container,
+      scale: { from: 1, to: 1.04 },
+      duration: 900,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
+  }
+
+  /**
+   * First-run coach hint aimed at the primary START button: an animated pointer
+   * arrow to its right plus a Korean-first line ('여기를 눌러 시작하세요'). Shown only
+   * for a fresh save (tutorialSeen === false); returning players never see it.
+   */
+  private spawnStartHint(cx: number, py: number): void {
+    // Bobbing arrow just right of the primary button, pointing left at it.
+    const arrow = this.add.text(cx + 176, py, '◀', textStyle(30, { color: PALETTE.ACCENT_CSS })).setOrigin(0.5);
+    this.tweens.add({
+      targets: arrow,
+      x: cx + 162,
+      duration: 620,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut',
+    });
+    // Korean-first prompt line above the button.
+    const hint = this.add
+      .text(cx, py - 44, tr('title.startHint'), textStyle(16, { fontStyle: 'bold', color: PALETTE.ACCENT_CSS }))
+      .setOrigin(0.5);
+    this.tweens.add({ targets: hint, alpha: { from: 0.55, to: 1 }, duration: 720, yoyo: true, repeat: -1 });
+  }
+
   private go(scene: string): void {
     Menu.fadeTo(this, () => this.scene.start(scene, { returnTo: SceneKeys.Title }));
   }
 
-  /** Toggle a How-to-Play overlay panel built from the howto.* strings. */
+  /**
+   * Toggle a genuinely-helpful How-to-Play guide overlay (FEAT-004). It covers
+   * BOTH the meta core loop (기지 base / 영웅 heroes / 전역 battle / 팔콘 구조대) AND
+   * the gate-runner controls + goal, with a small illustrated two-lane diagram
+   * drawn from Phaser primitives (no new binary assets). Korean-first, closable
+   * (닫기), and it leads straight into the guided tutorial via a prominent
+   * '튜토리얼 시작' button. Uses a dimmed full-screen scrim so it reads as a modal.
+   */
   private toggleHowTo(): void {
     if (this.howtoOverlay) {
       this.howtoOverlay.destroy(true);
@@ -122,33 +198,123 @@ export class TitleScene extends Phaser.Scene {
     }
     const cx = CANVAS.WIDTH / 2;
     const cy = CANVAS.HEIGHT / 2;
-    const panel = Menu.panel(this, cx, cy, CANVAS.WIDTH * 0.86, CANVAS.HEIGHT * 0.6);
-    const title = this.add.text(cx, cy - CANVAS.HEIGHT * 0.26, tr('howto.title'), textStyle(24, { fontStyle: 'bold' })).setOrigin(0.5);
+    const overlay = this.add.container(0, 0);
 
-    const lines = [tr('howto.move'), tr('howto.gates'), tr('howto.autofire'), tr('howto.boss'), tr('howto.meta')];
-    const texts: Phaser.GameObjects.Text[] = [];
-    let ly = cy - CANVAS.HEIGHT * 0.16;
-    for (const line of lines) {
+    // Dim scrim + framed panel.
+    const scrim = this.add.rectangle(cx, cy, CANVAS.WIDTH, CANVAS.HEIGHT, 0x000000, 0.6).setOrigin(0.5);
+    const panel = Menu.panel(this, cx, cy, CANVAS.WIDTH * 0.9, CANVAS.HEIGHT * 0.82);
+    overlay.add([scrim, panel]);
+
+    const left = cx - CANVAS.WIDTH * 0.4;
+    const wrap = CANVAS.WIDTH * 0.8;
+    let ly = cy - CANVAS.HEIGHT * 0.37;
+
+    const title = this.add.text(cx, ly, tr('howto.title'), textStyle(24, { fontStyle: 'bold' })).setOrigin(0.5, 0);
+    overlay.add(title);
+    ly += title.height + 10;
+
+    // GOAL line, accented.
+    const goal = this.add
+      .text(left, ly, tr('howto.goal'), textStyle(14, { color: PALETTE.ACCENT_CSS, wordWrap: { width: wrap }, align: 'left' }))
+      .setOrigin(0, 0);
+    overlay.add(goal);
+    ly += goal.height + 14;
+
+    // CORE LOOP section header + four labelled bullets.
+    const loopHeader = this.add
+      .text(left, ly, tr('howto.loopTitle'), textStyle(16, { fontStyle: 'bold', color: PALETTE.SQUAD_CSS }))
+      .setOrigin(0, 0);
+    overlay.add(loopHeader);
+    ly += loopHeader.height + 8;
+    for (const key of ['howto.loop.base', 'howto.loop.heroes', 'howto.loop.battle', 'howto.loop.falcon'] as const) {
       const t = this.add
-        .text(cx, ly, `• ${line}`, textStyle(14, { wordWrap: { width: CANVAS.WIDTH * 0.74 }, align: 'left' }))
-        .setOrigin(0.5, 0);
-      texts.push(t);
-      ly += t.height + 14;
+        .text(left, ly, `• ${tr(key)}`, textStyle(13, { wordWrap: { width: wrap }, align: 'left' }))
+        .setOrigin(0, 0);
+      overlay.add(t);
+      ly += t.height + 6;
+    }
+    ly += 8;
+
+    // CONTROLS section header.
+    const controlsHeader = this.add
+      .text(left, ly, tr('howto.controlsTitle'), textStyle(16, { fontStyle: 'bold', color: PALETTE.SQUAD_CSS }))
+      .setOrigin(0, 0);
+    overlay.add(controlsHeader);
+    ly += controlsHeader.height + 8;
+
+    // Illustrated two-lane diagram: a track with two lanes, a squad chip at the
+    // bottom, a good (green +/x) gate and a bad (red -/÷) gate, and a boss chip
+    // at the top — all Phaser primitives, no new binaries.
+    ly += this.drawLaneDiagram(overlay, cx, ly, wrap) + 10;
+
+    // Controls bullets (move / gates / auto-fire / boss).
+    for (const key of ['howto.move', 'howto.gates', 'howto.autofire', 'howto.boss'] as const) {
+      const t = this.add
+        .text(left, ly, `• ${tr(key)}`, textStyle(13, { wordWrap: { width: wrap }, align: 'left' }))
+        .setOrigin(0, 0);
+      overlay.add(t);
+      ly += t.height + 6;
     }
 
-    const overlay = this.add.container(0, 0, [panel, title, ...texts]);
-    // Always-available REPLAY entry point for the guided tutorial (FEAT-003).
-    const replay = Menu.button(this, cx, cy + CANVAS.HEIGHT * 0.18, tr('tutorial.replay'), () => this.replayTutorial(), {
-      width: 260,
+    // PRIMARY: launch the guided tutorial (ties #3 how-to-start into #2 tutorial).
+    const startTut = Menu.button(this, cx, cy + CANVAS.HEIGHT * 0.32, tr('howto.startTutorial'), () => this.replayTutorial(), {
+      width: 280,
+      fontSize: 22,
       accent: PALETTE.SQUAD,
     });
-    overlay.add(replay.container);
-    const close = Menu.button(this, cx, cy + CANVAS.HEIGHT * 0.24, tr('common.close'), () => this.toggleHowTo(), {
+    overlay.add(startTut.container);
+    const close = Menu.button(this, cx, cy + CANVAS.HEIGHT * 0.38, tr('common.close'), () => this.toggleHowTo(), {
       width: 160,
     });
     overlay.add(close.container);
+
     overlay.setDepth(50);
     this.howtoOverlay = overlay;
+  }
+
+  /**
+   * Draw a compact two-lane runner diagram (track, lane divider, squad chip,
+   * one good and one bad gate, boss chip) into `overlay`, centred on `cx` and
+   * starting at `topY`. Returns the diagram height so the caller can advance
+   * its layout cursor. Pure Phaser primitives + tr() chip labels — no assets.
+   */
+  private drawLaneDiagram(
+    overlay: Phaser.GameObjects.Container,
+    cx: number,
+    topY: number,
+    maxWidth: number,
+  ): number {
+    const w = Math.min(maxWidth, 300);
+    const h = 120;
+    const midY = topY + h / 2;
+
+    // Track background + centre lane divider.
+    const track = this.add.rectangle(cx, midY, w, h, PALETTE.ROAD, 1).setOrigin(0.5).setStrokeStyle(2, PALETTE.LANE_LINE);
+    const divider = this.add.rectangle(cx, midY, 2, h - 8, PALETTE.LANE_LINE, 0.8).setOrigin(0.5);
+    overlay.add([track, divider]);
+
+    const laneL = cx - w * 0.25;
+    const laneR = cx + w * 0.25;
+
+    // Boss chip at the top spanning both lanes.
+    const bossChip = this.add.rectangle(cx, topY + 16, w * 0.5, 22, PALETTE.BOSS, 0.9).setOrigin(0.5).setStrokeStyle(1, PALETTE.TEXT);
+    const bossLabel = this.add.text(cx, topY + 16, 'BOSS', textStyle(11, { fontStyle: 'bold' })).setOrigin(0.5);
+    overlay.add([bossChip, bossLabel]);
+
+    // Gate row: a good gate (left lane) and a bad gate (right lane).
+    const gateY = midY - 6;
+    const goodGate = this.add.rectangle(laneL, gateY, w * 0.4, 22, PALETTE.GATE_GOOD, 0.9).setOrigin(0.5).setStrokeStyle(1, PALETTE.TEXT);
+    const goodLabel = this.add.text(laneL, gateY, tr('howto.gateGood'), textStyle(11, { fontStyle: 'bold' })).setOrigin(0.5);
+    const badGate = this.add.rectangle(laneR, gateY, w * 0.4, 22, PALETTE.GATE_BAD, 0.9).setOrigin(0.5).setStrokeStyle(1, PALETTE.TEXT);
+    const badLabel = this.add.text(laneR, gateY, tr('howto.gateBad'), textStyle(11, { fontStyle: 'bold' })).setOrigin(0.5);
+    overlay.add([goodGate, goodLabel, badGate, badLabel]);
+
+    // Squad chip at the bottom (starts in the left lane) using the soldier sprite.
+    const squad = this.add.sprite(laneL, topY + h - 16, TextureKeys.Soldier).setScale(2);
+    const laneCaption = this.add.text(cx, topY + h - 12, tr('howto.laneLabel'), textStyle(10, { color: PALETTE.MUTED_CSS })).setOrigin(0.5, 1);
+    overlay.add([squad, laneCaption]);
+
+    return h;
   }
 
   /**

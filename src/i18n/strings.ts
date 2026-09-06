@@ -36,6 +36,8 @@ export const STRINGS = {
   // Title scene.
   'title.tagline': { en: 'Grow the squad. Reach the boss.', ko: '분대를 키워 보스에 도달하라' },
   'title.play': { en: 'Deploy', ko: '출격' },
+  'title.start': { en: '▶ Start', ko: '▶ 시작하기' },
+  'title.startHint': { en: 'Tap here to start', ko: '여기를 눌러 시작하세요' },
   'title.howto': { en: 'How to Play', ko: '플레이 방법' },
   'title.upgrades': { en: 'Upgrades', ko: '업그레이드' },
   'title.settings': { en: 'Settings', ko: '설정' },
@@ -131,6 +133,20 @@ export const STRINGS = {
   'howto.autofire': { en: 'Your soldiers auto-fire at enemy clusters. A bigger squad shoots harder.', ko: '병사들은 적 무리를 자동으로 사격합니다. 분대가 클수록 화력이 강해집니다.' },
   'howto.boss': { en: 'Survive to the end and defeat the boss to win the run.', ko: '끝까지 살아남아 보스를 물리치면 승리합니다.' },
   'howto.meta': { en: 'Spend earned coins on upgrades between runs.', ko: '출격 사이에 획득한 코인으로 업그레이드하세요.' },
+  'howto.goal': {
+    en: 'GOAL: build your base, grow a squad of heroes, then deploy and defeat the boss.',
+    ko: '목표: 기지를 키우고 영웅 분대를 성장시킨 뒤 출격해 보스를 물리치세요.',
+  },
+  'howto.loopTitle': { en: 'The Core Loop', ko: '핵심 루프' },
+  'howto.loop.base': { en: '기지 Base — upgrade buildings to produce resources over time.', ko: '기지 — 건물을 업그레이드해 시간에 따라 자원을 생산합니다.' },
+  'howto.loop.heroes': { en: '영웅 Heroes — recruit heroes and set your 5-slot formation.', ko: '영웅 — 영웅을 모집하고 5칸 편성을 구성합니다.' },
+  'howto.loop.battle': { en: '전역 Battle — send your formation into auto-resolved fights.', ko: '전역 — 편성을 전투에 투입해 자동으로 겨룹니다.' },
+  'howto.loop.falcon': { en: '팔콘 구조대 Falcon Rescue — the lane gate-runner below.', ko: '팔콘 구조대 — 아래의 차선 게이트 러너입니다.' },
+  'howto.controlsTitle': { en: 'Falcon Rescue Controls', ko: '팔콘 구조대 조작법' },
+  'howto.laneLabel': { en: 'Two lanes — slide between them', ko: '두 차선 — 사이를 이동' },
+  'howto.gateGood': { en: '+ x  grow', ko: '+ x  증가' },
+  'howto.gateBad': { en: '−  ÷  shrink', ko: '−  ÷  감소' },
+  'howto.startTutorial': { en: 'Start Tutorial', ko: '튜토리얼 시작' },
 
   // Base economy - resource names (original, genre-appropriate).
   'resource.rations': { en: 'Rations', ko: '식량' },

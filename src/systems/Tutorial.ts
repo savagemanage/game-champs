@@ -140,3 +140,14 @@ export function totalSteps(): number {
 export function shouldShowTutorialOnFirstRun(seen: boolean): boolean {
   return seen === false;
 }
+
+/**
+ * Whether the Title screen should show its first-run START hint (an animated
+ * pointer + "여기를 눌러 시작하세요" line aimed at the primary Deploy button),
+ * given the persisted `seen` flag (FEAT-004). Only a brand-new player who has
+ * not yet seen the onboarding tutorial (seen === false) is nudged; a returning
+ * player (seen === true) sees a clean Title with no hint.
+ */
+export function shouldShowStartHint(seen: boolean): boolean {
+  return seen === false;
+}
