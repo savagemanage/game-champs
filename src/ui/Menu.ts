@@ -118,8 +118,16 @@ export const Menu = {
     bg.setStrokeStyle(2, accent);
 
     const container = scene.add.container(x, y, [bg, label]);
+    // Size the container to the button box and let Phaser DERIVE the input hit
+    // area from that size. A container's derived hit rectangle is composed
+    // through the FULL parent-transform chain during pointer hit-testing, so
+    // the button stays clickable at its true on-screen position even when it is
+    // re-parented into a panel Container (upgrade panel, overlay panels). An
+    // explicit local-origin Geom.Rectangle passed to setInteractive is NOT
+    // re-composed the same way once nested, which is why re-parented buttons
+    // used to miss clicks. setSize centres the derived hit box on the origin.
     container.setSize(w, h);
-    container.setInteractive(new Phaser.Geom.Rectangle(-w / 2, -h / 2, w, h), Phaser.Geom.Rectangle.Contains);
+    container.setInteractive({ useHandCursor: true });
 
     // Only the topmost interactive object under the pointer should fire, so a
     // passive/transparent rect under a button can never steal its press.
