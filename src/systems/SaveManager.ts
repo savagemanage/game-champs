@@ -13,11 +13,13 @@ import type {
   BuildingId,
   BuildingState,
   BuildingUpgrade,
+  CampaignState,
   FormationState,
   GameState,
   GameStateV1,
   HeroInstance,
   HeroState,
+  LeagueState,
   MetaUpgradeState,
   MiniGameMeta,
   MissionState,
@@ -36,6 +38,7 @@ import {
   RESOURCE_ORDER,
   UPGRADE_ORDER,
 } from '../config/GameConfig';
+import { CAMPAIGN_ORDER, SEASON } from '../config/Progression';
 
 /** Current save-format version. Bump when GameState shape changes. */
 export const SAVE_VERSION = 2;
@@ -79,6 +82,8 @@ export class SaveManager {
       formation: freshFormation(),
       season: freshSeason(),
       missions: freshMissions(),
+      campaign: freshCampaign(),
+      league: freshLeague(),
     };
   }
 
@@ -97,6 +102,8 @@ export class SaveManager {
       formation: normalizeFormation(state.formation),
       season: normalizeSeason(state.season),
       missions: normalizeMissions(state.missions),
+      campaign: normalizeCampaign(state.campaign),
+      league: normalizeLeague(state.league),
     };
   }
 
@@ -177,6 +184,8 @@ function migrateV1toV2(legacy: GameStateV1): GameState {
     formation: freshFormation(),
     season: freshSeason(),
     missions: freshMissions(),
+    campaign: freshCampaign(),
+    league: freshLeague(),
   };
 }
 
@@ -238,17 +247,52 @@ function freshFormation(): FormationState {
   };
 }
 
-/** Empty-but-valid season state (no season started). */
+/**
+ * A fresh season / battle-pass state (FEAT-004): season 1, no XP, tier 0, no
+ * resistance, premium track locked. `progress` mirrors `xp` for backward-compat
+ * with the FEAT-001 placeholder shape.
+ */
 function freshSeason(): SeasonState {
   return {
-    current: GAME_STATE.SEASON.START_SEASON,
+    current: 1,
     progress: GAME_STATE.SEASON.START_PROGRESS,
+    xp: 0,
+    tier: 0,
+    claimedFree: 0,
+    claimedPremium: 0,
+    premiumUnlocked: false,
+    resistance: SEASON.START_RESISTANCE,
   };
 }
 
-/** Empty-but-valid mission state (no daily/weekly progress tracked). */
+/** A fresh mission state (FEAT-004): no day/week claimed, no progress tracked. */
 function freshMissions(): MissionState {
-  return { daily: {}, weekly: {} };
+  return {
+    dayKey: -1,
+    weekKey: -1,
+    daily: {},
+    claimedTasks: [],
+    armsScore: 0,
+    claimedMilestones: [],
+    weekActivity: 0,
+    weekly: {},
+  };
+}
+
+/** A fresh campaign state (FEAT-004): nothing cleared, no zombie waves. */
+function freshCampaign(): CampaignState {
+  return { clearedStages: [], highestWave: -1 };
+}
+
+/** A fresh league state (FEAT-004): player's alliance, period 0, no record. */
+function freshLeague(): LeagueState {
+  return {
+    alliance: 'league.alliance.player',
+    period: 0,
+    wins: 0,
+    losses: 0,
+    bestRank: 0,
+  };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -432,19 +476,100 @@ function normalizeFormation(formation: Partial<FormationState> | undefined): For
   };
 }
 
-/** Coerce a possibly-partial season state into a complete one. */
+/** Coerce a possibly-null integer key (allows a sentinel of -1). */
+function safeKeyInt(value: unknown): number {
+  const n = Math.floor(Number(value));
+  return Number.isFinite(n) && n >= 0 ? n : -1;
+}
+
+/** A deduplicated array of finite non-negative integers from an unknown value. */
+function normalizeIntArray(input: unknown): number[] {
+  if (!Array.isArray(input)) return [];
+  const seen = new Set<number>();
+  for (const raw of input) {
+    const n = Math.floor(Number(raw));
+    if (Number.isFinite(n) && n >= 0) seen.add(n);
+  }
+  return [...seen];
+}
+
+/** A deduplicated array of non-empty strings from an unknown value. */
+function normalizeStringArray(input: unknown): string[] {
+  if (!Array.isArray(input)) return [];
+  const seen = new Set<string>();
+  for (const raw of input) {
+    if (typeof raw === 'string' && raw.length > 0) seen.add(raw);
+  }
+  return [...seen];
+}
+
+/**
+ * Coerce a possibly-partial season state into a complete FEAT-004 one, clamping
+ * XP / tier / resistance / claimed counters to their bounds. `current` floors at
+ * 1 (a started season) and `progress` is kept in sync with `xp`.
+ */
 function normalizeSeason(season: Partial<SeasonState> | undefined): SeasonState {
+  const xp = safeInt(season?.xp ?? season?.progress);
+  const current = Math.max(1, safeInt(season?.current) || 1);
+  const clampMax = (v: unknown, max: number): number => Math.min(max, safeInt(v));
   return {
-    current: safeInt(season?.current),
-    progress: safeInt(season?.progress),
+    current,
+    progress: xp,
+    xp,
+    tier: clampMax(season?.tier, SEASON.MAX_TIER),
+    claimedFree: clampMax(season?.claimedFree, SEASON.MAX_TIER),
+    claimedPremium: clampMax(season?.claimedPremium, SEASON.MAX_TIER),
+    premiumUnlocked: season?.premiumUnlocked === true,
+    resistance: clampMax(season?.resistance, SEASON.MAX_RESISTANCE),
   };
 }
 
-/** Coerce a possibly-partial mission state into a complete one. */
+/**
+ * Coerce a possibly-partial mission state into a complete FEAT-004 one. Day /
+ * week keys default to the -1 sentinel (forces a rollover on first tick); the
+ * claimed lists and scores are normalized to well-formed non-negative values.
+ */
 function normalizeMissions(missions: Partial<MissionState> | undefined): MissionState {
   return {
+    dayKey: safeKeyInt(missions?.dayKey),
+    weekKey: safeKeyInt(missions?.weekKey),
     daily: normalizeIntRecord(missions?.daily),
+    claimedTasks: normalizeStringArray(missions?.claimedTasks),
+    armsScore: safeInt(missions?.armsScore),
+    claimedMilestones: normalizeIntArray(missions?.claimedMilestones),
+    weekActivity: safeInt(missions?.weekActivity),
     weekly: normalizeIntRecord(missions?.weekly),
+  };
+}
+
+/**
+ * Coerce a possibly-partial campaign state into a complete one: cleared stages
+ * filtered to real campaign stage ids (dedup), and the highest zombie wave a
+ * finite integer floored at the -1 "none" sentinel.
+ */
+function normalizeCampaign(campaign: Partial<CampaignState> | undefined): CampaignState {
+  const validStage = (id: string): boolean =>
+    (CAMPAIGN_ORDER as readonly string[]).includes(id);
+  const cleared = normalizeStringArray(campaign?.clearedStages).filter(validStage);
+  const wave = Math.floor(Number(campaign?.highestWave));
+  return {
+    clearedStages: cleared,
+    highestWave: Number.isFinite(wave) && wave >= 0 ? wave : -1,
+  };
+}
+
+/** Coerce a possibly-partial league state into a complete one. */
+function normalizeLeague(league: Partial<LeagueState> | undefined): LeagueState {
+  const alliance =
+    typeof league?.alliance === 'string' && league.alliance.length > 0
+      ? league.alliance
+      : 'league.alliance.player';
+  return {
+    alliance,
+    period: safeInt(league?.period),
+    wins: safeInt(league?.wins),
+    losses: safeInt(league?.losses),
+    bestRank: safeInt(league?.bestRank),
   };
 }
 

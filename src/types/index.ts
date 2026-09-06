@@ -17,6 +17,10 @@ import {
   RESOURCE_ORDER,
   UPGRADE_ORDER,
 } from '../config/GameConfig';
+import { DAILY_TASK_CATEGORIES } from '../config/Progression';
+
+/** A daily "arms race" task category. Derived from DAILY_TASK_CATEGORIES. */
+export type DailyTaskCategory = (typeof DAILY_TASK_CATEGORIES)[number];
 
 /** A math gate operation. Derived from the canonical GATE_OPS tuple. */
 export type GateOp = (typeof GATE_OPS)[number];
@@ -304,29 +308,98 @@ export interface FormationState {
 }
 
 /**
- * Season / battle-pass sub-state (OWNED BY A LATER FEAT: season/league).
+ * Season / battle-pass sub-state (OWNED BY FEAT-004: season/league).
  *
- * Placeholder for the current season id and pass progress. Empty-but-valid now
- * (season 0, no progress).
+ * Tracks the current season id, accumulated season XP, the derived pass tier,
+ * how many tier rewards have already been claimed (free/premium), whether the
+ * premium track has been unlocked by the in-game achievement, and the seasonal
+ * "virus resistance" stat that gates campaign stages and later tiers. Season
+ * rollover resets these while permanent gains (heroes/buildings/resources)
+ * remain. `progress` is retained for backward-compatibility with the FEAT-001
+ * placeholder and mirrors the current season XP.
  */
 export interface SeasonState {
   /** Current season identifier (0 = no season started). */
   current: number;
-  /** Accumulated season/pass progress points. */
+  /** Legacy alias for {@link SeasonState.xp}; kept so old saves round-trip. */
   progress: number;
+  /** Accumulated season XP this season. */
+  xp: number;
+  /** Derived pass tier reached this season (>= 0). */
+  tier: number;
+  /** Number of free-track tier rewards already claimed. */
+  claimedFree: number;
+  /** Number of premium-track tier rewards already claimed. */
+  claimedPremium: number;
+  /** Whether the premium reward track has been unlocked (in-game achievement). */
+  premiumUnlocked: boolean;
+  /** Seasonal virus-resistance level (gates campaign stages + later tiers). */
+  resistance: number;
 }
 
 /**
- * Daily / weekly mission sub-state (OWNED BY A LATER FEAT: missions).
+ * Daily / weekly mission sub-state (OWNED BY FEAT-004: missions).
  *
- * Placeholder for arms-race (daily) and alliance-duel (weekly) task progress.
- * Empty-but-valid now (no tasks tracked).
+ * `dayKey` / `weekKey` are the day- and week-index the current progress belongs
+ * to (derived from a timestamp in the pure layer); when the runtime observes a
+ * newer key it rolls the block over. `taskProgress` counts progress per active
+ * daily task id, `armsScore` is the accumulated daily arms-race score,
+ * `claimedTasks` / `claimedMilestones` guard one-time reward grants, and
+ * `weekActivity` accumulates the player's weekly alliance-duel score.
  */
 export interface MissionState {
-  /** Daily "arms race" task progress keyed by task id. */
+  /** Day index the daily block belongs to (-1 = uninitialized). */
+  dayKey: number;
+  /** Week index the weekly block belongs to (-1 = uninitialized). */
+  weekKey: number;
+  /** Progress per active daily task id. */
   daily: Record<string, number>;
-  /** Weekly "alliance duel" task progress keyed by task id. */
+  /** Ids of daily tasks whose completion reward was already granted. */
+  claimedTasks: string[];
+  /** Accumulated daily arms-race score. */
+  armsScore: number;
+  /** Point thresholds of daily milestones already claimed. */
+  claimedMilestones: number[];
+  /** Weekly alliance-duel activity score. */
+  weekActivity: number;
+  /** Weekly progress (retained for FEAT-001 compat / future weekly tasks). */
   weekly: Record<string, number>;
+}
+
+/**
+ * PvE campaign + zombie-wave sub-state (OWNED BY FEAT-004: campaign).
+ *
+ * `clearedStages` is the set of campaign stage ids the player has cleared (a
+ * stage is unlockable when the previous is cleared AND the seasonal resistance
+ * gate is met). `highestWave` is the furthest zombie wave cleared this run of
+ * the endless mode (permanent best).
+ */
+export interface CampaignState {
+  /** Ids of campaign stages already cleared. */
+  clearedStages: string[];
+  /** Highest zombie wave index cleared. */
+  highestWave: number;
+}
+
+/**
+ * League / alliance sub-state (OWNED BY FEAT-004: league, offline simulation).
+ *
+ * `alliance` is the player's (single-player) alliance name key, `period` is the
+ * current league period index (drives the deterministic AI power drift),
+ * `wins` / `losses` track offline league PvP outcomes this period, and
+ * `bestRank` is the best standings placement achieved (1 = top).
+ */
+export interface LeagueState {
+  /** i18n key for the player's alliance display name. */
+  alliance: string;
+  /** Current league period index (AI power drifts per period). */
+  period: number;
+  /** League PvP wins this period. */
+  wins: number;
+  /** League PvP losses this period. */
+  losses: number;
+  /** Best standings rank achieved (1 = best; 0 = none yet). */
+  bestRank: number;
 }
 
 /**
@@ -351,8 +424,12 @@ export interface GameState {
   heroes: HeroState;
   /** Squad formation (later FEAT). */
   formation: FormationState;
-  /** Season / battle-pass progression (later FEAT). */
+  /** Season / battle-pass progression (FEAT-004). */
   season: SeasonState;
-  /** Daily / weekly missions (later FEAT). */
+  /** Daily / weekly missions (FEAT-004). */
   missions: MissionState;
+  /** PvE campaign + zombie-wave progress (FEAT-004). */
+  campaign: CampaignState;
+  /** League / alliance standings (FEAT-004, offline simulation). */
+  league: LeagueState;
 }

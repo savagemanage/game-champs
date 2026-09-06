@@ -33,8 +33,10 @@ describe('SaveManager', () => {
         front: new Array<string | null>(GAME_STATE.FORMATION.FRONT_SLOTS).fill(null),
         back: new Array<string | null>(GAME_STATE.FORMATION.BACK_SLOTS).fill(null),
       },
-      season: { current: 0, progress: 0 },
-      missions: { daily: {}, weekly: {} },
+      season: SaveManager.freshGame().season,
+      missions: SaveManager.freshGame().missions,
+      campaign: SaveManager.freshGame().campaign,
+      league: SaveManager.freshGame().league,
     };
   }
 
@@ -84,8 +86,34 @@ describe('SaveManager', () => {
     expect(fresh.formation.back).toHaveLength(GAME_STATE.FORMATION.BACK_SLOTS);
     expect(fresh.formation.front.every((s) => s === null)).toBe(true);
     expect(fresh.formation.back.every((s) => s === null)).toBe(true);
-    expect(fresh.season).toEqual({ current: 0, progress: 0 });
-    expect(fresh.missions).toEqual({ daily: {}, weekly: {} });
+    expect(fresh.season).toEqual({
+      current: 1,
+      progress: 0,
+      xp: 0,
+      tier: 0,
+      claimedFree: 0,
+      claimedPremium: 0,
+      premiumUnlocked: false,
+      resistance: 0,
+    });
+    expect(fresh.missions).toEqual({
+      dayKey: -1,
+      weekKey: -1,
+      daily: {},
+      claimedTasks: [],
+      armsScore: 0,
+      claimedMilestones: [],
+      weekActivity: 0,
+      weekly: {},
+    });
+    expect(fresh.campaign).toEqual({ clearedStages: [], highestWave: -1 });
+    expect(fresh.league).toEqual({
+      alliance: 'league.alliance.player',
+      period: 0,
+      wins: 0,
+      losses: 0,
+      bestRank: 0,
+    });
   });
 
   it('loads a fresh game when storage is empty', () => {
@@ -153,8 +181,10 @@ describe('SaveManager', () => {
     });
     expect(state.formation.front).toHaveLength(GAME_STATE.FORMATION.FRONT_SLOTS);
     expect(state.formation.back).toHaveLength(GAME_STATE.FORMATION.BACK_SLOTS);
-    expect(state.season).toEqual({ current: 0, progress: 0 });
-    expect(state.missions).toEqual({ daily: {}, weekly: {} });
+    expect(state.season).toEqual(SaveManager.freshGame().season);
+    expect(state.missions).toEqual(SaveManager.freshGame().missions);
+    expect(state.campaign).toEqual(SaveManager.freshGame().campaign);
+    expect(state.league).toEqual(SaveManager.freshGame().league);
   });
 
   it('migrates then persists a normalized v2 save (v1 file replaced on next save)', () => {
@@ -233,9 +263,20 @@ describe('SaveManager', () => {
     // back reset to nulls.
     expect(state.formation.front).toEqual(['ironward', 'stormvolley']);
     expect(state.formation.back).toEqual([null, null, null]);
-    expect(state.season).toEqual({ current: 2, progress: 40 });
+    expect(state.season).toEqual({
+      current: 2,
+      progress: 40,
+      xp: 40,
+      tier: 0,
+      claimedFree: 0,
+      claimedPremium: 0,
+      premiumUnlocked: false,
+      resistance: 0,
+    });
     expect(state.missions.daily).toEqual({ arms: 3 });
     expect(state.missions.weekly).toEqual({});
+    expect(state.missions.dayKey).toBe(-1);
+    expect(state.missions.armsScore).toBe(0);
   });
 
   it('starts fresh on a version mismatch', () => {

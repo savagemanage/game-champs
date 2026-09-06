@@ -38,8 +38,39 @@ import {
 } from './Buildings';
 import { duplicateShards, recruit, type RecruitResult } from './Recruit';
 import { levelUp, makeHeroInstance, skillUp, starUp } from './Heroes';
-import { placeHero, validateFormation, type Row } from './Formation';
+import { assembleTeam, placeHero, validateFormation, type Row, type Team } from './Formation';
 import { makeRng } from './Rng';
+import {
+  resolveStage,
+  resolveZombieWave,
+  type StageBlockReason,
+  type StageOutcome,
+} from './Campaign';
+import {
+  addSeasonXp,
+  raiseResistance,
+  rolloverSeason,
+  type SeasonXpResult,
+} from './Season';
+import {
+  dayIndex,
+  recordProgress,
+  rollover as rolloverMissions,
+  settleAllianceDuel,
+  weekIndex,
+  type DuelResult,
+} from './DailyMissions';
+import {
+  playerRank,
+  resolveLeagueMatch,
+  rolloverLeague,
+  standings,
+  teamPower,
+  type AllianceStanding,
+  type MatchOutcome,
+} from './League';
+import type { DailyTaskCategory } from '../types';
+import type { RewardBundle } from '../config/Progression';
 
 /** Singleton wrapper around the full persisted v2 {@link GameState}. */
 export class GameStore {
@@ -295,5 +326,306 @@ export class GameStore {
     this.stateInternal.formation = next;
     this.persist();
     return true;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* FEAT-004: progression meta (campaign, season, missions, league).    */
+  /* ------------------------------------------------------------------ */
+
+  /**
+   * The player's current battle team, assembled from the saved formation +
+   * roster. Empty (no members) when the squad is not filled with owned heroes.
+   */
+  battleTeam(): Team {
+    return assembleTeam(this.stateInternal.formation, this.stateInternal.heroes.roster);
+  }
+
+  /**
+   * Grant a {@link RewardBundle} to the permanent economy: resources are added
+   * (clamped to storage), shards to the hero currency, coins to the mini-game
+   * wallet, and season XP fed into the battle-pass track (which may itself yield
+   * further rewards - those are applied once, non-recursively). Persists once.
+   * Returns the season-XP settlement so callers can surface tier-ups.
+   */
+  private applyReward(reward: RewardBundle): SeasonXpResult | null {
+    const { resources, buildings, heroes, miniGame } = this.stateInternal;
+    if (reward.resources) {
+      resources.stockpiles = addResources(resources.stockpiles, reward.resources, buildings.levels);
+    }
+    if (reward.shards) heroes.shards += reward.shards;
+    if (reward.coins) miniGame.coins += reward.coins;
+
+    let seasonResult: SeasonXpResult | null = null;
+    if (reward.seasonXp) {
+      seasonResult = addSeasonXp(this.stateInternal.season, reward.seasonXp);
+      this.stateInternal.season = seasonResult.state;
+      // Apply the tier rewards unlocked by the XP grant (non-recursive: their
+      // own seasonXp is added to the track but does not re-trigger tier rewards
+      // within this call, matching addSeasonXp's documented contract).
+      const tierReward = seasonResult.reward;
+      if (tierReward.resources) {
+        resources.stockpiles = addResources(
+          resources.stockpiles,
+          tierReward.resources,
+          buildings.levels,
+        );
+      }
+      if (tierReward.shards) heroes.shards += tierReward.shards;
+      if (tierReward.coins) miniGame.coins += tierReward.coins;
+      if (tierReward.seasonXp) {
+        const follow = addSeasonXp(this.stateInternal.season, tierReward.seasonXp);
+        this.stateInternal.season = follow.state;
+      }
+    }
+    this.persist();
+    return seasonResult;
+  }
+
+  /** The set of cleared campaign stage ids. */
+  clearedStages(): string[] {
+    return [...this.stateInternal.campaign.clearedStages];
+  }
+
+  /** The highest zombie wave index cleared (-1 = none). */
+  highestZombieWave(): number {
+    return this.stateInternal.campaign.highestWave;
+  }
+
+  /**
+   * Attempt a campaign stage with the current battle team. On a win the stage is
+   * marked cleared (idempotent) and any first-clear reward is applied to the
+   * economy + season track; the battle timeline is returned for animation.
+   * Returns `{ ok: false, reason }` when the stage is unknown, still locked, or
+   * the squad is empty.
+   */
+  attemptStage(
+    stageId: string,
+    stageSeed: number,
+  ): { ok: true; outcome: StageOutcome } | { ok: false; reason: StageBlockReason } {
+    const result = resolveStage(
+      this.battleTeam(),
+      stageId,
+      this.stateInternal.campaign.clearedStages,
+      this.stateInternal.season.resistance,
+      stageSeed,
+    );
+    if (!result.ok) return result;
+    if (result.outcome.win && !this.stateInternal.campaign.clearedStages.includes(stageId)) {
+      this.stateInternal.campaign.clearedStages = [
+        ...this.stateInternal.campaign.clearedStages,
+        stageId,
+      ];
+    }
+    if (result.outcome.win) {
+      this.applyReward(result.outcome.reward);
+    } else {
+      this.persist();
+    }
+    return result;
+  }
+
+  /**
+   * Attempt a zombie wave with the current battle team. On a win beyond the
+   * current best the highest-wave record advances and the scaled reward is
+   * applied. Returns `{ ok: false, reason }` when the wave is locked (skipping
+   * ahead) or the squad is empty.
+   */
+  attemptZombieWave(
+    waveIndex: number,
+    waveSeed: number,
+  ): { ok: true; outcome: StageOutcome } | { ok: false; reason: StageBlockReason } {
+    const result = resolveZombieWave(
+      this.battleTeam(),
+      waveIndex,
+      this.stateInternal.campaign.highestWave,
+      waveSeed,
+    );
+    if (!result.ok) return result;
+    if (result.outcome.win && waveIndex > this.stateInternal.campaign.highestWave) {
+      this.stateInternal.campaign.highestWave = waveIndex;
+    }
+    if (result.outcome.win) {
+      this.applyReward(result.outcome.reward);
+    } else {
+      this.persist();
+    }
+    return result;
+  }
+
+  /* --- Season / battle-pass ---------------------------------------- */
+
+  /** The current season / battle-pass tier. */
+  seasonTier(): number {
+    return this.stateInternal.season.tier;
+  }
+
+  /** The current seasonal virus-resistance level. */
+  resistance(): number {
+    return this.stateInternal.season.resistance;
+  }
+
+  /** Whether the premium reward track is unlocked. */
+  premiumUnlocked(): boolean {
+    return this.stateInternal.season.premiumUnlocked;
+  }
+
+  /**
+   * Award season XP directly (e.g. from a scene event that is not itself a
+   * reward bundle). Settles any tiers crossed and applies their rewards. Returns
+   * the settlement for UI feedback.
+   */
+  awardSeasonXp(xp: number): SeasonXpResult {
+    const before = this.stateInternal.season;
+    const result = addSeasonXp(before, xp);
+    this.stateInternal.season = result.state;
+    this.applyReward(result.reward);
+    return result;
+  }
+
+  /**
+   * Spend banked season XP to raise the seasonal virus-resistance by one level
+   * (unlocks harder campaign stages and, at the threshold, the premium track).
+   * Returns true on success and persists; false when unaffordable / capped.
+   */
+  raiseResistance(): boolean {
+    const res = raiseResistance(this.stateInternal.season);
+    if (!res.ok) return false;
+    this.stateInternal.season = res.state;
+    this.persist();
+    return true;
+  }
+
+  /**
+   * Roll the season over to the next season id, resetting seasonal progress
+   * (XP / tier / resistance / claimed rewards / premium unlock) while leaving
+   * permanent gains untouched. Persists.
+   */
+  rolloverSeason(): void {
+    const next = this.stateInternal.season.current + 1;
+    this.stateInternal.season = rolloverSeason(this.stateInternal.season, next);
+    this.persist();
+  }
+
+  /* --- Daily missions / weekly alliance duel ----------------------- */
+
+  /**
+   * Advance daily-missions time to `now`: settle the weekly alliance duel and
+   * grant its placement reward if a NEW week has begun, then roll the mission
+   * block over (resetting the day/week blocks as needed). Persists. Returns the
+   * settled duel result when a week rolled over, else null.
+   */
+  refreshMissions(now: number): DuelResult | null {
+    const missions = this.stateInternal.missions;
+    const week = weekIndex(now);
+    let duel: DuelResult | null = null;
+    // A real week rollover (an initialized prior week that differs) settles the
+    // just-ended week's duel before the activity score is reset.
+    if (missions.weekKey >= 0 && missions.weekKey !== week) {
+      duel = settleAllianceDuel(missions);
+    }
+    this.stateInternal.missions = rolloverMissions(missions, now);
+    if (duel) this.applyReward(duel.reward);
+    else this.persist();
+    return duel;
+  }
+
+  /**
+   * Record `amount` units of arms-race progress in a task `category` at time
+   * `now` (build / recruit / power_up / combat / mini_game). Advances active
+   * daily tasks, awards completion + milestone rewards, and accrues the weekly
+   * alliance-duel activity. Applies any reward earned and persists. Returns the
+   * arms-race points score after the update.
+   */
+  recordMissionProgress(category: DailyTaskCategory, amount: number, now: number): number {
+    const result = recordProgress(this.stateInternal.missions, category, amount, now);
+    this.stateInternal.missions = result.state;
+    this.applyReward(result.reward);
+    return this.stateInternal.missions.armsScore;
+  }
+
+  /** The current daily arms-race score. */
+  armsRaceScore(): number {
+    return this.stateInternal.missions.armsScore;
+  }
+
+  /* --- League (offline simulation) --------------------------------- */
+
+  /** The current league standings (player + AI alliances) for this period. */
+  leagueStandings(): AllianceStanding[] {
+    return standings(teamPower(this.battleTeam()), this.stateInternal.league.period);
+  }
+
+  /** The player's current league rank (1 = best). */
+  leagueRank(): number {
+    return playerRank(teamPower(this.battleTeam()), this.stateInternal.league.period);
+  }
+
+  /**
+   * Resolve an OFFLINE league PvP match against a seeded AI formation via the
+   * combat engine, recording the win/loss on the current period. Persists.
+   * Returns null when the squad is empty.
+   */
+  playLeagueMatch(matchSeed: number): MatchOutcome | null {
+    const outcome = resolveLeagueMatch(this.battleTeam(), matchSeed);
+    if (!outcome) return null;
+    if (outcome.win) this.stateInternal.league.wins += 1;
+    else this.stateInternal.league.losses += 1;
+    this.persist();
+    return outcome;
+  }
+
+  /**
+   * Roll the league over to the next period, granting the placement reward for
+   * the player's rank in the ending period and preserving the best rank ever
+   * achieved. Persists. Returns the ending rank + reward.
+   */
+  rolloverLeague(): { rank: number; reward: RewardBundle } {
+    const power = teamPower(this.battleTeam());
+    const next = this.stateInternal.league.period + 1;
+    const res = rolloverLeague(this.stateInternal.league, power, next);
+    this.stateInternal.league = res.state;
+    this.applyReward(res.reward);
+    return { rank: res.rank, reward: res.reward };
+  }
+
+  /* --- Gate-runner (Falcon Rescue) integration --------------------- */
+
+  /**
+   * Feed a completed Falcon Rescue (gate-runner) run into the progression loop.
+   * The rescued squad / run quality translates into army economy rewards:
+   * shards scale with the squad brought home, resources with distance, and a
+   * win grants a bonus; the run also advances the daily "mini-game" arms-race
+   * task and (via {@link applyReward}) the season track. This is the store hook
+   * the FEAT-007 Results flow calls after a run resolves. Persists.
+   *
+   * @param squadFinal Surviving squad size at run end.
+   * @param distance   Distance travelled (world units).
+   * @param win        Whether the boss was defeated.
+   * @param now        Wall-clock epoch-ms (drives the daily/weekly rollover).
+   */
+  recordGateRunnerResult(
+    squadFinal: number,
+    distance: number,
+    win: boolean,
+    now: number,
+  ): RewardBundle {
+    const shards = Math.max(1, Math.round(Math.max(0, squadFinal) * 0.5));
+    const rations = Math.max(0, Math.round(Math.max(0, distance) * 0.1));
+    const fuel = Math.max(0, Math.round(Math.max(0, distance) * 0.05));
+    const reward: RewardBundle = {
+      shards: shards + (win ? 20 : 0),
+      resources: { rations, fuel },
+      seasonXp: 30 + (win ? 40 : 0),
+      coins: win ? 50 : 0,
+    };
+    this.applyReward(reward);
+    // One mini-game arms-race unit per completed run.
+    this.recordMissionProgress('mini_game', 1, now);
+    return reward;
+  }
+
+  /** The day index for a timestamp (exposed so scenes share the derivation). */
+  dayOf(now: number): number {
+    return dayIndex(now);
   }
 }

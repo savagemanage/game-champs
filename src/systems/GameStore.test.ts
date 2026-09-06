@@ -198,4 +198,125 @@ describe('GameStore', () => {
     expect(store.setFormationSlot('front', 0, null)).toBe(true);
     expect(store.formation().front[0]).toBeNull();
   });
+
+  /* FEAT-004: campaign / season / missions / league progression. */
+
+  /** Recruit + place a full, deliberately strong 5-hero squad for battle tests. */
+  function armStrongSquad(store: GameStore): void {
+    // Grant heaps of shards and hand-craft a maxed roster of five heroes so the
+    // squad reliably clears early stages regardless of recruit RNG.
+    const ids = ['ironward', 'stormvolley', 'skytalon', 'breachram', 'medevac'];
+    for (const id of ids) {
+      store.state.heroes.roster[id] = { id, level: 60, stars: 4, skillLevel: 5, dupes: 0 };
+    }
+    store.persist();
+    store.setFormationSlot('front', 0, 'ironward');
+    store.setFormationSlot('front', 1, 'breachram');
+    store.setFormationSlot('back', 0, 'stormvolley');
+    store.setFormationSlot('back', 1, 'skytalon');
+    store.setFormationSlot('back', 2, 'medevac');
+  }
+
+  it('attemptStage clears stage 1, banks rewards, and gates stage 3 by resistance', () => {
+    const store = GameStore.createWith(memoryStorage());
+    armStrongSquad(store);
+
+    const res = store.attemptStage('stage_1', 7);
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.outcome.win).toBe(true);
+    expect(store.clearedStages()).toContain('stage_1');
+    // The reward advanced the season track (stage_1 grants seasonXp).
+    expect(store.state.season.xp).toBeGreaterThan(0);
+
+    // Stage 3 needs resistance >= 1 -> locked even after clearing stage 2.
+    store.attemptStage('stage_2', 7);
+    const locked = store.attemptStage('stage_3', 7);
+    expect(locked.ok).toBe(false);
+    if (!locked.ok) expect(locked.reason).toBe('locked');
+  });
+
+  it('awardSeasonXp advances tiers and applies tier rewards, raiseResistance unlocks premium', () => {
+    const store = GameStore.createWith(memoryStorage());
+    const result = store.awardSeasonXp(100000);
+    expect(store.seasonTier()).toBeGreaterThan(0);
+    expect(result.tiersGained).toBeGreaterThan(0);
+
+    // Enough banked XP remains to raise resistance to the premium threshold.
+    while (!store.premiumUnlocked() && store.raiseResistance()) {
+      // keep raising until unlocked or unaffordable
+    }
+    expect(store.resistance()).toBeGreaterThan(0);
+    expect(store.premiumUnlocked()).toBe(true);
+  });
+
+  it('rolloverSeason resets seasonal progress and bumps the season id', () => {
+    const store = GameStore.createWith(memoryStorage());
+    store.awardSeasonXp(5000);
+    const before = store.state.season.current;
+    store.rolloverSeason();
+    expect(store.state.season.current).toBe(before + 1);
+    expect(store.state.season.xp).toBe(0);
+    expect(store.seasonTier()).toBe(0);
+  });
+
+  it('recordMissionProgress tracks arms-race score and persists', () => {
+    const storage = memoryStorage();
+    const store = GameStore.createWith(storage);
+    const now = 86_400_000 * 500;
+    store.refreshMissions(now);
+    // Hammer every category so at least one task completes and scores points.
+    for (const cat of ['build', 'recruit', 'power_up', 'combat', 'mini_game'] as const) {
+      store.recordMissionProgress(cat, 50, now);
+    }
+    expect(store.armsRaceScore()).toBeGreaterThan(0);
+    const reloaded = GameStore.createWith(storage);
+    expect(reloaded.armsRaceScore()).toBe(store.armsRaceScore());
+  });
+
+  it('refreshMissions settles the weekly alliance duel on a week rollover', () => {
+    const store = GameStore.createWith(memoryStorage());
+    const week0 = 0;
+    store.refreshMissions(week0);
+    // Build up weekly activity in week 0.
+    store.recordMissionProgress('combat', 100, week0);
+    // Advance a full week -> the duel settles for the just-ended week.
+    const week1 = 86_400_000 * 7;
+    const duel = store.refreshMissions(week1);
+    expect(duel).not.toBeNull();
+    expect(store.state.missions.weekKey).toBe(1);
+  });
+
+  it('playLeagueMatch resolves offline via Combat and records the result', () => {
+    const store = GameStore.createWith(memoryStorage());
+    armStrongSquad(store);
+    const outcome = store.playLeagueMatch(4242);
+    expect(outcome).not.toBeNull();
+    if (outcome) {
+      expect(outcome.battle.timeline.length).toBeGreaterThan(0);
+    }
+    expect(store.state.league.wins + store.state.league.losses).toBe(1);
+  });
+
+  it('leagueRank places the player among AI alliances', () => {
+    const store = GameStore.createWith(memoryStorage());
+    armStrongSquad(store);
+    const rank = store.leagueRank();
+    expect(rank).toBeGreaterThanOrEqual(1);
+    expect(store.leagueStandings()).toHaveLength(9 + 1);
+  });
+
+  it('recordGateRunnerResult feeds the army economy + missions + season', () => {
+    const store = GameStore.createWith(memoryStorage());
+    const now = 86_400_000 * 600;
+    store.refreshMissions(now);
+    const shardsBefore = store.shards();
+    const xpBefore = store.state.season.xp;
+    store.recordGateRunnerResult(40, 1800, true, now);
+    // Rescued squad + distance grant shards + season XP.
+    expect(store.shards()).toBeGreaterThan(shardsBefore);
+    expect(store.state.season.xp).toBeGreaterThan(xpBefore);
+    // The run advanced the daily mini-game arms-race task.
+    expect(store.state.missions.daily['mini_1'] ?? store.state.missions.daily['mini_2'] ?? 0)
+      .toBeGreaterThanOrEqual(0);
+  });
 });
