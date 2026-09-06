@@ -348,6 +348,19 @@ export class GameStore {
    * Returns the season-XP settlement so callers can surface tier-ups.
    */
   private applyReward(reward: RewardBundle): SeasonXpResult | null {
+    const seasonResult = this.applyRewardNoPersist(reward);
+    this.persist();
+    return seasonResult;
+  }
+
+  /**
+   * The in-memory reward mutation shared by {@link applyReward} and the
+   * gate-runner hook: it applies resources/shards/coins/season-XP (including the
+   * non-recursive season tier rewards) to state but does NOT persist. Callers
+   * are responsible for calling {@link persist} exactly once after batching any
+   * further mutations, so a single logical grant results in a single save.
+   */
+  private applyRewardNoPersist(reward: RewardBundle): SeasonXpResult | null {
     const { resources, buildings, heroes, miniGame } = this.stateInternal;
     if (reward.resources) {
       resources.stockpiles = addResources(resources.stockpiles, reward.resources, buildings.levels);
@@ -377,7 +390,6 @@ export class GameStore {
         this.stateInternal.season = follow.state;
       }
     }
-    this.persist();
     return seasonResult;
   }
 
@@ -537,9 +549,25 @@ export class GameStore {
    * arms-race points score after the update.
    */
   recordMissionProgress(category: DailyTaskCategory, amount: number, now: number): number {
+    const score = this.recordMissionProgressNoPersist(category, amount, now);
+    this.persist();
+    return score;
+  }
+
+  /**
+   * The in-memory mission-progress mutation shared by
+   * {@link recordMissionProgress} and the gate-runner hook: advances the tasks,
+   * applies any earned reward to state, but does NOT persist. Returns the
+   * arms-race score after the update; the caller persists once.
+   */
+  private recordMissionProgressNoPersist(
+    category: DailyTaskCategory,
+    amount: number,
+    now: number,
+  ): number {
     const result = recordProgress(this.stateInternal.missions, category, amount, now);
     this.stateInternal.missions = result.state;
-    this.applyReward(result.reward);
+    this.applyRewardNoPersist(result.reward);
     return this.stateInternal.missions.armsScore;
   }
 
@@ -618,9 +646,12 @@ export class GameStore {
       seasonXp: 30 + (win ? 40 : 0),
       coins: win ? 50 : 0,
     };
-    this.applyReward(reward);
+    // Batch the reward grant and the mini-game arms-race tick as in-memory
+    // mutations, then persist exactly ONCE for the whole run result.
+    this.applyRewardNoPersist(reward);
     // One mini-game arms-race unit per completed run.
-    this.recordMissionProgress('mini_game', 1, now);
+    this.recordMissionProgressNoPersist('mini_game', 1, now);
+    this.persist();
     return reward;
   }
 
