@@ -36,7 +36,7 @@ export const STRINGS = {
   // Title scene.
   'title.tagline': { en: 'Grow the squad. Reach the boss.', ko: '분대를 키워 보스에 도달하라' },
   'title.play': { en: 'Deploy', ko: '출격' },
-  'title.start': { en: '▶ Start', ko: '▶ 시작하기' },
+  'title.start': { en: '→ Start', ko: '→ 시작하기' },
   'title.startHint': { en: 'Tap here to start', ko: '여기를 눌러 시작하세요' },
   'title.howto': { en: 'How to Play', ko: '플레이 방법' },
   'title.upgrades': { en: 'Upgrades', ko: '업그레이드' },
@@ -145,7 +145,7 @@ export const STRINGS = {
   'howto.controlsTitle': { en: 'Falcon Rescue Controls', ko: '팔콘 구조대 조작법' },
   'howto.laneLabel': { en: 'Two lanes — slide between them', ko: '두 차선 — 사이를 이동' },
   'howto.gateGood': { en: '+ x  grow', ko: '+ x  증가' },
-  'howto.gateBad': { en: '−  ÷  shrink', ko: '−  ÷  감소' },
+  'howto.gateBad': { en: '-  ÷  shrink', ko: '-  ÷  감소' },
   'howto.startTutorial': { en: 'Start Tutorial', ko: '튜토리얼 시작' },
 
   // Base economy - resource names (original, genre-appropriate).

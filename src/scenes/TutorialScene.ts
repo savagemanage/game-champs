@@ -14,12 +14,7 @@ import {
 import { tr } from '../i18n/i18n';
 import { Menu } from '../ui/Menu';
 import { textStyle } from '../ui/UiText';
-
-/** Data passed when launching the tutorial overlay. */
-export interface TutorialData {
-  /** Stable step id to start on. Defaults to the first step. */
-  startStepId?: string;
-}
+import { HomeScene } from './HomeScene';
 
 /**
  * TutorialScene - the first-run onboarding overlay (FEAT-003).
@@ -46,26 +41,21 @@ export class TutorialScene extends Phaser.Scene {
     super({ key: SceneKeys.Tutorial });
   }
 
-  create(data: TutorialData): void {
-    this.currentId = data?.startStepId && stepById(data.startStepId) ? data.startStepId : firstStep().id;
+  create(): void {
+    this.currentId = firstStep().id;
     // Draw above everything (the launching scene and its own HUD).
     this.coach = this.add.graphics().setDepth(1);
     this.renderStep();
   }
 
-  /** Coach-mark anchor for a step target id, or null when there is none. */
+  /**
+   * Coach-mark anchor for a step target id, or null when there is none.
+   * Delegates to {@link HomeScene.navAnchorFor} so the ring tracks the real
+   * bottom-nav geometry instead of a hand-copied duplicate that could drift.
+   */
   private anchorFor(target: string | undefined): { x: number; y: number } | null {
     if (!target) return null;
-    // The HomeScene bottom-nav lays 6 tabs evenly across the width; mirror that
-    // geometry so the ring lands over the tab the step is talking about.
-    const navOrder = ['nav.base', 'nav.heroes', 'nav.campaign', 'nav.missions', 'nav.season', 'nav.falcon'];
-    const idx = navOrder.indexOf(target);
-    if (idx >= 0) {
-      const cellW = CANVAS.WIDTH / navOrder.length;
-      const barH = 92;
-      return { x: cellW * idx + cellW / 2, y: CANVAS.HEIGHT - barH / 2 - 14 };
-    }
-    return null;
+    return HomeScene.navAnchorFor(target);
   }
 
   /** Rebuild the overlay for the current step. */
@@ -181,6 +171,11 @@ export class TutorialScene extends Phaser.Scene {
     store.markTutorialStep(this.currentId);
     store.markTutorialSeen();
     this.tweens.killTweensOf(this.coach);
+    // Resume the hub we paused on launch so it ticks/handles input again, then
+    // stop this overlay to reveal it untouched.
+    if (this.scene.isPaused(SceneKeys.Home)) {
+      this.scene.resume(SceneKeys.Home);
+    }
     this.scene.stop();
   }
 }

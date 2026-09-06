@@ -88,4 +88,52 @@ describe('i18n tr()', () => {
       expect(entry.ko, `ko missing for ${key}`).toBeTruthy();
     }
   });
+
+  /**
+   * Glyph-coverage guard for the bundled SUBSET webfont.
+   *
+   * The Hangul webfont shipped under public/assets/fonts is a subset built by
+   * tools/build_font.py, which only guarantees glyphs it can find: the planned
+   * unicode set below PLUS whatever characters appear in this string table.
+   * A symbol that is neither in the plan NOR in strings.ts (e.g. one hardcoded
+   * only in scene code, like the old '◀' U+25C0) renders as a missing-glyph
+   * "tofu" box at runtime. This test asserts every non-ASCII symbol used in
+   * strings.ts stays inside the plan, so a future edit that introduces an
+   * uncovered symbol here fails loudly instead of shipping tofu.
+   */
+  it('uses only webfont-subset symbols for non-Hangul, non-ASCII glyphs', () => {
+    // Mirror of the planned symbol set in tools/build_font.py (the ranges the
+    // subsetter always includes beyond ASCII/Latin-1/Hangul).
+    const isInSubsetPlan = (cp: number): boolean => {
+      if (cp <= 0x7f) return true; // ASCII printable
+      if (cp >= 0xa0 && cp <= 0xff) return true; // Latin-1 supplement (incl. × ÷)
+      if (cp >= 0xac00 && cp <= 0xd7a3) return true; // modern Hangul syllables
+      if (cp >= 0x3130 && cp <= 0x318f) return true; // Hangul compatibility jamo
+      const symbols = new Set<number>([
+        0x2018, 0x2019, 0x201c, 0x201d, // curly quotes
+        0x2013, 0x2014, // en/em dash
+        0x2026, // ellipsis
+        0x00b7, 0x2022, // middot, bullet
+        0x2605, 0x2606, // black/white star
+        0x2190, 0x2191, 0x2192, 0x2193, // arrows
+        0x00d7, // multiplication sign (×)
+        // NOTE: U+2212 (minus sign) is intentionally EXCLUDED: it is in the
+        // build_font plan-sweep but NOT in the currently shipped subset woff2,
+        // so UI copy uses ASCII '-' instead to avoid a missing-glyph box.
+      ]);
+      return symbols.has(cp);
+    };
+    const offenders: string[] = [];
+    for (const [key, entry] of Object.entries(STRINGS)) {
+      for (const value of [entry.ko, entry.en]) {
+        for (const ch of value) {
+          const cp = ch.codePointAt(0)!;
+          if (!isInSubsetPlan(cp)) {
+            offenders.push(`${key}: '${ch}' (U+${cp.toString(16).toUpperCase().padStart(4, '0')})`);
+          }
+        }
+      }
+    }
+    expect(offenders, `symbols outside the webfont subset plan: ${offenders.join(', ')}`).toEqual([]);
+  });
 });

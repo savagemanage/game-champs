@@ -162,7 +162,10 @@ export class TitleScene extends Phaser.Scene {
    */
   private spawnStartHint(cx: number, py: number): void {
     // Bobbing arrow just right of the primary button, pointing left at it.
-    const arrow = this.add.text(cx + 176, py, '◀', textStyle(30, { color: PALETTE.ACCENT_CSS })).setOrigin(0.5);
+    // Uses '←' (U+2190), which is in the bundled subset webfont's planned arrow
+    // set (U+2190..U+2193); the filled triangle '◀' (U+25C0) is NOT in the
+    // subset and would render as a missing-glyph box.
+    const arrow = this.add.text(cx + 176, py, '←', textStyle(30, { color: PALETTE.ACCENT_CSS })).setOrigin(0.5);
     this.tweens.add({
       targets: arrow,
       x: cx + 162,

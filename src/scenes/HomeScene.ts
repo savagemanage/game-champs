@@ -53,6 +53,25 @@ export class HomeScene extends Phaser.Scene {
     { icon: 'falcon', labelKey: 'nav.falcon', scene: SceneKeys.Run },
   ];
 
+  /** Height of the bottom-nav bar in px (single source of truth). */
+  private static readonly NAV_BAR_H = 92;
+  /** Vertical lift of the tab icon above the bar centre in px. */
+  private static readonly NAV_ICON_LIFT = 14;
+
+  /**
+   * The on-screen centre of a bottom-nav tab, addressed by its label key
+   * (e.g. 'nav.base'), or null if the key is not a nav tab. Shared so overlays
+   * such as the tutorial coach-mark can point at a tab WITHOUT re-deriving the
+   * bar geometry by hand (which would silently drift if the nav changes here).
+   */
+  static navAnchorFor(labelKey: string): { x: number; y: number } | null {
+    const idx = HomeScene.TABS.findIndex((t) => t.labelKey === labelKey);
+    if (idx < 0) return null;
+    const cellW = CANVAS.WIDTH / HomeScene.TABS.length;
+    const barY = CANVAS.HEIGHT - HomeScene.NAV_BAR_H / 2;
+    return { x: cellW * idx + cellW / 2, y: barY - HomeScene.NAV_ICON_LIFT };
+  }
+
   private toast: Phaser.GameObjects.Container | null = null;
 
   constructor() {
@@ -107,7 +126,10 @@ export class HomeScene extends Phaser.Scene {
     // this hub (scene.launch, not start). A returning player - who loads with
     // seen=true via the save migration - is never re-onboarded.
     if (shouldShowTutorialOnFirstRun(store.tutorialSeen()) && !this.scene.isActive(SceneKeys.Tutorial)) {
+      // Launch the overlay ON TOP, then PAUSE this hub so its economy tick and
+      // timers freeze during onboarding; TutorialScene resumes us when it ends.
       this.scene.launch(SceneKeys.Tutorial);
+      this.scene.pause();
     }
   }
 
@@ -177,7 +199,7 @@ export class HomeScene extends Phaser.Scene {
 
   /** The persistent bottom navigation bar. */
   private buildBottomNav(): void {
-    const barH = 92;
+    const barH = HomeScene.NAV_BAR_H;
     const barY = CANVAS.HEIGHT - barH / 2;
     const bar = this.add
       .image(CANVAS.WIDTH / 2, barY, TextureKeys.UiTabBar)
@@ -189,7 +211,7 @@ export class HomeScene extends Phaser.Scene {
     tabs.forEach((tab, i) => {
       const x = cellW * i + cellW / 2;
       const icon = this.add
-        .image(x, barY - 14, TextureKeys.NavIcons, NAV_ICON_FRAME[tab.icon])
+        .image(x, barY - HomeScene.NAV_ICON_LIFT, TextureKeys.NavIcons, NAV_ICON_FRAME[tab.icon])
         .setScale(1.6)
         .setDepth(41);
       const label = this.add
