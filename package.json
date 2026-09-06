@@ -1,5 +1,5 @@
 {
-  "name": "game-champs-monorepo",
+  "name": "open-games",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -11,13 +11,10 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build --workspaces --if-present",
+    "build": "npm run build:games && npm run build:site",
+    "build:games": "npm run build --workspaces --if-present",
+    "build:site": "node site/build.mjs",
     "test": "npm run test --workspaces --if-present",
-    "typecheck": "npm run typecheck --workspaces --if-present",
-    "dev:champs": "npm run dev -w packages/champs",
-    "dev:whiteout": "npm run dev -w packages/whiteout",
-    "dev:lastwar": "npm run dev -w packages/lastwar",
-    "dev:kingshot": "npm run dev -w packages/kingshot",
-    "dev:wirework": "npm run dev -w packages/wirework"
+    "typecheck": "npm run typecheck --workspaces --if-present"
   }
 }

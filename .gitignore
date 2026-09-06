@@ -20,3 +20,6 @@ __pycache__/
 # task / planning artifacts
 .tasks
 .agents/tasks/
+
+# generated landing page + assembled Pages output
+_site/
