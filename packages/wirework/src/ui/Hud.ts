@@ -1,0 +1,250 @@
+import Phaser from 'phaser';
+import { PALETTE, CANVAS, WALL } from '../config/GameConfig';
+import { textStyle } from './UiText';
+import { tr } from '../i18n/i18n';
+
+/**
+ * Snapshot of the state the HUD renders each frame. GameScene assembles this
+ * from its systems (gas, wall, wave, score, citizens) and hands it to
+ * {@link Hud.update} so the HUD stays a pure view with no gameplay coupling.
+ */
+export interface HudState {
+  /** Hero health ratio [0..1]. */
+  hpRatio: number;
+  /** Gas/stamina ratio [0..1]. */
+  gasRatio: number;
+  /** Whether gas is fully depleted (drives the danger tint). */
+  gasEmpty: boolean;
+  /** Outer ring integrity ratio [0..1]. */
+  outerRatio: number;
+  /** Inner ring integrity ratio [0..1]. */
+  innerRatio: number;
+  /** Living citizens remaining. */
+  citizensSaved: number;
+  /** Citizen total at the start of the run. */
+  citizensTotal: number;
+  /** Current wave number (1-based; 0 before the first wave). */
+  wave: number;
+  /** Total waves in the run. */
+  totalWaves: number;
+  /** Accumulated score. */
+  score: number;
+}
+
+/** A weak-point (nape) cue to draw at a world position, if any. */
+export interface WeakPointCue {
+  /** Screen-space (post-camera) position of the nape. */
+  screenX: number;
+  screenY: number;
+  /** Cue radius in screen px. */
+  radius: number;
+  /** True when the current aim/slash would actually connect (turns the cue hot). */
+  inRange: boolean;
+}
+
+/**
+ * Hud - the in-game heads-up display overlay.
+ *
+ * Owns and renders: the gas/stamina meter, the wall-integrity meter, the
+ * score / wave / citizen readout, the transient wave banner, and the on-screen
+ * WEAK-POINT cue that highlights an enemy nape the player is aiming at. Every
+ * element is fixed to the camera (scrollFactor 0) and lives on a high depth so
+ * it sits above the world.
+ *
+ * The HUD reads a plain {@link HudState} each frame; it never reaches into the
+ * game systems directly, so it can be unit-reasoned and reused.
+ */
+export class Hud {
+  private readonly scene: Phaser.Scene;
+
+  private readonly hpBar: Phaser.GameObjects.Rectangle;
+  private readonly gasBar: Phaser.GameObjects.Rectangle;
+  private readonly outerBar: Phaser.GameObjects.Rectangle;
+  private readonly innerBar: Phaser.GameObjects.Rectangle;
+  private readonly statusText: Phaser.GameObjects.Text;
+  private readonly waveBanner: Phaser.GameObjects.Text;
+  private readonly hint: Phaser.GameObjects.Text;
+
+  /** Vector graphics used for the aimed weak-point reticle. */
+  private readonly cueGfx: Phaser.GameObjects.Graphics;
+
+  // Sized for the 960x540 canvas (2x the original 480x270 layout).
+  private static readonly BAR_W = 168;
+  private static readonly BAR_H = 12;
+  private static readonly DEPTH = 50;
+
+  constructor(scene: Phaser.Scene) {
+    this.scene = scene;
+
+    // --- Health gauge ---
+    scene.add
+      .rectangle(12, 16, Hud.BAR_W, Hud.BAR_H, PALETTE.WALL_DARK)
+      .setOrigin(0, 0.5)
+      .setScrollFactor(0)
+      .setDepth(Hud.DEPTH);
+    this.hpBar = scene.add
+      .rectangle(12, 16, Hud.BAR_W, Hud.BAR_H, PALETTE.CITIZEN)
+      .setOrigin(0, 0.5)
+      .setScrollFactor(0)
+      .setDepth(Hud.DEPTH + 1);
+    scene.add
+      .text(12, 26, tr('hud.hp'), textStyle(14))
+      .setScrollFactor(0)
+      .setDepth(Hud.DEPTH + 1);
+
+    // --- Gas gauge ---
+    scene.add
+      .rectangle(12, 52, Hud.BAR_W, Hud.BAR_H, PALETTE.WALL_DARK)
+      .setOrigin(0, 0.5)
+      .setScrollFactor(0)
+      .setDepth(Hud.DEPTH);
+    this.gasBar = scene.add
+      .rectangle(12, 52, Hud.BAR_W, Hud.BAR_H, PALETTE.PLAYER)
+      .setOrigin(0, 0.5)
+      .setScrollFactor(0)
+      .setDepth(Hud.DEPTH + 1);
+    scene.add
+      .text(12, 62, tr('hud.gas'), textStyle(14))
+      .setScrollFactor(0)
+      .setDepth(Hud.DEPTH + 1);
+
+    // --- Outer ring integrity gauge ---
+    scene.add
+      .rectangle(12, 88, Hud.BAR_W, Hud.BAR_H, PALETTE.WALL_DARK)
+      .setOrigin(0, 0.5)
+      .setScrollFactor(0)
+      .setDepth(Hud.DEPTH);
+    this.outerBar = scene.add
+      .rectangle(12, 88, Hud.BAR_W, Hud.BAR_H, PALETTE.ACCENT)
+      .setOrigin(0, 0.5)
+      .setScrollFactor(0)
+      .setDepth(Hud.DEPTH + 1);
+    scene.add
+      .text(12, 98, tr('hud.outer'), textStyle(14))
+      .setScrollFactor(0)
+      .setDepth(Hud.DEPTH + 1);
+
+    // --- Inner ring integrity gauge ---
+    scene.add
+      .rectangle(12, 124, Hud.BAR_W, Hud.BAR_H, PALETTE.WALL_DARK)
+      .setOrigin(0, 0.5)
+      .setScrollFactor(0)
+      .setDepth(Hud.DEPTH);
+    this.innerBar = scene.add
+      .rectangle(12, 124, Hud.BAR_W, Hud.BAR_H, PALETTE.ACCENT)
+      .setOrigin(0, 0.5)
+      .setScrollFactor(0)
+      .setDepth(Hud.DEPTH + 1);
+    scene.add
+      .text(12, 134, tr('hud.inner'), textStyle(14))
+      .setScrollFactor(0)
+      .setDepth(Hud.DEPTH + 1);
+
+    // --- Score / wave / citizens readout (top-right) ---
+    this.statusText = scene.add
+      .text(CANVAS.WIDTH - 12, 16, '', textStyle(16, { align: 'right' }))
+      .setOrigin(1, 0)
+      .setScrollFactor(0)
+      .setDepth(Hud.DEPTH + 1);
+
+    // --- Center wave banner (transient) ---
+    this.waveBanner = scene.add
+      .text(
+        CANVAS.WIDTH / 2,
+        CANVAS.HEIGHT * 0.35,
+        '',
+        textStyle(32, { color: PALETTE.DANGER_CSS, fontStyle: 'bold', align: 'center' }),
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(Hud.DEPTH + 2)
+      .setAlpha(0);
+
+    // --- Controls hint (bottom, low-key) ---
+    this.hint = scene.add
+      .text(
+        CANVAS.WIDTH / 2,
+        CANVAS.HEIGHT - 16,
+        tr('hud.hint'),
+        textStyle(14),
+      )
+      .setOrigin(0.5, 1)
+      .setScrollFactor(0)
+      .setDepth(Hud.DEPTH + 1)
+      .setAlpha(0.4);
+
+    // --- Weak-point reticle graphics ---
+    this.cueGfx = scene.add.graphics().setScrollFactor(0).setDepth(Hud.DEPTH + 2);
+  }
+
+  /** Refresh the bars + readout from the current game state. */
+  update(state: HudState): void {
+    this.hpBar.width = Math.max(0, Math.floor(Hud.BAR_W * state.hpRatio));
+    this.hpBar.fillColor = state.hpRatio < 0.3 ? PALETTE.ENEMY_WEAKPOINT : PALETTE.CITIZEN;
+
+    this.gasBar.width = Math.max(0, Math.floor(Hud.BAR_W * state.gasRatio));
+    this.gasBar.fillColor = state.gasEmpty ? PALETTE.ENEMY_WEAKPOINT : PALETTE.PLAYER;
+
+    this.outerBar.width = Math.max(0, Math.floor(Hud.BAR_W * state.outerRatio));
+    this.outerBar.fillColor = state.outerRatio < 0.3 ? PALETTE.ENEMY_WEAKPOINT : PALETTE.ACCENT;
+
+    this.innerBar.width = Math.max(0, Math.floor(Hud.BAR_W * state.innerRatio));
+    this.innerBar.fillColor = state.innerRatio < 0.3 ? PALETTE.ENEMY_WEAKPOINT : PALETTE.ACCENT;
+
+    const total = state.citizensTotal || WALL.START_CITIZENS;
+    this.statusText.setText(
+      tr('hud.status', {
+        score: state.score,
+        wave: state.wave,
+        total: state.totalWaves,
+        saved: state.citizensSaved,
+        citizensTotal: total,
+      }),
+    );
+  }
+
+  /**
+   * Draw (or clear) the on-screen weak-point cue. Pass the cue for the nape the
+   * player is aiming at, or null to hide it. When {@link WeakPointCue.inRange}
+   * is true the reticle goes "hot" (bright + a lock chevron) to tell the player
+   * a slash will crit; otherwise it's a dim locate marker.
+   */
+  drawWeakPointCue(cue: WeakPointCue | null): void {
+    this.cueGfx.clear();
+    if (!cue) return;
+
+    const color = cue.inRange ? PALETTE.ENEMY_WEAKPOINT : PALETTE.ACCENT;
+    const alpha = cue.inRange ? 1 : 0.6;
+    const r = cue.radius;
+
+    // Pulsing ring.
+    const pulse = cue.inRange ? 1 + 0.12 * Math.sin(this.scene.time.now / 90) : 1;
+    this.cueGfx.lineStyle(1, color, alpha);
+    this.cueGfx.strokeCircle(cue.screenX, cue.screenY, r * pulse);
+
+    // Cross-hair ticks.
+    this.cueGfx.lineBetween(cue.screenX - r - 2, cue.screenY, cue.screenX - r + 2, cue.screenY);
+    this.cueGfx.lineBetween(cue.screenX + r - 2, cue.screenY, cue.screenX + r + 2, cue.screenY);
+    this.cueGfx.lineBetween(cue.screenX, cue.screenY - r - 2, cue.screenX, cue.screenY - r + 2);
+    this.cueGfx.lineBetween(cue.screenX, cue.screenY + r - 2, cue.screenX, cue.screenY + r + 2);
+
+    // A small inner dot marks the exact weak point.
+    this.cueGfx.fillStyle(color, alpha);
+    this.cueGfx.fillCircle(cue.screenX, cue.screenY, 1.5);
+  }
+
+  /** Flash the transient wave banner. */
+  announceWave(wave: number, totalWaves: number, size: number): void {
+    this.waveBanner.setText(
+      `${tr('hud.wave', { wave, total: totalWaves })}\n${tr('hud.incoming', { count: size })}`,
+    );
+    this.waveBanner.setAlpha(1);
+    this.scene.tweens.add({ targets: this.waveBanner, alpha: 0, duration: 1600, delay: 900 });
+  }
+
+  /** Temporarily reveal the controls hint (e.g. at the start of a run). */
+  showHint(durationMs = 4000): void {
+    this.hint.setAlpha(0.75);
+    this.scene.tweens.add({ targets: this.hint, alpha: 0.25, delay: durationMs, duration: 900 });
+  }
+}

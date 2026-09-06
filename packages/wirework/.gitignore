@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+.vite/
+
+# Test coverage
+coverage/
+
+# Task state (agent workspace)
+.agents/
+
+# OS / editor
+.DS_Store
+
+# Logs
+*.log
+logs/
