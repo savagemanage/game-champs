@@ -1,9 +1,11 @@
-# Kingdom Rise — Asset Credits
+# Frosthold: Last Ember — Asset Credits
 
-Kingdom Rise is an **original-world** medieval strategy / idle game *inspired by
-the base-building / idle-kingdom genre*. It is **not** based on "Kingshot" or any
-other copyrighted property. There are **no** IP names, character names, faction
-logos, story text, or copied/traced sprites anywhere in this project.
+Frosthold: Last Ember (서리성채: 마지막 불씨) is an **original** frozen-survival
+city-builder / idle game *inspired by* the frozen-survival base-building genre.
+It is **not** based on "Whiteout Survival" or any other copyrighted property.
+There are **no** IP names, character names, faction logos, story text, or
+copied/traced sprites or sounds anywhere in this project. All buildings, troops,
+enemies, lore, art, and audio are original and role-based.
 
 ## Provenance summary
 
@@ -34,64 +36,67 @@ consistent with the rest of the codebase.
 
 ## Sprites — `public/assets/sprites/`
 
-Buildings are 2-frame sheets (tier 0 starter look, tier 1 upgraded look);
-troops, raiders, and the ram are 2-frame walk/animation sheets. All designs are
-original and role-based.
+Buildings are 2-frame sheets (tier 0 weathered starter look, tier 1 upgraded
+look); troops and Frozen Horde enemies are 2-frame walk/animation sheets. All
+designs are original and role-based, rendered on a cohesive frozen palette (cold
+blues / whites / steel warmed by the Furnace's ember glow).
 
 | File | Name | Origin |
 | --- | --- | --- |
-| `sprites/town_center.png` | Town Center keep (gates every other building's level) | **Original** |
-| `sprites/farm.png` | Farm (produces food) | **Original** |
-| `sprites/lumber_mill.png` | Lumber Mill (produces wood) | **Original** |
-| `sprites/quarry.png` | Quarry (produces stone) | **Original** |
-| `sprites/mine.png` | Mine (produces gold) | **Original** |
-| `sprites/barracks.png` | Barracks (trains troops) | **Original** |
-| `sprites/troop_spearman.png` | Spearman — front-line infantry | **Original** |
-| `sprites/troop_archer.png` | Archer — ranged | **Original** |
-| `sprites/troop_knight.png` | Knight — elite heavy cavalry | **Original** |
-| `sprites/enemy_raider.png` | Raider — basic attacker | **Original** |
-| `sprites/enemy_brute.png` | Brute — heavy attacker | **Original** |
-| `sprites/enemy_ram.png` | Battering Ram — siege engine | **Original** |
+| `sprites/furnace.png` | Furnace — the settlement's central hearth; fueling its Ember holds back the cold and gates every other building's level | **Original** |
+| `sprites/hunters_hut.png` | Hunters' Hut (produces food / rations) | **Original** |
+| `sprites/sawmill.png` | Sawmill (produces wood / timber fuel) | **Original** |
+| `sprites/coal_pit.png` | Coal Pit (produces coal — the Furnace's key fuel) | **Original** |
+| `sprites/iron_mine.png` | Iron Mine (produces iron) | **Original** |
+| `sprites/war_camp.png` | War Camp (trains troops) | **Original** |
+| `sprites/troop_trapper.png` | Trapper — front-line, anti-beast survivor | **Original** |
+| `sprites/troop_marksman.png` | Marksman — ranged crossbow survivor | **Original** |
+| `sprites/troop_vanguard.png` | Vanguard — elite frost-plate heavy | **Original** |
+| `sprites/enemy_frost_wolf.png` | Frost Wolf — fast basic attacker | **Original** |
+| `sprites/enemy_ravager.png` | Ravager — hulking ice-hardened raider | **Original** |
+| `sprites/enemy_frost_titan.png` | Frost Titan — massive ice-body siege beast | **Original** |
 
 ## Backgrounds — `public/assets/backgrounds/`
 
 | File | Name | Origin |
 | --- | --- | --- |
-| `backgrounds/sky.png` | Dusk sky gradient with clouds (480×270) | **Original** |
-| `backgrounds/town.png` | Grassy town field with build plots (480×270) | **Original** |
-| `backgrounds/battle.png` | Battlefield with defended gate (480×270) | **Original** |
+| `backgrounds/sky.png` | Frozen-dusk sky with an aurora band and drifting snow (480×270) | **Original** |
+| `backgrounds/town.png` | Snowfield settlement with cleared build plots (480×270) | **Original** |
+| `backgrounds/battle.png` | Frozen battlefield with the hold's icy wall and gate (480×270) | **Original** |
 
 ## UI — `public/assets/ui/`
 
 | File | Name | Origin |
 | --- | --- | --- |
-| `ui/panel.png` | 9-slice parchment/timber panel | **Original** |
-| `ui/button.png` | 9-slice timber button | **Original** |
-| `ui/bar_frame.png` | Progress / health bar frame | **Original** |
-| `ui/icons.png` | HUD icon set (crown, hourglass, sword, shield) | **Original** |
-| `ui/resource_icons.png` | Resource icon sheet (food, wood, stone, gold) | **Original** |
+| `ui/panel.png` | 9-slice frost-steel panel | **Original** |
+| `ui/button.png` | 9-slice steel button | **Original** |
+| `ui/bar_frame.png` | Progress / warmth / health bar frame | **Original** |
+| `ui/icons.png` | HUD icon set (furnace ember, hourglass, sword, shield) | **Original** |
+| `ui/resource_icons.png` | Resource icon sheet (food, wood, coal, iron) | **Original** |
 
 ## FX — `public/assets/fx/`
 
 | File | Name | Origin |
 | --- | --- | --- |
-| `fx/spark.png` | Coin / spark burst (4 frames) | **Original** |
-| `fx/dust.png` | Dust puff (4 frames) | **Original** |
+| `fx/spark.png` | Ember / frost burst (4 frames) | **Original** |
+| `fx/dust.png` | Snow puff (4 frames) | **Original** |
 
 ## Audio — `public/assets/audio/`
 
 All audio is procedurally synthesized (16-bit PCM WAV, 22.05 kHz mono) by
-`tools/gen_audio.py` — no recorded samples or third-party sounds are used.
+`tools/gen_audio.py` — no recorded samples or third-party sounds are used. The
+palette evokes cold survival: sparse, minor-key tones over a low wind bed,
+warmed by an ember-bright note where the moment calls for hope.
 
 | File | Name | Origin |
 | --- | --- | --- |
-| `audio/ui_click.wav` | SFX — UI click | **Original** |
-| `audio/build_complete.wav` | SFX — building upgrade complete | **Original** |
+| `audio/ui_click.wav` | SFX — crisp glassy UI click | **Original** |
+| `audio/build_complete.wav` | SFX — building upgrade / Furnace stoked | **Original** |
 | `audio/train_complete.wav` | SFX — troop training complete | **Original** |
-| `audio/battle_hit.wav` | SFX — melee impact | **Original** |
-| `audio/victory.wav` | SFX — victory fanfare | **Original** |
-| `audio/defeat.wav` | SFX — defeat cadence | **Original** |
-| `audio/music_loop.wav` | Music — looping medieval strategy bed (D-minor, ~23 s) | **Original** |
+| `audio/battle_hit.wav` | SFX — cold melee impact | **Original** |
+| `audio/victory.wav` | SFX — victory lift (the Ember holds) | **Original** |
+| `audio/defeat.wav` | SFX — defeat cadence over wind (the Ember gutters out) | **Original** |
+| `audio/music_loop.wav` | Music — looping frozen-survival ambient bed (A-minor pad + wind + ember-pulse, ~27 s) | **Original** |
 
 ---
 

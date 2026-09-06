@@ -1,14 +1,22 @@
 #!/usr/bin/env python3
 """
-gen_audio.py - Original synthesized SFX + music for KINGDOM RISE.
+gen_audio.py - Original synthesized SFX + music for FROSTHOLD: LAST EMBER.
 
 All audio here is ORIGINAL, synthesized procedurally with the Python standard
-library (no samples, no third-party audio, no IP). Output is 16-bit PCM WAV at
-22.05kHz mono, which every modern browser (and Phaser's WebAudio backend) plays
-natively. WAV keeps the pipeline dependency-free (no ffmpeg / numpy required).
+library (no samples, no third-party audio, no IP). Frosthold: Last Ember
+(서리성채: 마지막 불씨) is an ORIGINAL frozen-survival city-builder merely
+INSPIRED BY the genre - it uses NO "Whiteout Survival" (or any third-party)
+sounds or music. Output is 16-bit PCM WAV at 22.05kHz mono, which every modern
+browser (and Phaser's WebAudio backend) plays natively. WAV keeps the pipeline
+dependency-free (no ffmpeg / numpy required).
+
+The palette evokes cold survival: sparse, minor-key tones over a low wind bed
+synthesized from the noise() generator, warmed by a single ember-bright note
+where the moment calls for hope (build/train/victory).
 
 SFX: ui_click, build_complete, train_complete, battle_hit, victory, defeat.
-Music: one looping medieval ambient/strategy bed (music_loop).
+Music: one looping frozen-survival ambient bed (music_loop) - a sparse minor
+pad with a soft wind layer and a slow ember-pulse.
 
 Run:  python3 tools/gen_audio.py
 Out:  public/assets/audio/*.wav
@@ -80,8 +88,22 @@ def noise(dur, vol=0.5, lp=1.0):
     return out
 
 
+def wind(dur, vol=0.5, lp=0.06, gust=0.35):
+    """A low, breathy wind bed: heavily low-passed noise slowly amplitude-
+    modulated by a gust LFO. Deterministic (uses the seeded RNG)."""
+    n = int(RATE * dur)
+    out = []
+    prev = 0.0
+    for i in range(n):
+        s = random.uniform(-1, 1)
+        prev = prev + lp * (s - prev)   # steep 1-pole low-pass -> rumble
+        lfo = 1.0 - gust + gust * (0.5 + 0.5 * math.sin(2 * math.pi * 0.15 * i / RATE))
+        out.append(vol * prev * lfo)
+    return out
+
+
 def seq(*parts):
-    """Concatenate sample lists (for melodic jingles)."""
+    """Concatenate sample lists (for melodic motifs)."""
     out = []
     for p in parts:
         out.extend(p)
@@ -106,76 +128,77 @@ def square(x):
 
 
 # --------------------------------------------------------------------------
-# SFX
+# SFX - cold and glassy, with a warm ember note where the moment is hopeful.
 # --------------------------------------------------------------------------
 def sfx_ui_click():
-    s = mix(tone(880, 0.04, 0.35, square), tone(1320, 0.03, 0.2))
+    # a crisp glassy tick, like frost cracking under a fingertip
+    s = mix(tone(1046.50, 0.035, 0.30), tone(1568.0, 0.025, 0.18))
     write_wav("ui_click.wav", s)
 
 
 def sfx_build_complete():
-    # a bright rising two-note chime with a little hammer tick (construction done)
-    s = seq(tone(523.25, 0.12, 0.4), tone(783.99, 0.22, 0.4))  # C5 -> G5
-    s = mix(s, noise(0.06, 0.2, 0.6))
+    # two icy chime notes rising to a warm ember note (the hearth is stoked)
+    s = seq(tone(587.33, 0.12, 0.38), tone(880.00, 0.20, 0.40))  # D5 -> A5
+    s = mix(s, noise(0.05, 0.14, 0.5))
     write_wav("build_complete.wav", s)
 
 
 def sfx_train_complete():
-    # a short martial fanfare (troops ready): three ascending notes
-    s = seq(tone(440.00, 0.10, 0.4, saw), tone(587.33, 0.10, 0.4, saw), tone(880.00, 0.20, 0.4, saw))
+    # three ascending glassy notes - survivors ready at the War Camp
+    s = seq(tone(493.88, 0.10, 0.38), tone(659.25, 0.10, 0.38), tone(987.77, 0.20, 0.40))
     write_wav("train_complete.wav", s)
 
 
 def sfx_battle_hit():
-    # meaty melee impact: low thud + short noise
-    s = mix(sweep(240, 60, 0.16, 0.6), noise(0.1, 0.3, 0.2))
+    # a cold, dull impact: low ice thud + a short frosty crack
+    s = mix(sweep(220, 55, 0.16, 0.6), noise(0.09, 0.28, 0.35))
     write_wav("battle_hit.wav", s)
 
 
 def sfx_victory():
-    # triumphant major fanfare (C - E - G - C octave)
+    # a rising minor-to-major lift: the cold breaks, the Ember holds
     s = seq(
-        tone(523.25, 0.16, 0.4, saw),
-        tone(659.25, 0.16, 0.4, saw),
-        tone(783.99, 0.16, 0.4, saw),
-        tone(1046.50, 0.40, 0.45, saw),
+        tone(523.25, 0.16, 0.38, saw),   # C5
+        tone(622.25, 0.16, 0.38, saw),   # Eb5
+        tone(783.99, 0.16, 0.40, saw),   # G5
+        tone(1046.50, 0.42, 0.44),       # C6 (pure, warm)
     )
     write_wav("victory.wav", s)
 
 
 def sfx_defeat():
-    # somber descending minor cadence (A - F - D low)
+    # a sinking minor cadence over a gust of wind (the Ember gutters out)
     s = seq(
-        tone(440.00, 0.24, 0.4),
-        tone(349.23, 0.24, 0.4),
-        tone(293.66, 0.50, 0.45, saw),
+        tone(392.00, 0.24, 0.38),        # G4
+        tone(311.13, 0.24, 0.38),        # Eb4
+        tone(233.08, 0.52, 0.42, saw),   # Bb3
     )
-    s = mix(s, noise(0.4, 0.12, 0.05))
+    s = mix(s, wind(len(s) / RATE, 0.16, lp=0.05, gust=0.5))
     write_wav("defeat.wav", s)
 
 
 # --------------------------------------------------------------------------
-# MUSIC: a seamless looping medieval strategy bed. Minor-key pad + lute-ish
-# arpeggio + soft heartbeat pulse.
+# MUSIC: a seamless looping frozen-survival bed. A sparse minor pad over a low
+# wind layer, with a slow ember-pulse standing in for the hearth heartbeat.
 # --------------------------------------------------------------------------
 def music_loop():
-    bpm = 84
+    bpm = 72
     beat = 60.0 / bpm
     bars = 8
-    total = beat * 4 * bars          # 8 bars of 4/4
+    total = beat * 4 * bars          # 8 bars of 4/4 (sparser, colder tempo)
     n = int(RATE * total)
     out = [0.0] * n
 
-    # D minor progression: Dm - Bb - F - C (one chord per 2 bars) - stately.
+    # A natural-minor progression: Am - F - Dm - E (one chord per 2 bars).
     chords = [
-        [146.83, 174.61, 220.00],    # Dm
-        [116.54, 174.61, 233.08],    # Bb
-        [174.61, 220.00, 261.63],    # F
-        [130.81, 164.81, 196.00],    # C
+        [110.00, 130.81, 164.81],    # Am
+        [87.31, 130.81, 174.61],     # F
+        [73.42, 110.00, 146.83],     # Dm
+        [82.41, 103.83, 164.81],     # E
     ]
     seg = n // len(chords)
 
-    # pad layer
+    # sustained pad layer (softer/breathier than the old lute bed)
     for ci, chord in enumerate(chords):
         start = ci * seg
         for i in range(seg):
@@ -183,38 +206,44 @@ def music_loop():
             if gi >= n:
                 break
             t = i / seg
-            amp = 0.10 * (0.6 + 0.4 * math.sin(math.pi * t))
+            amp = 0.09 * (0.55 + 0.45 * math.sin(math.pi * t))
             s = 0.0
             for f in chord:
                 s += math.sin(2 * math.pi * f * gi / RATE)
-                s += 0.25 * saw(2 * math.pi * (f / 2) * gi / RATE)
+                s += 0.18 * math.sin(2 * math.pi * (f * 2) * gi / RATE)  # airy octave
             out[gi] += amp * s / len(chord)
 
-    # lute-ish arpeggio (plucks) - 8th notes cycling chord tones an octave up
-    step = beat / 2
+    # sparse ember-bright bell (a single high note every 2 beats, letting the
+    # cold air breathe between hits)
+    step = beat * 2
     steps = int(total / step)
     for si in range(steps):
-        chord = chords[(si // 4) % len(chords)]
-        f = chord[si % 3] * 2
+        chord = chords[(si // 2) % len(chords)]
+        f = chord[si % 3] * 4
         start = int(si * step * RATE)
-        dur = int(step * RATE * 0.9)
+        dur = int(beat * RATE * 1.2)
         for i in range(dur):
             gi = start + i
             if gi >= n:
                 break
-            out[gi] += 0.13 * saw(2 * math.pi * f * i / RATE) * env(i, dur, 0.01, 0.6)
+            out[gi] += 0.10 * math.sin(2 * math.pi * f * i / RATE) * env(i, dur, 0.02, 0.85)
 
-    # soft heartbeat pulse on each beat
-    beats = int(total / beat)
-    for bi in range(beats):
-        start = int(bi * beat * RATE)
-        dur = int(0.12 * RATE)
+    # slow ember-pulse (a soft low heartbeat every 2 beats - the hearth burning)
+    pulses = int(total / (beat * 2))
+    for bi in range(pulses):
+        start = int(bi * beat * 2 * RATE)
+        dur = int(0.18 * RATE)
         for i in range(dur):
             gi = start + i
             if gi >= n:
                 break
-            f = 84 * (1 - i / dur) + 42
-            out[gi] += 0.22 * math.sin(2 * math.pi * f * i / RATE) * env(i, dur, 0.005, 0.7)
+            f = 66 * (1 - i / dur) + 33
+            out[gi] += 0.20 * math.sin(2 * math.pi * f * i / RATE) * env(i, dur, 0.01, 0.75)
+
+    # low wind bed across the whole loop
+    w = wind(total, 0.10, lp=0.05, gust=0.4)
+    for i in range(min(n, len(w))):
+        out[i] += w[i]
 
     # normalize to avoid clipping
     peak = max(abs(s) for s in out) or 1.0

@@ -2,29 +2,32 @@
 
 **[한국어](#korean) · [English](#english)**
 
-# 킹덤 라이즈 (Kingdom Rise)
+# 서리성채: 마지막 불씨 (Frosthold: Last Ember)
 
-오리지널 세계관의 2D 픽셀아트 **중세 전략 / 방치형** 브라우저 게임입니다. 작은
-정착지를 키워 나가세요. 자원 건물이 시간이 지날수록 **식량·목재·석재·금화**를
-자동으로 생산하고, 중앙의 **중앙 청사(Town Center)** 레벨이 다른 모든 건물의
-업그레이드 한계를 결정합니다. 병력은 병영에서 시간이 걸리는 **훈련 대기열**로
-양성하며, 주기적으로 몰려오는 **침략자 웨이브**를 애니메이션으로 연출되는
-결정론적 전투로 막아내야 합니다. 진행 상황은 `localStorage`에 저장되며, 자리를
-비운 동안의 방치 수익도 다시 접속할 때 정산됩니다. UI는 **한국어 우선**이며
-영어도 지원합니다.
+오리지널 세계관의 2D 픽셀아트 **혹한 생존 도시 건설 / 방치형** 브라우저
+게임입니다. 세계는 끝나지 않는 겨울에 잠겼고, 정착지는 중앙의 **화로(Furnace)**
+하나에 의지해 버팁니다. 화로의 **불씨(Ember)**에 **목재와 석탄**을 태워 추위를
+막아야 하며, 연료가 떨어지면 온기가 식으면서 생산이 둔화됩니다. 자원 건물은
+시간이 지날수록 **식량·목재·석탄·철**을 자동으로 생산하고, 중앙의
+**화로(Furnace)** 레벨이 다른 모든 건물의 업그레이드 한계를 결정합니다. 병력은
+**전투 캠프(War Camp)**에서 시간이 걸리는 **훈련 대기열**로 양성하며, 주기적으로
+몰려오는 **서리 군단(Frozen Horde)** 웨이브를 애니메이션으로 연출되는 결정론적
+전투로 막아내야 합니다. 진행 상황은 `localStorage`에 저장되며, 자리를 비운 동안의
+방치 수익도 다시 접속할 때 정산됩니다. UI는 **한국어 우선**이며 영어도
+지원합니다.
 
-> **오리지널 창작물 / IP 경계.** 킹덤 라이즈는 기지 건설 / 방치형 왕국 장르에서
-> *영감을 받은* **오리지널** 게임입니다. 모든 이름, 세계관, 아트, 오디오는 이
-> 프로젝트의 순수 창작물입니다. "Kingshot"(또는 그 밖의 어떤 제3자) 이름,
-> 캐릭터, 세력, 스토리, 스프라이트도 사용하지 않습니다. 전체 에셋 출처는
-> [`assets/CREDITS.md`](assets/CREDITS.md)를 참고하세요.
+> **오리지널 창작물 / IP 경계.** 서리성채: 마지막 불씨는 혹한 생존 도시 건설
+> 장르에서 *영감을 받은* **오리지널** 게임입니다. 모든 이름, 세계관, 아트,
+> 오디오는 이 프로젝트의 순수 창작물입니다. "Whiteout Survival"(또는 그 밖의 어떤
+> 제3자) 이름, 캐릭터, 세력, 스토리, 로고, 스프라이트, 오디오도 사용하지
+> 않습니다. 전체 에셋 출처는 [`assets/CREDITS.md`](assets/CREDITS.md)를
+> 참고하세요.
 >
 > 저장소 슬러그와 GitHub Pages 경로(`game-kingshot`,
-> `savagemanage.github.io/game-kingshot`)는 이 프로젝트가 오마주하는 장르를
-> 나타내는 **배포 식별자**일 뿐, 게임 브랜드의 일부가 아닙니다. 빌드에 담긴 그
-> 무엇도(게임 내 제목 "Kingdom Rise / 킹덤 라이즈", 세계관, 병종·적 이름, 아트,
-> 오디오) 제3자 IP를 사용하지 않습니다. 슬러그는 고정된 배포 대상이며 의도적으로
-> 그대로 둡니다.
+> `savagemanage.github.io/game-kingshot`)는 고정된 **배포 식별자**일 뿐, 게임
+> 브랜드의 일부가 아닙니다. 빌드에 담긴 그 무엇도(게임 내 제목 "Frosthold: Last
+> Ember / 서리성채: 마지막 불씨", 세계관, 병종·적 이름, 아트, 오디오) 제3자 IP를
+> 사용하지 않습니다. 슬러그는 고정된 배포 대상이며 의도적으로 그대로 둡니다.
 
 **라이브 빌드 플레이:** <https://savagemanage.github.io/game-kingshot/>
 
@@ -65,7 +68,7 @@ Vite가 출력하는 개발 서버 주소(기본값 <http://localhost:5173>)를 
 | 입력                 | 동작                                                          |
 | -------------------- | ------------------------------------------------------------- |
 | **건물 클릭**        | 업그레이드 패널 열기 (레벨, 다음 비용/시간, 업그레이드)        |
-| **병영 / 병영 버튼** | 병력 훈련 패널 열기                                           |
+| **전투 캠프 / 캠프 버튼** | 병력 훈련 패널 열기                                       |
 | `B`                  | **전투로** 진군 (마을에서)                                    |
 | `S`                  | **설정** 열기 (타이틀 또는 마을에서)                          |
 | `L`                  | 언어 전환 (타이틀 화면의 언어 토글과 동일)                    |
@@ -75,25 +78,30 @@ Vite가 출력하는 개발 서버 주소(기본값 <http://localhost:5173>)를 
 
 ### 핵심 루프
 
-1. **수집 (방치).** 농장·제재소·채석장·광산이 시간이 지날수록 식량·목재·석재·
-   금화를 생산합니다. 탭을 닫아 두어도 마찬가지이며, 자리를 비운 시간은 다시
-   접속할 때 (상한과 배율이 적용되어) 정산되고 무엇을 모았는지 요약이 표시됩니다.
-2. **업그레이드.** 모든 건물은 기하급수적으로 늘어나는 비용과 건설 타이머를 두고
-   업그레이드됩니다. **중앙 청사** 레벨이 다른 모든 건물의 레벨 상한을 정하므로,
-   진행의 중추가 됩니다.
-3. **훈련.** 병영에서 **창병·궁병·기사**를 묶음 단위로 대기열에 넣으면, 각 묶음이
-   훈련 시간이 지난 뒤 완성되어 보유 병력에 합류합니다.
-4. **전투.** 병력을 전투로 보내 점점 강해지는 침략자 웨이브(**침략자·광전사·공성
-   망치**)를 막아냅니다. 결과는 전투 시스템이 결정론적으로 계산한 뒤 애니메이션
-   으로 연출됩니다. 승리하면 자원 보상을 얻고 웨이브 진행이 올라가며, 패배하면
-   병력은 잃지만 마을은 건재합니다. 전투 HUD의 **건너뛰기**와 **속도**로 진행
-   속도를 조절할 수 있습니다.
-5. **더 어렵게, 반복.** 웨이브를 하나 격파할 때마다 다음 웨이브의 난이도가
+1. **수집 (방치).** 사냥꾼 오두막·제재소·석탄 채굴장·철광이 시간이 지날수록
+   식량·목재·석탄·철을 생산합니다. 탭을 닫아 두어도 마찬가지이며, 자리를 비운
+   시간은 다시 접속할 때 (상한과 배율이 적용되어) 정산되고 무엇을 모았는지 요약이
+   표시됩니다.
+2. **온기 유지 (화로).** **화로**는 매 초 **목재와 석탄**을 태워 온기(Warmth)를
+   유지합니다. 연료가 있으면 온기가 최대치로 차오르고, 연료가 바닥나면 온기가
+   식으면서 방치 생산이 하한선까지 둔화됩니다. 화로 레벨을 올리면 최대 온기가
+   커지고 연료 효율도 좋아지므로, 불씨에 투자한 만큼 두 배로 보답받습니다.
+3. **업그레이드.** 모든 건물은 기하급수적으로 늘어나는 비용과 건설 타이머를 두고
+   업그레이드됩니다. **화로** 레벨이 다른 모든 건물의 레벨 상한을 정하므로, 진행의
+   중추가 됩니다.
+4. **훈련.** 전투 캠프에서 **덫사냥꾼·명사수·선봉대**를 묶음 단위로 대기열에
+   넣으면, 각 묶음이 훈련 시간이 지난 뒤 완성되어 보유 병력에 합류합니다.
+5. **전투.** 병력을 전투로 보내 점점 강해지는 서리 군단 웨이브(**서리 늑대·파괴자·
+   서리 거인**)를 막아냅니다. 결과는 전투 시스템이 결정론적으로 계산한 뒤
+   애니메이션으로 연출됩니다. 승리하면 자원 보상을 얻고 웨이브 진행이 올라가며,
+   패배하면 병력은 잃지만 성채는 건재합니다. 전투 HUD의 **건너뛰기**와 **속도**로
+   진행 속도를 조절할 수 있습니다.
+6. **더 어렵게, 반복.** 웨이브를 하나 격파할 때마다 다음 웨이브의 난이도가
    올라갑니다. 마지막으로 설정된 웨이브를 격파하면 전체 캠페인 승리입니다.
 
 **설정**에서는 전체 / 효과음 / 음악 볼륨 슬라이더와 언어 토글(한국어 / English)을
 제공하며 모두 `localStorage`에 저장됩니다. 또한 두 번 눌러 확인하는 **진행
-초기화** 옵션으로 저장을 지우고 새 왕국을 시작할 수 있습니다.
+초기화** 옵션으로 저장을 지우고 새 성채를 시작할 수 있습니다.
 
 > **언어 설정 (한국어 / English).** 게임은 **한국어 우선**입니다. 저장된 설정이
 > 없는 첫 실행에서는 브라우저 언어를 자동 감지합니다. 브라우저의 선호 언어가
@@ -118,8 +126,8 @@ src/
   scenes/          Boot, Preload, Title, Town, Battle, GameOver, Settings
   entities/        Battler (애니메이션되는 단일 전투 유닛)
   systems/         순수 로직 시스템: ResourceStore, BuildingSystem, TrainingQueue,
-                   CombatSystem, CasualtyTimeline, SaveManager, GameState + AudioManager,
-                   SettingsStore
+                   CombatSystem, CasualtyTimeline, WarmthSystem, SaveManager,
+                   GameState + AudioManager, SettingsStore
   ui/              공용 픽셀 UI 헬퍼: Menu, TrainingPanel, BattleHud, UiText
   types/           공용 횡단 타입
   i18n/            한국어 우선 KO/EN 문자열 테이블 + 소형 런타임
@@ -128,9 +136,9 @@ tools/             에셋 생성기 (gen_sprites.py, gen_audio.py)
 ```
 
 `systems/`의 클래스에는 **Phaser 의존성이 없어서**, 자원 계산, 업그레이드 비용
-공식, 훈련 대기열 타이밍, 전투 계산, 저장 직렬화, 그리고 설정 로드(브라우저 언어
-자동 감지 포함)가 모두 빠른 `vitest` 유닛 테스트(`src/**/*.test.ts`)로
-검증됩니다.
+공식, 훈련 대기열 타이밍, 전투 계산, **화로 온기(WarmthSystem) 로직**, 저장
+직렬화, 그리고 설정 로드(브라우저 언어 자동 감지 포함)가 모두 빠른 `vitest`
+유닛 테스트(`src/**/*.test.ts`)로 검증됩니다.
 
 ## 에셋 재생성
 
@@ -191,29 +199,33 @@ Apache-2.0. [LICENSE](LICENSE)를 참고하세요.
 
 **[한국어](#korean) · [English](#english)**
 
-# Kingdom Rise (킹덤 라이즈)
+# Frosthold: Last Ember (서리성채: 마지막 불씨)
 
-An original-world 2D pixel-art **medieval strategy / idle** browser game. Grow a
-small settlement: resource buildings passively generate **food, wood, stone, and
-gold**; a central **Town Center** gates how far every other building can be
-upgraded; troops are trained in time-based **queues** at the Barracks; and
-periodic **waves of raiders** must be repelled in an animated, deterministic
-battle. Progress is saved to `localStorage`, with idle gains credited while you
-are away. The UI is **Korean-first** (한국어), with English available.
+An original-world 2D pixel-art **frozen-survival city-builder / idle** browser
+game. The world is locked in an endless winter and your settlement survives
+around a single central **Furnace**: burn **wood and coal** in its **Ember** to
+hold back a lethal cold — let the fuel run dry and warmth decays, throttling
+production. Resource buildings passively generate **food, wood, coal, and
+iron**; the central **Furnace** gates how far every other building can be
+upgraded; troops are trained in time-based **queues** at the **War Camp**; and
+periodic **waves of the Frozen Horde** must be repelled in an animated,
+deterministic battle. Progress is saved to `localStorage`, with idle gains
+credited while you are away. The UI is **Korean-first** (한국어), with English
+available.
 
-> **Original work / IP boundary.** Kingdom Rise is an **original** game
-> *inspired by* the base-building / idle-kingdom genre. All names, lore, art, and
-> audio are original to this project. It does **not** use "Kingshot" (or any
-> other third-party) names, characters, factions, story, or sprites. See
-> [`assets/CREDITS.md`](assets/CREDITS.md) for full asset provenance.
+> **Original work / IP boundary.** Frosthold: Last Ember is an **original** game
+> *inspired by* the frozen-survival city-builder genre. All names, lore, art,
+> and audio are original to this project. It does **not** use "Whiteout
+> Survival" (or any other third-party) names, characters, factions, story,
+> logos, art, or audio. See [`assets/CREDITS.md`](assets/CREDITS.md) for full
+> asset provenance.
 >
 > The repository slug and GitHub Pages path (`game-kingshot`,
-> `savagemanage.github.io/game-kingshot`) are only a **deployment identifier**
-> describing the genre this project is a homage to; they are not part of the
-> game's brand. Nothing shipped in the build (the in-game title "Kingdom Rise /
-> 킹덤 라이즈", the lore, the troop/enemy names, the art, and the audio) uses any
-> third-party IP. The slug is a fixed deployment target and is intentionally
-> left unchanged.
+> `savagemanage.github.io/game-kingshot`) are only a fixed **deployment
+> identifier**; they are not part of the game's brand. Nothing shipped in the
+> build (the in-game title "Frosthold: Last Ember / 서리성채: 마지막 불씨", the
+> lore, the troop/enemy names, the art, and the audio) uses any third-party IP.
+> The slug is a fixed deployment target and is intentionally left unchanged.
 
 **Play the live build:** <https://savagemanage.github.io/game-kingshot/>
 
@@ -253,7 +265,7 @@ on-screen buttons.
 | Input                | Action                                                        |
 | -------------------- | ------------------------------------------------------------- |
 | **Click a building** | Open its upgrade panel (level, next cost/time, Upgrade)       |
-| **Click Barracks / Barracks button** | Open the troop training panel               |
+| **Click War Camp / War Camp button** | Open the troop training panel               |
 | `B`                  | March **To Battle** (from the Town)                           |
 | `S`                  | Open **Settings** (from the Title or Town)                    |
 | `Esc`                | Close the open panel / skip the battle animation              |
@@ -262,27 +274,34 @@ on-screen buttons.
 
 ### The core loop
 
-1. **Gather (idle).** The Farm, Lumber Mill, Quarry, and Mine generate food,
-   wood, stone, and gold over time — even while the tab is closed. Offline time
-   is credited (capped and scaled) the next time you load, with a summary of
-   what you gathered.
-2. **Upgrade.** Every building upgrades for a geometrically growing cost and a
-   build timer. The **Town Center** level caps the level of every other
-   building, so it is the backbone of your progression.
-3. **Train.** Queue batches of **Spearmen, Archers, and Knights** at the
-   Barracks; each batch completes after its training time and joins your
-   standing army.
-4. **Battle.** Send your army To Battle to repel escalating waves of raiders
-   (**Raider, Brute, Battering Ram**). The outcome is resolved deterministically
-   by the combat system and then animated; on a win you earn resource rewards
-   and advance your wave progress, on a loss your army is lost but the town
-   stands. Use **Skip** and **Speed** in the battle HUD to control pacing.
-5. **Repeat, harder.** Each cleared wave raises the difficulty of the next.
+1. **Gather (idle).** The Hunters' Hut, Sawmill, Coal Pit, and Iron Mine
+   generate food, wood, coal, and iron over time — even while the tab is closed.
+   Offline time is credited (capped and scaled) the next time you load, with a
+   summary of what you gathered.
+2. **Keep warm (the Furnace).** The **Furnace** burns **wood and coal** every
+   second to sustain your settlement's Warmth. While fuel is available warmth
+   climbs to its max; when the stockpile runs dry warmth decays and idle
+   production is throttled toward a floor. A higher Furnace level raises max
+   warmth *and* makes fuel burn more efficiently, so investing in the Ember pays
+   off twice.
+3. **Upgrade.** Every building upgrades for a geometrically growing cost and a
+   build timer. The **Furnace** level caps the level of every other building, so
+   it is the backbone of your progression.
+4. **Train.** Queue batches of **Trappers, Marksmen, and Vanguards** at the War
+   Camp; each batch completes after its training time and joins your standing
+   army.
+5. **Battle.** Send your army To Battle to repel escalating waves of the Frozen
+   Horde (**Frost Wolf, Ravager, Frost Titan**). The outcome is resolved
+   deterministically by the combat system and then animated; on a win you earn
+   resource rewards and advance your wave progress, on a loss your army is lost
+   but the hold stands. Use **Skip** and **Speed** in the battle HUD to control
+   pacing.
+6. **Repeat, harder.** Each cleared wave raises the difficulty of the next.
    Clearing the final configured wave is a full-campaign victory.
 
 **Settings** offers master / SFX / music volume sliders and a language toggle
 (한국어 / English), all persisted to `localStorage`, plus a two-press
-**Reset Progress** option that wipes the save and starts a fresh kingdom.
+**Reset Progress** option that wipes the save and starts a fresh hold.
 
 ## Persistence
 
@@ -301,8 +320,8 @@ src/
   scenes/          Boot, Preload, Title, Town, Battle, GameOver, Settings
   entities/        Battler (a single animated combat unit)
   systems/         Pure-logic systems: ResourceStore, BuildingSystem, TrainingQueue,
-                   CombatSystem, CasualtyTimeline, SaveManager, GameState + AudioManager,
-                   SettingsStore
+                   CombatSystem, CasualtyTimeline, WarmthSystem, SaveManager,
+                   GameState + AudioManager, SettingsStore
   ui/              Shared pixel-UI helpers: Menu, TrainingPanel, BattleHud, UiText
   types/           Shared cross-cutting types
   i18n/            Korean-first KO/EN string table + tiny runtime
@@ -311,8 +330,9 @@ tools/             Asset generators (gen_sprites.py, gen_audio.py)
 ```
 
 The `systems/` classes contain **no Phaser dependency**, so the resource math,
-upgrade-cost formulas, training-queue timing, combat resolution, and save
-serialization are all covered by fast `vitest` unit tests (`src/**/*.test.ts`).
+upgrade-cost formulas, training-queue timing, combat resolution, the **Furnace
+warmth logic (WarmthSystem)**, and save serialization are all covered by fast
+`vitest` unit tests (`src/**/*.test.ts`).
 
 ## Regenerating assets
 
