@@ -104,7 +104,7 @@ describe('SaveManager', () => {
 
   it('uses the Frosthold save namespace', () => {
     expect(SAVE_KEY).toBe('frosthold:save');
-    expect(SAVE_VERSION).toBe(6);
+    expect(SAVE_VERSION).toBe(7);
   });
 
   it('produces a versioned plain JSON object on serialize', () => {
@@ -467,8 +467,8 @@ describe('SaveManager', () => {
 
   // --- FEAT-002: steel resource, premium currency, population, migration ---
 
-  it('bumps SAVE_VERSION to 6 for the FEAT-005 endgame layer', () => {
-    expect(SAVE_VERSION).toBe(6);
+  it('bumps SAVE_VERSION to 7 for the tiered-army review wiring', () => {
+    expect(SAVE_VERSION).toBe(7);
   });
 
   it('treats a pre-endgame version-5 save as a mismatch and starts fresh', () => {
@@ -503,6 +503,73 @@ describe('SaveManager', () => {
     expect(loaded.snapshot.alliance.techPoints).toBe(0);
     expect(loaded.snapshot.vip.level).toBe(0);
     expect(loaded.snapshot.quests.dailyProgress('daily_battle')).toBe(0);
+  });
+
+  it('treats a pre-tiered-army version-6 save as a mismatch and starts fresh', () => {
+    const storage = memoryStorage();
+    // A well-formed v6 (pre-tiered-army) save must NOT be mis-loaded into the
+    // v7 shape; it falls back to a fresh settlement.
+    const v6 = {
+      version: 6,
+      resources: { food: 500, wood: 500, coal: 500, iron: 500, steel: 100 },
+      premiumCurrency: 300,
+      population: { total: 20, assignments: {} },
+      heroes: { heroes: {}, lead: [] },
+      summon: { totalPulls: 0, pityCounter: 0 },
+      campaign: { highestCleared: 0, claimed: [] },
+      research: { completed: [], active: null },
+      gear: { slots: {} },
+      rally: { bosses: {} },
+      arena: { rank: 50, wins: 0, losses: 0, seed: 1 },
+      alliance: { techPoints: 0, helpsAvailable: 0 },
+      quests: { dailyDayIndex: 0, daily: {}, milestones: {}, activeEventId: null, eventEndsAt: 0 },
+      vip: { points: 0 },
+      warmth: 80,
+      buildings: [{ kind: 'furnace', level: 4, upgradeEndsAt: null }],
+      army: { trapper: 3, marksman: 2, vanguard: 1 },
+      trainingQueue: [],
+      waveCleared: 9,
+      lastSeenAt: 0,
+    };
+    storage.setItem(SAVE_KEY, JSON.stringify(v6));
+    const loaded = new SaveManager(storage).load(0);
+    expect(loaded.loaded).toBe(false);
+    expect(loaded.snapshot.buildings.furnaceLevel).toBe(1);
+  });
+
+  it('round-trips the tiered standing army through a save', () => {
+    const storage = memoryStorage();
+    const mgr = new SaveManager(storage);
+    const store = new ResourceStore({ food: 1e6, wood: 1e6, coal: 1e6, iron: 1e6, steel: 1e6 });
+
+    // Train a tier-2 batch (research would gate this in-game; the queue itself
+    // trusts the tier passed) and finish it so it lands in the tiered army.
+    const training = new TrainingQueue();
+    training.enqueue('vanguard', 3, store, 0, true, 2);
+    training.advance(1e12);
+    expect(training.army.vanguard).toBe(3);
+    expect(training.armyTiers.vanguard).toEqual({ 2: 3 });
+
+    const snap = { ...snapshot(), training };
+    mgr.save(snap, 0);
+    const loaded = mgr.load(0);
+    // Both the flat total and the per-tier breakdown survive the round trip.
+    expect(loaded.snapshot.training.army.vanguard).toBe(3);
+    expect(loaded.snapshot.training.armyTiers.vanguard).toEqual({ 2: 3 });
+  });
+
+  it('an older-shaped save (no armyTiers) lands the standing army at tier 1', () => {
+    const storage = memoryStorage();
+    const mgr = new SaveManager(storage);
+    // Serialize, then strip armyTiers to mimic a payload written before tiers.
+    const serialized = SaveManager.serialize(snapshot(), 0);
+    delete (serialized as { armyTiers?: unknown }).armyTiers;
+    serialized.version = SAVE_VERSION; // keep the version current so it loads
+    storage.setItem(SAVE_KEY, JSON.stringify(serialized));
+    const loaded = mgr.load(0);
+    // The 4 trappers from the snapshot all default to tier 1.
+    expect(loaded.snapshot.training.army.trapper).toBe(4);
+    expect(loaded.snapshot.training.armyTiers.trapper).toEqual({ 1: 4 });
   });
 
   it('treats a pre-expansion version-2 save as a mismatch and starts fresh', () => {

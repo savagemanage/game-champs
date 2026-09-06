@@ -69,9 +69,19 @@ export class QuestSystem {
   private readonly _milestones: Map<string, QuestProgressState> = new Map();
   private _activeEventId: string | null;
   private _eventEndsAt: number;
+  /**
+   * The last day index for which {@link dailySync} armed an event. Starts at -1
+   * (never armed) so a fresh board arms day 0's event on the first dailySync.
+   * Persisted so a returning player is not re-armed on every load within a day.
+   */
+  private _eventArmedDayIndex: number;
 
   constructor(state?: QuestState) {
     this._dailyDayIndex = state ? Math.floor(state.dailyDayIndex ?? 0) : 0;
+    this._eventArmedDayIndex =
+      state && typeof state.eventArmedDayIndex === 'number'
+        ? Math.floor(state.eventArmedDayIndex)
+        : -1;
     if (state?.daily) {
       for (const id of DAILY_QUEST_IDS) {
         const p = state.daily[id];
@@ -227,6 +237,42 @@ export class QuestSystem {
     return true;
   }
 
+  /**
+   * The event the daily cycle arms for a given day, chosen deterministically by
+   * rotating through the configured {@link EVENTS} by day index. Pure so the
+   * auto-armed event is reproducible from the clock alone.
+   */
+  static eventForDay(dayIdx: number): EventDef {
+    const list = EVENTS;
+    const i = ((Math.floor(dayIdx) % list.length) + list.length) % list.length;
+    return list[i];
+  }
+
+  /**
+   * The live-ops daily driver: roll the daily board over (via {@link sync}) and,
+   * whenever a NEW day has begun, AUTO-ARM that day's rotating event for the
+   * default event window so the events framework is always live without a UI
+   * action. Returns true when a new day (and thus a new event) started this call.
+   *
+   * This is what actually arms events during play: GameState calls it on tick /
+   * load, so a returning player always finds the day's event running and the
+   * production bonus applied. Deterministic given `now`.
+   */
+  dailySync(now: number): boolean {
+    this.sync(now);
+    const today = dayIndex(now);
+    // Arm the day's event exactly once per day: the persisted
+    // `_eventArmedDayIndex` guards against re-arming on every tick/load within
+    // the same day (and, together with startEvent replacing any running event,
+    // means a returning player finds today's event live).
+    if (today !== this._eventArmedDayIndex) {
+      this._eventArmedDayIndex = today;
+      this.startEvent(QuestSystem.eventForDay(today).id, now);
+      return true;
+    }
+    return false;
+  }
+
   /** The active event id at `now` (null when none / expired). */
   activeEvent(now: number): string | null {
     this.sync(now);
@@ -289,6 +335,7 @@ export class QuestSystem {
       milestones,
       activeEventId: this._activeEventId,
       eventEndsAt: this._eventEndsAt,
+      eventArmedDayIndex: this._eventArmedDayIndex,
     };
   }
 

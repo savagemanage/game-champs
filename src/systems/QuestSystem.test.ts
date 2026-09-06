@@ -105,4 +105,49 @@ describe('QuestSystem', () => {
     expect(QuestSystem.fromJSON(undefined).dailyProgress('daily_battle')).toBe(0);
     expect(QuestSystem.fromJSON(null).eventActive(0)).toBe(false);
   });
+
+  // --- events framework ARMING (review v2) ----------------------------------
+
+  it('dailySync arms the day event on a fresh board and applies the bonus', () => {
+    const q = new QuestSystem();
+    // A fresh board has NO event until the daily driver runs (mirrors the old
+    // behaviour for plain sync()).
+    expect(q.eventActive(0)).toBe(false);
+    expect(q.productionBonus(0)).toBe(1);
+
+    // The live-ops driver arms today's event and returns true (a new day armed).
+    expect(q.dailySync(0)).toBe(true);
+    expect(q.eventActive(0)).toBe(true);
+    expect(q.productionBonus(0)).toBeGreaterThan(1);
+  });
+
+  it('dailySync arms once per day (idempotent within a day) and re-arms next day', () => {
+    const q = new QuestSystem();
+    expect(q.dailySync(0)).toBe(true);
+    const firstEvent = q.activeEvent(0);
+    // Same day again: no new arming.
+    expect(q.dailySync(1000)).toBe(false);
+    expect(q.activeEvent(1000)).toBe(firstEvent);
+
+    // Next day: a new event is armed (deterministic rotation).
+    expect(q.dailySync(DAY)).toBe(true);
+    expect(q.eventActive(DAY)).toBe(true);
+    expect(q.activeEvent(DAY)).toBe(QuestSystem.eventForDay(1).id);
+  });
+
+  it('the armed-day marker survives a save so a reload does not re-arm', () => {
+    const q = new QuestSystem();
+    q.dailySync(0);
+    const restored = QuestSystem.fromJSON(JSON.parse(JSON.stringify(q.toJSON())));
+    // Same day after reload: the persisted marker suppresses a re-arm.
+    expect(restored.dailySync(1000)).toBe(false);
+  });
+
+  it('eventForDay rotates deterministically through the configured events', () => {
+    const a = QuestSystem.eventForDay(0).id;
+    const b = QuestSystem.eventForDay(1).id;
+    // With 2 configured events the rotation wraps every 2 days.
+    expect(QuestSystem.eventForDay(2).id).toBe(a);
+    expect(QuestSystem.eventForDay(3).id).toBe(b);
+  });
 });

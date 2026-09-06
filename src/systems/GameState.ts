@@ -1,7 +1,7 @@
-import { ALLIANCE, HEROES, POPULATION, RESOURCE_ORDER, heroTrainXp } from '../config/GameConfig';
+import { ALLIANCE, HEROES, POPULATION, QUESTS, RESOURCE_ORDER, heroTrainXp } from '../config/GameConfig';
 import { combineModifiers, economyMultiplierFor } from '../config/StatModifiers';
 import { maxTrainableTier } from '../config/TroopConfig';
-import type { Army, HeroId, ResourceCost, StatModifiers, TroopKind } from '../types';
+import type { Army, ArmyTiers, HeroId, ResourceCost, StatModifiers, TroopKind } from '../types';
 import { AllianceSystem } from './AllianceSystem';
 import { ArenaSystem, type ArenaMatchResult } from './ArenaSystem';
 import { BuildingSystem } from './BuildingSystem';
@@ -81,7 +81,7 @@ export class GameState {
   /** Resources credited from offline idle production on load. */
   readonly offlineGains: LoadResult['offlineGains'];
 
-  private constructor(result: LoadResult, saver: SaveManager) {
+  private constructor(result: LoadResult, saver: SaveManager, now: number) {
     this.resources = result.snapshot.resources;
     this.buildings = result.snapshot.buildings;
     this.training = result.snapshot.training;
@@ -103,6 +103,10 @@ export class GameState {
     this.loaded = result.loaded;
     this.offlineSeconds = result.offlineSeconds;
     this.offlineGains = result.offlineGains;
+    // Arm the day's rotating event immediately (fresh game or load) so the
+    // events framework is live from the first frame and the QuestsScene shows
+    // it. Uses the creation clock; subsequent ticks keep it rolling per day.
+    this.quests.dailySync(now);
   }
 
   /**
@@ -122,7 +126,7 @@ export class GameState {
    */
   static create(storage: KeyValueStorage, now: number): GameState {
     const saver = new SaveManager(storage);
-    return new GameState(saver.load(now), saver);
+    return new GameState(saver.load(now), saver, now);
   }
 
   /** Highest battle wave cleared. */
@@ -139,9 +143,14 @@ export class GameState {
     this.quests.record('waveCleared', 1, now);
   }
 
-  /** Replace the standing army with post-battle survivors (applies casualties). */
-  setArmy(survivors: Army): void {
-    this.training.setArmy(survivors);
+  /**
+   * Replace the standing army with post-battle survivors (applies casualties).
+   * An optional per-tier breakdown (from {@link CombatResult.survivorTiers})
+   * keeps the tiered army accurate; without it, casualties fall on the highest
+   * tiers first (TrainingQueue reconciles the breakdown against the totals).
+   */
+  setArmy(survivors: Army, survivorTiers?: ArmyTiers): void {
+    this.training.setArmy(survivors, survivorTiers);
   }
 
   /** The standing army available to send into battle. */
@@ -193,9 +202,23 @@ export class GameState {
    */
   effectiveArmyPower(wave: number): number {
     return (
-      CombatSystem.effectiveArmyPower(this.army, wave, this.battleModifiers()) *
-      this.heroes.armyPowerMultiplier()
+      CombatSystem.effectiveArmyPower(
+        this.army,
+        wave,
+        this.battleModifiers(),
+        this.training.armyTiers,
+      ) * this.heroes.armyPowerMultiplier()
     );
+  }
+
+  /** The battle modifier bundle (research + gear) for the current hold. */
+  combatModifiers(): StatModifiers {
+    return this.battleModifiers();
+  }
+
+  /** The standing army broken down by tier (for combat resolution / UI). */
+  get armyTiers(): ArmyTiers {
+    return this.training.armyTiers;
   }
 
   /**
@@ -205,7 +228,11 @@ export class GameState {
    * feeds {@link attemptCampaignStage}.
    */
   campaignPower(): number {
-    const rawArmy = CombatSystem.armyPower(this.army, this.battleModifiers());
+    const rawArmy = CombatSystem.armyPower(
+      this.army,
+      this.battleModifiers(),
+      this.training.armyTiers,
+    );
     return rawArmy * this.heroes.armyPowerMultiplier() + this.heroes.totalPower();
   }
 
@@ -271,6 +298,22 @@ export class GameState {
         this.heroes.addShards(id, amount);
       }
     }
+  }
+
+  /**
+   * Rally the hold for today's event: (re)arm the day's rotating event window
+   * from `now` (a UI-driven trigger, complementing the automatic day-roll
+   * arming in {@link tick}). Returns the id of the event now running so the
+   * caller can surface it. Deterministic given `now`.
+   */
+  rallyDailyEvent(now: number = Date.now()): string | null {
+    this.quests.dailySync(now);
+    // If the day's event already ran and expired, restart it so the action is
+    // always meaningful within a day.
+    if (!this.quests.eventActive(now)) {
+      this.quests.startEvent(QuestSystem.eventForDay(Math.floor(now / QUESTS.DAY_MS)).id, now);
+    }
+    return this.quests.activeEvent(now);
   }
 
   // --- FEAT-005: rallies, arena, alliance, quests, VIP ---------------------
@@ -426,8 +469,12 @@ export class GameState {
     // for the progress made this tick (buildings upgraded, research completed).
     const researchDone = this.research.advance(now);
 
-    // Roll the daily-quest board over on a day boundary + expire stale events.
-    this.quests.sync(now);
+    // Roll the daily-quest board over on a day boundary, expire stale events,
+    // AND arm the day's rotating event so the events framework is always live
+    // (its production bonus is applied in the tick above). This is the real
+    // trigger the review asked for: a returning player finds today's event
+    // running without any manual action.
+    this.quests.dailySync(now);
     for (let i = 0; i < buildingsDone.length; i++) {
       this.quests.record('buildingUpgraded', 1, now);
     }
@@ -469,15 +516,21 @@ export class GameState {
 }
 
 /**
- * Adapt the HeroRoster's existing {@link HeroBonuses} shape into the shared
+ * Adapt the HeroRoster's aggregate {@link HeroBonuses} into the shared
  * {@link StatModifiers} bundle so heroes contribute to the SAME combined total
- * as research + gear rather than through a parallel path. The heroes' `economy`
- * fraction maps to the all-producer `economyOutput`; their `army` fraction maps
- * to `troopAttack` (the dominant combat lever). This keeps the hero integration
- * coherent without double-counting: production reads the combined bundle, and
- * combat multiplies raw power by the heroes' army multiplier alongside the
- * research/gear battle modifiers.
+ * as research + gear for IDLE PRODUCTION. Only the `economy` fraction is mapped
+ * (to the all-producer `economyOutput`).
+ *
+ * The heroes' `army` fraction is deliberately NOT folded into the bundle's
+ * `troopAttack`. Combat applies it exactly once via
+ * {@link HeroRoster.armyPowerMultiplier} (see {@link GameState.effectiveArmyPower}
+ * / {@link GameState.campaignPower}), and {@link GameState.battleModifiers}
+ * excludes heroes entirely. Keeping the hero army bonus OUT of the economy
+ * bundle makes the "counted once" invariant STRUCTURAL rather than conventional:
+ * no matter what future consumer reads `modifiers().troopAttack`, it can never
+ * double-count the hero army bonus, because that bonus is not in the bundle.
+ * This mirrors {@link SaveManager}'s `heroEconomyBundle` so live + offline agree.
  */
 function heroBonusesToModifiers(bonuses: HeroBonuses): Partial<StatModifiers> {
-  return { economyOutput: bonuses.economy, troopAttack: bonuses.army };
+  return { economyOutput: bonuses.economy };
 }

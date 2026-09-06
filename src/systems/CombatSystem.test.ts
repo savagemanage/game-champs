@@ -177,6 +177,42 @@ describe('CombatSystem', () => {
     expect(classBuffed).toBeCloseTo(base * 1.25 * 1.1, 6);
   });
 
+  // --- troop TIERS (review v1): tiered army fields stronger units ------------
+
+  it('a higher-tier army fields strictly more effective power', () => {
+    const a = army({ vanguard: 10 });
+    const base = CombatSystem.effectiveArmyPower(a, 3);
+    // Same counts, but every vanguard is tier 3 -> strictly more power.
+    const tiered = CombatSystem.effectiveArmyPower(a, 3, undefined, { vanguard: { 3: 10 } });
+    expect(tiered).toBeGreaterThan(base);
+    // Determinism holds with tiers supplied.
+    expect(CombatSystem.effectiveArmyPower(a, 3, undefined, { vanguard: { 3: 10 } })).toBe(tiered);
+  });
+
+  it('armyPower respects a partial tier breakdown (remainder defaults to tier 1)', () => {
+    const a = army({ trapper: 10 });
+    const allT1 = CombatSystem.armyPower(a);
+    // 4 are tier 2, the remaining 6 default to tier 1.
+    const mixed = CombatSystem.armyPower(a, undefined, { trapper: { 2: 4 } });
+    expect(mixed).toBeGreaterThan(allT1);
+  });
+
+  it('tiers can turn a losing army into a winning one at the same counts/wave', () => {
+    const wave = 6;
+    // Largest marksman army that still LOSES at tier 1.
+    let n = 1;
+    while (!CombatSystem.resolve(army({ marksman: n }), wave).win) n++;
+    const loseCount = n - 1;
+    expect(loseCount).toBeGreaterThanOrEqual(1);
+    const a = army({ marksman: loseCount });
+    expect(CombatSystem.resolve(a, wave).win).toBe(false);
+    // The SAME army, but every unit at the top tier, wins.
+    const won = CombatSystem.resolve(a, wave, undefined, { marksman: { 4: loseCount } });
+    expect(won.win).toBe(true);
+    // Survivors are reported at their tier so the standing army keeps the tier.
+    expect(won.survivorTiers.marksman?.[4]).toBeGreaterThan(0);
+  });
+
   it('resolves the new Frostbeast escort kinds in late waves', () => {
     // Wave 15 now includes a glacier behemoth escort; its wave power is far
     // above an early wave, and a strong marksman-led army can still clear it.

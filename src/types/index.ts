@@ -127,9 +127,25 @@ export interface BuildingState {
 export interface TrainingOrder {
   troop: TroopKind;
   count: number;
+  /**
+   * The troop TIER this batch trains (1 = baseline militia). Gated by completed
+   * research; higher tiers cost more, take longer, and field stronger stats.
+   * Optional in the persisted shape so an older-shaped save (no tier) loads as
+   * tier 1.
+   */
+  tier?: TroopTier;
   /** Epoch ms when this batch completes. */
   completesAt: number;
 }
+
+/**
+ * The standing army broken down BY TIER: for each troop kind, a map of
+ * tier -> count. The flat {@link Army} is the per-kind TOTAL across tiers (kept
+ * for battle rendering + neutral power calls); this parallel breakdown lets the
+ * combat resolver field each unit at the tier it was trained. Missing kinds /
+ * tiers are treated as 0. Persisted alongside `army` so tiers survive reloads.
+ */
+export type ArmyTiers = Partial<Record<TroopKind, Record<number, number>>>;
 
 /**
  * The survivor workforce, persisted. `total` survivors are split into those
@@ -383,6 +399,12 @@ export interface QuestState {
   activeEventId: string | null;
   /** Epoch ms the active event ends (0 when none). */
   eventEndsAt: number;
+  /**
+   * The last day index the daily cycle armed an event for (see
+   * QuestSystem.dailySync). Optional so an older-shaped save (no field) arms
+   * the current day's event on the first sync. -1 = never armed.
+   */
+  eventArmedDayIndex?: number;
 }
 
 /**
@@ -442,13 +464,17 @@ export interface StatModifiers {
 /** The complete persisted game state (serialized to localStorage by the save feature). */
 export interface GameState {
   /**
-   * Save-format version so future migrations can be detected. Bumped to 6 for
-   * the FEAT-005 endgame + retention layer (world-boss rallies, a simulated
-   * arena/PvP ladder, a simulated NPC alliance, daily/growth quests + events,
-   * and VIP levels) on top of the v5 research/gear/troop-tier layer. Older
-   * saves (v1 medieval, v2 pre-expansion, v3 pre-heroes, v4 pre-research, v5
-   * pre-endgame) are detected as a version mismatch and fall back to a fresh
-   * frozen settlement rather than mis-mapping.
+   * Save-format version so future migrations can be detected. Bumped to 7 for
+   * the review-round wiring that makes troop TIERS live: training batches and
+   * the standing army now carry a tier dimension (`trainingQueue[].tier` +
+   * `armyTiers`), so a research-unlocked higher tier actually raises trained
+   * troop cost / stats / power. On top of the v6 endgame + retention layer
+   * (world-boss rallies, a simulated arena/PvP ladder, a simulated NPC
+   * alliance, daily/growth quests + events, and VIP levels) and the v5
+   * research/gear/troop-tier layer. Older saves (v1 medieval, v2 pre-expansion,
+   * v3 pre-heroes, v4 pre-research, v5 pre-endgame, v6 pre-tiered-army) are
+   * detected as a version mismatch and fall back to a fresh frozen settlement
+   * rather than mis-mapping.
    */
   version: number;
   resources: Resources;
@@ -484,8 +510,14 @@ export interface GameState {
    */
   warmth: number;
   buildings: BuildingState[];
-  /** Trained, idle troops available to send into battle. */
+  /** Trained, idle troops available to send into battle (per-kind totals). */
   army: Record<TroopKind, number>;
+  /**
+   * The standing army broken down by tier (FEAT review v1): per-kind, a map of
+   * tier -> count. Optional so an older-shaped save (flat `army` only) loads
+   * with every standing unit treated as tier 1.
+   */
+  armyTiers?: ArmyTiers;
   trainingQueue: TrainingOrder[];
   /** Highest battle wave cleared. */
   waveCleared: number;

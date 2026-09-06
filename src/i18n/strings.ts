@@ -62,6 +62,12 @@ export const STRINGS = {
   'population.value': { en: '{total}/{cap}', ko: '{total}/{cap}' },
   'population.assigned': { en: 'Working {assigned} · Idle {idle}', ko: '작업 {assigned} · 대기 {idle}' },
   'population.satisfaction': { en: 'Morale {pct}%', ko: '사기 {pct}%' },
+  // Survivor workforce panel (assign / recruit / recall).
+  'population.title': { en: 'SURVIVORS', ko: '생존자 관리' },
+  'population.recruit': { en: 'Recruit', ko: '모집' },
+  'population.recallAll': { en: 'Recall All', ko: '전원 해제' },
+  'population.workforceOutput': { en: 'Workforce output {pct}%', ko: '노동 생산 {pct}%' },
+  'nav.population': { en: 'Survivors', ko: '생존자' },
 
   // Town scene / HUD.
   'town.title': { en: 'YOUR HOLD', ko: '나의 성채' },
@@ -159,6 +165,7 @@ export const STRINGS = {
   'training.noWarCamp': { en: 'Build a War Camp to train soldiers', ko: '병력 훈련하려면 전진 기지를 지으세요' },
   'training.cost': { en: 'Cost {cost}', ko: '비용 {cost}' },
   'training.time': { en: '{seconds}s each', ko: '개당 {seconds}초' },
+  'training.tier': { en: 'Troop Tier T{tier} / T{max}', ko: '병력 등급 T{tier} / T{max}' },
 
   // Combat / battle UI.
   'battle.title': { en: 'BATTLE', ko: '전투' },
@@ -526,6 +533,7 @@ export const STRINGS = {
   'event.endsIn': { en: 'Ends in {time}', ko: '종료까지 {time}' },
   'event.ember_rush': { en: 'Ember Rush', ko: '불씨 축제' },
   'event.frostfall_hunt': { en: 'Frostfall Hunt', ko: '설강 사냥제' },
+  'event.rally': { en: 'Rally the Hold', ko: '결집 호령' },
 
   // --- FEAT-005: VIP progression ---
   'vip.title': { en: 'PATRON STANDING', ko: '후원자 지위' },

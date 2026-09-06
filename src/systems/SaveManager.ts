@@ -43,10 +43,15 @@ import { WarmthSystem, type WarmthTickResult } from './WarmthSystem';
  *   tech contribution), daily/growth quests + a time-boxed events framework,
  *   and VIP levels.
  *
+ * - v7: the review-round wiring that makes troop TIERS live - training batches
+ *   (`trainingQueue[].tier`) and the standing army (`armyTiers`) now carry a
+ *   tier dimension, so a research-unlocked higher tier actually raises trained
+ *   troop cost / stats / power.
+ *
  * A save with any older version is treated as a mismatch and falls back to a
  * fresh frozen settlement rather than mis-mapping old kinds.
  */
-export const SAVE_VERSION = 6;
+export const SAVE_VERSION = 7;
 
 /** Default localStorage key for the single save slot (Frosthold namespace). */
 export const SAVE_KEY = 'frosthold:save';
@@ -134,6 +139,7 @@ export class SaveManager {
       warmth: snapshot.warmth.toJSON(),
       buildings: snapshot.buildings.toJSON(),
       army: snapshot.training.army,
+      armyTiers: snapshot.training.armyTiers,
       trainingQueue: snapshot.training.toJSON(),
       waveCleared: snapshot.waveCleared,
       lastSeenAt: now,
@@ -150,7 +156,11 @@ export class SaveManager {
   static deserialize(state: GameState, now: number): LoadResult {
     const resources = ResourceStore.fromJSON(state.resources);
     const buildings = BuildingSystem.fromJSON(state.buildings);
-    const training = TrainingQueue.fromJSON(state.trainingQueue, normalizeArmy(state.army));
+    const training = TrainingQueue.fromJSON(
+      state.trainingQueue,
+      normalizeArmy(state.army),
+      state.armyTiers,
+    );
     // A legacy / warmth-less save (undefined) restores to full warmth.
     const warmth = WarmthSystem.fromJSON(state.warmth);
     // The survivor workforce + premium wallet (both tolerate missing fields).

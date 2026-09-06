@@ -58,6 +58,10 @@ export class QuestsScene extends HubScene {
     this.vipPerk = this.add.text(60, CANVAS.HEIGHT - 78, '', textStyle(12, { color: PALETTE.SUCCESS_CSS })).setOrigin(0, 0.5);
     this.eventText = this.add.text(60, CANVAS.HEIGHT - 54, '', textStyle(12, { color: PALETTE.ICE_CSS })).setOrigin(0, 0.5);
 
+    // A UI trigger to (re)arm the day's event window, complementing the
+    // automatic day-roll arming, so a player can always kick off the bonus.
+    Menu.button(this, CANVAS.WIDTH - 130, CANVAS.HEIGHT - 78, tr('event.rally'), () => this.doRallyEvent(), { width: 180, accent: PALETTE.EMBER });
+
     this.refresh();
   }
 
@@ -111,6 +115,18 @@ export class QuestsScene extends HubScene {
     } else {
       this.eventText.setText('').setVisible(false);
     }
+  }
+
+  /** (Re)arm today's event window from the UI, then refresh + persist. */
+  private doRallyEvent(): void {
+    const now = Date.now();
+    const id = this.state.rallyDailyEvent(now);
+    if (id) {
+      this.audio.playSfx(AudioKeys.QuestClaim, 0.6);
+      this.toast(`${trDyn(`event.${id}`)} · ${tr('event.active', { bonus: this.state.quests.productionBonus(now) })}`);
+    }
+    this.state.save(now);
+    this.refresh();
   }
 
   private doClaim(id: string, daily: boolean): void {

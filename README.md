@@ -120,10 +120,15 @@ Vite가 출력하는 개발 서버 주소(기본값 <http://localhost:5173>)를 
 - **확장된 도시 · 인구.** 화로가 게이트하는 다수의 오리지널 건물(피난 거처,
   서리 금고, 제련장, 사절관, 온기 병동, 불씨 서고, 보병·창병·사수 연무장)과 온기
   ·주거로 생산 효율이 오르내리는 **생존자 인구** 시스템, 그리고 정련 자원
-  **강철**과 프리미엄 화폐 **불씨 정수(Ember Sparks)**.
+  **강철**과 프리미엄 화폐 **불씨 정수(Ember Sparks)**. **생존자 관리 패널**
+  (상단 생존자 표시를 탭)에서 **모집**, 생산 건물에 **배치**, **전원 해제**를
+  할 수 있어, 배치가 늘수록 최소 인력 하한선 위로 생산이 크게 올라갑니다.
 - **영웅 · 소환.** 4단계 희귀도, 조각, 결정론적 **소환(가챠)**(천장 포함),
   레벨·승급·스킬, 보병/창병/사수 3직군을 갖춘 오리지널 영웅단. 지휘 영웅의
   보너스는 생산과 전투에 모두 반영됩니다.
+- **병력 등급.** 발전 연구 분기를 통해 더 높은 **병력 등급(T1–T4)**이 열립니다.
+  훈련 패널의 등급 선택기로 비용·시간이 늘고 능력치가 더 강한 상위 등급을 훈련할
+  수 있으며, 이 등급은 보유 병력과 전투 판정까지 그대로 반영됩니다.
 - **원정(캠페인).** 오리지널 서사의 단계별 탐험 지도. 첫 돌파 시 자원·조각·정수
   보상을 한 번 지급하고 다음 관문을 해금합니다.
 - **연구 · 지휘관 장비.** 4개 분기(경제/전투/생존/발전)의 **연구 기술 트리**와
@@ -132,7 +137,9 @@ Vite가 출력하는 개발 서버 주소(기본값 <http://localhost:5173>)를 
   단축, 협정 연구 기여), 반복 시도로 깎아내는 **서리괴수 총공격(월드 보스)**, 그리고
   AI 사다리 **투기장(모의 PvP)**. 서버 없이 전부 단일 플레이입니다.
 - **일일 임무 · 성장 과업 · VIP · 이벤트.** 매일 갱신되는 일일 임무, 1회성 성장
-  과업, 영구 혜택의 **VIP** 등급, 시간제한 **이벤트** 보너스.
+  과업, 영구 혜택의 **VIP** 등급, 그리고 날짜가 바뀔 때마다 자동으로 개시되는(임무
+  화면에서 직접 결집도 가능) 시간제한 **이벤트** 보너스로, 진행 중에는 방치 생산이
+  올라갑니다.
 
 > **PR #2(README 개편) 조율 안내.** 이 절은 README를 다시 쓰는 별도의 열린
 > PR(`docs/readme-overhaul`)과 충돌하지 않도록 **추가(additive)** 방식으로만
@@ -344,11 +351,18 @@ menu.
   buildings (Shelter Row, Frost Vault, Forge Hall, Envoy Hall, Warming Ward,
   Ember Archive, and the Infantry/Lancer/Marksman yards), a **survivor
   population** whose morale (warmth + housing) scales producer output, a refined
-  resource **Steel**, and a premium currency, **Ember Sparks**.
+  resource **Steel**, and a premium currency, **Ember Sparks**. A **workforce
+  panel** (tap the survivor readout) lets you **recruit**, **assign** survivors
+  to producers, and **recall** them, so staffing lifts output well above the
+  skeleton-crew floor.
 - **Heroes + summon.** An original hero roster across four rarities with shards,
   a deterministic **summon (gacha)** with a pity guarantee, level-ups, star-ups,
   skills, and the Infantry/Lancer/Marksman classes. Lead heroes' bonuses feed
   both production and combat.
+- **Troop tiers.** Training unlocks higher **troop tiers** (T1–T4) through the
+  development research branch; the Training panel's tier selector lets you train
+  a higher tier that costs more, trains slower, and fields stronger stats, and
+  those tiers carry into the standing army and battle resolution.
 - **Expedition (campaign).** A staged exploration map with an original
   narrative; first-clear rewards (resources / shards / Ember Sparks) are granted
   once and unlock the next stage.
@@ -361,7 +375,8 @@ menu.
   **arena (simulated PvP)** — all single-player, no servers.
 - **Daily duties, growth trials, VIP + events.** Daily quests that reset on a
   day boundary, one-time growth milestones, a permanent-perk **VIP** track, and
-  time-boxed **event** bonuses.
+  time-boxed **event** bonuses that arm automatically on each day roll-over (and
+  can be rallied from the Duties screen), lifting idle output while they run.
 
 > **Coordination note (PR #2, README overhaul).** This section was added
 > **additively** so it does not clobber the separate open PR

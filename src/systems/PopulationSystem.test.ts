@@ -141,4 +141,29 @@ describe('PopulationSystem', () => {
     expect(pop.assigned).toBe(0);
     expect(pop.idle).toBe(6);
   });
+
+  it('assigning survivors lifts the workforce output above the unstaffed floor (review v3)', () => {
+    // The review's concern: with producers built but NO assignment UI, staffing
+    // sat at STAFFING_FLOOR forever. Assigning survivors must measurably raise
+    // the workforce output toward 1.0 - the "upper ~65%" the panel unlocks.
+    const warmthRatio = 1;
+    const extraHousing = 1000; // roomy: isolate the staffing axis
+    const desiredStaff = 6;
+
+    const unstaffed = new PopulationSystem({ total: 10, assignments: {} });
+    const floorOnly = unstaffed.outputMultiplier(warmthRatio, extraHousing, desiredStaff);
+    // Unstaffed, the staffing factor is exactly the floor.
+    const sat = unstaffed.satisfaction(warmthRatio, extraHousing);
+    expect(floorOnly).toBeCloseTo(populationOutputMultiplier(sat, 0), 6);
+
+    // Fully staff the producers via assign(): output rises strictly above floor.
+    unstaffed.assign('hunters_hut', desiredStaff);
+    const staffed = unstaffed.outputMultiplier(warmthRatio, extraHousing, desiredStaff);
+    expect(staffed).toBeGreaterThan(floorOnly);
+    expect(staffed).toBeCloseTo(populationOutputMultiplier(sat, 1), 6);
+
+    // And recallAll drops it back to the floor, so the action round-trips.
+    unstaffed.recallAll();
+    expect(unstaffed.outputMultiplier(warmthRatio, extraHousing, desiredStaff)).toBeCloseTo(floorOnly, 6);
+  });
 });

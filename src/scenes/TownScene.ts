@@ -7,6 +7,7 @@ import { AudioManager } from '../systems/AudioManager';
 import { GameState } from '../systems/GameState';
 import { Menu, type MenuButton, type ProgressBar } from '../ui/Menu';
 import { TrainingPanel } from '../ui/TrainingPanel';
+import { PopulationPanel } from '../ui/PopulationPanel';
 import { textStyle } from '../ui/UiText';
 import { tr } from '../i18n/i18n';
 import type { TrKey } from '../i18n/strings';
@@ -104,6 +105,7 @@ export class TownScene extends Phaser.Scene {
   private warmthWidgets!: WarmthWidgets;
 
   private trainingPanel!: TrainingPanel;
+  private populationPanel!: PopulationPanel;
   private hubMenu?: Phaser.GameObjects.Container;
   private sparksText!: Phaser.GameObjects.Text;
   private populationText!: Phaser.GameObjects.Text;
@@ -141,10 +143,12 @@ export class TownScene extends Phaser.Scene {
     this.buildUpgradePanel();
 
     this.trainingPanel = new TrainingPanel(this, this.state);
+    this.populationPanel = new PopulationPanel(this, this.state);
 
     // Keyboard shortcuts.
     this.input.keyboard?.on('keydown-B', () => this.goBattle());
     this.input.keyboard?.on('keydown-S', () => this.openSettings());
+    this.input.keyboard?.on('keydown-P', () => this.openPopulation());
     this.input.keyboard?.on('keydown-ESC', () => this.closeUpgradePanel());
 
     this.audio.playMusic(AudioKeys.MusicLoop);
@@ -178,6 +182,7 @@ export class TownScene extends Phaser.Scene {
     this.refreshBuildingBadges();
     this.refreshUpgradePanel(now);
     this.trainingPanel.update();
+    this.populationPanel.update();
   }
 
   // ---- Buildings -----------------------------------------------------------
@@ -244,7 +249,15 @@ export class TownScene extends Phaser.Scene {
     // under the resource bar so the expanded economy is always visible.
     this.add.image(CANVAS.WIDTH - 250, 62, TextureKeys.ResourceIcons, SPARK_ICON_FRAME).setOrigin(0.5).setScale(1.2);
     this.sparksText = this.add.text(CANVAS.WIDTH - 238, 62, '', textStyle(13, { fontStyle: 'bold', color: PALETTE.SPARK_CSS })).setOrigin(0, 0.5);
-    this.populationText = this.add.text(CANVAS.WIDTH - 20, 62, '', textStyle(13, { color: PALETTE.FROST_CSS })).setOrigin(1, 0.5);
+    // The survivor readout doubles as the entry point to the workforce panel
+    // (assign / recruit / recall), so the population mechanic is playable.
+    this.populationText = this.add
+      .text(CANVAS.WIDTH - 20, 62, '', textStyle(13, { color: PALETTE.FROST_CSS }))
+      .setOrigin(1, 0.5)
+      .setInteractive({ useHandCursor: true });
+    this.populationText.on(Phaser.Input.Events.POINTER_OVER, () => this.populationText.setColor(PALETTE.ACCENT_CSS));
+    this.populationText.on(Phaser.Input.Events.POINTER_OUT, () => this.populationText.setColor(PALETTE.FROST_CSS));
+    this.populationText.on(Phaser.Input.Events.POINTER_DOWN, () => this.openPopulation());
   }
 
   // ---- Warmth HUD ----------------------------------------------------------
@@ -512,6 +525,11 @@ export class TownScene extends Phaser.Scene {
   private openTraining(): void {
     this.closeUpgradePanel();
     this.trainingPanel.toggle();
+  }
+
+  private openPopulation(): void {
+    this.closeUpgradePanel();
+    this.populationPanel.toggle();
   }
 
   private goBattle(): void {

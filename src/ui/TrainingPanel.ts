@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { CANVAS, PALETTE, TRAINING } from '../config/GameConfig';
 import { AudioKeys, TROOP_TEXTURE_BY_KIND } from '../config/AssetKeys';
-import { TROOP_ORDER, troopDef } from '../config/TroopConfig';
+import { TROOP_ORDER, troopTierCost, troopTierTrainTimeMs } from '../config/TroopConfig';
 import type { ResourceKind, TroopKind } from '../types';
 import { RESOURCE_ORDER } from '../config/GameConfig';
 import { AudioManager } from '../systems/AudioManager';
@@ -15,6 +15,7 @@ interface TroopRow {
   troop: TroopKind;
   count: number;
   countLabel: Phaser.GameObjects.Text;
+  costLine: Phaser.GameObjects.Text;
   armyLabel: Phaser.GameObjects.Text;
   trainButton: MenuButton;
 }
@@ -38,6 +39,11 @@ export class TrainingPanel {
   private readonly rows: TroopRow[] = [];
   private queueText!: Phaser.GameObjects.Text;
   private _visible = false;
+  /** The troop TIER every row trains at (1..maxTroopTier). Shared across rows. */
+  private tier = 1;
+  private tierLabel!: Phaser.GameObjects.Text;
+  private tierMinus!: MenuButton;
+  private tierPlus!: MenuButton;
 
   constructor(scene: Phaser.Scene, state: GameState) {
     this.scene = scene;
@@ -91,6 +97,12 @@ export class TrainingPanel {
       y += rowStep;
     }
 
+    // Shared troop-TIER selector (gated by research-unlocked max tier). Higher
+    // tiers cost more, train slower, and field stronger stats; every row trains
+    // at the selected tier.
+    this.buildTierSelector(left, y + 4, panelW - 80);
+    y += 40;
+
     // Live training queue readout.
     this.queueText = this.scene.add
       .text(left, y + 6, '', textStyle(15, { color: PALETTE.MUTED_CSS, wordWrap: { width: panelW - 80 } }))
@@ -104,18 +116,16 @@ export class TrainingPanel {
   }
 
   private buildTroopRow(troop: TroopKind, x: number, y: number, width: number): void {
-    const def = troopDef(troop);
-
     // Troop icon.
     const icon = this.scene.add.image(x + 16, y + 16, TROOP_TEXTURE_BY_KIND[troop], 0).setOrigin(0.5).setScale(1.4);
     this.root.add(icon);
 
-    // Name + cost/time line.
+    // Name + cost/time line (updated live for the selected tier).
     const name = this.scene.add.text(x + 40, y, tr(`troop.${troop}`), textStyle(18, { fontStyle: 'bold' })).setOrigin(0, 0);
     this.root.add(name);
 
     const costLine = this.scene.add
-      .text(x + 40, y + 22, `${tr('training.cost', { cost: this.costString(troop) })}   ${tr('training.time', { seconds: Math.round(def.trainTimeMs / 1000) })}`, textStyle(13, { color: PALETTE.MUTED_CSS }))
+      .text(x + 40, y + 22, '', textStyle(13, { color: PALETTE.MUTED_CSS }))
       .setOrigin(0, 0);
     this.root.add(costLine);
 
@@ -131,6 +141,7 @@ export class TrainingPanel {
       troop,
       count: 1,
       countLabel: this.scene.add.text(selectorX + 60, y + 16, '1', textStyle(20)).setOrigin(0.5),
+      costLine,
       armyLabel,
       trainButton: undefined as unknown as MenuButton,
     };
@@ -160,11 +171,40 @@ export class TrainingPanel {
   }
 
   private costString(troop: TroopKind): string {
-    const cost = troopDef(troop).cost;
+    const cost = troopTierCost(troop, this.tier);
     return (RESOURCE_ORDER as readonly ResourceKind[])
       .filter((r) => (cost[r] ?? 0) > 0)
       .map((r) => `${cost[r]} ${tr(`resource.${r}`)}`)
       .join(', ');
+  }
+
+  /** Build the shared tier selector (−/label/+), clamped to the unlocked max. */
+  private buildTierSelector(x: number, y: number, width: number): void {
+    const label = this.scene.add
+      .text(x, y, '', textStyle(15, { fontStyle: 'bold', color: PALETTE.ICE_CSS }))
+      .setOrigin(0, 0.5);
+    this.tierLabel = label;
+    this.root.add(label);
+
+    const selectorX = x + width - 250;
+    this.tierMinus = Menu.button(this.scene, selectorX + 20, y, '\u2212', () => this.changeTier(-1), {
+      width: 36,
+      height: 36,
+      fontSize: 20,
+    });
+    this.tierPlus = Menu.button(this.scene, selectorX + 100, y, '+', () => this.changeTier(1), {
+      width: 36,
+      height: 36,
+      fontSize: 20,
+    });
+    this.root.add(this.tierMinus.container);
+    this.root.add(this.tierPlus.container);
+  }
+
+  private changeTier(delta: number): void {
+    const max = this.state.maxTroopTier();
+    this.tier = Phaser.Math.Clamp(this.tier + delta, 1, max);
+    this.refresh();
   }
 
   private changeCount(row: TroopRow, delta: number): void {
@@ -181,9 +221,12 @@ export class TrainingPanel {
       this.state.resources,
       now,
       this.state.buildings.hasWarCamp,
+      this.tier,
     );
     if (result.ok) {
       AudioManager.get(this.scene).playSfx(AudioKeys.TrainComplete, 0.5);
+      // Training a batch progresses the daily 'train' quest metric.
+      this.state.quests.record('troopTrained', 1, now);
       this.state.save(now);
     }
     this.refresh();
@@ -196,7 +239,19 @@ export class TrainingPanel {
     const hasWarCamp = this.state.buildings.hasWarCamp;
     const army = this.state.training.army;
 
+    // Tier selector: clamp to the unlocked max, then reflect it in the label
+    // + button enablement.
+    const maxTier = this.state.maxTroopTier();
+    this.tier = Phaser.Math.Clamp(this.tier, 1, maxTier);
+    this.tierLabel.setText(tr('training.tier', { tier: this.tier, max: maxTier }));
+    this.tierMinus.setEnabled(this.tier > 1);
+    this.tierPlus.setEnabled(this.tier < maxTier);
+
     for (const row of this.rows) {
+      const seconds = Math.round(troopTierTrainTimeMs(row.troop, this.tier) / 1000);
+      row.costLine.setText(
+        `${tr('training.cost', { cost: this.costString(row.troop) })}   ${tr('training.time', { seconds })}`,
+      );
       row.armyLabel.setText(tr('training.army', { count: army[row.troop] }));
       row.trainButton.setEnabled(hasWarCamp && this.affordable(row));
       row.trainButton.setText(tr('training.trainCount', { count: row.count }));
@@ -219,11 +274,11 @@ export class TrainingPanel {
 
   /** Whether the player can currently afford a batch (without enqueuing). */
   private affordable(row: TroopRow): boolean {
-    const def = troopDef(row.troop);
+    const per = troopTierCost(row.troop, this.tier);
     const cost: Partial<Record<ResourceKind, number>> = {};
     for (const r of RESOURCE_ORDER as readonly ResourceKind[]) {
-      const per = def.cost[r] ?? 0;
-      if (per > 0) cost[r] = per * row.count;
+      const amount = per[r] ?? 0;
+      if (amount > 0) cost[r] = amount * row.count;
     }
     const queueHasRoom = this.state.training.length < TRAINING.MAX_QUEUE;
     return queueHasRoom && this.state.resources.canAfford(cost);

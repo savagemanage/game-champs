@@ -169,6 +169,8 @@ export const POPULATION = {
   GROWTH_PER_SEC: 0.02,
   /** Survivors a fresh hold begins with. */
   START_SURVIVORS: 4,
+  /** Survivors pulled in per Recruit action (capped by housing headroom). */
+  RECRUIT_BATCH: 3,
   /** Desired survivors to fully staff ONE producer level. */
   STAFF_PER_PRODUCER_LEVEL: 1,
   /** Lowest workforce multiplier when producers are completely unstaffed. */

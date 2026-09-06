@@ -62,6 +62,25 @@ describe('GameState modifier integration', () => {
     expect(boostGain).toBeGreaterThan(plainGain);
   });
 
+  it('a lead hero army bonus lifts combat but is NOT folded into modifiers().troopAttack (no double-count)', () => {
+    // Review note 4: the hero army bonus must be counted ONCE (via the army
+    // multiplier), never also through the economy bundle's troopAttack field.
+    const gs = freshState();
+    gs.setArmy({ trapper: 0, marksman: 0, vanguard: 10 });
+    const basePower = gs.effectiveArmyPower(1);
+
+    // Lead ember_warden (an ARMY-bonus infantry hero).
+    gs.heroes.grantHero('ember_warden');
+    gs.heroes.setLead(['ember_warden']);
+    expect(gs.heroes.bonuses().army).toBeGreaterThan(0);
+
+    // Combat power rises (the army multiplier applies the hero bonus once)...
+    expect(gs.effectiveArmyPower(1)).toBeGreaterThan(basePower);
+    // ...but the economy/UI bundle's troopAttack stays ZERO for heroes, so no
+    // future modifiers() consumer can double-count the hero army bonus.
+    expect(gs.modifiers().troopAttack).toBe(0);
+  });
+
   it('battle modifiers lift effective army power', () => {
     const store = () => new ResourceStore({ food: 1e6, wood: 1e6, coal: 1e6, iron: 1e6, steel: 1e6 });
     const army = { trapper: 0, marksman: 0, vanguard: 10 };
@@ -87,6 +106,26 @@ describe('GameState modifier integration', () => {
     gs.research.start('dev_ironworking', store, 10, 0);
     gs.research.advance(999_999_999);
     expect(gs.maxTroopTier()).toBe(2);
+  });
+
+  it('training and fielding a higher tier raises effective army power', () => {
+    // Two holds; both train one vanguard, but the second trains it at tier 2
+    // (which research would gate in-game). The tier-2 hold fields strictly more
+    // effective power AND the tier survives into the standing army.
+    const rich = () => new ResourceStore({ food: 1e7, wood: 1e7, coal: 1e7, iron: 1e7, steel: 1e7 });
+
+    const t1 = freshState();
+    t1.training.enqueue('vanguard', 4, rich(), 0, true, 1);
+    t1.training.advance(1e12);
+
+    const t2 = freshState();
+    t2.training.enqueue('vanguard', 4, rich(), 0, true, 2);
+    t2.training.advance(1e12);
+
+    expect(t2.armyTiers.vanguard).toEqual({ 2: 4 });
+    expect(t2.effectiveArmyPower(1)).toBeGreaterThan(t1.effectiveArmyPower(1));
+    // The tiered power also flows into campaign validation.
+    expect(t2.campaignPower()).toBeGreaterThan(t1.campaignPower());
   });
 });
 
@@ -150,6 +189,46 @@ describe('GameState endgame integration', () => {
     // The reward (iron + sparks) was applied.
     expect(gs.resources.get('iron')).toBeGreaterThan(0);
     expect(food0).toBe(gs.resources.get('food')); // this reward is not food
+  });
+
+  it('arms the day event on creation so the production bonus is live', () => {
+    const gs = freshState();
+    // The GameState constructor arms the day's event via dailySync, so the
+    // events framework is no longer inert: an event is running at the creation
+    // clock and its production bonus exceeds 1.
+    expect(gs.quests.eventActive(0)).toBe(true);
+    expect(gs.quests.productionBonus(0)).toBeGreaterThan(1);
+  });
+
+  it('the active event lifts idle production during tick', () => {
+    const store = () => new ResourceStore({ food: 1e6, wood: 1e6, coal: 1e6, iron: 1e6, steel: 1e6 });
+    const buildHut = (gs: GameState): void => {
+      gs.buildings.startUpgrade('hunters_hut', store(), 0);
+      while (gs.buildings.level('hunters_hut') < 1) gs.buildings.update(1e12);
+    };
+    // Two holds ticked over the SAME small (same-day) window so dailySync does
+    // not re-arm; one keeps the day's armed event, the other has it expired.
+    const withEvent = freshState();
+    buildHut(withEvent);
+    expect(withEvent.quests.eventActive(0)).toBe(true);
+
+    const plain = freshState();
+    buildHut(plain);
+    // Expire the event with a zero-length window; same-day tick won't re-arm.
+    plain.quests.startEvent('ember_rush', 0, 0);
+    expect(plain.quests.eventActive(1)).toBe(false);
+
+    const withEvent0 = withEvent.resources.get('food');
+    const plain0 = plain.resources.get('food');
+    withEvent.tick(1000, 1000);
+    plain.tick(1000, 1000);
+    const withEventGain = withEvent.resources.get('food') - withEvent0;
+    const plainGain = plain.resources.get('food') - plain0;
+
+    // The event-active hold gathered strictly more over the identical window.
+    expect(withEventGain).toBeGreaterThan(plainGain);
+    // And the event is still running for the boosted hold (same day).
+    expect(withEvent.quests.eventActive(1000)).toBe(true);
   });
 
   it('summoning contributes VIP points', () => {

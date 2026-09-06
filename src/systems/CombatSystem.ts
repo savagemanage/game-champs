@@ -8,11 +8,11 @@ import {
   TROOP_ORDER,
   enemyPower,
   troopClass,
-  troopDef,
+  troopTierPower,
   troopVsEnemyMultiplier,
 } from '../config/TroopConfig';
 import { waveComposition, waveReward } from '../config/WaveConfig';
-import type { Army, ResourceCost, StatModifiers, TroopKind } from '../types';
+import type { Army, ArmyTiers, ResourceCost, StatModifiers, TroopKind } from '../types';
 
 /** The result of resolving a single battle. */
 export interface CombatResult {
@@ -22,6 +22,12 @@ export interface CombatResult {
   wave: number;
   /** Surviving player troops (only meaningful on a win; all-zero on a loss). */
   survivors: Army;
+  /**
+   * Surviving player troops broken down BY TIER (kind -> tier -> count), so the
+   * town's tiered army can be updated after a battle without losing tier
+   * information. Casualties are taken proportionally within each kind.
+   */
+  survivorTiers: ArmyTiers;
   /** Player troops lost in the battle. */
   casualties: Army;
   /** Resource reward paid out (empty bundle on a loss). */
@@ -71,14 +77,17 @@ export class CombatSystem {
    * counts. Used for coarse sizing/UI and campaign validation; the wave battle
    * decision uses {@link effectiveArmyPower}.
    */
-  static armyPower(army: Army, modifiers?: BattleModifiers): number {
+  static armyPower(army: Army, modifiers?: BattleModifiers, tiers?: ArmyTiers): number {
     const mods = modifiers ?? emptyModifiers();
     const armyMult = armyBattleMultiplier(mods);
     let total = 0;
     for (const kind of TROOP_ORDER) {
       const count = Math.max(0, Math.floor(army[kind] ?? 0));
       if (count > 0) {
-        total += count * troopUnitPower(kind) * armyMult * classBattleMultiplier(mods, troopClass(kind));
+        // The tier-weighted per-unit power (higher-tier units are stronger); a
+        // missing tier breakdown falls back to tier 1 for the whole kind.
+        const perKind = tieredKindPower(kind, count, tiers);
+        total += perKind * armyMult * classBattleMultiplier(mods, troopClass(kind));
       }
     }
     return total;
@@ -93,7 +102,12 @@ export class CombatSystem {
    * wave's dominant enemy — and one buffed by research/gear/heroes —
    * outperforms an equal raw-power stack that is not. Pure and deterministic.
    */
-  static effectiveArmyPower(army: Army, n: number, modifiers?: BattleModifiers): number {
+  static effectiveArmyPower(
+    army: Army,
+    n: number,
+    modifiers?: BattleModifiers,
+    tiers?: ArmyTiers,
+  ): number {
     const mods = modifiers ?? emptyModifiers();
     const armyMult = armyBattleMultiplier(mods);
     const composition = waveComposition(n);
@@ -111,7 +125,7 @@ export class CombatSystem {
       const count = Math.max(0, Math.floor(army[kind] ?? 0));
       if (count <= 0) continue;
       const classMult = classBattleMultiplier(mods, troopClass(kind));
-      const raw = count * troopUnitPower(kind) * armyMult * classMult;
+      const raw = tieredKindPower(kind, count, tiers) * armyMult * classMult;
       if (waveTotal <= 0) {
         // No wave to counter (empty/degenerate): matchups are neutral.
         total += raw;
@@ -141,15 +155,21 @@ export class CombatSystem {
    * applies survivors/reward from the result. Optional `modifiers` scale the
    * player's effective power (research + gear + hero battle bonuses).
    */
-  static resolve(army: Army, wave: number, modifiers?: BattleModifiers): CombatResult {
+  static resolve(
+    army: Army,
+    wave: number,
+    modifiers?: BattleModifiers,
+    tiers?: ArmyTiers,
+  ): CombatResult {
     // The decision uses COMPOSITION-AWARE effective power (matchups + modifiers
-    // applied), reported as `armyPower` so the HUD/result reflect what actually
-    // decided the battle. `wavePower` is the raw enemy total to beat.
-    const armyPower = CombatSystem.effectiveArmyPower(army, wave, modifiers);
+    // + troop tiers applied), reported as `armyPower` so the HUD/result reflect
+    // what actually decided the battle. `wavePower` is the raw enemy total.
+    const armyPower = CombatSystem.effectiveArmyPower(army, wave, modifiers, tiers);
     const wavePower = CombatSystem.wavePower(wave);
 
     const casualties: Army = { trapper: 0, marksman: 0, vanguard: 0 };
     const survivors: Army = { trapper: 0, marksman: 0, vanguard: 0 };
+    const survivorTiers: ArmyTiers = {};
 
     const win = armyPower >= wavePower && armyPower > 0;
 
@@ -162,6 +182,7 @@ export class CombatSystem {
         win: false,
         wave: Math.max(1, Math.floor(wave)),
         survivors,
+        survivorTiers,
         casualties,
         reward: {},
         armyPower,
@@ -181,12 +202,17 @@ export class CombatSystem {
       if (lossFraction > 0 && lost >= count) lost = count - 1;
       casualties[kind] = lost;
       survivors[kind] = count - lost;
+      // Distribute the survivors back across the kind's tiers proportionally,
+      // so the standing tiered army keeps its higher-tier units where possible.
+      const perTierSurv = distributeSurvivors(kind, count, survivors[kind], tiers);
+      if (Object.keys(perTierSurv).length > 0) survivorTiers[kind] = perTierSurv;
     }
 
     return {
       win: true,
       wave: Math.max(1, Math.floor(wave)),
       survivors,
+      survivorTiers,
       casualties,
       reward: waveReward(wave),
       armyPower,
@@ -196,13 +222,67 @@ export class CombatSystem {
 }
 
 /**
- * Per-unit power used by the resolver. Kept module-local (re-derived from the
- * troop's stat block) so CombatSystem does not need to import troopPower under a
- * different name; identical formula shape to TroopConfig.troopPower.
+ * The total power of `count` units of a kind, respecting the per-tier
+ * breakdown when supplied: each tier's units contribute {@link troopTierPower}
+ * at that tier. A missing/short breakdown lands the remaining units at tier 1,
+ * so the tier-blind callers (all existing tests) behave exactly as before.
  */
-function troopUnitPower(kind: TroopKind): number {
-  const s = troopDef(kind).stats;
-  return s.attack * s.attackSpeed + s.hp * 0.25;
+function tieredKindPower(kind: TroopKind, count: number, tiers?: ArmyTiers): number {
+  const perTier = tiers?.[kind];
+  if (!perTier) return count * troopTierPower(kind, 1);
+  let power = 0;
+  let accounted = 0;
+  for (const [tierStr, n] of Object.entries(perTier)) {
+    const c = Math.max(0, Math.floor(n ?? 0));
+    if (c <= 0) continue;
+    power += c * troopTierPower(kind, Number(tierStr));
+    accounted += c;
+  }
+  // Any units not covered by the breakdown default to tier 1.
+  const remainder = Math.max(0, count - accounted);
+  if (remainder > 0) power += remainder * troopTierPower(kind, 1);
+  return power;
+}
+
+/**
+ * Distribute `survivorCount` survivors of a kind back across the tiers it was
+ * fielded at (proportionally, floored, remainder to the highest tiers so strong
+ * units are preferentially kept). Falls back to a single tier-1 bucket when no
+ * breakdown is supplied.
+ */
+function distributeSurvivors(
+  kind: TroopKind,
+  originalCount: number,
+  survivorCount: number,
+  tiers?: ArmyTiers,
+): Record<number, number> {
+  const out: Record<number, number> = {};
+  if (survivorCount <= 0) return out;
+  const perTier = tiers?.[kind];
+  if (!perTier || originalCount <= 0) {
+    out[1] = survivorCount;
+    return out;
+  }
+  const entries = Object.entries(perTier)
+    .map(([t, n]) => [Number(t), Math.max(0, Math.floor(n ?? 0))] as [number, number])
+    .filter(([, n]) => n > 0)
+    .sort((a, b) => b[0] - a[0]); // highest tier first
+  let assigned = 0;
+  for (const [tier, n] of entries) {
+    const share = Math.floor((n / originalCount) * survivorCount);
+    if (share > 0) {
+      out[tier] = share;
+      assigned += share;
+    }
+  }
+  // Remainder (from flooring) goes to the highest tiers first.
+  let remainder = survivorCount - assigned;
+  for (const [tier] of entries) {
+    if (remainder <= 0) break;
+    out[tier] = (out[tier] ?? 0) + 1;
+    remainder--;
+  }
+  return out;
 }
 
 // Re-export for callers that want the enemy stat table alongside combat logic.
