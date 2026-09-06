@@ -26,11 +26,12 @@ import os
 from PIL import Image
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PUB = os.path.join(ROOT, "public")
 SPR = os.path.join(ROOT, "public", "assets", "sprites")
 BG = os.path.join(ROOT, "public", "assets", "backgrounds")
 UI = os.path.join(ROOT, "public", "assets", "ui")
 FX = os.path.join(ROOT, "public", "assets", "fx")
-for d in (SPR, BG, UI, FX):
+for d in (PUB, SPR, BG, UI, FX):
     os.makedirs(d, exist_ok=True)
 
 # ---------------------------------------------------------------------------
@@ -1328,10 +1329,69 @@ def build_ui():
     print("ui: panel.png button.png bar_frame.png icons.png resource_icons.png menu_icons.png")
 
 
+# ===========================================================================
+# FAVICON: a tiny app mark for the browser tab. An ORIGINAL "ember-in-the-cold"
+# motif that matches the game: a warm Furnace ember flame glowing against a
+# cold, frost-dark rounded tile. Drawn as crisp 16x16 pixel art and exported
+# upscaled to 32x32 (NEAREST) so it reads on the tab while staying byte-stable.
+# Output: public/favicon.png (Vite copies public/ to the site root of the build
+# base, so it ships at /game-whiteout/favicon.png in production).
+# ===========================================================================
+
+def build_favicon():
+    """A 16x16 ember-flame-in-the-cold mark, saved 2x (32x32) to public/."""
+    s = 16
+    img = new(s, s)
+
+    # Cold frost-dark rounded tile background (PALETTE.PANEL over BG_SKY tones),
+    # corners trimmed for a soft rounded-square silhouette.
+    PANEL_BG = (24, 32, 46, 255)         # PALETTE.PANEL
+    FROST_EDGE = (58, 74, 96, 255)       # cool steel rim
+    rect(img, 0, 0, s - 1, s - 1, PANEL_BG)
+    for (cx, cy) in ((0, 0), (s - 1, 0), (0, s - 1), (s - 1, s - 1)):
+        px(img, cx, cy, T)
+    # A 1px cool rim so the tile reads against a light or dark tab bar.
+    for x in range(1, s - 1):
+        px(img, x, 0, FROST_EDGE)
+        px(img, x, s - 1, FROST_EDGE)
+    for y in range(1, s - 1):
+        px(img, 0, y, FROST_EDGE)
+        px(img, s - 1, y, FROST_EDGE)
+
+    # A couple of cold frost specks in the corners (the "cold" the ember fights).
+    px(img, 3, 3, ICE)
+    px(img, 12, 4, ICE_DK)
+    px(img, 4, 12, ICE_DK)
+
+    # The ember flame, centred and rising: a warm teardrop from a hot core up to
+    # a bright tip, ringed by ember-orange, with a dark base ember bed.
+    # Base bed / hearth line.
+    rect(img, 6, 13, 9, 13, EMBER_DK)
+    # Outer flame body (ember orange).
+    rect(img, 6, 9, 9, 12, EMBER)
+    rect(img, 7, 6, 8, 12, EMBER)
+    px(img, 6, 8, EMBER)
+    px(img, 9, 8, EMBER)
+    px(img, 7, 5, EMBER)
+    px(img, 8, 5, EMBER)
+    # Warm inner glow.
+    rect(img, 7, 9, 8, 12, EMBER_LT)
+    px(img, 7, 8, EMBER_LT)
+    px(img, 8, 8, EMBER_LT)
+    px(img, 7, 7, EMBER_LT)
+    # Hot white-gold core + rising tip.
+    rect(img, 7, 10, 8, 11, EMBER_CORE)
+    px(img, 8, 6, EMBER_CORE)
+
+    save(img, os.path.join(PUB, "favicon.png"), scale=2)
+    print("favicon: favicon.png (32x32)")
+
+
 if __name__ == "__main__":
     build_buildings()
     build_all_characters()
     build_backgrounds()
     build_fx()
     build_ui()
+    build_favicon()
     print("\nAll original pixel-art assets generated.")

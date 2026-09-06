@@ -18,6 +18,13 @@ import { textStyle } from '../ui/UiText';
  * backs the town from here on.
  */
 export class TitleScene extends Phaser.Scene {
+  /**
+   * The one explicit outer margin for this screen. The language toggle's right
+   * edge sits exactly at 960 - MARGIN so the front-door control shares the same
+   * inset as every other screen instead of touching the canvas edge.
+   */
+  private static readonly MARGIN = 24;
+
   private bgSky!: Phaser.GameObjects.TileSprite;
   private drift = 0;
 
@@ -56,8 +63,11 @@ export class TitleScene extends Phaser.Scene {
 
     // Compact language toggle in the top-right so players can switch language
     // straight from the front door without opening Settings. Reuses the
-    // Settings ◀ value ▶ stepper feel and persists via the AudioManager.
-    this.buildLanguageToggle(CANVAS.WIDTH - 170, 36);
+    // Settings ◀ value ▶ stepper feel and persists via the AudioManager. The
+    // group is anchored to the shared outer margin M so its right edge lines up
+    // with 960 - M (the same inset used elsewhere) instead of jamming the '>'
+    // arrow against the far edge.
+    this.buildLanguageToggle(TitleScene.MARGIN, 36);
 
     Menu.label(this, cx, CANVAS.HEIGHT * 0.94, tr('title.hint'), 14, 0.55);
 
@@ -91,20 +101,37 @@ export class TitleScene extends Phaser.Scene {
 
   /**
    * A compact language toggle: a small label, a prev button, the current
-   * language name, and a next button, centered on (x, y). Mirrors the Settings
-   * stepper so the front-door control feels identical.
+   * language name, and a next button. Mirrors the Settings stepper so the
+   * front-door control feels identical.
+   *
+   * The group is laid out RIGHT-TO-LEFT anchored to the outer margin so its
+   * right edge lands at exactly 960 - `margin`, matching the inset used by the
+   * rest of the UI. Reading right to left the run is:
+   *   [언어]  [<]  한국어  [>]
+   * with even, symmetric gaps between the stepper glyphs and the value. The
+   * stepper glyphs use ASCII '<' / '>' (both in the bundled subset) so they
+   * always render; the arrow codepoints (U+25C0/U+25B6) are not in the font
+   * subset and would render as tofu boxes.
    */
-  private buildLanguageToggle(x: number, y: number): void {
+  private buildLanguageToggle(margin: number, y: number): void {
     const lang = AudioManager.get(this).getSettings().language;
-    // Laid out strictly left-to-right so nothing overlaps:
-    //   [언어]  [<]  한국어  [>]
-    // The stepper glyphs use ASCII '<' / '>' (both in the bundled subset) so
-    // they always render; the arrow codepoints (U+25C0/U+25B6) are not in the
-    // font subset and rendered as tofu boxes here.
-    Menu.label(this, x - 96, y, tr('settings.language'), 14, 0.7).setOrigin(0, 0.5);
-    Menu.button(this, x - 20, y, '<', () => this.stepLanguage(-1), { width: 30, fontSize: 14, padY: 6 });
-    this.add.text(x + 60, y, tr(`language.${lang}`), textStyle(16)).setOrigin(0.5);
-    Menu.button(this, x + 140, y, '>', () => this.stepLanguage(1), { width: 30, fontSize: 14, padY: 6 });
+
+    const arrowW = 30; // stepper button width
+    const gap = 12; // even gap between the value and each arrow
+    const valueHalf = 42; // half-width reserved for the language name
+
+    // Anchor the '>' arrow so the group's right edge == 960 - margin.
+    const nextX = CANVAS.WIDTH - margin - arrowW / 2;
+    const valueX = nextX - arrowW / 2 - gap - valueHalf;
+    const prevX = valueX - valueHalf - gap - arrowW / 2;
+    // The "Language" label sits a small, fixed gap to the left of the '<' arrow
+    // (right-aligned so the gap stays constant regardless of the label width).
+    const labelX = prevX - arrowW / 2 - gap;
+
+    Menu.label(this, labelX, y, tr('settings.language'), 14, 0.7).setOrigin(1, 0.5);
+    Menu.button(this, prevX, y, '<', () => this.stepLanguage(-1), { width: arrowW, fontSize: 14, padY: 6 });
+    this.add.text(valueX, y, tr(`language.${lang}`), textStyle(16)).setOrigin(0.5);
+    Menu.button(this, nextX, y, '>', () => this.stepLanguage(1), { width: arrowW, fontSize: 14, padY: 6 });
   }
 
   /**
