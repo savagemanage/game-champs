@@ -1,8 +1,9 @@
 import Phaser from 'phaser';
 import { SceneKeys, PALETTE, CANVAS, RESOURCE_ORDER, type SceneKey } from '../config/GameConfig';
 import { TextureKeys, AudioKeys, BUILDING_TEXTURE_BY_KIND, RESOURCE_ICON_FRAME, SPARK_ICON_FRAME, MENU_ICON_FRAME } from '../config/AssetKeys';
-import { BUILDING_ORDER, buildingDef, isProducer } from '../config/BuildingConfig';
+import { BUILDING_ORDER, buildingDef, isProducer, unlockRequirement } from '../config/BuildingConfig';
 import type { BuildingKind, ResourceKind } from '../types';
+import { currentObjective, type Objective, type ObjectiveView } from '../systems/ObjectiveSystem';
 import { AudioManager } from '../systems/AudioManager';
 import { GameState } from '../systems/GameState';
 import { Menu, type MenuButton, type ProgressBar } from '../ui/Menu';
@@ -117,6 +118,18 @@ export class TownScene extends Phaser.Scene {
   private trainingPanel!: TrainingPanel;
   private populationPanel!: PopulationPanel;
   private hubMenu?: Phaser.GameObjects.Container;
+
+  // FEAT-003 new-player guidance: a persistent next-step objective banner and a
+  // pulsing pointer/glow at the current objective's target building. Both are
+  // per-visit widgets (created in create(), cleaned up on SHUTDOWN) so
+  // re-entering the Town never touches destroyed objects (Town re-entry fix).
+  private objectiveBanner?: Phaser.GameObjects.Container;
+  private objectiveLabel?: Phaser.GameObjects.Text;
+  private objectivePointer?: Phaser.GameObjects.Container;
+  /** The objective id currently reflected in the banner/pointer, or null. */
+  private currentObjectiveId: string | null = null;
+  /** Set once the guided flow finished during this session (plays SFX once). */
+  private guidedFlowSignalled = false;
   private sparksText!: Phaser.GameObjects.Text;
   private populationText!: Phaser.GameObjects.Text;
 
@@ -152,6 +165,14 @@ export class TownScene extends Phaser.Scene {
     // every entry starts from a clean slate.
     this.resourceWidgets = [];
     this.markers = [];
+    // Per-visit guidance widgets: cleared here so a re-entry never retains
+    // references to the destroyed banner/pointer from a previous visit (the
+    // same class of bug the resourceWidgets/markers reset guards against).
+    this.objectiveBanner = undefined;
+    this.objectiveLabel = undefined;
+    this.objectivePointer = undefined;
+    this.currentObjectiveId = null;
+    this.guidedFlowSignalled = false;
 
     this.cameras.main.setBackgroundColor(PALETTE.BG_SKY_CSS);
     Menu.fadeIn(this);
@@ -164,6 +185,7 @@ export class TownScene extends Phaser.Scene {
     this.buildWarmthBar();
     this.buildBottomBar();
     this.buildUpgradePanel();
+    this.buildObjectiveGuidance();
 
     this.trainingPanel = new TrainingPanel(this, this.state);
     this.populationPanel = new PopulationPanel(this, this.state);
@@ -178,9 +200,14 @@ export class TownScene extends Phaser.Scene {
 
     // Surface offline gains once, if any were credited on load; on a brand-new
     // hold, show a one-time onboarding hint instead.
-    if (this.state.loaded) {
+    if (this.state.offlineSeconds > 1) {
       this.maybeShowOfflineGains();
-    } else {
+    }
+    // Show the SHORT first-run welcome only for a genuine new player who has
+    // never dismissed it. Returning players (or anyone who dismissed it) go
+    // straight into the guided objective flow (pointer + banner), never the
+    // wall-of-text card.
+    if (!this.state.onboarding.introDismissed) {
       this.showOnboarding();
     }
 
@@ -188,6 +215,13 @@ export class TownScene extends Phaser.Scene {
     this.game.events.on(Phaser.Core.Events.BLUR, this.saveNow, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.game.events.off(Phaser.Core.Events.BLUR, this.saveNow, this);
+      // Tear down the per-visit guidance widgets so a later re-entry rebuilds
+      // them fresh and the update loop never touches destroyed objects.
+      this.objectiveBanner?.destroy();
+      this.objectivePointer?.destroy();
+      this.objectiveBanner = undefined;
+      this.objectiveLabel = undefined;
+      this.objectivePointer = undefined;
       this.saveNow();
     });
   }
@@ -203,6 +237,7 @@ export class TownScene extends Phaser.Scene {
     this.refreshResourceBar();
     this.refreshWarmthBar();
     this.refreshBuildingBadges();
+    this.refreshObjectiveGuidance(now);
     this.refreshUpgradePanel(now);
     this.trainingPanel.update();
     this.populationPanel.update();
@@ -257,7 +292,14 @@ export class TownScene extends Phaser.Scene {
       if (level <= 0) {
         // Locked reads in the bright frost tone (not the low-contrast muted
         // grey) so it stays legible against both the chip and the town art.
-        marker.levelBadge.setText(tr('town.locked')).setColor(PALETTE.FROST_CSS);
+        // When the lock is a Furnace-level gate, name the REQUIREMENT (e.g.
+        // '용광로 Lv.2 필요') instead of a bare 'Locked' so a new player knows
+        // exactly what unlocks it; otherwise fall back to the plain label.
+        const req = unlockRequirement(marker.kind, level, this.state.buildings.furnaceLevel);
+        const text = req.locked
+          ? tr('town.lockedRequires', { level: req.requiredFurnaceLevel })
+          : tr('town.locked');
+        marker.levelBadge.setText(text).setColor(PALETTE.FROST_CSS);
         marker.sprite.setAlpha(0.5);
       } else {
         marker.levelBadge.setText(tr('building.level', { level })).setColor(upgrading ? PALETTE.SUCCESS_CSS : PALETTE.ACCENT_CSS);
@@ -548,7 +590,16 @@ export class TownScene extends Phaser.Scene {
     const level = buildings.level(kind);
     const def = buildingDef(kind);
 
-    this.upgradeLevel.setText(level > 0 ? tr('building.level', { level }) : tr('town.locked'));
+    if (level > 0) {
+      this.upgradeLevel.setText(tr('building.level', { level }));
+    } else {
+      // A locked building names its Furnace requirement here too, so the panel
+      // agrees with the on-map badge instead of a bare 'Locked'.
+      const req = unlockRequirement(kind, level, buildings.furnaceLevel);
+      this.upgradeLevel.setText(
+        req.locked ? tr('town.lockedRequires', { level: req.requiredFurnaceLevel }) : tr('town.locked'),
+      );
+    }
 
     // Producer output at current level; the Furnace instead shows its warmth
     // reserve and per-second fuel burn (its defining role).
@@ -659,27 +710,31 @@ export class TownScene extends Phaser.Scene {
   }
 
   /**
-   * First-run onboarding: a dismissible centred card explaining the core loop
-   * (gather -> upgrade -> train -> battle). Only shown for a brand-new hold
-   * (no save was loaded), so returning players are never nagged.
+   * First-run welcome: a SHORT, dismissible centred card (1-2 lines) that hands
+   * off to the guided objective flow (the persistent banner + the pulsing
+   * pointer at the next building) rather than explaining the whole loop in a
+   * paragraph. Shown once for a genuine new player; dismissing it records
+   * `introDismissed` in the versioned save so it never re-appears.
    */
   private showOnboarding(): void {
     const cx = CANVAS.WIDTH / 2;
     const cy = CANVAS.HEIGHT / 2;
-    const w = 560;
-    const h = 220;
+    const w = 520;
+    const h = 176;
 
     const overlay = this.add.rectangle(0, 0, CANVAS.WIDTH, CANVAS.HEIGHT, 0x000000, 0.5).setOrigin(0, 0).setDepth(70).setInteractive();
     const card = this.add.container(0, 0).setDepth(71);
 
     const panel = Menu.panel(this, cx, cy, w, h);
-    const title = Menu.title(this, cx, cy - h / 2 + 30, tr('brand.name'), 30).setColor(PALETTE.ACCENT_CSS);
+    const title = Menu.title(this, cx, cy - h / 2 + 30, tr('brand.name'), 28).setColor(PALETTE.ACCENT_CSS);
     const body = this.add
-      .text(cx, cy - 6, tr('town.onboarding'), textStyle(15, { align: 'center', color: PALETTE.TEXT_CSS, wordWrap: { width: w - 60 } }))
+      .text(cx, cy - 2, tr('town.welcome'), textStyle(15, { align: 'center', color: PALETTE.TEXT_CSS, wordWrap: { width: w - 60 } }))
       .setOrigin(0.5)
       .setLineSpacing(6);
 
     const dismiss = (): void => {
+      // Persist that the intro was seen so a returning player skips it.
+      this.state.markIntroDismissed(Date.now());
       this.tweens.add({
         targets: [overlay, card],
         alpha: 0,
@@ -690,13 +745,151 @@ export class TownScene extends Phaser.Scene {
         },
       });
     };
-    const ok = Menu.button(this, cx, cy + h / 2 - 34, tr('town.onboardingDismiss'), dismiss, { width: 200 });
+    // Dismiss button centred at cy + h/2 - 12 = 270 + 88 - 12 = 346 so it lines
+    // up with the screenshot harness's dismiss click at logical (480, 346);
+    // keep this in sync with tools/capture_screenshots.mjs.
+    const ok = Menu.button(this, cx, cy + h / 2 - 12, tr('town.welcomeStart'), dismiss, { width: 200 });
 
     card.add([panel, title, body, ok.container]);
     // A gentle entrance so it reads as an intentional, polished welcome.
     card.setAlpha(0);
     overlay.setAlpha(0);
     this.tweens.add({ targets: [overlay, card], alpha: 1, duration: 300, ease: 'Sine.easeOut' });
+  }
+
+  // ---- New-player objective guidance (FEAT-003) ----------------------------
+
+  /**
+   * Build a read-only {@link ObjectiveView} from the live simulation for the
+   * pure {@link ObjectiveSystem}. `battleFought` is derived from the highest
+   * wave cleared (a returning player who has fought reads > 0).
+   */
+  private buildObjectiveView(): ObjectiveView {
+    const buildings = this.state.buildings;
+    const levels: ObjectiveView['levels'] = {};
+    for (const kind of BUILDING_ORDER) {
+      levels[kind] = buildings.level(kind);
+    }
+    return {
+      furnaceLevel: buildings.furnaceLevel,
+      levels,
+      warmthRatio: this.state.warmth.warmthRatio(buildings.furnaceLevel),
+      armySize: this.state.armyCount,
+      battleFought: this.state.waveCleared > 0,
+    };
+  }
+
+  /**
+   * Create the persistent objective banner (hidden until the first refresh) and
+   * the reusable pulsing pointer/glow container (original Phaser-drawn art: a
+   * pulsing ring + a bobbing downward arrow). Both start hidden; the per-frame
+   * refresh shows/positions them from the ObjectiveSystem.
+   *
+   * The banner sits in CLEAR space just above the bottom action bar, well below
+   * every HUD band (resource row, warmth y=60, output/FREEZING y=84, hint
+   * y=108) and centred within the HUD margins so it never collides with them.
+   */
+  private buildObjectiveGuidance(): void {
+    const M = TownScene.HUD_MARGIN;
+    // Banner band: a compact strip above the bottom action bar (bar centred at
+    // HEIGHT-30). Placed at y=482 so it clears the bar and sits well below the
+    // hint band at y=108 and the building sprites.
+    const bannerW = CANVAS.WIDTH - M * 2 - 320; // leave room for side panels
+    const bannerH = 40;
+    const bannerX = CANVAS.WIDTH / 2;
+    const bannerY = 458;
+
+    const banner = this.add.container(0, 0).setDepth(40).setVisible(false);
+    const bg = this.add
+      .rectangle(bannerX, bannerY, bannerW, bannerH, 0x0d1420, 0.82)
+      .setOrigin(0.5)
+      .setStrokeStyle(2, PALETTE.ACCENT, 0.9);
+    // Two-line layout: heading on top, instruction below, both fitting the
+    // 40px strip.
+    const heading = this.add
+      .text(bannerX - bannerW / 2 + 14, bannerY - 11, tr('objective.title'), textStyle(12, { fontStyle: 'bold', color: PALETTE.ACCENT_CSS }))
+      .setOrigin(0, 0.5);
+    const instruction = this.add
+      .text(bannerX - bannerW / 2 + 14, bannerY + 9, '', textStyle(12, { color: PALETTE.FROST_CSS }))
+      .setOrigin(0, 0.5)
+      .setShadow(0, 1, '#000000', 2, true, true);
+    banner.add([bg, heading, instruction]);
+    this.objectiveBanner = banner;
+    this.objectiveLabel = instruction;
+
+    // The pointer/glow: a pulsing ring + a bobbing arrow, all original graphics.
+    const pointer = this.add.container(0, 0).setDepth(24).setVisible(false);
+    const ring = this.add.circle(0, 0, 30, PALETTE.ACCENT, 0).setStrokeStyle(3, PALETTE.ACCENT, 0.9);
+    const glow = this.add.circle(0, 0, 20, PALETTE.ACCENT, 0.14);
+    // A downward-pointing arrow above the building (drawn as a triangle).
+    const arrow = this.add.triangle(0, -48, 0, 0, 20, 0, 10, 14, PALETTE.ACCENT, 0.95).setOrigin(0.5, 0.5);
+    arrow.setStrokeStyle(2, 0x0d1420, 0.8);
+    pointer.add([glow, ring, arrow]);
+
+    // A steady pulse on the ring/glow and a gentle bob on the arrow so it reads
+    // as "tap here" without being noisy. Tweens target children directly.
+    this.tweens.add({ targets: [ring, glow], scale: { from: 0.85, to: 1.15 }, alpha: { from: 0.9, to: 0.4 }, duration: 780, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    this.tweens.add({ targets: arrow, y: { from: -52, to: -42 }, duration: 620, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+
+    this.objectivePointer = pointer;
+  }
+
+  /**
+   * Drive the objective banner + building pointer from the pure ObjectiveSystem
+   * each frame. Hides everything when the guided flow is done (unless the
+   * low-warmth advisory applies). A returning player whose guided flow is
+   * already complete only ever sees the transient low-warmth advisory.
+   */
+  private refreshObjectiveGuidance(now: number): void {
+    if (!this.objectiveBanner || !this.objectivePointer || !this.objectiveLabel) return;
+
+    const view = this.buildObjectiveView();
+    const guidedDone = this.state.onboarding.guidedComplete;
+
+    // Compute the current objective. For a returning player who finished the
+    // guided flow, only the transient warmth advisory should ever show.
+    let objective: Objective | null = currentObjective(view);
+    if (guidedDone && objective && objective.id !== 'warmth') {
+      objective = null;
+    }
+
+    // When the ordered flow first reaches "done" for a new player, record it
+    // (persist) and play a subtle completion cue once.
+    if (!guidedDone) {
+      const orderedDone = currentObjective({ ...view, warmthRatio: 1 }) === null;
+      if (orderedDone) {
+        this.state.markGuidedComplete(now);
+        if (!this.guidedFlowSignalled) {
+          this.guidedFlowSignalled = true;
+          this.audio.playSfx(AudioKeys.BuildComplete, 0.5);
+        }
+      }
+    }
+
+    if (!objective) {
+      this.objectiveBanner.setVisible(false);
+      this.objectivePointer.setVisible(false);
+      this.currentObjectiveId = null;
+      return;
+    }
+
+    // Play a subtle cue when the objective advances to a NEW step.
+    if (this.currentObjectiveId !== null && this.currentObjectiveId !== objective.id) {
+      this.audio.playSfx(AudioKeys.UiClick, 0.4);
+    }
+    this.currentObjectiveId = objective.id;
+
+    this.objectiveBanner.setVisible(true);
+    this.objectiveLabel.setText(tr(objective.instruction));
+
+    // Position the pointer over the target building's map slot (above its
+    // sprite). Hide it for objectives with no building target.
+    if (objective.target && BUILDING_LAYOUT[objective.target]) {
+      const layout = BUILDING_LAYOUT[objective.target];
+      this.objectivePointer.setPosition(layout.x, layout.y - 8).setVisible(true);
+    } else {
+      this.objectivePointer.setVisible(false);
+    }
   }
 
   private maybeShowOfflineGains(): void {

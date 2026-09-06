@@ -461,6 +461,22 @@ export interface StatModifiers {
   marksmanBonus: number;
 }
 
+/**
+ * The persisted new-player onboarding / tutorial state (FEAT-003). A tiny
+ * record so a returning player is never re-onboarded: `introDismissed` marks the
+ * short first-run welcome card as seen, and `guidedComplete` marks the guided
+ * objective flow (pointer + banner) as finished. Both optional so an older-shaped
+ * save (no field) loads without crashing; the SaveManager treats a save that
+ * predates onboarding as a RETURNING player (see fromJSON tolerance), so old
+ * players never get the intro card again.
+ */
+export interface OnboardingState {
+  /** True once the short first-run welcome card has been dismissed. */
+  introDismissed: boolean;
+  /** True once the guided objective flow has been completed (or skipped). */
+  guidedComplete: boolean;
+}
+
 /** The complete persisted game state (serialized to localStorage by the save feature). */
 export interface GameState {
   /**
@@ -521,6 +537,13 @@ export interface GameState {
   trainingQueue: TrainingOrder[];
   /** Highest battle wave cleared. */
   waveCleared: number;
+  /**
+   * New-player onboarding / tutorial state (FEAT-003). Optional so an older
+   * save (written before onboarding existed) loads without crashing; a missing
+   * value is treated as a RETURNING player (intro dismissed + guided complete),
+   * so long-time players are never re-onboarded.
+   */
+  onboarding?: OnboardingState;
   /** Epoch ms of the last simulation update (drives offline reconciliation). */
   lastSeenAt: number;
 }

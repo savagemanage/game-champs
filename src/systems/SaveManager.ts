@@ -1,6 +1,6 @@
 import { ECONOMY, POPULATION, RESOURCE_ORDER } from '../config/GameConfig';
 import { combineModifiers, economyMultiplierFor } from '../config/StatModifiers';
-import type { Army, GameState, StatModifiers, TroopKind } from '../types';
+import type { Army, GameState, OnboardingState, StatModifiers, TroopKind } from '../types';
 import { AllianceSystem } from './AllianceSystem';
 import { ArenaSystem } from './ArenaSystem';
 import { BuildingSystem } from './BuildingSystem';
@@ -48,10 +48,17 @@ import { WarmthSystem, type WarmthTickResult } from './WarmthSystem';
  *   tier dimension, so a research-unlocked higher tier actually raises trained
  *   troop cost / stats / power.
  *
+ * - v8: the FEAT-003 (crisp-text/onboarding task) new-player guidance layer -
+ *   a persisted `onboarding` record ({ introDismissed, guidedComplete }) so the
+ *   short first-run welcome + guided objective flow run only for a genuine new
+ *   player and a returning player is never re-onboarded. The field is OPTIONAL
+ *   in fromJSON: an (in-version) save missing it is treated as a RETURNING
+ *   player, so it never re-triggers the intro.
+ *
  * A save with any older version is treated as a mismatch and falls back to a
  * fresh frozen settlement rather than mis-mapping old kinds.
  */
-export const SAVE_VERSION = 7;
+export const SAVE_VERSION = 8;
 
 /** Default localStorage key for the single save slot (Frosthold namespace). */
 export const SAVE_KEY = 'frosthold:save';
@@ -86,6 +93,32 @@ export interface GameSnapshot {
   quests: QuestSystem;
   vip: VipSystem;
   waveCleared: number;
+  /** New-player onboarding / tutorial state (FEAT-003). */
+  onboarding: OnboardingState;
+}
+
+/**
+ * A brand-new player's onboarding state: neither the intro card nor the guided
+ * flow has run yet, so a fresh game shows both.
+ */
+export function freshOnboarding(): OnboardingState {
+  return { introDismissed: false, guidedComplete: false };
+}
+
+/**
+ * Normalize a persisted (possibly-absent / partial) onboarding record. A save
+ * written BEFORE onboarding existed (undefined) is treated as a RETURNING
+ * player - both flags true - so long-time players are never re-onboarded. A
+ * present record is coerced to strict booleans.
+ */
+export function normalizeOnboarding(data: Partial<OnboardingState> | undefined): OnboardingState {
+  if (!data || typeof data !== 'object') {
+    return { introDismissed: true, guidedComplete: true };
+  }
+  return {
+    introDismissed: data.introDismissed === true,
+    guidedComplete: data.guidedComplete === true,
+  };
 }
 
 /** Extra info returned from a load so the caller can surface offline gains. */
@@ -142,6 +175,7 @@ export class SaveManager {
       armyTiers: snapshot.training.armyTiers,
       trainingQueue: snapshot.training.toJSON(),
       waveCleared: snapshot.waveCleared,
+      onboarding: { ...snapshot.onboarding },
       lastSeenAt: now,
     };
   }
@@ -259,6 +293,9 @@ export class SaveManager {
         quests,
         vip,
         waveCleared: state.waveCleared ?? 0,
+        // A save missing the onboarding field predates it: treat as a returning
+        // player so the intro/guided flow never re-triggers for old holds.
+        onboarding: normalizeOnboarding(state.onboarding),
       },
       loaded: true,
       offlineSeconds,
@@ -286,6 +323,7 @@ export class SaveManager {
       quests: new QuestSystem(),
       vip: new VipSystem(),
       waveCleared: 0,
+      onboarding: freshOnboarding(),
     };
   }
 

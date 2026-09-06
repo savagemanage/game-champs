@@ -82,6 +82,61 @@ export const STRINGS = {
     ko: '기나긴 겨울이 찾아왔습니다. 건물은 시간이 지날수록 자원을 모읍니다. 용광로를 눌러 업그레이드하고 불씨를 지키세요. 사냥꾼 오두막을 올려 식량을 얻은 뒤, 전진 기지에서 생존자를 훈련해 전투로 나아가세요.',
   },
   'town.onboardingDismiss': { en: 'Got it', ko: '알겠어요' },
+  // Locked building label that names the unlock requirement instead of a bare
+  // 'Locked' (FEAT-003 guidance pass).
+  'town.lockedRequires': { en: 'Furnace Lv.{level} required', ko: '용광로 Lv.{level} 필요' },
+
+  // --- FEAT-003: new-player objective / guidance flow ---
+  // A SHORT first-run welcome that hands off to the guided objective flow
+  // (pointer + banner) instead of a wall of text.
+  'town.welcome': {
+    en: 'Welcome, Warden. Follow the glowing marker to your next task.',
+    ko: '어서 오세요, 파수꾼님. 빛나는 표시를 따라 다음 할 일을 진행하세요.',
+  },
+  'town.welcomeStart': { en: 'Begin', ko: '시작하기' },
+  // The persistent next-step objective banner.
+  'objective.title': { en: 'Next Objective', ko: '다음 목표' },
+  'objective.furnace.label': { en: 'Raise the Furnace', ko: '용광로 올리기' },
+  'objective.furnace.instruction': {
+    en: 'Tap the Furnace and upgrade it to raise the level cap of every building.',
+    ko: '용광로를 눌러 업그레이드하세요. 모든 건물의 한계 레벨이 올라갑니다.',
+  },
+  'objective.hunters.label': { en: 'Build the Hunters\u2019 Hut', ko: '사냥꾼 오두막 짓기' },
+  'objective.hunters.instruction': {
+    en: 'Tap the Hunters\u2019 Hut to build it and gather rations.',
+    ko: '사냥꾼 오두막을 눌러 지어 식량을 모으세요.',
+  },
+  'objective.sawmill.label': { en: 'Build the Sawmill', ko: '벌목장 짓기' },
+  'objective.sawmill.instruction': {
+    en: 'Tap the Sawmill to build it and gather timber.',
+    ko: '벌목장을 눌러 지어 목재를 모으세요.',
+  },
+  'objective.furnace2.label': { en: 'Raise the Furnace again', ko: '용광로 다시 올리기' },
+  'objective.furnace2.instruction': {
+    en: 'Upgrade the Furnace again to unlock the War Camp and more buildings.',
+    ko: '용광로를 다시 올려 전진 기지와 더 많은 건물을 해금하세요.',
+  },
+  'objective.warcamp.label': { en: 'Build the War Camp', ko: '전진 기지 짓기' },
+  'objective.warcamp.instruction': {
+    en: 'Tap the War Camp to build it so you can train soldiers.',
+    ko: '전진 기지를 눌러 지어 병력을 훈련할 수 있게 하세요.',
+  },
+  'objective.train.label': { en: 'Train soldiers', ko: '병력 훈련' },
+  'objective.train.instruction': {
+    en: 'Open the War Camp and train a batch of soldiers for battle.',
+    ko: '전진 기지를 열어 전투에 나설 병력을 훈련하세요.',
+  },
+  'objective.battle.label': { en: 'March to battle', ko: '전투로 진군' },
+  'objective.battle.instruction': {
+    en: 'Press To Battle to lead your soldiers against the Frozen Horde.',
+    ko: '전투로 버튼을 눌러 병력을 이끌고 서리 무리에 맞서세요.',
+  },
+  'objective.warmth.label': { en: 'Keep warm!', ko: '온기를 지키세요!' },
+  'objective.warmth.instruction': {
+    en: 'Warmth is low. Keep timber and coal stocked and upgrade the Furnace to burn fuel more efficiently.',
+    ko: '온기가 낮습니다. 목재와 석탄을 채워 두고 용광로를 올려 연료를 더 효율적으로 태우세요.',
+  },
+  'objective.done': { en: 'The core loop is yours. Well done!', ko: '기본 흐름을 익혔습니다. 훌륭해요!' },
 
   // Warmth (the signature frozen-survival mechanic).
   'warmth.label': { en: 'Warmth', ko: '온기' },
