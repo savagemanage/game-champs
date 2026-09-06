@@ -147,6 +147,7 @@
   },
   "settings": {
     "open": "Settings",
+    "openAria": "Open settings and help",
     "title": "Settings & Help",
     "close": "Close",
     "done": "Done",

@@ -147,6 +147,7 @@
   },
   "settings": {
     "open": "설정",
+    "openAria": "설정 및 도움말 열기",
     "title": "설정 및 도움말",
     "close": "닫기",
     "done": "완료",

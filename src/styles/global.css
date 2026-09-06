@@ -54,6 +54,7 @@ body {
 }
 
 .app-shell {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100vh;
@@ -61,37 +62,49 @@ body {
   overflow: hidden;
 }
 
-.app-header {
+/* Floating controls overlaid in the top-right corner, replacing the old
+   header bar so the game fills the viewport edge-to-edge. Sits above the game
+   layers and stays clickable on every screen. */
+.app-controls {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 40;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 1.25rem 2rem;
-  border-bottom: 1px solid var(--color-gold-muted);
-  background: linear-gradient(180deg, rgba(10, 20, 40, 0.9), transparent);
+  gap: 0.5rem;
 }
 
-.app-title {
-  font-family: var(--font-display);
-  font-size: clamp(1.5rem, 3vw, 2.25rem);
-  letter-spacing: 0.05em;
-  margin: 0;
-  color: var(--color-gold-bright);
-  text-shadow: var(--shadow-gold);
-}
-
-.app-subtitle {
-  margin: 0.15rem 0 0;
-  font-size: 0.85rem;
+.app-controls__settings {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  font-size: 1.05rem;
+  line-height: 1;
+  border: 1px solid var(--color-gold-muted);
+  border-radius: 2px;
+  background: rgba(9, 20, 40, 0.85);
   color: var(--color-gold);
-  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.app-controls__settings:hover {
+  border-color: var(--color-gold);
+  color: var(--color-gold-bright);
+  box-shadow: var(--shadow-gold);
 }
 
 .app-main {
   flex: 1;
   /* min-height:0 lets this flex child shrink below its content size so it only
-     ever takes the space left below the header, never forcing the shell to
-     grow past the viewport. Non-battle screens can still scroll internally. */
+     ever takes the space the shell leaves, never forcing the shell to grow
+     past the viewport. Non-battle screens can still scroll internally. */
   min-height: 0;
   display: flex;
   align-items: center;
@@ -163,6 +176,7 @@ body {
   border: 1px solid var(--color-gold-muted);
   border-radius: 2px;
   overflow: hidden;
+  background: rgba(9, 20, 40, 0.85);
 }
 
 .language-toggle__button {
@@ -580,10 +594,10 @@ body {
   max-width: 900px;
   max-height: 640px;
   aspect-ratio: 900 / 640;
-  border: 1px solid var(--color-gold-muted);
+  /* No outer frame: the stage blends into the viewport instead of sitting in a
+     bordered/boxed shell. Corners are still clipped so the canvas stays tidy. */
   border-radius: 6px;
   overflow: hidden;
-  box-shadow: var(--shadow-gold);
   background: #071018;
 }
 
@@ -965,20 +979,8 @@ body {
 }
 
 /* ============================================================
-   Header controls + Settings / Help panel (FEAT-004)
+   Settings / Help panel (FEAT-004)
    ============================================================ */
-.app-header__controls {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-}
-
-.app-header__settings {
-  padding: 0.4rem 1rem;
-  font-size: 0.85rem;
-}
-
 .settings-overlay {
   position: fixed;
   inset: 0;
@@ -1121,18 +1123,6 @@ body {
    Responsive pass (FEAT-004)
    ============================================================ */
 @media (max-width: 720px) {
-  .app-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.75rem;
-    padding: 1rem 1.25rem;
-  }
-
-  .app-header__controls {
-    width: 100%;
-    justify-content: space-between;
-  }
-
   .app-main {
     padding: 1rem;
   }

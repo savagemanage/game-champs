@@ -19,8 +19,9 @@ const KEYBINDS: { keys: string; actionKey: string }[] = [
 ];
 
 /**
- * A localized Settings / Help modal reachable from the header on every screen
- * (menu, select, battle, results). It documents the controls, exposes the
+ * A localized Settings / Help modal reachable from the floating top-right
+ * controls on every screen (menu, select, battle, results). It documents the
+ * controls, exposes the
  * persisted audio controls (mute, master volume, ambient drone), and surfaces
  * the language toggle. Every string is localized; nothing is hardcoded.
  */

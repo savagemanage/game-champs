@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import LanguageToggle from './components/LanguageToggle';
 import SettingsPanel from './components/SettingsPanel';
@@ -35,6 +35,12 @@ export default function App() {
   // same across a rematch.
   const [matchNonce, setMatchNonce] = useState(0);
 
+  // The old header showed the game title; with the header removed we surface
+  // the localized title as the document title so the branding is not lost.
+  useEffect(() => {
+    document.title = t('app.title');
+  }, [t]);
+
   const handleModeSelect = (chosen: GameMode) => {
     setMode(chosen);
     setScreen('select');
@@ -64,22 +70,23 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <header className="app-header">
-        <div className="app-header__brand">
-          <h1 className="app-title">{t('app.title')}</h1>
-          <p className="app-subtitle">{t('app.subtitle')}</p>
-        </div>
-        <div className="app-header__controls">
-          <LanguageToggle />
-          <button
-            type="button"
-            className="btn app-header__settings"
-            onClick={() => setSettingsOpen(true)}
-          >
-            {t('settings.open')}
-          </button>
-        </div>
-      </header>
+      {/* Compact floating controls in the top-right corner. This replaces the
+          old full-width header bar/frame so the game fills the viewport
+          edge-to-edge, while keeping language switching visible and the
+          settings/help panel one click away on every screen. Kept clear of the
+          battle HUD's shop button, minimap and QWER bar, which sit lower/left. */}
+      <div className="app-controls">
+        <LanguageToggle />
+        <button
+          type="button"
+          className="app-controls__settings"
+          aria-label={t('settings.openAria')}
+          title={t('settings.open')}
+          onClick={() => setSettingsOpen(true)}
+        >
+          <span aria-hidden="true">{'\u2699'}</span>
+        </button>
+      </div>
 
       <main className="app-main">
         {screen === 'menu' && <MainMenu onPlay={() => setScreen('mode')} />}

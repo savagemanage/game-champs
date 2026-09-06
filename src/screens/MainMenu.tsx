@@ -7,7 +7,8 @@ interface MainMenuProps {
 
 /**
  * Landing screen: game title, tagline, and a Play button that routes to
- * champion select. The LanguageToggle lives in the shared App header.
+ * champion select. Language switching lives in the floating top-right
+ * controls (and inside the Settings panel), not on this screen.
  */
 export default function MainMenu({ onPlay }: MainMenuProps) {
   const { t } = useTranslation();
