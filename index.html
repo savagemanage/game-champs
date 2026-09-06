@@ -30,8 +30,19 @@
         align-items: center;
         justify-content: center;
       }
+      /*
+        The canvas backbuffer is rendered at the device's real pixel resolution
+        (logical 960x540 * devicePixelRatio - see src/main.ts / ui/renderScale.ts)
+        and Scale.FIT letterboxes it to the viewport, so there is NO low-res
+        buffer for the browser to nearest-neighbour-upscale. We therefore do NOT
+        force `image-rendering: pixelated` on the whole canvas: that would make
+        UI/HUD text jagged, and it is unnecessary for sprites because pixel-art
+        crispness comes from Phaser's per-texture NEAREST filtering (pixelArt:true),
+        not from a canvas-wide CSS upscale. Any residual FIT letterbox scaling is
+        left smooth so glyph edges stay clean.
+      */
       #game canvas {
-        image-rendering: pixelated;
+        image-rendering: auto;
       }
     </style>
   </head>
