@@ -151,6 +151,7 @@ export class BaseScene extends Phaser.Scene {
     const button = Menu.button(this, cx + CANVAS.WIDTH * 0.34, y + 40, tr('building.upgrade'), () => this.tryUpgrade(id), {
       width: 118,
       fontSize: 15,
+      allowSmall: true,
     });
 
     this.rows.push({ id, levelText, costText, statusText, button, icon });

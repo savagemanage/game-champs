@@ -18,6 +18,13 @@ export interface ButtonOptions {
   height?: number;
   /** Accent (border/hover) colour override, 0xRRGGBB. */
   accent?: number;
+  /**
+   * Opt out of the {@link UI_MIN_FONT_SIZE} floor in {@link textStyle}. Set on
+   * the pre-existing sub-18 buttons in the dense meta scenes (Heroes/Missions
+   * tabs, per-row action buttons, etc.) so they keep their original compact
+   * size inside their fixed-width boxes instead of being silently enlarged.
+   */
+  allowSmall?: boolean;
 }
 
 /** The composite object returned for a button. */
@@ -47,15 +54,31 @@ export interface ProgressBar {
  * button feel, panels, progress bars, fade transitions).
  */
 export const Menu = {
-  /** Standard pixel title text. */
-  title(scene: Phaser.Scene, x: number, y: number, text: string, size = 48): Phaser.GameObjects.Text {
+  /**
+   * Standard pixel title text. Titles are always large (default 48), well above
+   * the {@link UI_MIN_FONT_SIZE} floor, but the `allowSmall` opt-out is exposed
+   * for the handful of dense meta-scene sub-headings authored below 18.
+   */
+  title(
+    scene: Phaser.Scene,
+    x: number,
+    y: number,
+    text: string,
+    size = 48,
+    allowSmall = false,
+  ): Phaser.GameObjects.Text {
     return scene.add
-      .text(x, y, text, textStyle(size, { fontStyle: 'bold', color: PALETTE.TEXT_CSS }))
+      .text(x, y, text, textStyle(size, { fontStyle: 'bold', color: PALETTE.TEXT_CSS, allowSmall }))
       .setOrigin(0.5)
       .setShadow(3, 3, '#000000', 4);
   },
 
-  /** Muted body/label text. */
+  /**
+   * Muted body/label text. Pass `allowSmall: true` to opt a sub-18 size out of
+   * the {@link UI_MIN_FONT_SIZE} floor (used by the dense meta scenes whose
+   * compact captions must stay their authored size); the in-scope primary-flow
+   * text omits it and is floored/raised as intended.
+   */
   label(
     scene: Phaser.Scene,
     x: number,
@@ -63,8 +86,9 @@ export const Menu = {
     text: string,
     size = 18,
     alpha = 0.9,
+    allowSmall = false,
   ): Phaser.GameObjects.Text {
-    return scene.add.text(x, y, text, textStyle(size)).setOrigin(0.5).setAlpha(alpha);
+    return scene.add.text(x, y, text, textStyle(size, { allowSmall })).setOrigin(0.5).setAlpha(alpha);
   },
 
   /**
@@ -102,7 +126,7 @@ export const Menu = {
     const padY = opts.padY ?? 10;
     const accent = opts.accent ?? PALETTE.ACCENT;
 
-    const label = scene.add.text(0, 0, text, textStyle(fontSize)).setOrigin(0.5);
+    const label = scene.add.text(0, 0, text, textStyle(fontSize, { allowSmall: opts.allowSmall })).setOrigin(0.5);
 
     const w = opts.width ?? Math.ceil(label.width) + padX * 2;
     const h = opts.height ?? Math.ceil(label.height) + padY * 2;

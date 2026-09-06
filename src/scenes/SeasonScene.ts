@@ -167,6 +167,7 @@ export class SeasonScene extends Phaser.Scene {
       width: 220,
       accent: PALETTE.BOSS,
       fontSize: 15,
+      allowSmall: true,
     });
     // Disable when capped or the player cannot afford the next level.
     btn.setEnabled(!capped && store.state.season.xp >= cost);

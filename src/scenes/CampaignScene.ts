@@ -89,7 +89,7 @@ export class CampaignScene extends Phaser.Scene {
     this.add.image(cx, 0, TextureKeys.BgBattle).setOrigin(0.5, 0).setAlpha(0.3);
 
     Menu.title(this, cx, CANVAS.HEIGHT * 0.06, tr('campaign.title'), 30).setColor(PALETTE.SQUAD_CSS);
-    Menu.label(this, cx, CANVAS.HEIGHT * 0.1, tr('season.resistance', { level: GameStore.get().resistance() }), 12, 0.75);
+    Menu.label(this, cx, CANVAS.HEIGHT * 0.1, tr('season.resistance', { level: GameStore.get().resistance() }), 12, 0.75, true);
 
     this.buildStageList();
     this.buildHordeSection();
@@ -173,7 +173,7 @@ export class CampaignScene extends Phaser.Scene {
       y + 32,
       `${tr('zombie.next')} (${tr('zombie.wave', { wave: nextWave + 1 })})`,
       () => this.attemptZombieWave(),
-      { width: 260, fontSize: 15 },
+      { width: 260, fontSize: 15, allowSmall: true },
     );
   }
 

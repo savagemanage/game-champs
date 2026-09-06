@@ -80,9 +80,9 @@ export class HeroesScene extends Phaser.Scene {
       .setOrigin(0, 0.5);
 
     // Tab bar: Roster | Recruit, plus a Formation shortcut.
-    Menu.button(this, cx - 150, CANVAS.HEIGHT * 0.155, tr('heroes.rosterTab'), () => this.setTab('roster'), { width: 120, fontSize: 14 });
-    Menu.button(this, cx, CANVAS.HEIGHT * 0.155, tr('heroes.recruitTab'), () => this.setTab('recruit'), { width: 120, fontSize: 14 });
-    Menu.button(this, cx + 150, CANVAS.HEIGHT * 0.155, tr('heroes.formation'), () => this.openFormation(), { width: 120, fontSize: 14, accent: PALETTE.SQUAD });
+    Menu.button(this, cx - 150, CANVAS.HEIGHT * 0.155, tr('heroes.rosterTab'), () => this.setTab('roster'), { width: 120, fontSize: 14, allowSmall: true });
+    Menu.button(this, cx, CANVAS.HEIGHT * 0.155, tr('heroes.recruitTab'), () => this.setTab('recruit'), { width: 120, fontSize: 14, allowSmall: true });
+    Menu.button(this, cx + 150, CANVAS.HEIGHT * 0.155, tr('heroes.formation'), () => this.openFormation(), { width: 120, fontSize: 14, accent: PALETTE.SQUAD, allowSmall: true });
 
     this.content = this.add.container(0, 0);
 
@@ -121,7 +121,7 @@ export class HeroesScene extends Phaser.Scene {
   private renderRoster(store: GameStore): void {
     const owned = Object.values(store.state.heroes.roster) as HeroInstance[];
     if (owned.length === 0) {
-      const label = Menu.label(this, CANVAS.WIDTH / 2, CANVAS.HEIGHT * 0.45, tr('heroes.rosterEmpty'), 14, 0.85);
+      const label = Menu.label(this, CANVAS.WIDTH / 2, CANVAS.HEIGHT * 0.45, tr('heroes.rosterEmpty'), 14, 0.85, true);
       this.content.add(label);
       return;
     }
@@ -237,7 +237,7 @@ export class HeroesScene extends Phaser.Scene {
       if (store.skillUpHero(id)) this.afterProgress(id, container, cx, cy, w);
     });
 
-    const close = Menu.button(this, cx, cy + CANVAS.HEIGHT * 0.26, tr('common.close'), () => this.closeDetail(), { width: 160, fontSize: 14 });
+    const close = Menu.button(this, cx, cy + CANVAS.HEIGHT * 0.26, tr('common.close'), () => this.closeDetail(), { width: 160, fontSize: 14, allowSmall: true });
     container.add(close.container);
   }
 
@@ -253,7 +253,7 @@ export class HeroesScene extends Phaser.Scene {
   ): void {
     const capped = !Number.isFinite(cost);
     const costText = capped ? tr('hero.maxed') : tr('hero.cost', { cost });
-    const btn: MenuButton = Menu.button(this, cx - 60, y, label, onClick, { width: 180, fontSize: 14 });
+    const btn: MenuButton = Menu.button(this, cx - 60, y, label, onClick, { width: 180, fontSize: 14, allowSmall: true });
     const price = this.add.text(cx + 70, y, costText, textStyle(12, { color: capped ? PALETTE.MUTED_CSS : PALETTE.COIN_CSS, allowSmall: true })).setOrigin(0, 0.5);
     btn.setEnabled(!capped && shards >= cost);
     container.add([btn.container, price]);

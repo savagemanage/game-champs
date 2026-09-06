@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { CANVAS, PHYSICS, PALETTE } from './config/GameConfig';
+import { resolveRenderZoom } from './systems/RenderScale';
 import { BootScene } from './scenes/BootScene';
 import { PreloadScene } from './scenes/PreloadScene';
 import { TitleScene } from './scenes/TitleScene';
@@ -47,7 +48,35 @@ import { TutorialScene } from './scenes/TutorialScene';
  * viewport size and DPR. The pixel-art world/UI sprites are kept crisp by
  * applying NEAREST filtering PER-TEXTURE in PreloadScene, not by pixelating the
  * whole canvas.
+ *
+ * BACKING-BUFFER RESOLUTION (scale.zoom): with only the above, the canvas
+ * BACKING BUFFER is a fixed 540x960 device-independent pixels, and Scale.FIT
+ * then stretches that buffer to whatever CSS size fits the viewport. On desktop
+ * that is usually a DOWNSCALE (e.g. a 1440x820 dpr=1 window displays the portrait
+ * canvas at ~461x820 CSS px), so the whole scene is rendered at only 540px wide
+ * and shrunk - which is exactly what softens small Korean glyphs. To fix this at
+ * the root we set `scale.zoom` to a computed render-scale factor: Phaser 3.80's
+ * zoom multiplies ONLY the backing store, so the canvas becomes
+ * `540*zoom x 960*zoom` physical pixels while the world/camera coordinate space
+ * stays 540x960. Every scene lays out in the same logical space (no layout code
+ * changes), but the buffer now carries enough device pixels to cover the display
+ * (>= displayScale*dpr, see src/systems/RenderScale.ts), so the browser no longer
+ * upscales a 540-wide buffer. FIT still fits+centers the (now larger) buffer into
+ * the viewport, and the `#game` flex parent remains the sole centering owner
+ * (autoCenter stays NO_CENTER). Note: Phaser 3 removed the old game-config
+ * `resolution` property (it is a no-op) - `scale.zoom` is the supported knob.
  */
+
+/**
+ * Render-scale (scale.zoom) computed from the live viewport + DPR at boot. Guard
+ * for an absent `window` (e.g. non-browser/test bundling) and fall back to 1,
+ * which is the plain 540x960 backing buffer.
+ */
+const renderZoom = resolveRenderZoom(
+  typeof window !== 'undefined' ? window : undefined,
+  CANVAS.WIDTH,
+  CANVAS.HEIGHT,
+);
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
   parent: 'game',
@@ -75,6 +104,11 @@ const config: Phaser.Types.Core.GameConfig = {
     autoCenter: Phaser.Scale.NO_CENTER,
     width: CANVAS.WIDTH,
     height: CANVAS.HEIGHT,
+    // Raise the backing buffer to (at least) the displayed device-pixel size so
+    // the browser never upscales a fixed 540-wide buffer. width/height (world
+    // coords) stay 540x960; only the physical canvas pixels grow (540*zoom x
+    // 960*zoom). See src/systems/RenderScale.ts for the math.
+    zoom: renderZoom,
   },
   physics: {
     default: 'arcade',

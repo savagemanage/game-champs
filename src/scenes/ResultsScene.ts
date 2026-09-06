@@ -50,7 +50,7 @@ export class ResultsScene extends Phaser.Scene {
     const win = result.win;
     const headColor = win ? PALETTE.SUCCESS_CSS : PALETTE.DANGER_CSS;
     Menu.title(this, cx, CANVAS.HEIGHT * 0.16, tr(win ? 'result.victory' : 'result.defeat'), 46).setColor(headColor);
-    Menu.label(this, cx, CANVAS.HEIGHT * 0.16 + 42, tr(win ? 'result.victoryDesc' : 'result.defeatDesc'), 14, 0.85);
+    Menu.label(this, cx, CANVAS.HEIGHT * 0.16 + 42, tr(win ? 'result.victoryDesc' : 'result.defeatDesc'), 14, 0.85, true);
 
     // Stats panel.
     const panelY = CANVAS.HEIGHT * 0.44;
@@ -94,7 +94,7 @@ export class ResultsScene extends Phaser.Scene {
     // Return to the base hub (Home), not the Title. Reuse the nav base label.
     Menu.button(this, cx, by, tr('nav.base'), () => this.goHome(), { width: 260 });
 
-    Menu.label(this, cx, CANVAS.HEIGHT * 0.955, tr('result.keyhint'), 13, 0.6);
+    Menu.label(this, cx, CANVAS.HEIGHT * 0.955, tr('result.keyhint'), 13, 0.6, true);
 
     const kb = this.input.keyboard;
     kb?.on('keydown-R', () => this.redeploy());

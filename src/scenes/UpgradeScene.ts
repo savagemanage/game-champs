@@ -105,6 +105,7 @@ export class UpgradeScene extends Phaser.Scene {
     const button = Menu.button(this, cx + CANVAS.WIDTH * 0.33, y + 40, tr('upgrade.buy'), () => this.buy(kind), {
       width: 110,
       fontSize: 16,
+      allowSmall: true,
     });
 
     this.rows.push({ kind, levelText, costText, button });

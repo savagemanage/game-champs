@@ -87,7 +87,7 @@ export class FormationScene extends Phaser.Scene {
     this.add.image(cx, 0, TextureKeys.BgBattle).setOrigin(0.5, 0).setAlpha(0.35);
 
     Menu.title(this, cx, CANVAS.HEIGHT * 0.06, tr('formation.title'), 32).setColor(PALETTE.SQUAD_CSS);
-    Menu.label(this, cx, CANVAS.HEIGHT * 0.1, tr('formation.tapToPlace'), 11, 0.7);
+    Menu.label(this, cx, CANVAS.HEIGHT * 0.1, tr('formation.tapToPlace'), 11, 0.7, true);
 
     this.powerText = this.add
       .text(cx, CANVAS.HEIGHT * 0.135, '', textStyle(16, { fontStyle: 'bold', color: PALETTE.ACCENT_CSS, allowSmall: true }))
@@ -117,8 +117,8 @@ export class FormationScene extends Phaser.Scene {
     const frontY = CANVAS.HEIGHT * 0.25;
     const backY = CANVAS.HEIGHT * 0.4;
 
-    Menu.label(this, cx, frontY - 52, tr('formation.front'), 12, 0.7);
-    Menu.label(this, cx, backY - 52, tr('formation.back'), 12, 0.7);
+    Menu.label(this, cx, frontY - 52, tr('formation.front'), 12, 0.7, true);
+    Menu.label(this, cx, backY - 52, tr('formation.back'), 12, 0.7, true);
 
     this.layoutRow('front', GAME_STATE.FORMATION.FRONT_SLOTS, frontY);
     this.layoutRow('back', GAME_STATE.FORMATION.BACK_SLOTS, backY);
@@ -157,7 +157,7 @@ export class FormationScene extends Phaser.Scene {
     const rowH = 78;
 
     if (owned.length === 0) {
-      Menu.label(this, CANVAS.WIDTH / 2, startY + 20, tr('heroes.rosterEmpty'), 13, 0.8);
+      Menu.label(this, CANVAS.WIDTH / 2, startY + 20, tr('heroes.rosterEmpty'), 13, 0.8, true);
       return;
     }
 

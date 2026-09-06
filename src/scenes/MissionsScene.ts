@@ -74,8 +74,8 @@ export class MissionsScene extends Phaser.Scene {
     Menu.title(this, cx, CANVAS.HEIGHT * 0.06, tr('mission.daily.title'), 28).setColor(PALETTE.SQUAD_CSS);
 
     // View toggle: Missions | League.
-    Menu.button(this, cx - 90, CANVAS.HEIGHT * 0.115, tr('mission.daily.title'), () => this.setView('missions'), { width: 150, fontSize: 13 });
-    Menu.button(this, cx + 90, CANVAS.HEIGHT * 0.115, tr('league.title'), () => this.setView('league'), { width: 150, fontSize: 13, accent: PALETTE.BOSS });
+    Menu.button(this, cx - 90, CANVAS.HEIGHT * 0.115, tr('mission.daily.title'), () => this.setView('missions'), { width: 150, fontSize: 13, allowSmall: true });
+    Menu.button(this, cx + 90, CANVAS.HEIGHT * 0.115, tr('league.title'), () => this.setView('league'), { width: 150, fontSize: 13, accent: PALETTE.BOSS, allowSmall: true });
 
     this.content = this.add.container(0, 0);
 
@@ -168,7 +168,7 @@ export class MissionsScene extends Phaser.Scene {
     panel.setStrokeStyle(2, PALETTE.SQUAD);
     this.content.add(panel);
 
-    this.content.add(Menu.title(this, cx, y - 30, tr('mission.duel.title'), 16).setColor(PALETTE.SQUAD_CSS));
+    this.content.add(Menu.title(this, cx, y - 30, tr('mission.duel.title'), 16, true).setColor(PALETTE.SQUAD_CSS));
     this.content.add(
       this.add.text(cx, y - 8, tr('mission.duel.desc'), textStyle(10, { align: 'center', color: PALETTE.MUTED_CSS, allowSmall: true })).setOrigin(0.5),
     );
@@ -235,6 +235,7 @@ export class MissionsScene extends Phaser.Scene {
       width: 220,
       accent: PALETTE.BOSS,
       fontSize: 15,
+      allowSmall: true,
     });
     this.content.add(matchBtn.container);
   }
