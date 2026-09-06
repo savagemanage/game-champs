@@ -1,17 +1,21 @@
 # LAST SQUAD (라스트 스쿼드)
 
-An original 2D pixel-art **lane gate-runner** browser game. A small squad of
-soldiers auto-runs forward down **two lanes** on a scrolling road; you slide the
-squad left/right between lanes to pass through rows of **math gates** (`+10`,
-`x2`, `-5`, `/2`) that grow or shrink the crowd. Your soldiers **auto-fire** at
-periodic enemy clusters, and a **boss** waits at the end of every run. Between
-runs you spend earned **coins** on permanent meta-upgrades. Progress is saved to
-`localStorage`. The UI is **Korean-first** (한국어), with English available.
+An original 2D pixel-art **survival base-builder + squad auto-battler** browser
+game. From a persistent **home base** you gather resources, raise buildings,
+collect and level an original cast of heroes, arrange them into a squad
+formation, and send that squad into deterministic **auto-battles** across a
+story campaign, endless **horde defense** zombie waves, and an offline
+**alliance league**. A built-in **Falcon Rescue** lane gate-runner mini-game
+feeds shards, resources, and season XP back into your army. Everything runs
+client-side and is saved to `localStorage`. The UI is **Korean-first** (한국어),
+with English available via an in-game toggle.
 
 > **Original work / IP boundary.** LAST SQUAD is an **original** game inspired by
-> the lane gate-runner / crowd-runner genre. All names, art, and audio are
-> original to this project. It does **not** use the "Last War", "Kingshot", or
-> any other third-party name, characters, factions, story, or sprites. See
+> the mobile survival / squad-battler and lane crowd-runner genres. All names,
+> art, audio, heroes, and story are original to this project, including the
+> **15-hero catalog** (see [`src/config/Heroes.ts`](src/config/Heroes.ts)). It
+> does **not** use the "Last War", "Kingshot", or any other third-party name,
+> characters, factions, story, or sprites. See
 > [`assets/CREDITS.md`](assets/CREDITS.md) for full asset provenance.
 >
 > The repository slug and GitHub Pages path (`game-lastwar`,
@@ -19,6 +23,11 @@ runs you spend earned **coins** on permanent meta-upgrades. Progress is saved to
 > and are not part of the game's brand. Nothing shipped in the build uses any
 > third-party IP. The slug is a fixed deployment target and is intentionally
 > left unchanged.
+
+> **Client-only, offline single-player.** There is no server and no networking.
+> The "alliance", "league", and "duel" features are **single-player
+> simulations against deterministic AI opponents**, and all progress lives in
+> your browser's `localStorage`. Nothing is uploaded or shared between players.
 
 **Play the live build:** <https://savagemanage.github.io/game-lastwar/>
 
@@ -36,8 +45,7 @@ window with nearest-neighbour rendering.
 
 ## Getting started
 
-Requires **Node 22+** (the version the GitHub Pages deploy workflow builds
-with; see [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)).
+Requires **Node 22+**.
 
 ```bash
 npm install       # install dependencies
@@ -53,67 +61,113 @@ Open the dev server URL that Vite prints (default <http://localhost:5173>).
 ## How to play
 
 The whole game is playable with the mouse / touch; keyboard shortcuts mirror the
-on-screen buttons.
+on-screen buttons. From the **Title** you enter the **Home** base hub, which
+carries a persistent bottom navigation between the game's main screens:
 
-| Input                       | Action                                             |
-| --------------------------- | -------------------------------------------------- |
-| **Drag left/right**         | Slide the squad between the two lanes              |
-| `←` / `A`                   | Move to the left lane                              |
-| `→` / `D`                   | Move to the right lane                             |
-| `Space` / `Enter`           | Deploy (Title) · Redeploy (Results)                |
-| `U`                         | Open **Upgrades**                                  |
-| `S`                         | Open **Settings** (from the Title)                 |
-| `H`                         | Toggle **How to Play** (from the Title)            |
-| `R`                         | **Redeploy** into a new run (Results)              |
-| `Esc`                       | Close a panel / go back                            |
+| Screen             | What you do there                                             |
+| ------------------ | ------------------------------------------------------------- |
+| **Base**           | Upgrade buildings; collect offline resource production        |
+| **Heroes**         | Recruit, view, and level up your hero collection              |
+| **Formation**      | Arrange a 2-front / 3-back squad for battle                   |
+| **Campaign**       | Fight story stages and endless horde-defense zombie waves     |
+| **Missions**       | Claim daily arms-race tasks and the weekly alliance duel      |
+| **Season**         | Progress the season battle-pass and virus-resistance track    |
+| **Falcon Rescue**  | Play the lane gate-runner mini-game to top up your economy     |
+
+`Esc` closes a panel or returns to the hub. Volume sliders and the
+한국어 / English language toggle live in **Settings**, all persisted to
+`localStorage`, alongside a two-press **Reset Progress** option.
 
 ### The core loop
 
-1. **Deploy.** Start a run from the Title. Your squad auto-runs forward on a
-   scrolling two-lane road.
-2. **Pick gates.** Each gate row shows one math gate per lane. Steer into the
-   gate that grows your squad (green) and avoid the shrinking ones (red). The
-   run always offers at least one safe choice per row.
-3. **Fight.** A bigger squad shoots harder. Your soldiers auto-fire at enemy
-   clusters as they pass; any enemy HP you fail to burn down costs you soldiers.
-4. **Beat the boss.** Survive to the end of the run and defeat the boss to win.
-   If your squad ever hits zero, the run ends in defeat.
-5. **Upgrade.** Spend the coins earned each run on **Starting Squad**,
-   **Firepower**, **Fire Rate**, and **Salvage** (coin gain). Upgrades persist
-   and change the next run's starting stats.
+1. **Build your base.** From **Base** you upgrade an HQ-gated building tree.
+   Production buildings generate the four resources over real time; the base
+   **credits offline production** when you return, so progress continues while
+   the tab is closed.
+2. **Collect heroes.** In **Heroes** you spend shards to **recruit** from an
+   original 15-hero catalog. Recruiting uses a **pity** system: a guaranteed
+   high-grade pull arrives if you go dry, and duplicates convert into **shard**
+   progression that levels and stars-up heroes you already own.
+3. **Set your formation.** In **Formation** you place heroes into a **2-front /
+   3-back** squad. Each hero has a **type** in the triangle
+   **tank > missile > aircraft > tank** (attacking the type you beat deals
+   bonus damage; attacking the type that beats you deals less). Filling all
+   five slots with a **single type** grants a **+20% HP/ATK/DEF** same-type
+   buff.
+4. **Go to battle.** Combat is a **deterministic turn-based auto-battle**: given
+   your team, the enemy team, and a seed it resolves to the exact same outcome
+   and produces an ordered event **timeline** that the **Battle** scene replays
+   as an animated fight (attacks, heals, deaths, type-advantage cues, with
+   screen shake, particles, and SFX).
+5. **Play the modes.**
+   - **Campaign** stages advance the story. Later stages are **gated by your
+     seasonal virus resistance**, so you raise resistance on the season track
+     to unlock them.
+   - **Horde defense** pits your squad against escalating **zombie waves** for
+     endless-mode progression.
+   - The offline **league** runs single-player AI matches that score your rank
+     within a simulated alliance standings table.
+6. **Earn season + mission rewards.** **Daily arms-race missions** reward an
+   arms score with milestone payouts; a **weekly alliance duel** settles from
+   your accumulated activity. The **Season** battle-pass converts season XP into
+   tiers on a free (and unlockable premium) reward track.
+7. **Top up with Falcon Rescue.** The **Falcon Rescue** lane gate-runner
+   mini-game is fully playable on its own, and its results now **feed the army
+   economy**: a run awards **shards, resources, and season XP** back into your
+   main save, so the mini-game meaningfully accelerates hero collection and the
+   season track.
 
-**Settings** offers master / SFX / music volume sliders and a language toggle
-(한국어 / English), all persisted to `localStorage`, plus a two-press
-**Reset Progress** option that wipes the save.
+### Falcon Rescue (lane gate-runner mini-game)
+
+A small squad auto-runs forward on a scrolling two-lane road; you slide it
+left/right to pass through rows of **math gates** (`+10`, `x2`, `-5`, `/2`) that
+grow or shrink the crowd, auto-fire at enemy clusters, and face a **boss** at
+the end. Drag or use `←`/`A` and `→`/`D` to switch lanes; `Space`/`Enter`
+deploys and redeploys. On finishing, the run's result is recorded into the main
+game and converted into shards / resources / season XP for your army.
 
 ## Persistence
 
-Meta-progression (coins, upgrade levels, best distance/score, runs played) is
-saved to `localStorage` after every run and every purchase. A run itself is
-transient and never saved. The save is **versioned**: a corrupt, absent, or
-old-version save falls back to a fresh game rather than crashing. Audio + language
-settings are persisted separately under their own namespaced key.
+All progress is saved to `localStorage`. The save is **versioned (v2)** and
+covers the full game: resources, buildings and build queue, hero roster, shards
+and pity, formation, campaign clears and highest horde wave, season and mission
+state, league record, and the Falcon Rescue mini-game meta. Loading is robust:
+a corrupt, absent, or unknown-version save falls back to a fresh game rather
+than crashing, and a legacy **v1** save (the old gate-runner-only meta) is
+**migrated forward to v2** automatically, preserving its coins, upgrade levels,
+and bests under the mini-game block. Audio + language settings are persisted
+separately under their own namespaced key.
 
 ## Project structure
 
 ```
 src/
   main.ts          Phaser.Game bootstrap + scene list
-  config/          Centralized, config-driven tuning (GameConfig) + asset/scene keys
-  scenes/          Boot, Preload, Title, Run, Results, Upgrade, Settings
-  systems/         Pure-logic systems: Rng, GateMath, RunSimulator, MetaProgress,
-                   SaveManager, MetaStore + AudioManager
+  config/          Centralized, config-driven tuning (GameConfig), Heroes catalog,
+                   Progression tuning, asset/scene keys
+  scenes/          Boot, Preload, Title, Settings,
+                   Home (base hub w/ bottom-nav), Base, Heroes, Formation,
+                   Campaign (stages + horde defense), Missions (daily + league),
+                   Season (battle-pass + resistance), Battle (animated replay),
+                   and the Falcon Rescue mini-game (Run, Results, Upgrade)
+  systems/         Pure-logic systems + facade:
+                   Buildings, Economy, Heroes, Recruit, Formation, Combat,
+                   Campaign, Season, DailyMissions, League, plus the gate-runner
+                   Rng/GateMath/RunSimulator/MetaProgress; SaveManager,
+                   GameStore (v2 save facade), MetaStore, AudioManager
   ui/              Shared pixel-UI helpers: Menu, RunHud, UiText
-  types/           Shared cross-cutting types
+  types/           Shared cross-cutting v2 state contracts
   i18n/            Korean-first KO/EN string table + tiny runtime
 public/assets/     Original sprites, backgrounds, UI, FX, and audio
 tools/             Asset generators (gen_sprites.py, gen_audio.py)
 ```
 
-The `systems/` pure logic (gate math, deterministic run resolution,
-meta-progression, save serialization) contains **no Phaser dependency**, so it
-is covered by fast `vitest` unit tests (`src/**/*.test.ts`). The RunScene renders
-the exact same tested model, so the visible outcome matches the simulation.
+The `systems/` pure logic (economy, buildings, recruit, formation, combat,
+campaign, season, missions, league, gate math, save serialization) contains
+**no Phaser dependency**, so it is covered by fast `vitest` unit tests
+(`src/**/*.test.ts`). Scenes only read the `GameStore` facade and call its
+mutators; they never do game math, so the animated Battle replay matches the
+tested simulation exactly.
 
 ## Regenerating assets
 
@@ -133,27 +187,25 @@ The generated assets are committed (Phaser loads them at runtime from
 ## Deployment (GitHub Pages)
 
 The production build sets the Vite `base` to `/game-lastwar/` so asset URLs
-resolve under the project-pages path.
+resolve under the project-pages path. The site is a fully static bundle, so it
+can be served from any static host.
 
-### Automatic (GitHub Actions, recommended)
+### Manual publish (`npm run build` + `gh-pages`)
 
-Pushes to `main` trigger [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml),
-which runs `npm ci && npm run build`, uploads `dist/` as a Pages artifact, and
-publishes it with `actions/deploy-pages`. Enable **Settings → Pages → Build and
-deployment → Source: GitHub Actions** on the repository once, and every push to
-`main` redeploys to <https://savagemanage.github.io/game-lastwar/>.
-
-### Manual (`npm run build` + `gh-pages` fallback)
-
-If you prefer to publish by hand (or Actions is unavailable):
+The primary, self-contained way to publish is to build locally and push the
+`dist/` output to the `gh-pages` branch:
 
 ```bash
-npm run build                     # produces dist/
+npm run build                     # produces dist/ (base /game-lastwar/)
 npx gh-pages -d dist              # push dist/ to the gh-pages branch
 ```
 
 Then set **Settings → Pages → Source: Deploy from a branch → `gh-pages` / root**.
-The site serves at the same <https://savagemanage.github.io/game-lastwar/> URL.
+The site serves at <https://savagemanage.github.io/game-lastwar/>.
+
+> This branch does not include a GitHub Actions deploy workflow; the manual
+> build-and-publish path above is the supported route. Any static host works as
+> long as the site is served under the `/game-lastwar/` base path.
 
 ## Credits
 
