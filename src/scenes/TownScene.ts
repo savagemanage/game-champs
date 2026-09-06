@@ -10,6 +10,18 @@ import { TrainingPanel } from '../ui/TrainingPanel';
 import { textStyle } from '../ui/UiText';
 import { tr } from '../i18n/i18n';
 
+/**
+ * Format a NET offline resource delta for the "while away" banner. The amount
+ * can be negative (the Furnace burned more fuel than was produced), so a
+ * positive value is prefixed with '+' and a negative one keeps its '-', making
+ * the honest net change unambiguous. Magnitude is floored so tiny fractional
+ * drift renders as 0 rather than noise.
+ */
+function signed(value: number): string {
+  const whole = value < 0 ? Math.ceil(value) : Math.floor(value);
+  return whole > 0 ? `+${whole}` : String(whole);
+}
+
 /** Fixed layout position for each building sprite on the town map. */
 const BUILDING_LAYOUT: Record<BuildingKind, { x: number; y: number; scale: number }> = {
   furnace: { x: 480, y: 250, scale: 2.0 },
@@ -476,17 +488,21 @@ export class TownScene extends Phaser.Scene {
   private maybeShowOfflineGains(): void {
     if (!this.state.loaded || this.state.offlineSeconds <= 1) return;
     const g = this.state.offlineGains;
-    const total = g.food + g.wood + g.coal + g.iron;
-    if (total < 1) return;
+    // offlineGains is a NET bundle: production minus furnace fuel burn, so
+    // wood/coal can be negative. Suppress only a truly negligible window - use
+    // the summed MAGNITUDE of the net change so a meaningful net loss (e.g. the
+    // Furnace outburned production) still surfaces, not just net gains.
+    const magnitude = Math.abs(g.food) + Math.abs(g.wood) + Math.abs(g.coal) + Math.abs(g.iron);
+    if (magnitude < 1) return;
     const banner = this.add
       .text(
         CANVAS.WIDTH / 2,
         90,
         tr('save.offlineGains', {
-          food: Math.floor(g.food),
-          wood: Math.floor(g.wood),
-          coal: Math.floor(g.coal),
-          iron: Math.floor(g.iron),
+          food: signed(g.food),
+          wood: signed(g.wood),
+          coal: signed(g.coal),
+          iron: signed(g.iron),
         }),
         textStyle(13, { color: PALETTE.ACCENT_CSS, backgroundColor: PALETTE.PANEL_CSS, padding: { x: 8, y: 6 }, wordWrap: { width: 600 }, align: 'center' }),
       )

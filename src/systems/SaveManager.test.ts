@@ -235,6 +235,85 @@ describe('SaveManager', () => {
     expect(loaded.offlineGains.food).toBeLessThan(unthrottled);
   });
 
+  it('nets furnace fuel burn out of the reported offlineGains (wood/coal)', () => {
+    const storage = memoryStorage();
+    const mgr = new SaveManager(storage);
+    // A hold that PRODUCES wood/coal (sawmill + coal pit) yet also burns fuel in
+    // the Furnace while away. Fuel is plentiful enough to stay fully warm the
+    // whole window (so production runs at full efficiency and warmth never
+    // decays), letting us pin the expected net exactly: production - fuelSpent.
+    const startWood = 100_000;
+    const startCoal = 100_000;
+    const resources = new ResourceStore({ food: 0, wood: startWood, coal: startCoal, iron: 0 });
+    const buildings = new BuildingSystem([
+      { kind: 'furnace', level: 1, upgradeEndsAt: null },
+      { kind: 'sawmill', level: 1, upgradeEndsAt: null },
+      { kind: 'coal_pit', level: 1, upgradeEndsAt: null },
+    ]);
+    const training = new TrainingQueue(undefined, { trapper: 0, marksman: 0, vanguard: 0 });
+    mgr.save({ resources, buildings, training, warmth: new WarmthSystem(WARMTH.MAX_WARMTH), waveCleared: 0 }, 0);
+
+    const elapsedSec = 3600; // 1 hour, under the cap
+    const loaded = mgr.load(elapsedSec * 1000);
+    expect(loaded.offlineSeconds).toBe(elapsedSec);
+    // Stayed fully warm all window (ample fuel), so production ran unthrottled.
+    expect(loaded.snapshot.warmth.warmth).toBe(loaded.snapshot.warmth.maxWarmth(1));
+
+    const eff = ECONOMY.OFFLINE_EFFICIENCY;
+    // Gross production over the window (multiplier 1.0 at full warmth).
+    const grossWood = outputPerSec('sawmill', 1) * elapsedSec * eff;
+    const grossCoal = outputPerSec('coal_pit', 1) * elapsedSec * eff;
+    // Fuel the L1 Furnace burned over the window (per-second demand * seconds).
+    const perSec = new WarmthSystem().fuelPerSecond(1);
+    const burnedWood = perSec.wood * elapsedSec;
+    const burnedCoal = perSec.coal * elapsedSec;
+    expect(burnedWood).toBeGreaterThan(0);
+    expect(burnedCoal).toBeGreaterThan(0);
+
+    // The reported summary is NET: production credited minus fuel burned.
+    expect(loaded.offlineGains.wood).toBeCloseTo(grossWood - burnedWood, 4);
+    expect(loaded.offlineGains.coal).toBeCloseTo(grossCoal - burnedCoal, 4);
+    // ...and strictly less than the gross production (proves the netting runs).
+    expect(loaded.offlineGains.wood).toBeLessThan(grossWood);
+    expect(loaded.offlineGains.coal).toBeLessThan(grossCoal);
+
+    // The store balance remains the authoritative correct value: it already had
+    // the gross production added and the fuel spent debited, so it equals the
+    // starting stockpile plus the same net delta the summary reports.
+    expect(loaded.snapshot.resources.get('wood')).toBeCloseTo(startWood + (grossWood - burnedWood), 3);
+    expect(loaded.snapshot.resources.get('coal')).toBeCloseTo(startCoal + (grossCoal - burnedCoal), 3);
+    expect(loaded.snapshot.resources.get('wood')).toBeCloseTo(startWood + loaded.offlineGains.wood, 3);
+    expect(loaded.snapshot.resources.get('coal')).toBeCloseTo(startCoal + loaded.offlineGains.coal, 3);
+  });
+
+  it('reports a NET LOSS in offlineGains when the furnace outburns production', () => {
+    const storage = memoryStorage();
+    const mgr = new SaveManager(storage);
+    // A hold with NO wood/coal producers but a fueled Furnace: while away it
+    // burns fuel with zero production, so the net wood/coal summary is NEGATIVE.
+    const startWood = 100_000;
+    const startCoal = 100_000;
+    const resources = new ResourceStore({ food: 0, wood: startWood, coal: startCoal, iron: 0 });
+    const buildings = new BuildingSystem([
+      { kind: 'furnace', level: 1, upgradeEndsAt: null },
+      { kind: 'hunters_hut', level: 1, upgradeEndsAt: null },
+    ]);
+    const training = new TrainingQueue(undefined, { trapper: 0, marksman: 0, vanguard: 0 });
+    mgr.save({ resources, buildings, training, warmth: new WarmthSystem(WARMTH.MAX_WARMTH), waveCleared: 0 }, 0);
+
+    const elapsedSec = 3600;
+    const loaded = mgr.load(elapsedSec * 1000);
+
+    const perSec = new WarmthSystem().fuelPerSecond(1);
+    expect(loaded.offlineGains.wood).toBeCloseTo(-perSec.wood * elapsedSec, 4);
+    expect(loaded.offlineGains.coal).toBeCloseTo(-perSec.coal * elapsedSec, 4);
+    expect(loaded.offlineGains.wood).toBeLessThan(0);
+    expect(loaded.offlineGains.coal).toBeLessThan(0);
+    // Store balance stays authoritative and matches the reported net.
+    expect(loaded.snapshot.resources.get('wood')).toBeCloseTo(startWood + loaded.offlineGains.wood, 3);
+    expect(loaded.snapshot.resources.get('coal')).toBeCloseTo(startCoal + loaded.offlineGains.coal, 3);
+  });
+
   it('holds warmth at max over an offline window when fuel is ample', () => {
     const storage = memoryStorage();
     const mgr = new SaveManager(storage);

@@ -3,7 +3,7 @@ import type { Army, GameState, TroopKind } from '../types';
 import { BuildingSystem } from './BuildingSystem';
 import { ResourceStore } from './ResourceStore';
 import { TrainingQueue } from './TrainingQueue';
-import { WarmthSystem } from './WarmthSystem';
+import { WarmthSystem, type WarmthTickResult } from './WarmthSystem';
 
 /**
  * Current save-format version. Bump when GameState shape changes. Version 2 is
@@ -43,7 +43,13 @@ export interface LoadResult {
   loaded: boolean;
   /** Elapsed offline seconds credited (after capping), 0 for a fresh game. */
   offlineSeconds: number;
-  /** Resources credited from offline idle production. */
+  /**
+   * NET resource change credited over the offline window: idle production minus
+   * the fuel (wood + coal) the Furnace burned to hold back the cold. wood/coal
+   * may therefore be negative when the furnace outburned production; food/iron
+   * are production-only. The ResourceStore balance is the authoritative value;
+   * this bundle is the honest "while away" summary derived from it.
+   */
   offlineGains: ReturnType<ResourceStore['toJSON']>;
 }
 
@@ -124,7 +130,10 @@ export class SaveManager {
     for (const boundary of boundaries) {
       // Advance warmth over the segment (burning fuel from the store at the
       // current Furnace level) BEFORE production, mirroring the live tick order.
-      warmth.tick(boundary - cursor, buildings.furnaceLevel, resources);
+      // Deduct any fuel actually burned so `offlineGains` reflects the NET
+      // wood/coal change (production credited minus furnace burn), matching the
+      // authoritative store balance the player actually returns to.
+      deductFuel(offlineGains, warmth.tick(boundary - cursor, buildings.furnaceLevel, resources));
       // Credit production at the CURRENT (pre-completion) rates up to this
       // boundary, scaled by the warmth-derived multiplier, then apply the
       // completion so later segments use higher rates.
@@ -140,7 +149,7 @@ export class SaveManager {
       cursor = boundary;
     }
     // Final segment: from the last boundary (or window start) to `now`.
-    warmth.tick(now - cursor, buildings.furnaceLevel, resources);
+    deductFuel(offlineGains, warmth.tick(now - cursor, buildings.furnaceLevel, resources));
     accumulate(
       offlineGains,
       resources.applyProduction(
@@ -225,6 +234,22 @@ function accumulate(
   for (const key of Object.keys(dst) as (keyof typeof dst)[]) {
     dst[key] += src[key] ?? 0;
   }
+}
+
+/**
+ * Subtract the fuel a warmth tick burned (wood + coal) from the running
+ * `offlineGains` bundle, so the reported summary is the NET change over the
+ * offline window rather than gross production. Uses the tick's reported
+ * {@link WarmthTickResult.fuelSpent} directly (never re-derived). food/iron are
+ * never fuel, so they are untouched. The value can go negative when the furnace
+ * burned more than was produced; that honest net is surfaced by the UI.
+ */
+function deductFuel(
+  dst: ReturnType<ResourceStore['toJSON']>,
+  tick: WarmthTickResult,
+): void {
+  dst.wood -= tick.fuelSpent.wood;
+  dst.coal -= tick.fuelSpent.coal;
 }
 
 /** Coerce a possibly-partial army object into a full, non-negative integer Army. */
