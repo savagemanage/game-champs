@@ -131,6 +131,56 @@ export const STRINGS = {
   'howto.boss': { en: 'Survive to the end and defeat the boss to win the run.', ko: '끝까지 살아남아 보스를 물리치면 승리합니다.' },
   'howto.meta': { en: 'Spend earned coins on upgrades between runs.', ko: '출격 사이에 획득한 코인으로 업그레이드하세요.' },
 
+  // Base economy - resource names (original, genre-appropriate).
+  'resource.rations': { en: 'Rations', ko: '식량' },
+  'resource.steel': { en: 'Steel', ko: '철강' },
+  'resource.fuel': { en: 'Fuel', ko: '연료' },
+  'resource.circuitry': { en: 'Circuitry', ko: '전자부품' },
+
+  // Base buildings - names.
+  'building.hq': { en: 'Headquarters', ko: '본부' },
+  'building.tech_center': { en: 'Tech Center', ko: '테크센터' },
+  'building.parade_ground': { en: 'Parade Ground', ko: '연병장' },
+  'building.hospital': { en: 'Hospital', ko: '병원' },
+  'building.barracks': { en: 'Barracks', ko: '병영' },
+  'building.drone_center': { en: 'Drone Center', ko: '드론센터' },
+
+  // Base buildings - descriptions.
+  'building.hq.desc': {
+    en: 'Command center. Its level caps every other building and boosts all resource production and storage.',
+    ko: '지휘 본부. 다른 모든 건물의 최대 레벨을 결정하며 자원 생산과 저장량을 늘립니다.',
+  },
+  'building.tech_center.desc': {
+    en: 'Researches upgrades and produces circuitry for advanced construction.',
+    ko: '업그레이드를 연구하고 고급 건설에 필요한 전자부품을 생산합니다.',
+  },
+  'building.parade_ground.desc': {
+    en: 'Musters the squad and boosts rations and fuel production.',
+    ko: '분대를 집결시키고 식량과 연료 생산을 늘립니다.',
+  },
+  'building.hospital.desc': {
+    en: 'Treats wounded soldiers, raising heal capacity between battles.',
+    ko: '부상병을 치료하여 전투 사이의 회복 용량을 늘립니다.',
+  },
+  'building.barracks.desc': {
+    en: 'Trains new troops and produces steel for the war effort.',
+    ko: '새 병력을 훈련시키고 철강을 생산합니다.',
+  },
+  'building.drone_center.desc': {
+    en: 'Fields support drones and produces fuel for the rescue squad.',
+    ko: '지원 드론을 운용하고 구조대를 위한 연료를 생산합니다.',
+  },
+
+  // Base management (construction feedback).
+  'building.upgrade': { en: 'Upgrade', ko: '업그레이드' },
+  'building.level': { en: 'Lv. {level}', ko: 'Lv. {level}' },
+  'building.building': { en: 'Building… {seconds}s', ko: '건설 중… {seconds}초' },
+  'building.complete': { en: 'Construction complete', ko: '건설 완료' },
+  'building.hqCapped': { en: 'Upgrade HQ first', ko: '먼저 본부를 올리세요' },
+  'building.queueFull': { en: 'Another building is under construction', ko: '다른 건물을 건설 중입니다' },
+  'building.maxLevel': { en: 'Max level', ko: '최대 레벨' },
+  'building.insufficient': { en: 'Not enough resources', ko: '자원이 부족합니다' },
+
   // Save / load feedback.
   'save.saved': { en: 'Saved', ko: '저장됨' },
   'save.loaded': { en: 'Progress loaded', ko: '진행 불러옴' },

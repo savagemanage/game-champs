@@ -3,6 +3,11 @@ import { SaveManager, memoryStorage, SAVE_VERSION, SAVE_KEY } from './SaveManage
 import { GAME_STATE } from '../config/GameConfig';
 import type { GameState, GameStateV1 } from '../types';
 
+/** The fresh resources sub-state (seeded stockpiles, no tick yet). */
+const freshResources = () => SaveManager.freshGame().resources;
+/** The fresh buildings sub-state (HQ 1, others 0, empty queue). */
+const freshBuildings = () => SaveManager.freshGame().buildings;
+
 /**
  * Unit tests for the versioned meta-save layer with an INJECTED fake storage
  * (no window dependency): v2 round-trip fidelity, v1 -> v2 migration,
@@ -21,8 +26,8 @@ describe('SaveManager', () => {
         bestScore: 4200,
         runsPlayed: 12,
       },
-      resources: { stockpiles: {} },
-      buildings: { levels: {} },
+      resources: freshResources(),
+      buildings: freshBuildings(),
       heroes: { roster: {} },
       formation: {
         front: new Array<string | null>(GAME_STATE.FORMATION.FRONT_SLOTS).fill(null),
@@ -61,8 +66,15 @@ describe('SaveManager', () => {
       bestScore: 0,
       runsPlayed: 0,
     });
-    expect(fresh.resources).toEqual({ stockpiles: {} });
-    expect(fresh.buildings).toEqual({ levels: {} });
+    // Four resources seeded from config; no production tick recorded yet.
+    expect(Object.keys(fresh.resources.stockpiles).sort()).toEqual(
+      ['circuitry', 'fuel', 'rations', 'steel'],
+    );
+    expect(fresh.resources.lastTickTimestamp).toBe(0);
+    // HQ starts at level 1 so the base is playable; others at 0; empty queue.
+    expect(fresh.buildings.levels.hq).toBe(1);
+    expect(fresh.buildings.levels.barracks).toBe(0);
+    expect(fresh.buildings.queue).toEqual([]);
     expect(fresh.heroes).toEqual({ roster: {} });
     expect(fresh.formation.front).toHaveLength(GAME_STATE.FORMATION.FRONT_SLOTS);
     expect(fresh.formation.back).toHaveLength(GAME_STATE.FORMATION.BACK_SLOTS);
@@ -128,8 +140,8 @@ describe('SaveManager', () => {
     expect(state.miniGame.bestScore).toBe(4200);
     expect(state.miniGame.runsPlayed).toBe(12);
     // New sub-states initialized to fresh defaults.
-    expect(state.resources).toEqual({ stockpiles: {} });
-    expect(state.buildings).toEqual({ levels: {} });
+    expect(state.resources).toEqual(freshResources());
+    expect(state.buildings).toEqual(freshBuildings());
     expect(state.heroes).toEqual({ roster: {} });
     expect(state.formation.front).toHaveLength(GAME_STATE.FORMATION.FRONT_SLOTS);
     expect(state.formation.back).toHaveLength(GAME_STATE.FORMATION.BACK_SLOTS);
@@ -176,7 +188,8 @@ describe('SaveManager', () => {
     expect(state.miniGame.bestDistance).toBe(10);
     expect(state.miniGame.runsPlayed).toBe(0);
     // Missing sub-states are filled with fresh defaults.
-    expect(state.resources).toEqual({ stockpiles: {} });
+    expect(state.resources).toEqual(freshResources());
+    expect(state.buildings).toEqual(freshBuildings());
     expect(state.formation.front).toHaveLength(GAME_STATE.FORMATION.FRONT_SLOTS);
   });
 
@@ -187,14 +200,27 @@ describe('SaveManager', () => {
       JSON.stringify({
         version: SAVE_VERSION,
         miniGame: { coins: 5 },
-        resources: { stockpiles: { wood: 10.9, food: -4 } },
+        resources: { stockpiles: { rations: 10.9, steel: -4, bogus: 99 }, lastTickTimestamp: -1 },
+        buildings: { levels: { hq: 2.7, barracks: -1 }, queue: 'nope' },
         formation: { front: ['h1', 'h2', 'h3'], back: 'nope' },
         season: { current: 2.9, progress: 40 },
         missions: { daily: { arms: 3.6 }, weekly: 'bad' },
       }),
     );
     const { state } = new SaveManager(storage).load();
-    expect(state.resources.stockpiles).toEqual({ wood: 10, food: 0 });
+    // Known keys clamped to non-negative ints; unknown keys dropped; missing
+    // keys (fuel/circuitry) filled from config start amounts.
+    expect(state.resources.stockpiles.rations).toBe(10); // floored
+    expect(state.resources.stockpiles.steel).toBe(0); // negative -> 0
+    expect(state.resources.stockpiles).not.toHaveProperty('bogus');
+    expect(Object.keys(state.resources.stockpiles).sort()).toEqual(
+      ['circuitry', 'fuel', 'rations', 'steel'],
+    );
+    expect(state.resources.lastTickTimestamp).toBe(0); // negative -> 0
+    // Building levels floored; HQ floored at 1; malformed queue -> empty.
+    expect(state.buildings.levels.hq).toBe(2); // floored
+    expect(state.buildings.levels.barracks).toBe(0); // negative -> 0
+    expect(state.buildings.queue).toEqual([]);
     // Extra front slot dropped to config size; back reset to nulls.
     expect(state.formation.front).toEqual(['h1', 'h2']);
     expect(state.formation.back).toEqual([null, null, null]);

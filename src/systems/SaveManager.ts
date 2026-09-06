@@ -10,7 +10,9 @@
  */
 
 import type {
+  BuildingId,
   BuildingState,
+  BuildingUpgrade,
   FormationState,
   GameState,
   GameStateV1,
@@ -22,7 +24,14 @@ import type {
   SeasonState,
 } from '../types';
 import { freshUpgrades } from './MetaProgress';
-import { GAME_STATE, UPGRADE_ORDER } from '../config/GameConfig';
+import {
+  BUILDING_ORDER,
+  BUILDINGS,
+  ECONOMY,
+  GAME_STATE,
+  RESOURCE_ORDER,
+  UPGRADE_ORDER,
+} from '../config/GameConfig';
 
 /** Current save-format version. Bump when GameState shape changes. */
 export const SAVE_VERSION = 2;
@@ -182,14 +191,29 @@ function freshMiniGame(): MiniGameMeta {
   };
 }
 
-/** Empty-but-valid resource economy (no stockpiles yet). */
+/**
+ * A fresh resource economy: each of the four resources seeded with its config
+ * `start` amount, and no production tick recorded yet (lastTickTimestamp 0 so
+ * the first real tick establishes the baseline without back-crediting time).
+ */
 function freshResources(): ResourceState {
-  return { stockpiles: {} };
+  const stockpiles: Record<string, number> = {};
+  for (const kind of RESOURCE_ORDER) {
+    stockpiles[kind] = ECONOMY.RESOURCES[kind].start;
+  }
+  return { stockpiles, lastTickTimestamp: 0 };
 }
 
-/** Empty-but-valid building state (nothing constructed). */
+/**
+ * A fresh building state: HQ at level 1 (base is playable) and every other
+ * building at level 0, with an empty build queue.
+ */
 function freshBuildings(): BuildingState {
-  return { levels: {} };
+  const levels: Record<string, number> = {};
+  for (const id of BUILDING_ORDER) {
+    levels[id] = id === 'hq' ? 1 : 0;
+  }
+  return { levels, queue: [] };
 }
 
 /** Empty-but-valid hero roster (no heroes recruited). */
@@ -261,14 +285,64 @@ function normalizeIntRecord(input: unknown): Record<string, number> {
   return out;
 }
 
-/** Coerce a possibly-partial resource state into a complete one. */
+/**
+ * Coerce a possibly-partial resource state into a complete one: every resource
+ * key present as a non-negative int (missing -> config start), stockpiles
+ * clamped to their storage caps is left to the runtime tick (normalization only
+ * guarantees a well-formed shape), and a non-negative lastTickTimestamp.
+ */
 function normalizeResources(resources: Partial<ResourceState> | undefined): ResourceState {
-  return { stockpiles: normalizeIntRecord(resources?.stockpiles) };
+  const rawStockpiles = normalizeIntRecord(resources?.stockpiles);
+  const stockpiles: Record<string, number> = {};
+  for (const kind of RESOURCE_ORDER) {
+    stockpiles[kind] = rawStockpiles[kind] ?? ECONOMY.RESOURCES[kind].start;
+  }
+  return { stockpiles, lastTickTimestamp: safeInt(resources?.lastTickTimestamp) };
 }
 
-/** Coerce a possibly-partial building state into a complete one. */
+/**
+ * Coerce a possibly-partial building state into a complete one: every building
+ * id present as a non-negative int level (missing -> HQ 1, others 0) and a
+ * well-formed, deduplicated single-slot build queue.
+ */
 function normalizeBuildings(buildings: Partial<BuildingState> | undefined): BuildingState {
-  return { levels: normalizeIntRecord(buildings?.levels) };
+  const rawLevels = normalizeIntRecord(buildings?.levels);
+  const levels: Record<string, number> = {};
+  for (const id of BUILDING_ORDER) {
+    const fallback = id === 'hq' ? 1 : 0;
+    const level = rawLevels[id] ?? fallback;
+    // HQ starts at 1 (base always exists); nothing exceeds its config ceiling.
+    const min = id === 'hq' ? 1 : 0;
+    levels[id] = Math.min(Math.max(min, level), BUILDINGS.DEFS[id].maxLevel);
+  }
+  return { levels, queue: normalizeQueue(buildings?.queue) };
+}
+
+/** Whether a value is a valid building id. */
+function isBuildingId(value: unknown): value is BuildingId {
+  return typeof value === 'string' && (BUILDING_ORDER as readonly string[]).includes(value);
+}
+
+/**
+ * Coerce a possibly-malformed build queue into a well-formed one, keeping at
+ * most one active upgrade (single global queue) and dropping entries that are
+ * not a valid, fully-specified {@link BuildingUpgrade}.
+ */
+function normalizeQueue(input: unknown): BuildingUpgrade[] {
+  if (!Array.isArray(input)) return [];
+  const out: BuildingUpgrade[] = [];
+  for (const raw of input) {
+    if (!raw || typeof raw !== 'object') continue;
+    const u = raw as Partial<BuildingUpgrade>;
+    if (!isBuildingId(u.building)) continue;
+    const toLevel = safeInt(u.toLevel);
+    const startedAt = safeInt(u.startedAt);
+    const completesAt = safeInt(u.completesAt);
+    if (toLevel <= 0 || completesAt <= 0) continue;
+    out.push({ building: u.building, toLevel, startedAt, completesAt });
+    if (out.length >= BUILDINGS.MAX_CONCURRENT_UPGRADES) break;
+  }
+  return out;
 }
 
 /**

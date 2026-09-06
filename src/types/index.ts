@@ -8,10 +8,19 @@
  * config stays the single source of truth.
  */
 
-import { GATE_OPS, UPGRADE_ORDER } from '../config/GameConfig';
+import { BUILDING_ORDER, GATE_OPS, RESOURCE_ORDER, UPGRADE_ORDER } from '../config/GameConfig';
 
 /** A math gate operation. Derived from the canonical GATE_OPS tuple. */
 export type GateOp = (typeof GATE_OPS)[number];
+
+/** A survival resource id. Derived from the canonical RESOURCE_ORDER tuple. */
+export type ResourceKind = (typeof RESOURCE_ORDER)[number];
+
+/** A base building id. Derived from the canonical BUILDING_ORDER tuple. */
+export type BuildingId = (typeof BUILDING_ORDER)[number];
+
+/** A per-resource numeric bag (stockpiles, costs, production rates). */
+export type ResourceBag = Record<ResourceKind, number>;
 
 /** A lane index. With RUN.LANE_COUNT === 2 this is 0 or 1. */
 export type Lane = number;
@@ -120,27 +129,50 @@ export interface GameStateV1 {
 }
 
 /**
- * Resource economy sub-state (OWNED BY A LATER FEAT: buildings/economy).
+ * Resource economy sub-state (OWNED BY FEAT-002: buildings/economy).
  *
- * Placeholder for the four survival resources plus their storage caps that the
- * base-building economy will drive. Kept empty-but-valid (all zero) now so the
- * save round-trips and later features can populate concrete fields.
+ * Tracks the current stockpile of each of the four survival resources plus the
+ * wall-clock timestamp (ms since epoch) of the last production tick. Passive
+ * production accrues against `lastTickTimestamp` so it works offline on a
+ * static site. Stockpiles are stored keyed by id for save-format tolerance;
+ * {@link ResourceKind} enumerates the valid keys.
  */
 export interface ResourceState {
-  /** Per-resource stockpiles, keyed by resource id (empty until FEAT adds them). */
+  /** Per-resource stockpiles, keyed by {@link ResourceKind}. */
   stockpiles: Record<string, number>;
+  /** Epoch-ms timestamp of the last production tick (0 until first tick). */
+  lastTickTimestamp: number;
 }
 
 /**
- * Base-building sub-state (OWNED BY A LATER FEAT: buildings/economy).
+ * A queued, time-gated building upgrade. `completesAt` is an epoch-ms timestamp;
+ * the upgrade resolves (bumps the building level) once wall-clock time reaches
+ * it, including while the tab was closed (offline completion on load).
+ */
+export interface BuildingUpgrade {
+  /** Building being upgraded. */
+  building: BuildingId;
+  /** The level the building reaches when this upgrade completes. */
+  toLevel: number;
+  /** Epoch-ms timestamp the upgrade started. */
+  startedAt: number;
+  /** Epoch-ms timestamp the upgrade completes. */
+  completesAt: number;
+}
+
+/**
+ * Base-building sub-state (OWNED BY FEAT-002: buildings/economy).
  *
- * Placeholder for HQ + tech center / parade ground / hospital / barracks /
- * drone center levels and their in-progress timed upgrades. Empty-but-valid
- * now (no buildings constructed).
+ * Holds every building's current level (HQ + tech center / parade ground /
+ * hospital / barracks / drone center) and the single global build queue. Only
+ * one upgrade is in progress at a time (single-queue feel); `queue` holds the
+ * active upgrade(s) with their completion timestamps.
  */
 export interface BuildingState {
-  /** Building level keyed by building id (empty until a FEAT populates it). */
+  /** Building level keyed by {@link BuildingId}. */
   levels: Record<string, number>;
+  /** Active timed upgrade(s); at most one at a time (single global queue). */
+  queue: BuildingUpgrade[];
 }
 
 /**

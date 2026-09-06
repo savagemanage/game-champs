@@ -226,6 +226,134 @@ export const GAME_STATE = {
 } as const;
 
 /**
+ * Base economy tuning (FEAT-002). The base produces four original survival
+ * resources over wall-clock time, each capped by a storage limit. HQ level
+ * drives global production/storage multipliers; individual buildings add flat
+ * production and storage on top. All numbers are Phaser-free `as const` data so
+ * the pure economy/building systems and their tests share one source of truth.
+ *
+ * Resources (original, genre-appropriate names):
+ *  - rations   (식량)     : feeds the squad; base staple resource.
+ *  - steel     (철강)     : structural material for construction.
+ *  - fuel      (연료)     : powers vehicles, drones, and production.
+ *  - circuitry (전자부품) : advanced parts gating higher-tech upgrades.
+ */
+export const ECONOMY = {
+  /**
+   * Per-resource base tuning. `baseProduction` is units/second produced with no
+   * buildings, `baseStorage` is the level-0 storage cap, and `start` is the
+   * amount a fresh save begins with. Storage clamps the stockpile every tick.
+   */
+  RESOURCES: {
+    rations: { baseProduction: 0.5, baseStorage: 2000, start: 500 },
+    steel: { baseProduction: 0.4, baseStorage: 2000, start: 400 },
+    fuel: { baseProduction: 0.3, baseStorage: 1500, start: 300 },
+    circuitry: { baseProduction: 0.1, baseStorage: 800, start: 100 },
+  },
+  /**
+   * Real-time accrual is capped at this many seconds per resolution so a save
+   * left closed for weeks does not overflow with a single absurd delta; offline
+   * production still accrues up to this window (24h). Storage caps then clamp.
+   */
+  MAX_ACCRUAL_SECONDS: 86400,
+} as const;
+
+/**
+ * Building tree tuning (FEAT-002). Every building shares a geometric cost + time
+ * curve: the cost of a resource to reach `level` (from level-1 up) is
+ * `round(baseCost[res] * costGrowth^(level-1))` and the build time is
+ * `round(baseTimeSeconds * timeGrowth^(level-1))`. `maxLevel` is the absolute
+ * ceiling; a non-HQ building is additionally capped at the current HQ level
+ * (the HQ cap, enforced in Buildings.ts).
+ *
+ * Per-level EFFECTS (applied by Economy/other systems reading the level):
+ *  - hq            : global production + storage multiplier; raises the cap for
+ *                    all other buildings. Level 0 already grants the base.
+ *  - tech_center   : circuitry production + research-unlock tier.
+ *  - parade_ground : rations + fuel production (feeds/moves the army).
+ *  - hospital      : wounded-soldier heal capacity.
+ *  - barracks      : troop-training capacity + steel production.
+ *  - drone_center  : fuel production + drone (Falcon Rescue) support capacity.
+ */
+export const BUILDINGS = {
+  /** Multiplicative cost growth per building level (geometric curve). */
+  COST_GROWTH: 1.6,
+  /** Multiplicative build-time growth per building level. */
+  TIME_GROWTH: 1.5,
+  /** Only one upgrade may be in progress at a time (single global build queue). */
+  MAX_CONCURRENT_UPGRADES: 1,
+  /**
+   * Per-building definitions. `baseCost` is the level-1 cost per resource,
+   * `baseTimeSeconds` the level-1 build time, `maxLevel` the absolute ceiling,
+   * and `effectPerLevel` documents the numeric effect one level grants (read by
+   * the systems that own that stat).
+   */
+  DEFS: {
+    hq: {
+      baseCost: { steel: 100, rations: 100, fuel: 0, circuitry: 0 },
+      baseTimeSeconds: 30,
+      maxLevel: 30,
+      /** Fractional production + storage bonus granted per HQ level. */
+      effectPerLevel: { productionBonus: 0.1, storageBonus: 0.25 },
+    },
+    tech_center: {
+      baseCost: { steel: 80, rations: 40, fuel: 20, circuitry: 0 },
+      baseTimeSeconds: 45,
+      maxLevel: 30,
+      /** Flat circuitry production (units/sec) added per level. */
+      effectPerLevel: { circuitryProduction: 0.05, researchTier: 1 },
+    },
+    parade_ground: {
+      baseCost: { steel: 60, rations: 80, fuel: 30, circuitry: 0 },
+      baseTimeSeconds: 40,
+      maxLevel: 30,
+      /** Flat rations + fuel production (units/sec) added per level. */
+      effectPerLevel: { rationsProduction: 0.15, fuelProduction: 0.08 },
+    },
+    hospital: {
+      baseCost: { steel: 70, rations: 50, fuel: 10, circuitry: 5 },
+      baseTimeSeconds: 40,
+      maxLevel: 30,
+      /** Wounded-heal capacity added per level. */
+      effectPerLevel: { healCapacity: 25 },
+    },
+    barracks: {
+      baseCost: { steel: 90, rations: 60, fuel: 15, circuitry: 0 },
+      baseTimeSeconds: 50,
+      maxLevel: 30,
+      /** Troop-training capacity + flat steel production per level. */
+      effectPerLevel: { trainingCapacity: 20, steelProduction: 0.1 },
+    },
+    drone_center: {
+      baseCost: { steel: 80, rations: 40, fuel: 40, circuitry: 15 },
+      baseTimeSeconds: 55,
+      maxLevel: 30,
+      /** Flat fuel production + drone-support capacity per level. */
+      effectPerLevel: { fuelProduction: 0.12, droneSupport: 1 },
+    },
+  },
+} as const;
+
+/**
+ * Ordered tuple of resource ids so UI and iteration share one canonical order.
+ * The ResourceKind union type is derived in src/types.
+ */
+export const RESOURCE_ORDER = ['rations', 'steel', 'fuel', 'circuitry'] as const;
+
+/**
+ * Ordered tuple of building ids (HQ first). The BuildingId union type is
+ * derived in src/types. HQ leads because its level caps every other building.
+ */
+export const BUILDING_ORDER = [
+  'hq',
+  'tech_center',
+  'parade_ground',
+  'hospital',
+  'barracks',
+  'drone_center',
+] as const;
+
+/**
  * Ordered tuple of meta-upgrade kinds so UI and iteration share one canonical
  * order. The MetaUpgradeKind union type is derived in src/types.
  */
