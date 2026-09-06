@@ -1,5 +1,7 @@
 # Wirework
 
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+
 An original-world 2D pixel-art **top-down wall-defense ODM action** game. You
 pilot an omni-directional mobility (ODM) grapple rig across a besieged arena,
 defending a **concentric double ring** fortification — an **outer ring** and an

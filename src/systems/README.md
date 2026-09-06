@@ -1,8 +1,8 @@
 # Systems
 
-Cross-entity game systems live here: the ODM grapple/mobility physics, the wave
-spawner/composer, combat and damage resolution, and scoring.
+Cross-entity game systems live here: the ODM `GrappleSystem` (grapple/mobility
+physics), `GasSystem` (gas resource), `CombatSystem` (damage resolution),
+`WaveSystem` (spawning/composition), `AudioManager` (sound), and the
+`SiegeGeometry` helpers for the concentric-ring layout.
 
-Systems operate on entities and read tuning from `src/config/GameConfig.ts`.
-
-Populated by later features.
+Systems operate on entities and read tuning from `src/config/*.ts`.
