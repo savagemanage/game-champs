@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import type { ChampionRole } from '../../data/champions';
+import { CHAMPIONS, getChampionById, type ChampionRole } from '../../data/champions';
 import type { MinionType } from '../rift/minions';
-import { derivePalette } from './palette';
+import { derivePalette, hexToInt } from './palette';
 import {
   MARKER_PALETTES,
+  TEAM_RIM,
   championArt,
+  championArtSvg,
   markerArt,
   minionArt,
   structureArt,
@@ -76,6 +78,41 @@ describe('championArt', () => {
     const a = championArt('bruiser', derivePalette(0xff5533, RIM)).svg;
     const b = championArt('bruiser', derivePalette(0x33ff88, RIM)).svg;
     expect(a).not.toBe(b);
+  });
+});
+
+describe('championArtSvg', () => {
+  it('returns a non-empty inline SVG string for a champion', () => {
+    const svg = championArtSvg(CHAMPIONS[0]);
+    expect(typeof svg).toBe('string');
+    expect(svg.length).toBeGreaterThan(0);
+    expect(svg).toContain('<svg');
+    expect(svg.trimEnd().endsWith('</svg>')).toBe(true);
+  });
+
+  it('matches the battle art path (championArt + derivePalette + TEAM_RIM)', () => {
+    const champ = CHAMPIONS[0];
+    const expected = championArt(
+      champ.role,
+      derivePalette(hexToInt(champ.accentColor), TEAM_RIM.ally),
+    ).svg;
+    expect(championArtSvg(champ, 'ally')).toBe(expected);
+    expect(championArtSvg(champ)).toBe(expected); // default team is 'ally'
+  });
+
+  it('differs by team so the ally/enemy rim tell survives', () => {
+    const champ = CHAMPIONS[0];
+    expect(championArtSvg(champ, 'ally')).not.toBe(championArtSvg(champ, 'enemy'));
+    expect(championArtSvg(champ, 'ally')).toContain(toHex(TEAM_RIM.ally));
+    expect(championArtSvg(champ, 'enemy')).toContain(toHex(TEAM_RIM.enemy));
+  });
+
+  it('varies by champion accent and role', () => {
+    const marksman = getChampionById('ashborne')!;
+    const assassin = getChampionById('nightveil')!;
+    expect(championArtSvg(marksman)).not.toBe(championArtSvg(assassin));
+    // accent color is embedded as the base tone
+    expect(championArtSvg(marksman)).toContain(toHex(hexToInt(marksman.accentColor)));
   });
 });
 

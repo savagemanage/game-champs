@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import type { Champion } from '../data/champions';
+import ChampionFigure from './ChampionFigure';
 
 interface ChampionCardProps {
   champion: Champion;
@@ -21,9 +22,10 @@ function initials(name: string): string {
 }
 
 /**
- * Selectable roster tile. The portrait is pure CSS art: a gradient built from
- * the champion's accent color with their initials overlaid, so no image assets
- * are required. Reused by the champion-select grid.
+ * Selectable roster tile. The portrait frame is an accent-tinted gradient
+ * (built from the champion's accent color) hosting the champion's illustrated
+ * inline-SVG figure, with the initials kept as a subtle fallback tell behind
+ * it. No binary image assets are required. Reused by the champion-select grid.
  */
 export default function ChampionCard({
   champion,
@@ -50,6 +52,7 @@ export default function ChampionCard({
       {badge && <span className="champion-card__badge">{badge}</span>}
       <span className="champion-card__portrait" style={portraitStyle} aria-hidden="true">
         <span className="champion-card__initials">{initials(name)}</span>
+        <ChampionFigure champion={champion} className="champion-card__figure" />
       </span>
       <span className="champion-card__name">{name}</span>
       <span className="champion-card__role">{t(`role.${champion.role}`)}</span>

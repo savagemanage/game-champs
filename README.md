@@ -65,10 +65,16 @@ containers each frame as depth-sorted shadow + billboard sprites baked by
 
 Choose a mode after the main menu:
 
-- **Summoner's Rift** – the full three-lane 5v5 experience: three lanes with the complete
-  structure chain, minion waves, jungle camps and buffs, and epic monsters.
-- **ARAM** (All Random All Mid) – a single mid lane with randomized champions for constant
-  skirmishing.
+- **Summoner's Rift** – the full three-lane 5v5 experience: **ten champions in play (five per
+  team)** spread across three lanes by role, with the complete structure chain, minion waves,
+  jungle camps and buffs, and epic monsters. You control your pick; the other nine champions
+  (your four allies and all five opponents) are AI-driven and actively lane, fight, cast
+  abilities, die and respawn, and push toward the enemy Nexus, so the map stays in motion.
+- **ARAM** (All Random All Mid) – a single mid lane where both full teams pile into mid for
+  constant skirmishing.
+
+> The roster has five original archetypes, so both teams field the same five champions; they
+> are told apart by the ally/enemy team rim and accent color on every sprite.
 
 ---
 
@@ -76,8 +82,11 @@ Choose a mode after the main menu:
 
 1. **Main Menu** – start a match or open **Settings & Help**.
 2. **Mode Select** – pick **Summoner's Rift** or **ARAM**.
-3. **Champion Select** – browse the roster, inspect stats, P/Q/W/E/R abilities, role and
-   **lane role** (top / jungle / mid / bot / support), choose or randomize the opponent, and **Lock In**.
+3. **Champion Select** – browse the roster (each card shows the champion's **illustrated
+   inline-SVG figure**, the same vector art used in battle), inspect stats, P/Q/W/E/R abilities,
+   role and **lane role** (top / jungle / mid / bot / support), choose or randomize the
+   opponent, and **Lock In**. The selected-champion detail panel and the post-match **Results**
+   screen show the same character art.
 4. **Battle** – push lanes, farm minions and jungle camps for gold and XP, level up to **18**,
    buy items from the **shop** while in base, contest Dragon / Herald / Baron for team-wide
    buffs, and destroy structures in order to break through to the enemy Nexus.
@@ -196,7 +205,8 @@ src/
   main.tsx                      # React entry: imports i18n + global styles
   components/
     AbilityCard.tsx             # ability tooltip card (inline SVG skill icon from abilityIcons.ts)
-    ChampionCard.tsx            # roster tile (CSS-art portrait)
+    ChampionCard.tsx            # roster tile (accent frame + inline-SVG champion figure)
+    ChampionFigure.tsx          # decorative inline-SVG champion illustration (shared svgArt path)
     LanguageToggle.tsx          # ko/en segmented switch
     SettingsPanel.tsx           # localized settings + help modal (keybinds incl. B, audio, language)
     ShopPanel.tsx               # in-battle item shop (reads gold/owned items from the store)
@@ -237,7 +247,8 @@ src/
 
 There are **no binary art or audio assets** — none. Every visual is authored as **text**: the
 in-canvas battle art is **SVG vector markup built from TypeScript strings**, HUD skill icons are
-**inline DOM SVG**, champion portraits are CSS gradients with initials, and all sound effects are
+**inline DOM SVG**, champion portraits in the UI (select cards, detail panel, results) are the
+same **inline-SVG champion figures** rendered from `svgArt.championArt` over an accent frame, and all sound effects are
 synthesized at runtime with the Web Audio API. No PNGs, JPGs, atlases, or spritesheets are loaded
 or committed — SVG is text, not a binary asset.
 

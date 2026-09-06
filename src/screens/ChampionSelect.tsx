@@ -10,6 +10,7 @@ import {
 } from '../data/champions';
 import AbilityCard from '../components/AbilityCard';
 import ChampionCard from '../components/ChampionCard';
+import ChampionFigure from '../components/ChampionFigure';
 
 import type { GameMode } from '../App';
 
@@ -101,6 +102,10 @@ export default function ChampionSelect({
           {selected ? (
             <>
               <header className="champion-detail__header">
+                <ChampionFigure
+                  champion={selected}
+                  className="champion-detail__figure"
+                />
                 <div>
                   <h3 className="champion-detail__name">
                     {t(selected.nameKey)}

@@ -21,9 +21,24 @@
  * the art and tinting is wired without any runtime Phaser tint.
  */
 
-import type { ChampionRole } from '../../data/champions';
+import type { Champion, ChampionRole } from '../../data/champions';
 import type { MinionType } from '../rift/minions';
-import { darken, lighten, type SpritePalette } from './palette';
+import { darken, derivePalette, hexToInt, lighten, type SpritePalette } from './palette';
+
+/** Team a figure belongs to; drives the ally/enemy rim tell. */
+export type SpriteTeam = 'ally' | 'enemy';
+
+/**
+ * Rim/outline color per team, kept bright so the ally/enemy tell reads. This is
+ * the single source of truth shared by both the battle sprite factory (which
+ * bakes tinted textures) and the DOM champion art, so the in-UI figures match
+ * exactly what the player sees in battle. Defined here in the pure, Phaser-free
+ * module so React components can import it without pulling in Phaser.
+ */
+export const TEAM_RIM: Record<SpriteTeam, number> = {
+  ally: 0x8fd7ff,
+  enemy: 0xff8a7a,
+};
 
 /** Result of an SVG art builder: markup plus intrinsic geometry. */
 export interface SvgArt {
@@ -259,6 +274,20 @@ export function championArt(role: ChampionRole, pal: SpritePalette): SvgArt {
   const sy = (CH_H / CH_ART_H).toFixed(4);
   const body = `<g transform="scale(${sx} ${sy})">${inner}</g>`;
   return { svg: svgDoc(id, CH_W, CH_H, pal, body), viewW: CH_W, viewH: CH_H, footYFrac: CH_FOOT };
+}
+
+/**
+ * Convenience: build the full inline `<svg>` markup string for a champion,
+ * tinted exactly like the battle art for the given team. Derives the palette
+ * from the champion's accent color and the shared {@link TEAM_RIM} so the DOM
+ * figure matches the in-battle sprite without duplicating the rim literal.
+ *
+ * Pure and Phaser-free, so React components can import it and it can be unit
+ * tested directly (no rasterization involved for DOM inline SVG).
+ */
+export function championArtSvg(champion: Champion, team: SpriteTeam = 'ally'): string {
+  const pal = derivePalette(hexToInt(champion.accentColor), TEAM_RIM[team]);
+  return championArt(champion.role, pal).svg;
 }
 
 // ---------------------------------------------------------------------------

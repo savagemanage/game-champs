@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import {
+  CHAMPIONS,
   getChampionById,
   randomChampionId,
   type Champion,
@@ -87,6 +88,7 @@ import {
   STARTING_GOLD,
   type ProgressState,
 } from '../rift/economy';
+import { composeTeams, enemyFacingSlot } from '../rift/teams';
 import {
   computeEffectiveStats,
   getItemById,
@@ -202,9 +204,33 @@ function projScale(): number {
 /** Depth for transient VFX so they render above all entities. */
 const VFX_DEPTH = 200000;
 
+/**
+ * Per-champion AI/simulation state for a NON-human champion. Each bot owns its
+ * own cooldowns, resource pool, progression and lane assignment so all nine
+ * AI champions reason and act independently through the same pure helpers the
+ * human uses. The human champion does NOT carry a bot record; it uses the
+ * scene's `player*` fields (which the HUD reads).
+ */
+interface BotState {
+  champion: Champion;
+  side: MapSide;
+  cds: CooldownState;
+  resource: number;
+  maxResource: number;
+  progress: ProgressState;
+  /** The active map lane this bot walks/pushes. */
+  lane: Lane;
+  /** Cached lane push waypoints (flat gameplay pixels), enemy-nexus-ward. */
+  pushPath: Vec2[];
+  /** Current index into {@link pushPath} while marching. */
+  pushIndex: number;
+}
+
 /** A rendered combat entity: pairs pure combat state with its Phaser visuals. */
 interface Entity {
   unit: Unit;
+  /** AI/simulation state for non-human champions (undefined for the human). */
+  bot?: BotState;
   /**
    * The upright billboard container. Positioned every frame at the entity's
    * PROJECTED screen point, lifted up by {@link Entity.heightPx}. Holds the
@@ -247,7 +273,10 @@ export default class BattleScene extends Phaser.Scene {
   private lanes: Lane[] = [...LANES];
 
   private player!: Entity;
+  /** The player-facing enemy champion (drives the HUD enemy bar). AI-driven. */
   private enemy!: Entity;
+  /** All champion entities (10 total): the human + 9 AI bots. */
+  private champions: Entity[] = [];
   private structures: Entity[] = [];
   private minions: Entity[] = [];
   private allEntities: Entity[] = [];
@@ -259,15 +288,12 @@ export default class BattleScene extends Phaser.Scene {
   private structureLines: StructureLine[] = [];
 
   private playerCds: CooldownState = createCooldownState();
-  private enemyCds: CooldownState = createCooldownState();
   private playerResource = 0;
   private playerMaxResource = 300;
-  private enemyResource = 0;
-  private enemyMaxResource = 300;
 
-  // Economy / progression.
+  // Economy / progression. Each AI bot carries its own ProgressState; this is
+  // the human player's.
   private playerProgress: ProgressState = createProgress();
-  private enemyProgress: ProgressState = createProgress();
   private ownedItems: string[] = [];
   private goldAccrual = 0;
 
@@ -302,6 +328,19 @@ export default class BattleScene extends Phaser.Scene {
   private ended = false;
   /** Guards the cosmetic kill slow-mo so rapid kills cannot stack/strand it. */
   private slowMoActive = false;
+  /**
+   * Per-frame living-unit snapshot, rebuilt once at the top of {@link update}
+   * before the champion/minion/turret loops that call {@link findTarget}. This
+   * removes the per-caller allocation churn: with ten champions plus minions and
+   * turrets all targeting each frame, rebuilding the living `Unit[]` list and id
+   * `Set` per call multiplied badly. Targeting is a per-frame approximation (a
+   * unit may die mid-loop), which is acceptable and matches the prior
+   * order-dependent behavior; the attack paths still guard on `target.dead`.
+   */
+  private livingSnapshot: { units: Unit[]; ids: Set<string> } = {
+    units: [],
+    ids: new Set(),
+  };
   private stats = {
     championKills: 0,
     minionKills: 0,
@@ -330,17 +369,15 @@ export default class BattleScene extends Phaser.Scene {
     }
 
     // Reset per-run state so a restart/rematch starts clean.
+    this.champions = [];
     this.structures = [];
     this.minions = [];
     this.allEntities = [];
     this.structureById.clear();
     this.structureLines = [];
     this.playerCds = createCooldownState();
-    this.enemyCds = createCooldownState();
     this.playerResource = this.playerMaxResource;
-    this.enemyResource = this.enemyMaxResource;
     this.playerProgress = createProgress(STARTING_GOLD);
-    this.enemyProgress = createProgress(STARTING_GOLD);
     this.ownedItems = [];
     this.goldAccrual = 0;
     this.playerBuffs = createBuffState();
@@ -367,18 +404,71 @@ export default class BattleScene extends Phaser.Scene {
 
     this.buildStructures();
 
-    // Champions spawn at their team fountains.
-    const allySpawn = toScreen(BASE_POSITIONS.ally);
-    const enemySpawn = toScreen(BASE_POSITIONS.enemy);
-    this.player = this.spawnChampion('player', this.playerChampion, 'ally', allySpawn);
-    this.enemy = this.spawnChampion('enemy', this.enemyChampion, 'enemy', enemySpawn);
-    this.applyChampionStats(this.player, 'ally');
-    this.applyChampionStats(this.enemy, 'enemy');
-    this.player.unit.hp = this.player.unit.maxHp;
-    this.enemy.unit.hp = this.enemy.unit.maxHp;
+    this.spawnTeams();
 
     this.setupInput();
     this.pushHud();
+  }
+
+  /**
+   * Build both full five-champion teams from the pure {@link composeTeams}
+   * composition. The human keeps their chosen champion as {@link player} on the
+   * ally side; the enemy's player-facing pick becomes {@link enemy} (AI-driven)
+   * so the existing single-enemy HUD bar stays meaningful. Every other champion
+   * gets its own {@link BotState} and is driven each tick by the pure AI.
+   */
+  private spawnTeams() {
+    const composition = composeTeams(
+      CHAMPIONS,
+      this.playerChampion.id,
+      this.enemyChampion.id,
+      this.lanes,
+    );
+    const facing = enemyFacingSlot(composition, this.enemyChampion.id);
+
+    let allyIndex = 0;
+    let enemyIndex = 0;
+    for (const side of ['ally', 'enemy'] as MapSide[]) {
+      const slots = side === 'ally' ? composition.ally : composition.enemy;
+      const base = toScreen(BASE_POSITIONS[side]);
+      for (const slot of slots) {
+        // Fan the fountain spawns slightly so the five champions do not overlap.
+        const n = side === 'ally' ? allyIndex++ : enemyIndex++;
+        const spawn: Vec2 = {
+          x: this.clampX(base.x + (n - 2) * 16 * SCALE),
+          y: this.clampY(base.y + (n - 2) * 16 * SCALE),
+        };
+        const isHuman = slot.isHuman;
+        const isFacingEnemy = side === 'enemy' && slot === facing;
+        const id = isHuman
+          ? 'player'
+          : isFacingEnemy
+            ? 'enemy'
+            : `${side}-bot-${n}`;
+        const entity = this.spawnChampion(id, slot.champion, side, spawn);
+
+        if (isHuman) {
+          this.player = entity;
+        } else {
+          if (isFacingEnemy) this.enemy = entity;
+          entity.bot = {
+            champion: slot.champion,
+            side,
+            cds: createCooldownState(),
+            resource: 300,
+            maxResource: 300,
+            progress: createProgress(STARTING_GOLD),
+            lane: slot.lane,
+            pushPath: laneWaypoints(slot.lane, side).map(toScreen),
+            pushIndex: 0,
+          };
+        }
+        this.champions.push(entity);
+        this.applyChampionStats(entity, side);
+        entity.unit.hp = entity.unit.maxHp;
+        if (entity.bot) entity.bot.resource = entity.bot.maxResource;
+      }
+    }
   }
 
   // ---- Map + structure setup ----------------------------------------------
@@ -674,26 +764,34 @@ export default class BattleScene extends Phaser.Scene {
     entity.hpBar = bar;
   }
 
-  /** Recompute a champion's Unit stats from level + items + team modifiers. */
+  /**
+   * Recompute a champion's Unit stats from level + items + team modifiers. The
+   * human champion reads the scene's `player*` progression/items; every AI bot
+   * reads its own {@link BotState}. Item/CDR bonuses stay ally-player-only (bots
+   * carry no items), matching prior behavior.
+   */
   private applyChampionStats(entity: Entity, side: MapSide) {
-    const champion = side === 'ally' ? this.playerChampion : this.enemyChampion;
-    const level = side === 'ally' ? this.playerProgress.level : this.enemyProgress.level;
-    const items = side === 'ally' ? this.ownedItems : [];
+    const isHuman = entity === this.player;
+    const champion = isHuman ? this.playerChampion : entity.bot!.champion;
+    const level = isHuman ? this.playerProgress.level : entity.bot!.progress.level;
+    const items = isHuman ? this.ownedItems : [];
     const team = this.teamModifiers(side);
     const eff = computeEffectiveStats(champion, level, items, team);
     const u = entity.unit;
     const hpFrac = u.maxHp > 0 ? u.hp / u.maxHp : 1;
     u.maxHp = Math.round(eff.hp);
-    u.hp = entity === this.player || entity === this.enemy ? Math.min(u.maxHp, Math.round(u.maxHp * hpFrac)) : u.maxHp;
+    // Preserve current hp fraction for live champions; freshly spawned/respawned
+    // entities are topped up by the caller.
+    u.hp = Math.min(u.maxHp, Math.round(u.maxHp * hpFrac));
     u.ad = eff.attackDamage;
     u.armor = eff.armor;
     u.attackSpeed = eff.attackSpeed;
     u.moveSpeed = champion.stats.moveSpeed * SCALE + eff.moveSpeed * SCALE;
     u.attackRange = champion.stats.attackRange * SCALE;
-    if (side === 'ally') {
+    if (isHuman) {
       this.playerMaxResource = 300 + eff.resource;
     } else {
-      this.enemyMaxResource = 300 + eff.resource;
+      entity.bot!.maxResource = 300 + eff.resource;
     }
   }
 
@@ -751,18 +849,31 @@ export default class BattleScene extends Phaser.Scene {
     this.elapsed += dt;
 
     tickCooldowns(this.playerCds, dt);
-    tickCooldowns(this.enemyCds, dt);
     const blueRegen = this.blueBuffRegen();
     this.playerResource = Math.min(this.playerMaxResource, this.playerResource + (RESOURCE_REGEN + blueRegen) * dt);
-    this.enemyResource = Math.min(this.enemyMaxResource, this.enemyResource + RESOURCE_REGEN * dt);
+    // Tick every bot's own cooldowns + resource regen.
+    for (const c of this.champions) {
+      if (!c.bot) continue;
+      tickCooldowns(c.bot.cds, dt);
+      c.bot.resource = Math.min(c.bot.maxResource, c.bot.resource + RESOURCE_REGEN * dt);
+    }
 
     this.tickEconomy(dt);
     this.tickBuffsAndObjectives();
     this.processPurchases();
     this.maybeSpawnWaves();
 
+    // Build ONE living-unit snapshot for this frame, consumed by every
+    // findTarget/turret-targeting call below. Refreshed here, before the
+    // player/bot/minion/turret loops, so the whole frame targets against the
+    // same living set instead of each caller rebuilding it.
+    this.refreshLivingSnapshot();
+
     this.updatePlayerMovement(dt);
-    this.updateEnemyChampion(dt);
+    // Drive all nine AI champions through the pure AI each tick.
+    for (const c of this.champions) {
+      if (c.bot) this.updateBotChampion(c, dt);
+    }
     this.updateMinions(dt);
     for (const s of this.structures) {
       if (s.unit.kind === 'turret') this.updateTurret(s);
@@ -899,8 +1010,15 @@ export default class BattleScene extends Phaser.Scene {
         this.playerResource = Math.min(this.playerMaxResource, this.playerResource + this.playerMaxResource * 0.08 * dt);
       }
     }
-    if (!this.enemy.unit.dead) {
-      applyHeal(this.enemy.unit, this.enemyChampion.stats.hpRegen * dt);
+    // Every AI champion regenerates from its own champion's base regen, plus a
+    // strong fountain heal when it is home (so respawned bots top up and push).
+    for (const c of this.champions) {
+      if (!c.bot || c.unit.dead) continue;
+      applyHeal(c.unit, c.bot.champion.stats.hpRegen * dt);
+      if (this.inBase(c.unit, c.bot.side)) {
+        applyHeal(c.unit, c.unit.maxHp * 0.08 * dt);
+        c.bot.resource = Math.min(c.bot.maxResource, c.bot.resource + c.bot.maxResource * 0.08 * dt);
+      }
     }
   }
 
@@ -939,31 +1057,51 @@ export default class BattleScene extends Phaser.Scene {
     if (target) this.tryBasicAttack(this.player, target);
   }
 
-  private updateEnemyChampion(dt: number) {
-    const u = this.enemy.unit;
+  /**
+   * Drive one AI champion for a tick: find its nearest enemy, build a per-bot
+   * {@link AiSnapshot}, decide via the pure {@link decideAction}, and apply the
+   * intent through the SAME combat/ability/movement paths the human uses. When
+   * the bot has no target it marches its assigned lane's waypoints toward the
+   * enemy nexus so champions actually push lanes instead of standing still.
+   */
+  private updateBotChampion(bot: Entity, dt: number) {
+    const u = bot.unit;
+    const state = bot.bot!;
     if (u.dead) {
-      this.respawnIfNeeded(this.enemy, 'enemy', dt);
+      this.respawnIfNeeded(bot, state.side, dt);
       return;
     }
-    if (this.enemy.stunned > 0) return;
+    if (bot.stunned > 0) return;
 
     const target = this.findTarget(u, 1200 * SCALE, true);
-    const snapshot = this.buildAiSnapshot(target);
+    const snapshot = this.buildAiSnapshot(bot, target);
     const intent = decideAction(snapshot);
-    const pushGoal = toScreen(BASE_POSITIONS.ally);
+    const homeBase = toScreen(BASE_POSITIONS[state.side]);
 
     switch (intent) {
       case 'approach': {
-        const goal = target ? target.pos : pushGoal;
-        this.moveUnitToward(u, goal, dt);
+        if (target) {
+          this.moveUnitToward(u, target.pos, dt);
+        } else {
+          const goal = this.laneAdvanceGoal(state);
+          this.moveUnitToward(u, goal, dt);
+          // Advance to the next lane waypoint once this one is reached so the
+          // bot keeps marching toward the enemy nexus.
+          if (
+            state.pushIndex < state.pushPath.length - 1 &&
+            distance(u.pos, goal) <= 30 * SCALE
+          ) {
+            state.pushIndex += 1;
+          }
+        }
         break;
       }
       case 'retreat': {
-        this.moveUnitToward(u, toScreen(BASE_POSITIONS.enemy), dt);
+        this.moveUnitToward(u, homeBase, dt);
         break;
       }
       case 'attack': {
-        if (target) this.tryBasicAttack(this.enemy, target);
+        if (target) this.tryBasicAttack(bot, target);
         break;
       }
       case 'castQ':
@@ -971,28 +1109,42 @@ export default class BattleScene extends Phaser.Scene {
       case 'castE':
       case 'castR': {
         const slot = intent.slice(4) as CooldownKey;
-        const ability = this.abilityBySlot(this.enemyChampion, slot);
+        const ability = this.abilityBySlot(state.champion, slot);
         const aim =
           ability.behavior === 'heal' || ability.behavior === 'buff'
             ? { ...u.pos }
             : target?.pos;
-        if (aim) this.enemyCast(slot, aim);
+        if (aim) this.botCast(bot, slot, aim);
         break;
       }
     }
   }
 
-  private buildAiSnapshot(target: Unit | undefined): AiSnapshot {
-    const u = this.enemy.unit;
+  /**
+   * The next lane waypoint a bot should walk toward while pushing. Advances the
+   * bot's cached push index as it reaches each waypoint so it marches down its
+   * lane toward the enemy nexus. Returns the final waypoint once the lane is
+   * fully walked. No per-frame allocation beyond reading the cached path.
+   */
+  private laneAdvanceGoal(state: BotState): Vec2 {
+    const path = state.pushPath;
+    if (path.length === 0) return toScreen(BASE_POSITIONS[state.side]);
+    // (path is authored ally->enemy; laneWaypoints already reversed for enemy).
+    return path[Math.min(state.pushIndex, path.length - 1)];
+  }
+
+  private buildAiSnapshot(bot: Entity, target: Unit | undefined): AiSnapshot {
+    const u = bot.unit;
+    const state = bot.bot!;
     const dist = target ? distance(u.pos, target.pos) : Infinity;
-    const [q, w, e, r] = this.enemyChampion.abilities;
+    const [q, w, e, r] = state.champion.abilities;
     return {
       selfHpPct: u.hp / u.maxHp,
-      selfResourcePct: this.enemyResource / this.enemyMaxResource,
+      selfResourcePct: state.resource / state.maxResource,
       distanceToTarget: dist,
       hasTarget: !!target,
       attackRange: u.attackRange,
-      cooldowns: this.enemyCds,
+      cooldowns: state.cds,
       abilityRanges: {
         Q: q.range * SCALE,
         W: w.range * SCALE,
@@ -1001,7 +1153,7 @@ export default class BattleScene extends Phaser.Scene {
       },
       abilityCosts: { Q: q.cost, W: w.cost, E: e.cost, R: r.cost },
       abilityBehaviors: { Q: q.behavior, W: w.behavior, E: e.behavior, R: r.behavior },
-      maxResource: this.enemyMaxResource,
+      maxResource: state.maxResource,
       targetLowHp: target ? target.hp / target.maxHp < 0.35 : false,
     };
   }
@@ -1034,9 +1186,9 @@ export default class BattleScene extends Phaser.Scene {
     if (u.dead) return;
     const target = nearestTargetableEnemy(
       u,
-      this.livingUnits(),
+      this.livingSnapshot.units,
       this.structureLines,
-      this.livingUnitIds(),
+      this.livingSnapshot.ids,
       u.attackRange,
     );
     if (target && canBasicAttack(u)) {
@@ -1089,11 +1241,12 @@ export default class BattleScene extends Phaser.Scene {
     }, true);
   }
 
-  private enemyCast(slot: CooldownKey, aim: Vec2) {
-    this.castAbility(this.enemy, slot, aim, this.enemyChampion, this.enemyCds, () => {
-      const cost = this.abilityBySlot(this.enemyChampion, slot).cost;
-      if (this.enemyResource < cost || this.enemyCds[slot] > 0) return false;
-      this.enemyResource -= cost;
+  private botCast(bot: Entity, slot: CooldownKey, aim: Vec2) {
+    const state = bot.bot!;
+    this.castAbility(bot, slot, aim, state.champion, state.cds, () => {
+      const cost = this.abilityBySlot(state.champion, slot).cost;
+      if (state.resource < cost || state.cds[slot] > 0) return false;
+      state.resource -= cost;
       return true;
     }, false);
   }
@@ -1205,7 +1358,11 @@ export default class BattleScene extends Phaser.Scene {
 
   private respawnIfNeeded(entity: Entity, side: MapSide, _dt: number) {
     if (!entity.container.getData('respawnAt')) {
-      const level = side === 'ally' ? this.playerProgress.level : this.enemyProgress.level;
+      const level = entity === this.player
+        ? this.playerProgress.level
+        : entity.bot
+          ? entity.bot.progress.level
+          : 1;
       entity.container.setData('respawnAt', this.elapsed + Math.min(50, 6 + level * 2.5));
       entity.container.setVisible(false);
     } else if (this.elapsed >= entity.container.getData('respawnAt')) {
@@ -1214,6 +1371,8 @@ export default class BattleScene extends Phaser.Scene {
       entity.unit.hp = entity.unit.maxHp;
       entity.unit.pos = { ...toScreen(BASE_POSITIONS[side]) };
       entity.container.setVisible(true);
+      // Restart the bot's lane march from home so it pushes out again.
+      if (entity.bot) entity.bot.pushIndex = 0;
     }
   }
 
@@ -1223,43 +1382,59 @@ export default class BattleScene extends Phaser.Scene {
     if (target.kind === 'turret' && target.id.endsWith('-inhibitor')) {
       this.inhibitorKillTimes.set(target.id, this.elapsed);
     }
-    // Award gold/XP to whoever landed the kill (player or enemy).
-    const toAlly = source.team === 'ally';
-    const progress = toAlly ? this.playerProgress : this.enemyProgress;
+    // Award gold/XP to the champion that landed the kill (its OWN progress).
+    // The human uses the scene's playerProgress; each bot uses its own. Kills by
+    // structures/minions have no champion progress to award, but still tick the
+    // human's stats when the human is the source.
+    const killer = this.entityForUnit(source);
+    const progress = source.id === 'player'
+      ? this.playerProgress
+      : killer?.bot?.progress ?? null;
     if (target.kind === 'minion') {
       const type = (this.entityForUnit(target)?.minionType ?? 'melee') as MinionType;
       const b = minionBounty(type);
-      addGold(progress, b.gold);
-      addXp(progress, b.xp);
+      if (progress) {
+        addGold(progress, b.gold);
+        addXp(progress, b.xp);
+      }
       if (source.id === 'player') this.stats.minionKills += 1;
     } else if (target.kind === 'champion') {
-      addGold(progress, CHAMPION_TAKEDOWN_BOUNTY.gold);
-      addXp(progress, CHAMPION_TAKEDOWN_BOUNTY.xp);
+      if (progress) {
+        addGold(progress, CHAMPION_TAKEDOWN_BOUNTY.gold);
+        addXp(progress, CHAMPION_TAKEDOWN_BOUNTY.xp);
+      }
       if (source.id === 'player') this.stats.championKills += 1;
     }
-    if (toAlly) this.applyChampionStats(this.player, 'ally');
-    else this.applyChampionStats(this.enemy, 'enemy');
+    // Recompute the killer's stats from its updated level/progression.
+    if (source.id === 'player') this.applyChampionStats(this.player, 'ally');
+    else if (killer?.bot) this.applyChampionStats(killer, killer.bot.side);
   }
 
   // ---- Targeting -----------------------------------------------------------
 
-  private livingUnits(): Unit[] {
-    return this.allEntities.filter((e) => !e.unit.dead).map((e) => e.unit);
-  }
-
-  private livingUnitIds(): Set<string> {
+  /**
+   * Rebuild the per-frame {@link livingSnapshot} (living `Unit[]` + id `Set`)
+   * from the current entities. Called once per frame from {@link update} so all
+   * targeting in that frame shares one snapshot instead of each caller
+   * allocating its own.
+   */
+  private refreshLivingSnapshot() {
+    const units: Unit[] = [];
     const ids = new Set<string>();
     for (const e of this.allEntities) {
-      if (!e.unit.dead) ids.add(e.unit.id);
+      if (!e.unit.dead) {
+        units.push(e.unit);
+        ids.add(e.unit.id);
+      }
     }
-    return ids;
+    this.livingSnapshot = { units, ids };
   }
 
   private findTarget(u: Unit, maxRange: number, preferStructures = false): Unit | undefined {
-    // Structure gating: build the current living-structure set and only allow a
-    // structure to be targeted when the pure rule permits it.
-    const living = this.livingUnitIds();
-    const candidates = this.livingUnits().filter((c) => {
+    // Structure gating: use the per-frame living set and only allow a structure
+    // to be targeted when the pure rule permits it.
+    const living = this.livingSnapshot.ids;
+    const candidates = this.livingSnapshot.units.filter((c) => {
       if (c.team === u.team) return false;
       if (c.kind === 'turret' || c.kind === 'nexus') {
         return isStructureTargetable(c.id, living);

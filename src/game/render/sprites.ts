@@ -41,17 +41,18 @@ import type { MinionType } from '../rift/minions';
 import { derivePalette, hexToInt } from './palette';
 import {
   MARKER_PALETTES,
+  TEAM_RIM,
   championArt,
   markerArt,
   minionArt,
   structureArt,
   vfxArt,
+  type SpriteTeam,
   type SvgArt,
   type VfxKind,
 } from './svgArt';
 
-/** Team a sprite belongs to; used only to bias the outline/rim color. */
-export type SpriteTeam = 'ally' | 'enemy';
+export type { SpriteTeam };
 
 /** Baked size (in texture pixels) of a generated billboard sprite. */
 export interface SpriteSize {
@@ -100,12 +101,6 @@ export type SpriteSpec =
   | MinionSpriteSpec
   | StructureSpriteSpec
   | MarkerSpriteSpec;
-
-/** Rim/outline color per team (kept bright so the ally/enemy tell reads). */
-const TEAM_RIM: Record<SpriteTeam, number> = {
-  ally: 0x8fd7ff,
-  enemy: 0xff8a7a,
-};
 
 /**
  * Resolution multiplier: the backing CanvasTexture is created at

@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import type { BattleOutcome } from '../game/battleStore';
 import { getChampionById } from '../data/champions';
+import ChampionFigure from '../components/ChampionFigure';
 
 interface ResultScreenProps {
   outcome: BattleOutcome;
@@ -40,21 +41,35 @@ export default function ResultScreen({
         {outcome.win ? t('result.winSubtitle') : t('result.loseSubtitle')}
       </p>
 
-      <p className="result-screen__matchup">
+      <div className="result-screen__matchup">
         <span
           className="result-screen__champ"
           style={player ? { color: player.accentColor } : undefined}
         >
-          {playerName}
+          {player && (
+            <ChampionFigure
+              champion={player}
+              team="ally"
+              className="result-screen__figure"
+            />
+          )}
+          <span className="result-screen__champ-name">{playerName}</span>
         </span>
         <span className="result-screen__vs">{t('result.vs')}</span>
         <span
           className="result-screen__champ"
           style={enemy ? { color: enemy.accentColor } : undefined}
         >
-          {enemyName}
+          {enemy && (
+            <ChampionFigure
+              champion={enemy}
+              team="enemy"
+              className="result-screen__figure"
+            />
+          )}
+          <span className="result-screen__champ-name">{enemyName}</span>
         </span>
-      </p>
+      </div>
 
       <dl className="result-screen__stats">
         <div className="result-screen__stat">
