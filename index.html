@@ -49,7 +49,25 @@
         margin: 0;
         padding: 0;
         height: 100%;
-        background: #11151c;
+        /*
+          DESKTOP-FRAMING backdrop (Complaint #1 "전체 화면에서 가운데가 아니다"):
+          under Scale.FIT the portrait 540x960 canvas is centered by the #game
+          flexbox, but on a WIDE viewport that leaves big margins. A flat
+          #11151c fill made those margins look like an unintentional letterbox
+          strip. Instead we paint the whole page with a themed radial vignette
+          built from the game PALETTE (BG_HORIZON #1c2733 lifted toward the
+          center, BG_SKY #11151c at the edges) so the centered play-area reads
+          as deliberately framed. The base #11151c is kept as a solid fallback
+          so narrow/portrait phones (where the canvas fills the screen and the
+          gradient is barely visible) look exactly as before.
+        */
+        background-color: #11151c;
+        background-image: radial-gradient(
+          ellipse 90% 70% at 50% 42%,
+          #1c2733 0%,
+          #161b23 45%,
+          #11151c 100%
+        );
         overflow: hidden;
       }
       #game {
@@ -83,6 +101,26 @@
         art sprites stay crisp via per-texture NEAREST filtering (PreloadScene),
         not by pixelating the whole canvas.
       */
+      /*
+        DESKTOP-ONLY device frame. On viewports at least as wide as they are
+        tall (min-aspect-ratio: 1/1) the portrait canvas is a narrow strip with
+        wide themed margins, so we treat it as a framed "device": a thin lifted
+        hairline (LANE_LINE #4a5666 at low alpha) plus a soft drop-shadow to
+        separate it from the backdrop, and a small border-radius. This is purely
+        cosmetic: margin stays 0 so the #game flexbox remains the SOLE centering
+        owner (box-shadow/border-radius paint outside the layout box and do not
+        offset the canvas or affect Scale.FIT / pointer input). The media query
+        GUARDS mobile: on narrow/portrait phones the canvas fills the screen, so
+        no frame is applied and the presentation is unchanged from before.
+      */
+      @media (min-aspect-ratio: 1/1) {
+        #game canvas {
+          box-shadow:
+            0 0 0 1px rgba(74, 86, 102, 0.6),
+            0 24px 80px rgba(0, 0, 0, 0.6);
+          border-radius: 6px;
+        }
+      }
     </style>
   </head>
   <body>
