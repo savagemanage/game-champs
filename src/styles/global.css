@@ -634,12 +634,30 @@ body {
   font-weight: 700;
 }
 
+.battle-hud__bottom-band {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
 .battle-hud__hint {
-  text-align: center;
-  color: var(--color-gold);
+  display: flex;
+  justify-content: center;
   margin: 0;
+}
+
+.battle-hud__hint-text {
+  display: inline-block;
+  max-width: 90%;
+  padding: 0.2rem 0.7rem;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--color-gold);
+  font-size: 0.72rem;
+  text-align: center;
   text-shadow: 0 1px 2px #000;
-  opacity: 0.85;
+  opacity: 0.75;
 }
 
 .battle-hud__bottom {

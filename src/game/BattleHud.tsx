@@ -91,7 +91,13 @@ export default function BattleHud({ onOpenShop }: BattleHudProps) {
         ))}
       </div>
 
-      <p className="battle-hud__hint">{t('battle.controlsHint')}</p>
+      {/* Bottom band: a subtle centered caption hint sitting just above the
+          player status + ability bar, anchored to the bottom edge so it reads
+          as a footer and never overlaps the projected battlefield's center. */}
+      <div className="battle-hud__bottom-band">
+      <p className="battle-hud__hint">
+        <span className="battle-hud__hint-text">{t('battle.controlsHint')}</span>
+      </p>
 
       {/* Bottom player status + ability bar. */}
       <div className="battle-hud__bottom">
@@ -191,6 +197,7 @@ export default function BattleHud({ onOpenShop }: BattleHudProps) {
             {t('shop.open')} (B)
           </button>
         </div>
+      </div>
       </div>
     </div>
   );
