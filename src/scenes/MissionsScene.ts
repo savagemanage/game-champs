@@ -114,13 +114,13 @@ export class MissionsScene extends Phaser.Scene {
     // Arms-race score + milestone hint.
     this.content.add(
       this.add
-        .text(cx, CANVAS.HEIGHT * 0.165, tr('mission.daily.score', { score: store.armsRaceScore() }), textStyle(15, { align: 'center', color: PALETTE.COIN_CSS }))
+        .text(cx, CANVAS.HEIGHT * 0.165, tr('mission.daily.score', { score: store.armsRaceScore() }), textStyle(15, { align: 'center', color: PALETTE.COIN_CSS, allowSmall: true }))
         .setOrigin(0.5),
     );
     const nextMilestone = MISSIONS.DAILY_MILESTONES.find((m) => store.armsRaceScore() < m.points);
     this.content.add(
       this.add
-        .text(cx, CANVAS.HEIGHT * 0.195, nextMilestone ? tr('mission.daily.milestone', { points: nextMilestone.points }) : tr('mission.daily.reset'), textStyle(11, { align: 'center', color: PALETTE.MUTED_CSS }))
+        .text(cx, CANVAS.HEIGHT * 0.195, nextMilestone ? tr('mission.daily.milestone', { points: nextMilestone.points }) : tr('mission.daily.reset'), textStyle(11, { align: 'center', color: PALETTE.MUTED_CSS, allowSmall: true }))
         .setOrigin(0.5),
     );
 
@@ -142,17 +142,17 @@ export class MissionsScene extends Phaser.Scene {
 
       this.content.add(
         this.add
-          .text(cx - rowW / 2 + 14, y - 10, tr(task.nameKey as TrKey), textStyle(13, { fontStyle: 'bold' }))
+          .text(cx - rowW / 2 + 14, y - 10, tr(task.nameKey as TrKey), textStyle(13, { fontStyle: 'bold', allowSmall: true }))
           .setOrigin(0, 0.5),
       );
       this.content.add(
         this.add
-          .text(cx - rowW / 2 + 14, y + 12, `${Math.min(done, task.target)} / ${task.target}`, textStyle(11, { color: complete ? PALETTE.SUCCESS_CSS : PALETTE.MUTED_CSS }))
+          .text(cx - rowW / 2 + 14, y + 12, `${Math.min(done, task.target)} / ${task.target}`, textStyle(11, { color: complete ? PALETTE.SUCCESS_CSS : PALETTE.MUTED_CSS, allowSmall: true }))
           .setOrigin(0, 0.5),
       );
       this.content.add(
         this.add
-          .text(cx + rowW / 2 - 14, y, `+${task.points}`, textStyle(13, { align: 'right', color: PALETTE.COIN_CSS }))
+          .text(cx + rowW / 2 - 14, y, `+${task.points}`, textStyle(13, { align: 'right', color: PALETTE.COIN_CSS, allowSmall: true }))
           .setOrigin(1, 0.5),
       );
     });
@@ -170,20 +170,20 @@ export class MissionsScene extends Phaser.Scene {
 
     this.content.add(Menu.title(this, cx, y - 30, tr('mission.duel.title'), 16).setColor(PALETTE.SQUAD_CSS));
     this.content.add(
-      this.add.text(cx, y - 8, tr('mission.duel.desc'), textStyle(10, { align: 'center', color: PALETTE.MUTED_CSS })).setOrigin(0.5),
+      this.add.text(cx, y - 8, tr('mission.duel.desc'), textStyle(10, { align: 'center', color: PALETTE.MUTED_CSS, allowSmall: true })).setOrigin(0.5),
     );
 
     // Player's weekly activity vs the seeded rival alliance score for this week.
     const playerScore = store.state.missions.weekActivity;
     const rivalScore = allianceAiScore(store.state.missions.weekKey < 0 ? 0 : store.state.missions.weekKey);
     this.content.add(
-      this.add.text(cx, y + 14, tr('mission.duel.you', { score: playerScore }), textStyle(12, { align: 'center', color: PALETTE.SUCCESS_CSS })).setOrigin(0.5),
+      this.add.text(cx, y + 14, tr('mission.duel.you', { score: playerScore }), textStyle(12, { align: 'center', color: PALETTE.SUCCESS_CSS, allowSmall: true })).setOrigin(0.5),
     );
     this.content.add(
-      this.add.text(cx, y + 32, tr('mission.duel.rival', { score: rivalScore }), textStyle(12, { align: 'center', color: PALETTE.DANGER_CSS })).setOrigin(0.5),
+      this.add.text(cx, y + 32, tr('mission.duel.rival', { score: rivalScore }), textStyle(12, { align: 'center', color: PALETTE.DANGER_CSS, allowSmall: true })).setOrigin(0.5),
     );
     this.content.add(
-      this.add.text(cx + (CANVAS.WIDTH - 40) / 2 - 12, y - 30, tr('mission.duel.resets'), textStyle(9, { align: 'right', color: PALETTE.MUTED_CSS })).setOrigin(1, 0.5),
+      this.add.text(cx + (CANVAS.WIDTH - 40) / 2 - 12, y - 30, tr('mission.duel.resets'), textStyle(9, { align: 'right', color: PALETTE.MUTED_CSS, allowSmall: true })).setOrigin(1, 0.5),
     );
   }
 
@@ -197,13 +197,13 @@ export class MissionsScene extends Phaser.Scene {
 
     this.content.add(Menu.title(this, cx, CANVAS.HEIGHT * 0.165, tr('league.title'), 22).setColor(PALETTE.BOSS_CSS));
     this.content.add(
-      this.add.text(cx, CANVAS.HEIGHT * 0.2, tr('league.simNote'), textStyle(10, { align: 'center', color: PALETTE.MUTED_CSS })).setOrigin(0.5),
+      this.add.text(cx, CANVAS.HEIGHT * 0.2, tr('league.simNote'), textStyle(10, { align: 'center', color: PALETTE.MUTED_CSS, allowSmall: true })).setOrigin(0.5),
     );
 
     // Player rank + record.
     this.content.add(
       this.add
-        .text(cx, CANVAS.HEIGHT * 0.235, `${tr('league.rank', { rank: store.leagueRank() })}   ${tr('league.record', { wins: store.state.league.wins, losses: store.state.league.losses })}`, textStyle(13, { align: 'center', color: PALETTE.COIN_CSS }))
+        .text(cx, CANVAS.HEIGHT * 0.235, `${tr('league.rank', { rank: store.leagueRank() })}   ${tr('league.record', { wins: store.state.league.wins, losses: store.state.league.losses })}`, textStyle(13, { align: 'center', color: PALETTE.COIN_CSS, allowSmall: true }))
         .setOrigin(0.5),
     );
 
@@ -220,13 +220,13 @@ export class MissionsScene extends Phaser.Scene {
 
       const color = entry.isPlayer ? PALETTE.SUCCESS_CSS : PALETTE.TEXT_CSS;
       this.content.add(
-        this.add.text(cx - rowW / 2 + 12, y, `${entry.rank}.`, textStyle(12, { fontStyle: 'bold', color })).setOrigin(0, 0.5),
+        this.add.text(cx - rowW / 2 + 12, y, `${entry.rank}.`, textStyle(12, { fontStyle: 'bold', color, allowSmall: true })).setOrigin(0, 0.5),
       );
       this.content.add(
-        this.add.text(cx - rowW / 2 + 44, y, tr(entry.nameKey as TrKey), textStyle(12, { color })).setOrigin(0, 0.5),
+        this.add.text(cx - rowW / 2 + 44, y, tr(entry.nameKey as TrKey), textStyle(12, { color, allowSmall: true })).setOrigin(0, 0.5),
       );
       this.content.add(
-        this.add.text(cx + rowW / 2 - 12, y, tr('league.power', { power: entry.power }), textStyle(11, { align: 'right', color: PALETTE.MUTED_CSS })).setOrigin(1, 0.5),
+        this.add.text(cx + rowW / 2 - 12, y, tr('league.power', { power: entry.power }), textStyle(11, { align: 'right', color: PALETTE.MUTED_CSS, allowSmall: true })).setOrigin(1, 0.5),
       );
     });
 

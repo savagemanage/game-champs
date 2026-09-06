@@ -72,7 +72,7 @@ export class ResultsScene extends Phaser.Scene {
     const rewardLine = this.rewardSummary(granted);
     if (rewardLine) {
       this.add
-        .text(cx, panelY + 92, tr('result.army', { reward: rewardLine }), textStyle(13, { align: 'center', color: PALETTE.SUCCESS_CSS }))
+        .text(cx, panelY + 92, tr('result.army', { reward: rewardLine }), textStyle(13, { align: 'center', color: PALETTE.SUCCESS_CSS, allowSmall: true }))
         .setOrigin(0.5);
     }
 

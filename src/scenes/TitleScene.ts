@@ -45,14 +45,14 @@ export class TitleScene extends Phaser.Scene {
 
     // Brand + tagline.
     Menu.title(this, cx, CANVAS.HEIGHT * 0.2, tr('brand.name'), 52).setColor(PALETTE.SQUAD_CSS);
-    Menu.label(this, cx, CANVAS.HEIGHT * 0.2 + 46, tr('title.tagline'), 16, 0.85);
+    Menu.label(this, cx, CANVAS.HEIGHT * 0.2 + 48, tr('title.tagline'), 20, 0.85);
 
     // Best readouts from the save.
     const meta = MetaStore.get();
-    Menu.label(this, cx, CANVAS.HEIGHT * 0.31, tr('title.best', { meters: meta.bestDistance }), 15, 0.75).setColor(
+    Menu.label(this, cx, CANVAS.HEIGHT * 0.31, tr('title.best', { meters: meta.bestDistance }), 18, 0.75).setColor(
       PALETTE.ACCENT_CSS,
     );
-    Menu.label(this, cx, CANVAS.HEIGHT * 0.31 + 24, tr('title.bestScore', { score: meta.bestScore }), 15, 0.75);
+    Menu.label(this, cx, CANVAS.HEIGHT * 0.31 + 26, tr('title.bestScore', { score: meta.bestScore }), 18, 0.75);
 
     // Primary actions. The primary action now enters the base-hub HomeScene;
     // the Falcon Rescue mini-game (the gate-runner Run) stays reachable from the
@@ -79,7 +79,7 @@ export class TitleScene extends Phaser.Scene {
     y += step;
     Menu.button(this, cx, y, tr('title.settings'), () => this.go(SceneKeys.Settings), { width: 260 });
 
-    Menu.label(this, cx, CANVAS.HEIGHT * 0.95, tr('title.hint'), 13, 0.6);
+    Menu.label(this, cx, CANVAS.HEIGHT * 0.95, tr('title.hint'), 18, 0.6);
 
     // Keyboard shortcuts.
     const kb = this.input.keyboard;
@@ -167,7 +167,7 @@ export class TitleScene extends Phaser.Scene {
   private spawnStartHint(cx: number, py: number): void {
     // Centred prompt line above the button.
     const hint = this.add
-      .text(cx, py - 46, tr('title.startHint'), textStyle(16, { fontStyle: 'bold', color: PALETTE.ACCENT_CSS }))
+      .text(cx, py - 48, tr('title.startHint'), textStyle(20, { fontStyle: 'bold', color: PALETTE.ACCENT_CSS }))
       .setOrigin(0.5);
     this.tweens.add({ targets: hint, alpha: { from: 0.55, to: 1 }, duration: 720, yoyo: true, repeat: -1 });
     // Bobbing arrow centred between the prompt and the button, pointing DOWN at
@@ -208,70 +208,82 @@ export class TitleScene extends Phaser.Scene {
     const cy = CANVAS.HEIGHT / 2;
     const overlay = this.add.container(0, 0);
 
-    // Dim scrim + framed panel.
+    // Dim scrim + framed panel. The panel is near-full-size so the larger
+    // (FEAT-002) body text has room and the widest possible word-wrap, which
+    // keeps each bullet to as few lines as possible and prevents overflow.
+    const panelW = CANVAS.WIDTH * 0.94;
+    const panelH = CANVAS.HEIGHT * 0.9;
+    const panelTop = cy - panelH / 2;
+    const panelBottom = cy + panelH / 2;
     const scrim = this.add.rectangle(cx, cy, CANVAS.WIDTH, CANVAS.HEIGHT, 0x000000, 0.6).setOrigin(0.5);
-    const panel = Menu.panel(this, cx, cy, CANVAS.WIDTH * 0.9, CANVAS.HEIGHT * 0.82);
+    const panel = Menu.panel(this, cx, cy, panelW, panelH);
     overlay.add([scrim, panel]);
 
-    const left = cx - CANVAS.WIDTH * 0.4;
-    const wrap = CANVAS.WIDTH * 0.8;
-    let ly = cy - CANVAS.HEIGHT * 0.37;
+    // Reserve room at the bottom for the two stacked action buttons, then flow
+    // the copy from the top down so nothing collides with them.
+    const startTutY = panelBottom - 84;
+    const closeY = panelBottom - 34;
+
+    const pad = 22;
+    const left = cx - panelW / 2 + pad;
+    const wrap = panelW - pad * 2;
+    let ly = panelTop + 14;
 
     const title = this.add.text(cx, ly, tr('howto.title'), textStyle(24, { fontStyle: 'bold' })).setOrigin(0.5, 0);
     overlay.add(title);
-    ly += title.height + 10;
+    ly += title.height + 8;
 
     // GOAL line, accented.
     const goal = this.add
-      .text(left, ly, tr('howto.goal'), textStyle(14, { color: PALETTE.ACCENT_CSS, wordWrap: { width: wrap }, align: 'left' }))
+      .text(left, ly, tr('howto.goal'), textStyle(18, { color: PALETTE.ACCENT_CSS, wordWrap: { width: wrap }, align: 'left' }))
       .setOrigin(0, 0);
     overlay.add(goal);
-    ly += goal.height + 14;
+    ly += goal.height + 10;
 
     // CORE LOOP section header + four labelled bullets.
     const loopHeader = this.add
-      .text(left, ly, tr('howto.loopTitle'), textStyle(16, { fontStyle: 'bold', color: PALETTE.SQUAD_CSS }))
+      .text(left, ly, tr('howto.loopTitle'), textStyle(18, { fontStyle: 'bold', color: PALETTE.SQUAD_CSS }))
       .setOrigin(0, 0);
     overlay.add(loopHeader);
-    ly += loopHeader.height + 8;
+    ly += loopHeader.height + 4;
     for (const key of ['howto.loop.base', 'howto.loop.heroes', 'howto.loop.battle', 'howto.loop.falcon'] as const) {
       const t = this.add
-        .text(left, ly, `• ${tr(key)}`, textStyle(13, { wordWrap: { width: wrap }, align: 'left' }))
+        .text(left, ly, `• ${tr(key)}`, textStyle(17, { wordWrap: { width: wrap }, align: 'left', allowSmall: true }))
         .setOrigin(0, 0);
       overlay.add(t);
-      ly += t.height + 6;
+      ly += t.height + 3;
     }
-    ly += 8;
+    ly += 4;
 
     // CONTROLS section header.
     const controlsHeader = this.add
-      .text(left, ly, tr('howto.controlsTitle'), textStyle(16, { fontStyle: 'bold', color: PALETTE.SQUAD_CSS }))
+      .text(left, ly, tr('howto.controlsTitle'), textStyle(18, { fontStyle: 'bold', color: PALETTE.SQUAD_CSS }))
       .setOrigin(0, 0);
     overlay.add(controlsHeader);
-    ly += controlsHeader.height + 8;
+    ly += controlsHeader.height + 4;
 
     // Illustrated two-lane diagram: a track with two lanes, a squad chip at the
     // bottom, a good (green +/x) gate and a bad (red -/÷) gate, and a boss chip
     // at the top — all Phaser primitives, no new binaries.
-    ly += this.drawLaneDiagram(overlay, cx, ly, wrap) + 10;
+    ly += this.drawLaneDiagram(overlay, cx, ly, wrap) + 8;
 
     // Controls bullets (move / gates / auto-fire / boss).
     for (const key of ['howto.move', 'howto.gates', 'howto.autofire', 'howto.boss'] as const) {
       const t = this.add
-        .text(left, ly, `• ${tr(key)}`, textStyle(13, { wordWrap: { width: wrap }, align: 'left' }))
+        .text(left, ly, `• ${tr(key)}`, textStyle(17, { wordWrap: { width: wrap }, align: 'left', allowSmall: true }))
         .setOrigin(0, 0);
       overlay.add(t);
-      ly += t.height + 6;
+      ly += t.height + 3;
     }
 
     // PRIMARY: launch the guided tutorial (ties #3 how-to-start into #2 tutorial).
-    const startTut = Menu.button(this, cx, cy + CANVAS.HEIGHT * 0.32, tr('howto.startTutorial'), () => this.replayTutorial(), {
+    const startTut = Menu.button(this, cx, startTutY, tr('howto.startTutorial'), () => this.replayTutorial(), {
       width: 280,
       fontSize: 22,
       accent: PALETTE.SQUAD,
     });
     overlay.add(startTut.container);
-    const close = Menu.button(this, cx, cy + CANVAS.HEIGHT * 0.38, tr('common.close'), () => this.toggleHowTo(), {
+    const close = Menu.button(this, cx, closeY, tr('common.close'), () => this.toggleHowTo(), {
       width: 160,
     });
     overlay.add(close.container);
@@ -293,8 +305,10 @@ export class TitleScene extends Phaser.Scene {
     maxWidth: number,
   ): number {
     const w = Math.min(maxWidth, 300);
-    const h = 120;
+    const h = 100;
     const midY = topY + h / 2;
+    // Chip height sized so the ~14px chip captions sit comfortably inside.
+    const chipH = 24;
 
     // Track background + centre lane divider.
     const track = this.add.rectangle(cx, midY, w, h, PALETTE.ROAD, 1).setOrigin(0.5).setStrokeStyle(2, PALETTE.LANE_LINE);
@@ -304,22 +318,24 @@ export class TitleScene extends Phaser.Scene {
     const laneL = cx - w * 0.25;
     const laneR = cx + w * 0.25;
 
-    // Boss chip at the top spanning both lanes.
-    const bossChip = this.add.rectangle(cx, topY + 16, w * 0.5, 22, PALETTE.BOSS, 0.9).setOrigin(0.5).setStrokeStyle(1, PALETTE.TEXT);
-    const bossLabel = this.add.text(cx, topY + 16, 'BOSS', textStyle(11, { fontStyle: 'bold' })).setOrigin(0.5);
+    // Boss chip at the top spanning both lanes. Chip captions stay compact
+    // (allowSmall) so they fit their fixed chip height; the min-font floor is
+    // for body/label copy, not tiny decorative diagram tags.
+    const bossChip = this.add.rectangle(cx, topY + 18, w * 0.5, chipH, PALETTE.BOSS, 0.9).setOrigin(0.5).setStrokeStyle(1, PALETTE.TEXT);
+    const bossLabel = this.add.text(cx, topY + 18, 'BOSS', textStyle(14, { fontStyle: 'bold', allowSmall: true })).setOrigin(0.5);
     overlay.add([bossChip, bossLabel]);
 
     // Gate row: a good gate (left lane) and a bad gate (right lane).
     const gateY = midY - 6;
-    const goodGate = this.add.rectangle(laneL, gateY, w * 0.4, 22, PALETTE.GATE_GOOD, 0.9).setOrigin(0.5).setStrokeStyle(1, PALETTE.TEXT);
-    const goodLabel = this.add.text(laneL, gateY, tr('howto.gateGood'), textStyle(11, { fontStyle: 'bold' })).setOrigin(0.5);
-    const badGate = this.add.rectangle(laneR, gateY, w * 0.4, 22, PALETTE.GATE_BAD, 0.9).setOrigin(0.5).setStrokeStyle(1, PALETTE.TEXT);
-    const badLabel = this.add.text(laneR, gateY, tr('howto.gateBad'), textStyle(11, { fontStyle: 'bold' })).setOrigin(0.5);
+    const goodGate = this.add.rectangle(laneL, gateY, w * 0.4, chipH, PALETTE.GATE_GOOD, 0.9).setOrigin(0.5).setStrokeStyle(1, PALETTE.TEXT);
+    const goodLabel = this.add.text(laneL, gateY, tr('howto.gateGood'), textStyle(14, { fontStyle: 'bold', allowSmall: true })).setOrigin(0.5);
+    const badGate = this.add.rectangle(laneR, gateY, w * 0.4, chipH, PALETTE.GATE_BAD, 0.9).setOrigin(0.5).setStrokeStyle(1, PALETTE.TEXT);
+    const badLabel = this.add.text(laneR, gateY, tr('howto.gateBad'), textStyle(14, { fontStyle: 'bold', allowSmall: true })).setOrigin(0.5);
     overlay.add([goodGate, goodLabel, badGate, badLabel]);
 
     // Squad chip at the bottom (starts in the left lane) using the soldier sprite.
     const squad = this.add.sprite(laneL, topY + h - 16, TextureKeys.Soldier).setScale(2);
-    const laneCaption = this.add.text(cx, topY + h - 12, tr('howto.laneLabel'), textStyle(10, { color: PALETTE.MUTED_CSS })).setOrigin(0.5, 1);
+    const laneCaption = this.add.text(cx, topY + h - 10, tr('howto.laneLabel'), textStyle(14, { color: PALETTE.MUTED_CSS, allowSmall: true })).setOrigin(0.5, 1);
     overlay.add([squad, laneCaption]);
 
     return h;

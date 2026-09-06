@@ -82,7 +82,7 @@ export class SeasonScene extends Phaser.Scene {
         cx,
         y,
         `${tr('season.current', { season: store.state.season.current })}   ${tr('season.tier', { tier: store.seasonTier() })}   ${tr('season.xp', { xp: store.state.season.xp })}`,
-        textStyle(14, { align: 'center' }),
+        textStyle(14, { align: 'center', allowSmall: true }),
       )
       .setOrigin(0.5);
     this.content.add(line);
@@ -94,7 +94,7 @@ export class SeasonScene extends Phaser.Scene {
         store.premiumUnlocked()
           ? tr('season.premiumUnlocked')
           : tr('season.premiumLocked', { level: SEASON.PREMIUM_UNLOCK_RESISTANCE }),
-        textStyle(11, { align: 'center', color: store.premiumUnlocked() ? PALETTE.SUCCESS_CSS : PALETTE.MUTED_CSS }),
+        textStyle(11, { align: 'center', color: store.premiumUnlocked() ? PALETTE.SUCCESS_CSS : PALETTE.MUTED_CSS, allowSmall: true }),
       )
       .setOrigin(0.5);
     this.content.add(premiumLine);
@@ -119,18 +119,18 @@ export class SeasonScene extends Phaser.Scene {
       this.content.add(panel);
 
       const tierLabel = this.add
-        .text(cx - rowW / 2 + 12, y, tr('season.tier', { tier }), textStyle(12, { fontStyle: 'bold', color: reached ? PALETTE.SUCCESS_CSS : PALETTE.TEXT_CSS }))
+        .text(cx - rowW / 2 + 12, y, tr('season.tier', { tier }), textStyle(12, { fontStyle: 'bold', color: reached ? PALETTE.SUCCESS_CSS : PALETTE.TEXT_CSS, allowSmall: true }))
         .setOrigin(0, 0.5);
       this.content.add(tierLabel);
 
       const freeText = this.add
-        .text(cx - rowW / 2 + 74, y, `${tr('season.free')}: ${this.rewardSummary(pair.free)}`, textStyle(10))
+        .text(cx - rowW / 2 + 74, y, `${tr('season.free')}: ${this.rewardSummary(pair.free)}`, textStyle(10, { allowSmall: true }))
         .setOrigin(0, 0.5);
       this.content.add(freeText);
 
       const premColor = premiumUnlocked ? PALETTE.COIN_CSS : PALETTE.MUTED_CSS;
       const premText = this.add
-        .text(cx + rowW / 2 - 12, y, `${tr('season.premium')}: ${this.rewardSummary(pair.premium)}`, textStyle(10, { align: 'right', color: premColor }))
+        .text(cx + rowW / 2 - 12, y, `${tr('season.premium')}: ${this.rewardSummary(pair.premium)}`, textStyle(10, { align: 'right', color: premColor, allowSmall: true }))
         .setOrigin(1, 0.5);
       this.content.add(premText);
     });
@@ -150,7 +150,7 @@ export class SeasonScene extends Phaser.Scene {
     );
     this.content.add(
       this.add
-        .text(cx, y - 10, tr('season.resistanceDesc'), textStyle(10, { align: 'center', color: PALETTE.MUTED_CSS, wordWrap: { width: CANVAS.WIDTH - 80 } }))
+        .text(cx, y - 10, tr('season.resistanceDesc'), textStyle(10, { align: 'center', color: PALETTE.MUTED_CSS, wordWrap: { width: CANVAS.WIDTH - 80 }, allowSmall: true }))
         .setOrigin(0.5),
     );
 
@@ -159,7 +159,7 @@ export class SeasonScene extends Phaser.Scene {
     const costText = capped ? tr('hero.maxed') : tr('hero.cost', { cost });
     this.content.add(
       this.add
-        .text(cx, y + 24, costText, textStyle(12, { align: 'center', color: capped ? PALETTE.MUTED_CSS : PALETTE.COIN_CSS }))
+        .text(cx, y + 24, costText, textStyle(12, { align: 'center', color: capped ? PALETTE.MUTED_CSS : PALETTE.COIN_CSS, allowSmall: true }))
         .setOrigin(0.5),
     );
 

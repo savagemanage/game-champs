@@ -90,17 +90,17 @@ export class FormationScene extends Phaser.Scene {
     Menu.label(this, cx, CANVAS.HEIGHT * 0.1, tr('formation.tapToPlace'), 11, 0.7);
 
     this.powerText = this.add
-      .text(cx, CANVAS.HEIGHT * 0.135, '', textStyle(16, { fontStyle: 'bold', color: PALETTE.ACCENT_CSS }))
+      .text(cx, CANVAS.HEIGHT * 0.135, '', textStyle(16, { fontStyle: 'bold', color: PALETTE.ACCENT_CSS, allowSmall: true }))
       .setOrigin(0.5);
     this.buffText = this.add
-      .text(cx, CANVAS.HEIGHT * 0.165, '', textStyle(12, { align: 'center', color: PALETTE.SUCCESS_CSS }))
+      .text(cx, CANVAS.HEIGHT * 0.165, '', textStyle(12, { align: 'center', color: PALETTE.SUCCESS_CSS, allowSmall: true }))
       .setOrigin(0.5);
 
     this.buildBoard();
     this.buildBench();
 
     this.selectionText = this.add
-      .text(cx, CANVAS.HEIGHT * 0.6, '', textStyle(12, { align: 'center', color: PALETTE.SQUAD_CSS }))
+      .text(cx, CANVAS.HEIGHT * 0.6, '', textStyle(12, { align: 'center', color: PALETTE.SQUAD_CSS, allowSmall: true }))
       .setOrigin(0.5);
 
     Menu.button(this, cx - 100, CANVAS.HEIGHT * 0.955, tr('formation.remove'), () => this.clearSelectedSlot(), { width: 150 });
@@ -134,7 +134,7 @@ export class FormationScene extends Phaser.Scene {
       const bg = this.add.rectangle(x, y, SLOT_SIZE, SLOT_SIZE, PALETTE.PANEL, 0.85).setStrokeStyle(2, PALETTE.LANE_LINE);
       const portrait = this.add.image(x, y, TextureKeys.HeroPortraits, 0).setScale(1.6).setVisible(false);
       const frame = this.add.image(x, y, TextureKeys.GradeFrames, 0).setScale(1.6).setVisible(false);
-      const label = this.add.text(x, y + SLOT_SIZE / 2 + 8, tr('formation.empty'), textStyle(9, { align: 'center' })).setOrigin(0.5);
+      const label = this.add.text(x, y + SLOT_SIZE / 2 + 8, tr('formation.empty'), textStyle(9, { align: 'center', allowSmall: true })).setOrigin(0.5);
       const zone = this.add
         .zone(x, y, SLOT_SIZE, SLOT_SIZE)
         .setInteractive({ useHandCursor: true });
@@ -180,7 +180,7 @@ export class FormationScene extends Phaser.Scene {
     const portrait = this.add.image(0, -4, TextureKeys.HeroPortraits, portraitFrame).setScale(1.4);
     const frame = this.add.image(0, -4, TextureKeys.GradeFrames, gradeFrame).setScale(1.4);
     const name = this.add
-      .text(0, 22, def ? tr(def.nameKey as TrKey) : hero.id, textStyle(8, { align: 'center' }))
+      .text(0, 22, def ? tr(def.nameKey as TrKey) : hero.id, textStyle(8, { align: 'center', allowSmall: true }))
       .setOrigin(0.5);
 
     const container = this.add.container(x, y, [bg, portrait, frame, name]);

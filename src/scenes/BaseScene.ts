@@ -111,7 +111,7 @@ export class BaseScene extends Phaser.Scene {
       const x = cellW * i + cellW / 2;
       this.add.image(x - 26, y, TextureKeys.Resources, RESOURCE_ICON_FRAME[kind]).setScale(1.2);
       const amountText = this.add
-        .text(x - 12, y, '', textStyle(10))
+        .text(x - 12, y, '', textStyle(10, { allowSmall: true }))
         .setOrigin(0, 0.5);
       this.cells.push({ kind, amountText });
     });
@@ -135,17 +135,17 @@ export class BaseScene extends Phaser.Scene {
     const icon = this.add.image(left + 28, y + 40, TextureKeys.Buildings, BUILDING_ICON_FRAME[id]).setScale(1.7);
 
     this.add
-      .text(left + 58, y + 8, `${index + 1}. ${tr(`building.${id}` as TrKey)}`, textStyle(16, { fontStyle: 'bold', color: PALETTE.ACCENT_CSS }))
+      .text(left + 58, y + 8, `${index + 1}. ${tr(`building.${id}` as TrKey)}`, textStyle(16, { fontStyle: 'bold', color: PALETTE.ACCENT_CSS, allowSmall: true }))
       .setOrigin(0, 0.5);
 
-    const levelText = this.add.text(left + 58, y + 32, '', textStyle(13)).setOrigin(0, 0.5);
+    const levelText = this.add.text(left + 58, y + 32, '', textStyle(13, { allowSmall: true })).setOrigin(0, 0.5);
 
     const costText = this.add
-      .text(left + 58, y + 56, '', textStyle(11, { color: PALETTE.MUTED_CSS, wordWrap: { width: CANVAS.WIDTH * 0.52 } }))
+      .text(left + 58, y + 56, '', textStyle(11, { color: PALETTE.MUTED_CSS, wordWrap: { width: CANVAS.WIDTH * 0.52 }, allowSmall: true }))
       .setOrigin(0, 0);
 
     const statusText = this.add
-      .text(left + 58, y + 78, '', textStyle(11, { color: PALETTE.SUCCESS_CSS }))
+      .text(left + 58, y + 78, '', textStyle(11, { color: PALETTE.SUCCESS_CSS, allowSmall: true }))
       .setOrigin(0, 0.5);
 
     const button = Menu.button(this, cx + CANVAS.WIDTH * 0.34, y + 40, tr('building.upgrade'), () => this.tryUpgrade(id), {

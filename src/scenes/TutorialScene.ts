@@ -80,15 +80,15 @@ export class TutorialScene extends Phaser.Scene {
 
     const idx = stepIndex(step.id);
     const progress = this.add
-      .text(cx, panelY - panelH / 2 + 22, tr('tutorial.progress', { step: idx + 1, total: totalSteps() }), textStyle(14, { color: PALETTE.ACCENT_CSS }))
+      .text(cx, panelY - panelH / 2 + 24, tr('tutorial.progress', { step: idx + 1, total: totalSteps() }), textStyle(18, { color: PALETTE.ACCENT_CSS }))
       .setOrigin(0.5);
 
     const title = this.add
-      .text(cx, panelY - panelH / 2 + 58, tr(step.titleKey), textStyle(24, { fontStyle: 'bold', align: 'center' }))
+      .text(cx, panelY - panelH / 2 + 60, tr(step.titleKey), textStyle(24, { fontStyle: 'bold', align: 'center' }))
       .setOrigin(0.5);
 
     const body = this.add
-      .text(cx, panelY - panelH / 2 + 104, tr(step.bodyKey), textStyle(15, { align: 'center', wordWrap: { width: panelW - 48 } }))
+      .text(cx, panelY - panelH / 2 + 104, tr(step.bodyKey), textStyle(20, { align: 'center', wordWrap: { width: panelW - 48 } }))
       .setOrigin(0.5, 0);
 
     const children: Phaser.GameObjects.GameObject[] = [dim, panel, progress, title, body];
@@ -97,14 +97,14 @@ export class TutorialScene extends Phaser.Scene {
     const rowY = panelY + panelH / 2 - 34;
     const back = prevStep(step.id);
     if (back) {
-      const backBtn = Menu.button(this, cx - 84, rowY, tr('tutorial.back'), () => this.goPrev(), { width: 150, fontSize: 16 });
+      const backBtn = Menu.button(this, cx - 84, rowY, tr('tutorial.back'), () => this.goPrev(), { width: 150, fontSize: 18 });
       children.push(backBtn.container);
     }
     const advanceLabel = isLastStep(step.id) ? tr('tutorial.done') : tr('tutorial.next');
     const advanceX = back ? cx + 84 : cx;
     const advanceBtn = Menu.button(this, advanceX, rowY, advanceLabel, () => this.goNext(), {
       width: 150,
-      fontSize: 16,
+      fontSize: 18,
       accent: PALETTE.SQUAD,
     });
     children.push(advanceBtn.container);
@@ -112,7 +112,7 @@ export class TutorialScene extends Phaser.Scene {
     // Skip is always available (dismisses the whole tutorial).
     const skip = Menu.button(this, cx, panelY + panelH / 2 + 30, tr('tutorial.skip'), () => this.finish(), {
       width: 160,
-      fontSize: 14,
+      fontSize: 18,
       accent: PALETTE.ROAD,
     });
     children.push(skip.container);

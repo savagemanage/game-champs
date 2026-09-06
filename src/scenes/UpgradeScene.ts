@@ -90,15 +90,16 @@ export class UpgradeScene extends Phaser.Scene {
       .text(cx - CANVAS.WIDTH * 0.4, y + 26, tr(`upgrade.${kind}.desc` as TrKey), textStyle(13, {
         color: PALETTE.MUTED_CSS,
         wordWrap: { width: CANVAS.WIDTH * 0.5 },
+        allowSmall: true,
       }))
       .setOrigin(0, 0);
 
     const levelText = this.add
-      .text(cx - CANVAS.WIDTH * 0.4, y + 66, '', textStyle(15))
+      .text(cx - CANVAS.WIDTH * 0.4, y + 66, '', textStyle(15, { allowSmall: true }))
       .setOrigin(0, 0.5);
 
     const costText = this.add
-      .text(cx + CANVAS.WIDTH * 0.14, y + 66, '', textStyle(14, { color: PALETTE.COIN_CSS }))
+      .text(cx + CANVAS.WIDTH * 0.14, y + 66, '', textStyle(14, { color: PALETTE.COIN_CSS, allowSmall: true }))
       .setOrigin(0, 0.5);
 
     const button = Menu.button(this, cx + CANVAS.WIDTH * 0.33, y + 40, tr('upgrade.buy'), () => this.buy(kind), {

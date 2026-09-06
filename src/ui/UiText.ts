@@ -53,17 +53,41 @@ export const UI_FONT_FAMILY =
   '"NotoSansKR", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", "DejaVu Sans", "Helvetica Neue", Arial, sans-serif';
 
 /**
+ * Minimum body/label font size, in 540-wide logical px.
+ *
+ * The whole UI is authored in a fixed 540x960 logical space that Scale.FIT
+ * stretches to fill the viewport. On a large desktop window that logical space
+ * is displayed much bigger than 540px wide, so a "10-13px" logical label - once
+ * comfortable on a phone-sized canvas - reads as uncomfortably tiny relative to
+ * the rest of the (now crisp, thanks to the FEAT-001 backing-buffer fix) UI. We
+ * therefore floor every body/label style at this minimum so no ordinary text
+ * ever renders below ~18 logical px. Genuinely decorative micro-labels that
+ * must stay smaller (e.g. a tiny diagram chip caption that would otherwise not
+ * fit its shape) opt out explicitly via the `allowSmall` override; large
+ * headings already pass sizes well above the floor and are unaffected.
+ */
+export const UI_MIN_FONT_SIZE = 18;
+
+/**
  * Build a monospace text style with the crisp text resolution baked in, using
  * the shared palette. Callers pass a font size (in logical px, already sized
  * for the 540x960 canvas) plus optional overrides (colour/align/weight win).
+ *
+ * The effective font size is floored at {@link UI_MIN_FONT_SIZE} so body/label
+ * text stays legible on a large desktop window. Callers that intentionally need
+ * a smaller size (e.g. a tight diagram chip caption) pass `allowSmall: true` in
+ * the overrides to opt out of the floor; `allowSmall` is a UiText-only hint and
+ * is never forwarded into the returned Phaser style object.
  */
 export function textStyle(
   fontSize: number,
-  overrides: Phaser.Types.GameObjects.Text.TextStyle = {},
+  overrides: Phaser.Types.GameObjects.Text.TextStyle & { allowSmall?: boolean } = {},
 ): Phaser.Types.GameObjects.Text.TextStyle {
+  const { allowSmall, ...styleOverrides } = overrides;
+  const effectiveSize = allowSmall ? fontSize : Math.max(fontSize, UI_MIN_FONT_SIZE);
   return {
     fontFamily: UI_FONT_FAMILY,
-    fontSize: `${fontSize}px`,
+    fontSize: `${effectiveSize}px`,
     color: PALETTE.TEXT_CSS,
     resolution: TEXT_RESOLUTION,
     padding: { x: 2, y: 2 },
@@ -75,6 +99,6 @@ export function textStyle(
       fill: true,
       stroke: false,
     },
-    ...overrides,
+    ...styleOverrides,
   };
 }

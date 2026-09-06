@@ -153,8 +153,8 @@ export class HeroesScene extends Phaser.Scene {
     const bg = this.add.rectangle(x, y, 76, 84, PALETTE.PANEL, 0.9).setStrokeStyle(2, PALETTE.ACCENT);
     const portrait = this.add.image(x, y - 12, TextureKeys.HeroPortraits, portraitFrame).setScale(1.6);
     const frame = this.add.image(x, y - 12, TextureKeys.GradeFrames, GRADE_FRAME_FRAME[def.grade]).setScale(1.6);
-    const levelText = this.add.text(x, y + 20, tr('hero.level', { level: instance.level }), textStyle(9, { align: 'center' })).setOrigin(0.5);
-    const starText = this.add.text(x, y + 32, tr('hero.stars', { stars: instance.stars }), textStyle(9, { align: 'center', color: PALETTE.COIN_CSS })).setOrigin(0.5);
+    const levelText = this.add.text(x, y + 20, tr('hero.level', { level: instance.level }), textStyle(9, { align: 'center', allowSmall: true })).setOrigin(0.5);
+    const starText = this.add.text(x, y + 32, tr('hero.stars', { stars: instance.stars }), textStyle(9, { align: 'center', color: PALETTE.COIN_CSS, allowSmall: true })).setOrigin(0.5);
 
     const zone = this.add.zone(x, y, 76, 84).setInteractive({ useHandCursor: true });
     zone.on(Phaser.Input.Events.POINTER_DOWN, () => this.openDetail(id));
@@ -200,13 +200,13 @@ export class HeroesScene extends Phaser.Scene {
     const frame = this.add.image(cx - w / 2 + 60, top + 40, TextureKeys.GradeFrames, GRADE_FRAME_FRAME[def.grade]).setScale(2.2);
 
     const name = this.add.text(cx - w / 2 + 110, top + 14, tr(def.nameKey as TrKey), textStyle(18, { fontStyle: 'bold', color: PALETTE.ACCENT_CSS })).setOrigin(0, 0);
-    const grade = this.add.text(cx - w / 2 + 110, top + 40, `${tr(`herograde.${def.grade}` as TrKey)}  ${tr(`herotype.${def.type}` as TrKey)}  ${tr(`herorole.${def.role}` as TrKey)}`, textStyle(11, { color: PALETTE.MUTED_CSS })).setOrigin(0, 0);
-    const lore = this.add.text(cx - w / 2 + 110, top + 60, tr(def.loreKey as TrKey), textStyle(10, { color: PALETTE.MUTED_CSS, wordWrap: { width: w - 130 } })).setOrigin(0, 0);
+    const grade = this.add.text(cx - w / 2 + 110, top + 40, `${tr(`herograde.${def.grade}` as TrKey)}  ${tr(`herotype.${def.type}` as TrKey)}  ${tr(`herorole.${def.role}` as TrKey)}`, textStyle(11, { color: PALETTE.MUTED_CSS, allowSmall: true })).setOrigin(0, 0);
+    const lore = this.add.text(cx - w / 2 + 110, top + 60, tr(def.loreKey as TrKey), textStyle(10, { color: PALETTE.MUTED_CSS, wordWrap: { width: w - 130 }, allowSmall: true })).setOrigin(0, 0);
     container.add([portrait, frame, name, grade, lore]);
 
     // Progression readouts: level / stars / skill.
     const progY = top + 100;
-    const levelLine = this.add.text(cx - w / 2 + 24, progY, `${tr('hero.level', { level: instance.level })}   ${tr('hero.stars', { stars: instance.stars })}   ${tr('hero.skillLevel', { level: instance.skillLevel })}`, textStyle(12)).setOrigin(0, 0.5);
+    const levelLine = this.add.text(cx - w / 2 + 24, progY, `${tr('hero.level', { level: instance.level })}   ${tr('hero.stars', { stars: instance.stars })}   ${tr('hero.skillLevel', { level: instance.skillLevel })}`, textStyle(12, { allowSmall: true })).setOrigin(0, 0.5);
     container.add(levelLine);
 
     // Derived stats.
@@ -216,12 +216,12 @@ export class HeroesScene extends Phaser.Scene {
         cx - w / 2 + 24,
         progY + 22,
         `${tr('hero.stat.hp')} ${stats.hp}   ${tr('hero.stat.atk')} ${stats.atk}   ${tr('hero.stat.def')} ${stats.def}   ${tr('hero.stat.speed')} ${stats.speed}`,
-        textStyle(11, { color: PALETTE.SQUAD_CSS }),
+        textStyle(11, { color: PALETTE.SQUAD_CSS, allowSmall: true }),
       )
       .setOrigin(0, 0.5);
     container.add(statLine);
 
-    const shardsLine = this.add.text(cx + w / 2 - 24, progY, tr('recruit.shards', { shards: store.shards() }), textStyle(12, { color: PALETTE.COIN_CSS })).setOrigin(1, 0.5);
+    const shardsLine = this.add.text(cx + w / 2 - 24, progY, tr('recruit.shards', { shards: store.shards() }), textStyle(12, { color: PALETTE.COIN_CSS, allowSmall: true })).setOrigin(1, 0.5);
     container.add(shardsLine);
 
     // Three progression buttons with their shard costs.
@@ -254,7 +254,7 @@ export class HeroesScene extends Phaser.Scene {
     const capped = !Number.isFinite(cost);
     const costText = capped ? tr('hero.maxed') : tr('hero.cost', { cost });
     const btn: MenuButton = Menu.button(this, cx - 60, y, label, onClick, { width: 180, fontSize: 14 });
-    const price = this.add.text(cx + 70, y, costText, textStyle(12, { color: capped ? PALETTE.MUTED_CSS : PALETTE.COIN_CSS })).setOrigin(0, 0.5);
+    const price = this.add.text(cx + 70, y, costText, textStyle(12, { color: capped ? PALETTE.MUTED_CSS : PALETTE.COIN_CSS, allowSmall: true })).setOrigin(0, 0.5);
     btn.setEnabled(!capped && shards >= cost);
     container.add([btn.container, price]);
   }
@@ -293,13 +293,13 @@ export class HeroesScene extends Phaser.Scene {
     // Pity counter readout.
     const pity = store.state.heroes.pity;
     const pityLine = this.add
-      .text(cx, CANVAS.HEIGHT * 0.32, tr('recruit.pityCount', { count: pity.sinceHighGrade, max: RECRUIT.PITY_THRESHOLD }), textStyle(13, { align: 'center' }))
+      .text(cx, CANVAS.HEIGHT * 0.32, tr('recruit.pityCount', { count: pity.sinceHighGrade, max: RECRUIT.PITY_THRESHOLD }), textStyle(13, { align: 'center', allowSmall: true }))
       .setOrigin(0.5);
     this.content.add(pityLine);
 
     const remaining = Math.max(0, RECRUIT.PITY_THRESHOLD - pity.sinceHighGrade);
     const pityHint = this.add
-      .text(cx, CANVAS.HEIGHT * 0.35, tr('recruit.pity', { count: remaining }), textStyle(11, { align: 'center', color: PALETTE.MUTED_CSS }))
+      .text(cx, CANVAS.HEIGHT * 0.35, tr('recruit.pity', { count: remaining }), textStyle(11, { align: 'center', color: PALETTE.MUTED_CSS, allowSmall: true }))
       .setOrigin(0.5);
     this.content.add(pityHint);
 
@@ -352,13 +352,13 @@ export class HeroesScene extends Phaser.Scene {
       const portrait = this.add.image(x, y, TextureKeys.HeroPortraits, portraitFrame).setScale(0.1);
       const frame = this.add.image(x, y, TextureKeys.GradeFrames, gradeFrame).setScale(0.1);
       const tag = this.add
-        .text(x, y + 24, res.duplicate ? tr('recruit.duplicate', { shards: res.shardsGained }) : tr('recruit.new'), textStyle(8, { align: 'center', color: res.duplicate ? PALETTE.MUTED_CSS : PALETTE.SUCCESS_CSS }))
+        .text(x, y + 24, res.duplicate ? tr('recruit.duplicate', { shards: res.shardsGained }) : tr('recruit.new'), textStyle(8, { align: 'center', color: res.duplicate ? PALETTE.MUTED_CSS : PALETTE.SUCCESS_CSS, allowSmall: true }))
         .setOrigin(0.5);
       reveal.add([portrait, frame, tag]);
       // Pop-in reveal, staggered per pull.
       this.tweens.add({ targets: [portrait, frame], scale: 1.5, duration: 260, delay: i * 70, ease: 'Back.out' });
       if (res.pity) {
-        const flash = this.add.text(x, y - 26, tr('recruit.pityHit'), textStyle(9, { color: PALETTE.COIN_CSS })).setOrigin(0.5);
+        const flash = this.add.text(x, y - 26, tr('recruit.pityHit'), textStyle(9, { color: PALETTE.COIN_CSS, allowSmall: true })).setOrigin(0.5);
         reveal.add(flash);
       }
     });

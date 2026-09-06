@@ -181,7 +181,7 @@ export class BattleScene extends Phaser.Scene {
     const frame = this.add.image(0, -2, TextureKeys.GradeFrames, gradeFrame).setScale(1.5);
     // Enemy portraits read as hostile with a red tint over the shared sheet.
     if (side === 'defender') portrait.setTint(0xff9a90);
-    const nameText = this.add.text(0, 26, label, textStyle(8, { align: 'center' })).setOrigin(0.5);
+    const nameText = this.add.text(0, 26, label, textStyle(8, { align: 'center', allowSmall: true })).setOrigin(0.5);
 
     // HP bar under the portrait.
     const hpBarWidth = 48;

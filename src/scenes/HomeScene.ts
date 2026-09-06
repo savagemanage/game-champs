@@ -103,7 +103,7 @@ export class HomeScene extends Phaser.Scene {
 
     // Header.
     Menu.title(this, cx, CANVAS.HEIGHT * 0.07, tr('home.title'), 34).setColor(PALETTE.SQUAD_CSS);
-    Menu.label(this, cx, CANVAS.HEIGHT * 0.07 + 32, tr('home.welcome'), 13, 0.75);
+    Menu.label(this, cx, CANVAS.HEIGHT * 0.07 + 34, tr('home.welcome'), 18, 0.75);
 
     this.buildResourceBar(store);
     this.buildBasePlots(store);
@@ -111,8 +111,8 @@ export class HomeScene extends Phaser.Scene {
 
     // A cog to reach Settings without occupying a nav tab.
     Menu.button(this, CANVAS.WIDTH - 44, CANVAS.HEIGHT * 0.07, tr('title.settings'), () => this.navTo(SceneKeys.Settings), {
-      width: 72,
-      fontSize: 12,
+      width: 76,
+      fontSize: 15,
     });
 
     // Surface offline construction completions as a toast.
@@ -144,12 +144,14 @@ export class HomeScene extends Phaser.Scene {
     RESOURCE_ORDER.forEach((kind: ResourceKind, i) => {
       const x = cellW * i + cellW / 2;
       this.add
-        .image(x - 24, y, TextureKeys.Resources, RESOURCE_ICON_FRAME[kind])
+        .image(x - 30, y, TextureKeys.Resources, RESOURCE_ICON_FRAME[kind])
         .setScale(1.4);
       const amount = Math.floor(resources[kind] ?? 0);
       const cap = Math.floor(caps[kind] ?? 0);
+      // Kept just under the min-font floor (allowSmall) so four columns of
+      // "amount/cap" fit the resource strip without colliding.
       this.add
-        .text(x - 8, y, `${amount}/${cap}`, textStyle(11))
+        .text(x - 16, y, `${amount}/${cap}`, textStyle(16, { allowSmall: true }))
         .setOrigin(0, 0.5);
     });
   }
@@ -170,7 +172,7 @@ export class HomeScene extends Phaser.Scene {
       this.buildPlot(x, y, id, store);
     });
 
-    Menu.label(this, CANVAS.WIDTH / 2, startY + 2 * cellH + 4, tr('nav.hint'), 11, 0.55);
+    Menu.label(this, CANVAS.WIDTH / 2, startY + 2 * cellH + 4, tr('nav.hint'), 15, 0.55);
   }
 
   /** A single building plot: framed panel, icon, localized name + level. */
@@ -180,11 +182,13 @@ export class HomeScene extends Phaser.Scene {
     this.add.image(x, y - 16, TextureKeys.Buildings, BUILDING_ICON_FRAME[id]).setScale(2);
 
     const nameKey = `building.${id}` as TrKey;
-    this.add.text(x, y + 22, tr(nameKey), textStyle(11, { align: 'center' })).setOrigin(0.5);
+    // Plot name/level are compact grid captions (allowSmall) that must fit the
+    // fixed 132x104 plot panel; raised from 11/10 to 16/15 for legibility.
+    this.add.text(x, y + 20, tr(nameKey), textStyle(16, { align: 'center', allowSmall: true })).setOrigin(0.5);
 
     const levelText = level > 0 ? tr('home.buildingLevel', { level }) : tr('home.plotEmpty');
     this.add
-      .text(x, y + 36, levelText, textStyle(10, { color: level > 0 ? PALETTE.ACCENT_CSS : PALETTE.MUTED_CSS }))
+      .text(x, y + 38, levelText, textStyle(15, { color: level > 0 ? PALETTE.ACCENT_CSS : PALETTE.MUTED_CSS, allowSmall: true }))
       .setOrigin(0.5);
 
     // Tapping a plot opens Base management (FEAT-006). Guarded no-op until then.
@@ -215,7 +219,9 @@ export class HomeScene extends Phaser.Scene {
         .setScale(1.6)
         .setDepth(41);
       const label = this.add
-        .text(x, barY + 20, tr(tab.labelKey), textStyle(10, { align: 'center' }))
+        // Compact tab caption (allowSmall): six tabs across 540px leave ~90px
+        // per cell, so the label stays at 15px to avoid crowding neighbours.
+        .text(x, barY + 22, tr(tab.labelKey), textStyle(15, { align: 'center', allowSmall: true }))
         .setOrigin(0.5)
         .setDepth(41);
 
@@ -267,7 +273,7 @@ export class HomeScene extends Phaser.Scene {
     }
     const cx = CANVAS.WIDTH / 2;
     const y = CANVAS.HEIGHT * 0.82;
-    const text = this.add.text(0, 0, message, textStyle(14, { align: 'center' })).setOrigin(0.5);
+    const text = this.add.text(0, 0, message, textStyle(18, { align: 'center' })).setOrigin(0.5);
     const bg = Menu.panel(this, 0, 0, Math.ceil(text.width) + 40, 44, 0.95);
     const toast = this.add.container(cx, y, [bg, text]).setDepth(60);
     this.toast = toast;

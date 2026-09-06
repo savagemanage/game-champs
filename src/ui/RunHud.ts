@@ -44,13 +44,13 @@ export class RunHud {
     // Score (centre).
     scene.add.image(CANVAS.WIDTH / 2 - 34, 22, TextureKeys.UiIcons, HUD_ICON_FRAME.coin).setScale(1.4).setDepth(91);
     this.scoreText = scene.add
-      .text(CANVAS.WIDTH / 2 - 20, 22, '', textStyle(16, { color: PALETTE.COIN_CSS }))
+      .text(CANVAS.WIDTH / 2 - 20, 22, '', textStyle(16, { color: PALETTE.COIN_CSS, allowSmall: true }))
       .setOrigin(0, 0.5)
       .setDepth(91);
 
     // Distance (right).
     this.distanceText = scene.add
-      .text(CANVAS.WIDTH - pad, 22, '', textStyle(16))
+      .text(CANVAS.WIDTH - pad, 22, '', textStyle(16, { allowSmall: true }))
       .setOrigin(1, 0.5)
       .setDepth(91);
     scene.add

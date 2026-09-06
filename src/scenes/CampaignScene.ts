@@ -121,12 +121,12 @@ export class CampaignScene extends Phaser.Scene {
       panel.setStrokeStyle(2, isCleared ? PALETTE.SUCCESS : unlocked ? PALETTE.ACCENT : PALETTE.LANE_LINE);
 
       this.add
-        .text(cx - rowW / 2 + 16, y, tr(stage.nameKey as TrKey), textStyle(15, { fontStyle: 'bold' }))
+        .text(cx - rowW / 2 + 16, y, tr(stage.nameKey as TrKey), textStyle(15, { fontStyle: 'bold', allowSmall: true }))
         .setOrigin(0, 0.5);
 
       const status = this.stageStatusText(stage, isCleared, unlocked, resistance);
       this.add
-        .text(cx + rowW / 2 - 16, y, status.text, textStyle(11, { align: 'right', color: status.color }))
+        .text(cx + rowW / 2 - 16, y, status.text, textStyle(11, { align: 'right', color: status.color, allowSmall: true }))
         .setOrigin(1, 0.5);
 
       if (unlocked) {
@@ -164,7 +164,7 @@ export class CampaignScene extends Phaser.Scene {
     const nextWave = store.highestZombieWave() + 1;
     // Waves are 0-indexed internally; show them 1-indexed to the player.
     this.add
-      .text(cx, y + 2, tr('zombie.best', { wave: store.highestZombieWave() + 1 }), textStyle(12, { align: 'center' }))
+      .text(cx, y + 2, tr('zombie.best', { wave: store.highestZombieWave() + 1 }), textStyle(12, { align: 'center', allowSmall: true }))
       .setOrigin(0.5);
 
     Menu.button(
@@ -283,12 +283,12 @@ export class CampaignScene extends Phaser.Scene {
 
     if (win && res.reward && Object.keys(res.reward).length > 0) {
       this.add
-        .text(cx, cy - 52, tr('campaign.reward'), textStyle(14, { color: PALETTE.ACCENT_CSS }))
+        .text(cx, cy - 52, tr('campaign.reward'), textStyle(14, { color: PALETTE.ACCENT_CSS, allowSmall: true }))
         .setOrigin(0.5)
         .setDepth(102);
       const lines = this.rewardLines(res.reward);
       this.add
-        .text(cx, cy - 4, lines.join('\n'), textStyle(13, { align: 'center', lineSpacing: 6 }))
+        .text(cx, cy - 4, lines.join('\n'), textStyle(13, { align: 'center', lineSpacing: 6, allowSmall: true }))
         .setOrigin(0.5)
         .setDepth(102);
       AudioManager.get(this).playSfx(AudioKeys.Reward, 0.7);
