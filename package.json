@@ -15,8 +15,10 @@
     "build": "npm run build:games && npm run build:site",
     "build:games": "npm run build --workspaces --if-present",
     "build:site": "node site/build.mjs",
+    "docs:readme": "node scripts/gen-readme.mjs",
+    "docs:check": "node scripts/gen-readme.mjs --check",
+    "new-game": "node scripts/new-game.mjs",
     "test": "npm run test --workspaces --if-present",
-    "typecheck": "npm run typecheck --workspaces --if-present",
-    "new-game": "node scripts/new-game.mjs"
+    "typecheck": "npm run typecheck --workspaces --if-present"
   }
 }
