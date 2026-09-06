@@ -5,12 +5,17 @@ coverage
 *.local
 .DS_Store
 *.log
+logs/
 .vite
 
 # tsc -b / composite build artifacts
 *.tsbuildinfo
 vite.config.js
 vite.config.d.ts
+
+# Python bytecode (per-game asset generators under packages/*/tools)
+__pycache__/
+*.pyc
 
 # task / planning artifacts
 .tasks

@@ -1,0 +1,23 @@
+{
+  "name": "game-champs-monorepo",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "dev:champs": "npm run dev -w packages/champs",
+    "dev:whiteout": "npm run dev -w packages/whiteout",
+    "dev:lastwar": "npm run dev -w packages/lastwar",
+    "dev:kingshot": "npm run dev -w packages/kingshot",
+    "dev:wirework": "npm run dev -w packages/wirework"
+  }
+}
