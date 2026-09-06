@@ -71,7 +71,9 @@ export class ResearchPanel {
     const cx = CANVAS.WIDTH / 2;
     const cy = CANVAS.HEIGHT / 2;
     const panelW = 760;
-    const panelH = 500;
+    // Grow toward the 540 canvas (centered at cy=270 -> top 10 / bottom 530)
+    // so the taller economic branch's 8 three-line rows all fit above Close.
+    const panelH = 520;
 
     const backdrop = this.scene.add
       .rectangle(0, 0, CANVAS.WIDTH, CANVAS.HEIGHT, 0x000000, 0.55)
@@ -127,8 +129,10 @@ export class ResearchPanel {
       .setOrigin(0, 0);
     this.root.add(header);
 
-    let rowY = y + 30;
-    const rowStep = 58;
+    let rowY = y + 28;
+    // Tightened from 58 so the economic branch's 8 three-line rows fit inside
+    // the panel with Close clearly below the last row.
+    const rowStep = 46;
     for (const tech of techsInBranch(branch)) {
       this.buildTechRow(tech, x, rowY, width);
       rowY += rowStep;
@@ -144,16 +148,16 @@ export class ResearchPanel {
     this.root.add(name);
 
     const desc = this.scene.add
-      .text(x, y + 17, `${tr(`tech.${tech}.desc`)}`, textStyle(11, { color: PALETTE.MUTED_CSS, wordWrap: { width: width - 130 } }))
+      .text(x, y + 15, `${tr(`tech.${tech}.desc`)}`, textStyle(11, { color: PALETTE.MUTED_CSS, wordWrap: { width: width - 130 } }))
       .setOrigin(0, 0);
     this.root.add(desc);
 
     const statusLabel = this.scene.add
-      .text(x, y + 34, '', textStyle(11, { color: PALETTE.MUTED_CSS, wordWrap: { width: width - 130 } }))
+      .text(x, y + 29, '', textStyle(11, { color: PALETTE.MUTED_CSS, wordWrap: { width: width - 130 } }))
       .setOrigin(0, 0);
     this.root.add(statusLabel);
 
-    const button = Menu.button(this.scene, x + width - 56, y + 16, tr('research.unlock'), () => this.research(tech), {
+    const button = Menu.button(this.scene, x + width - 56, y + 15, tr('research.unlock'), () => this.research(tech), {
       width: 108,
       height: 34,
       fontSize: 13,

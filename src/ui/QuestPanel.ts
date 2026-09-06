@@ -72,7 +72,9 @@ export class QuestPanel {
     const cx = CANVAS.WIDTH / 2;
     const cy = CANVAS.HEIGHT / 2;
     const panelW = 720;
-    const panelH = 500;
+    // Grow toward the 540 canvas (centered at cy=270 -> top 10 / bottom 530)
+    // so all 8 two-line quest rows (incl. reward text) sit above Close.
+    const panelH = 520;
 
     const backdrop = this.scene.add
       .rectangle(0, 0, CANVAS.WIDTH, CANVAS.HEIGHT, 0x000000, 0.55)
@@ -93,7 +95,8 @@ export class QuestPanel {
     this.root.add(this.summaryText);
 
     const left = cx - panelW / 2 + 30;
-    const rowStep = 50;
+    // Tightened from 50 so all 8 rows plus their reward text fit above Close.
+    const rowStep = 48;
     let y = cy - panelH / 2 + 78;
     for (const quest of QUEST_ORDER) {
       this.buildQuestRow(quest, left, y, panelW - 60);
