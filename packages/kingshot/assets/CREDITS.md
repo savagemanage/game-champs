@@ -26,7 +26,7 @@ URL, and license must be recorded below.
 ## License
 
 All original assets in this repository are released by the project author under
-the repository's **Apache-2.0** license (see [`../LICENSE`](../LICENSE)),
+the repository's **Apache-2.0** license (see [`../LICENSE`](../../../LICENSE)),
 consistent with the rest of the codebase.
 
 - **License:** Apache-2.0

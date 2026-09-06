@@ -177,10 +177,18 @@ a first-time visitor with no saved choice loads Korean.
 
 ## Local development
 
-Requires **Node 22** and npm.
+Requires **Node 22** and **npm 11**.
+
+Arena Champions is a workspace of the [open-games](../../README.md) monorepo, so
+dependencies are installed once from the **repo root**, not from this directory:
 
 ```bash
-npm install            # install dependencies
+npm install            # from the repo root; installs every workspace
+```
+
+Then run the package scripts from here (or from the root with `-w packages/champs`):
+
+```bash
 npm run dev            # start the Vite dev server (hot reload)
 npm run build          # type-check (tsc -b) then produce dist/
 npm run preview        # serve the production build locally
@@ -196,15 +204,17 @@ This app is served from the **`/open-games/champs/`** subpath because it is a Gi
 page**. That subpath is configured in `vite.config.ts`:
 
 ```ts
-export default defineConfig({
-  base: '/open-games/champs/',
+export default defineConfig(({ command }) => ({
+  base: command === 'build' ? '/open-games/champs/' : '/',
   // ...
-});
+}));
 ```
 
-Deployment is automated by `.github/workflows/deploy.yml`: on every push to `main`, it runs
-`npm ci`, `npm run build`, and deploys `dist/` with `actions/deploy-pages`. Enable it once
-under **Settings → Pages → Build and deployment → Source: GitHub Actions**. The site is then
+Deployment is handled once for the whole repo by
+[`.github/workflows/deploy.yml`](../../.github/workflows/deploy.yml): on every push to `main`
+it builds every workspace, collects each `dist/` into its own subpath, generates the root
+landing page, and publishes them together with `actions/deploy-pages`. Enable it once under
+**Settings → Pages → Build and deployment → Source: GitHub Actions**. This game is then
 available at:
 
 ```
@@ -343,7 +353,7 @@ unavailable, so builds and unit tests stay green.
 
 ## License
 
-This project is licensed under the **Apache License 2.0**. See the [LICENSE](./LICENSE) file
-for the full text.
+This project is licensed under the **Apache License 2.0**. See the repo-root
+[LICENSE](../../LICENSE) file for the full text.
 
 © 2026 Janghoon Lee

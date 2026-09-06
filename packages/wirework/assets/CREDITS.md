@@ -25,7 +25,7 @@ below.
 ## License
 
 All original assets in this repository are released by the project author under
-the repository's **Apache-2.0** license (see [`../LICENSE`](../LICENSE),
+the repository's **Apache-2.0** license (see [`../LICENSE`](../../../LICENSE),
 Copyright 2026 Janghoon Lee), consistent with the rest of the codebase.
 
 - **Author:** Janghoon Lee / Wirework project
