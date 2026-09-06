@@ -5,26 +5,37 @@ import { KO_FONT_FAMILY } from './fonts';
 /**
  * UiText - crisp-text strategy for the UI/HUD/menu layer.
  *
- * The game renders at a low logical resolution (960x540) and is upscaled with
- * nearest-neighbour (Scale.FIT + pixelArt), which crushes small text. To keep
- * glyphs sharp we render Phaser Text at a higher DPI via the `resolution`
- * style property: the glyph texture is rasterized at `resolution` times the
- * logical size, so it stays crisp when the canvas is scaled up and on high-DPI
- * displays. This does NOT change roundPixels or the world pixel-art scale; it
- * only sharpens text. Mirrors wirework's ui/UiText.ts approach.
+ * The game is laid out in a fixed 960x540 LOGICAL coordinate system. As of the
+ * FEAT-002 render-pipeline fix the Phaser BACKBUFFER is sized to the device's
+ * real pixel resolution (logical size * renderScale, tracking
+ * devicePixelRatio - see src/main.ts and ui/renderScale.ts) and each scene's
+ * main camera is zoomed by the same factor, so the browser no longer
+ * nearest-neighbour-upscales a low-res 960x540 canvas: text now rasterizes at
+ * device pixels and stays sharp, while sprites keep NEAREST filtering
+ * (pixelArt:true) so they remain crisp pixel-art.
+ *
+ * The per-Text `resolution` below is an ADDITIONAL sharpener that now actually
+ * helps: because the camera is zoomed, a Text drawn at a logical font size is
+ * rendered onto `renderScale` times as many device pixels, so its glyph texture
+ * must be rasterized at (at least) `renderScale` times the logical size to fill
+ * them without softening. `resolution` does exactly that, independently of the
+ * world pixel-art scale.
  */
 
 /**
  * Text resolution multiplier. Text is rasterized to its OWN glyph texture at
- * `resolution` times the logical size, independently of the world's
- * nearest-neighbour pixel-art upscale. We scale with the device pixel ratio
- * and floor at 3x so HUD/menu glyphs stay crisp even on 1x monitors that get
- * Scale.FIT-upscaled well past 1x. The world art stays pixel-art; only text
+ * `resolution` times the logical font size. It must comfortably cover the
+ * device pixels the zoomed camera maps each logical text pixel onto, so we base
+ * it on devicePixelRatio (rounded UP so a fractional DPR never under-samples)
+ * and floor it at 2x. The floor keeps HUD/menu glyphs crisp even on a 1x
+ * monitor whose window gets Scale.FIT-scaled past 1x, without the wastefully
+ * huge textures a larger constant would allocate now that the backbuffer itself
+ * is already at device resolution. The world art stays pixel-art; only text
  * sharpens.
  */
 export const TEXT_RESOLUTION = Math.max(
-  3,
-  Math.ceil((typeof window !== 'undefined' ? window.devicePixelRatio : 1) || 1) * 2,
+  2,
+  Math.ceil((typeof window !== 'undefined' ? window.devicePixelRatio : 1) || 1),
 );
 
 /**
