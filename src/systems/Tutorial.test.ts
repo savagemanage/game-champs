@@ -7,6 +7,7 @@ import {
   prevStep,
   shouldShowStartHint,
   shouldShowTutorialOnFirstRun,
+  startCtaSubKeys,
   stepById,
   stepIndex,
   totalSteps,
@@ -80,6 +81,20 @@ describe('Tutorial', () => {
   it('shouldShowStartHint (FEAT-004) is true only for a fresh, unseen save', () => {
     expect(shouldShowStartHint(false)).toBe(true);
     expect(shouldShowStartHint(true)).toBe(false);
+  });
+
+  it('startCtaSubKeys (FEAT-003) lists the explainer + desktop key cue, both in STRINGS', () => {
+    const keys = startCtaSubKeys();
+    // Ordered: the one-line explainer first, then the compact SPACE cue.
+    expect(keys).toEqual(['title.startSub', 'title.startKey']);
+    for (const key of keys) {
+      const entry = STRINGS[key];
+      expect(entry, `missing entry for ${key}`).toBeTruthy();
+      expect(entry.ko, `ko missing for ${key}`).toBeTruthy();
+      expect(entry.en, `en missing for ${key}`).toBeTruthy();
+    }
+    // The explainer makes clear the CTA enters the base to build the squad.
+    expect(STRINGS['title.startSub'].ko).toBe('기지에 입장해 분대를 편성하고 출격합니다');
   });
 
   it('every step title/body i18n key exists in STRINGS', () => {

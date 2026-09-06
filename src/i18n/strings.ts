@@ -36,7 +36,12 @@ export const STRINGS = {
   // Title scene.
   'title.tagline': { en: 'Grow the squad. Reach the boss.', ko: '분대를 키워 보스에 도달하라' },
   'title.play': { en: 'Deploy', ko: '출격' },
-  'title.start': { en: '→ Start', ko: '→ 시작하기' },
+  'title.start': { en: '→ Start Game', ko: '→ 게임 시작' },
+  'title.startSub': {
+    en: 'Enter your base to build your squad and deploy',
+    ko: '기지에 입장해 분대를 편성하고 출격합니다',
+  },
+  'title.startKey': { en: 'or press SPACE to start', ko: 'SPACE 로 시작' },
   'title.startHint': { en: 'Tap here to start', ko: '여기를 눌러 시작하세요' },
   'title.howto': { en: 'How to Play', ko: '플레이 방법' },
   'title.upgrades': { en: 'Upgrades', ko: '업그레이드' },
@@ -465,8 +470,8 @@ export const STRINGS = {
   'tutorial.replay': { en: 'Replay Tutorial', ko: '튜토리얼 다시 보기' },
   'tutorial.step.welcome.title': { en: 'Welcome, Commander', ko: '환영합니다, 사령관' },
   'tutorial.step.welcome.body': {
-    en: 'Grow your squad and reach the boss. This quick guide shows how to get started.',
-    ko: '분대를 키워 보스에 도달하세요. 이 짧은 안내로 시작 방법을 알려드립니다.',
+    en: 'Tap or press SPACE to start. Your goal: grow the squad, reach the boss, and defeat it. In the runner you slide between lanes by dragging or with ← →. This quick guide shows how to begin.',
+    ko: '탭하거나 SPACE 를 눌러 시작하세요. 목표는 분대를 키워 보스에 도달해 물리치는 것입니다. 러너에서는 드래그하거나 ← → 로 차선 사이를 이동합니다. 이 짧은 안내로 시작 방법을 알려드립니다.',
   },
   'tutorial.step.base.title': { en: 'Your Base', ko: '기지' },
   'tutorial.step.base.body': {

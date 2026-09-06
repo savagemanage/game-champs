@@ -4,7 +4,7 @@ import { TextureKeys, AudioKeys } from '../config/AssetKeys';
 import { AudioManager } from '../systems/AudioManager';
 import { MetaStore } from '../systems/MetaStore';
 import { GameStore } from '../systems/GameStore';
-import { shouldShowStartHint } from '../systems/Tutorial';
+import { shouldShowStartHint, startCtaSubKeys } from '../systems/Tutorial';
 import { tr } from '../i18n/i18n';
 import { Menu } from '../ui/Menu';
 import { textStyle } from '../ui/UiText';
@@ -72,7 +72,22 @@ export class TitleScene extends Phaser.Scene {
     if (shouldShowStartHint(GameStore.get().tutorialSeen())) {
       this.spawnStartHint(cx, y);
     }
-    y += step;
+    // Explainer + desktop keyboard cue rendered directly UNDER the CTA so a
+    // first-time player knows exactly what the button does (it enters the base
+    // hub) and that SPACE also starts. The keys come from the pure start-flow
+    // helper so their presence in the string table is unit-tested. These sit in
+    // the gap between the button (above) and the next menu button; `step` below
+    // is widened so nothing collides.
+    const [subKey, keyCueKey] = startCtaSubKeys();
+    this.add
+      .text(cx, y + 32, tr(subKey), textStyle(16, { color: PALETTE.MUTED_CSS, align: 'center' }))
+      .setOrigin(0.5);
+    this.add
+      .text(cx, y + 54, tr(keyCueKey), textStyle(15, { color: PALETTE.ACCENT_CSS, fontStyle: 'bold', allowSmall: true }))
+      .setOrigin(0.5);
+    // The explainer + key cue occupy ~54px below the button; advance past them
+    // (larger than the normal step) so the Upgrades button clears the cue.
+    y += step + 26;
     Menu.button(this, cx, y, tr('title.upgrades'), () => this.go(SceneKeys.Upgrade), { width: 260 });
     y += step;
     Menu.button(this, cx, y, tr('title.howto'), () => this.toggleHowTo(), { width: 260 });

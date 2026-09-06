@@ -151,3 +151,18 @@ export function shouldShowTutorialOnFirstRun(seen: boolean): boolean {
 export function shouldShowStartHint(seen: boolean): boolean {
   return seen === false;
 }
+
+/**
+ * The i18n keys for the start-flow copy rendered directly UNDER the Title's
+ * primary CTA (FEAT-003): a one-line explainer of what the button does, and a
+ * compact keyboard cue telling a desktop player they can also start with SPACE.
+ *
+ * Returned as ordered data (not rendered here) so the pure layer stays
+ * Phaser-free and unit-testable, while {@link TitleScene} stacks the labels in
+ * this order below the button. Keeping the keys here means the guarantee that
+ * every listed key exists in the STRINGS table is covered by a plain unit test,
+ * mirroring how the tutorial step keys are validated.
+ */
+export function startCtaSubKeys(): readonly TrKey[] {
+  return ['title.startSub', 'title.startKey'] as const;
+}
