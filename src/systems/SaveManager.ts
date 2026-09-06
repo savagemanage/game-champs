@@ -2,6 +2,7 @@ import { ECONOMY, RESOURCE_ORDER } from '../config/GameConfig';
 import { TROOP_ORDER } from '../config/TroopConfig';
 import type { Army, GameState } from '../types';
 import { BuildingSystem } from './BuildingSystem';
+import { HeroSystem } from './HeroSystem';
 import { ResearchSystem } from './ResearchSystem';
 import { ResourceStore } from './ResourceStore';
 import { TrainingQueue } from './TrainingQueue';
@@ -17,11 +18,14 @@ import { TrainingQueue } from './TrainingQueue';
  *     other missing new fields the same way, so a future feature can add its
  *     own field (bumping the version and extending the accepted range) without
  *     breaking a v2 save.
+ * v3: adds the `heroes` field (hero roster + active hero). A v1/v2 save (no
+ *     heroes) still loads: deserialize() default-constructs a fresh, empty
+ *     HeroSystem when the field is missing, exactly like research did.
  */
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 
 /** Save versions this build can load and migrate forward from. */
-export const SUPPORTED_SAVE_VERSIONS: readonly number[] = [1, 2];
+export const SUPPORTED_SAVE_VERSIONS: readonly number[] = [1, 2, 3];
 
 /** Default localStorage key for the single save slot. */
 export const SAVE_KEY = 'kingdom-rise:save';
@@ -43,6 +47,7 @@ export interface GameSnapshot {
   buildings: BuildingSystem;
   training: TrainingQueue;
   research: ResearchSystem;
+  heroes: HeroSystem;
   waveCleared: number;
 }
 
@@ -81,6 +86,7 @@ export class SaveManager {
       trainingQueue: snapshot.training.toJSON(),
       waveCleared: snapshot.waveCleared,
       research: snapshot.research.toJSON(),
+      heroes: snapshot.heroes.toJSON(),
       lastSeenAt: now,
     };
   }
@@ -102,12 +108,17 @@ export class SaveManager {
     // have completed while offline is unlocked on load.
     const research = ResearchSystem.fromJSON(state.research);
     research.update(now);
+    // v1/v2 saves omit `heroes`; HeroSystem.fromJSON default-constructs a
+    // fresh, empty roster when the field is missing/malformed, so the migration
+    // never crashes.
+    const heroes = HeroSystem.fromJSON(state.heroes);
 
-    // Research multipliers applied to offline reconciliation:
-    //  - production:  rates are boosted before crediting.
+    // Production multipliers applied to offline reconciliation:
+    //  - production:  research production techs AND the active economy hero
+    //                 both scale the rates (composed multiplicatively).
     //  - storage:     raises the soft cap so offline gains can fill higher.
     //  - offline eff: scales ECONOMY.OFFLINE_EFFICIENCY (>1 = more).
-    const prodMult = research.productionMultiplier();
+    const prodMult = research.productionMultiplier() * heroes.economyMultiplier();
     const capMult = research.storageMultiplier();
     const eff = ECONOMY.OFFLINE_EFFICIENCY * research.offlineEfficiencyMultiplier();
     const boost = (rates: ReturnType<BuildingSystem['productionRates']>): typeof rates => {
@@ -162,7 +173,7 @@ export class SaveManager {
     buildings.update(now);
 
     return {
-      snapshot: { resources, buildings, training, research, waveCleared: state.waveCleared ?? 0 },
+      snapshot: { resources, buildings, training, research, heroes, waveCleared: state.waveCleared ?? 0 },
       loaded: true,
       offlineSeconds,
       offlineGains,
@@ -176,6 +187,7 @@ export class SaveManager {
       buildings: new BuildingSystem(),
       training: new TrainingQueue(),
       research: new ResearchSystem(),
+      heroes: new HeroSystem(),
       waveCleared: 0,
     };
   }

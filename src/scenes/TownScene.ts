@@ -8,6 +8,7 @@ import { GameState } from '../systems/GameState';
 import { Menu, type MenuButton, type ProgressBar } from '../ui/Menu';
 import { TrainingPanel } from '../ui/TrainingPanel';
 import { ResearchPanel } from '../ui/ResearchPanel';
+import { HeroPanel } from '../ui/HeroPanel';
 import { textStyle } from '../ui/UiText';
 import { tr } from '../i18n/i18n';
 
@@ -61,6 +62,7 @@ export class TownScene extends Phaser.Scene {
 
   private trainingPanel!: TrainingPanel;
   private researchPanel!: ResearchPanel;
+  private heroPanel!: HeroPanel;
 
   // Upgrade panel widgets (rebuilt per selected building).
   private upgradePanel!: Phaser.GameObjects.Container;
@@ -95,11 +97,13 @@ export class TownScene extends Phaser.Scene {
 
     this.trainingPanel = new TrainingPanel(this, this.state);
     this.researchPanel = new ResearchPanel(this, this.state);
+    this.heroPanel = new HeroPanel(this, this.state);
 
     // Keyboard shortcuts.
     this.input.keyboard?.on('keydown-B', () => this.goBattle());
     this.input.keyboard?.on('keydown-S', () => this.openSettings());
     this.input.keyboard?.on('keydown-R', () => this.openResearch());
+    this.input.keyboard?.on('keydown-H', () => this.openHeroes());
     this.input.keyboard?.on('keydown-ESC', () => this.closeUpgradePanel());
 
     this.audio.playMusic(AudioKeys.MusicLoop);
@@ -138,6 +142,7 @@ export class TownScene extends Phaser.Scene {
     this.refreshUpgradePanel(now);
     this.trainingPanel.update();
     this.researchPanel.update();
+    this.heroPanel.update();
   }
 
   // ---- Buildings -----------------------------------------------------------
@@ -210,10 +215,11 @@ export class TownScene extends Phaser.Scene {
 
   private buildBottomBar(): void {
     const y = CANVAS.HEIGHT - 30;
-    Menu.button(this, 105, y, tr('town.training'), () => this.openTraining(), { width: 150 });
-    Menu.button(this, 275, y, tr('town.research'), () => this.openResearch(), { width: 150 });
-    Menu.button(this, CANVAS.WIDTH / 2 + 40, y, tr('town.battle'), () => this.goBattle(), { width: 160, accent: PALETTE.DANGER });
-    Menu.button(this, CANVAS.WIDTH - 105, y, tr('town.settings'), () => this.openSettings(), { width: 150 });
+    Menu.button(this, 95, y, tr('town.training'), () => this.openTraining(), { width: 140 });
+    Menu.button(this, 245, y, tr('town.research'), () => this.openResearch(), { width: 140 });
+    Menu.button(this, 395, y, tr('town.heroes'), () => this.openHeroes(), { width: 140 });
+    Menu.button(this, CANVAS.WIDTH / 2 + 150, y, tr('town.battle'), () => this.goBattle(), { width: 160, accent: PALETTE.DANGER });
+    Menu.button(this, CANVAS.WIDTH - 100, y, tr('town.settings'), () => this.openSettings(), { width: 140 });
   }
 
   // ---- Upgrade panel -------------------------------------------------------
@@ -369,13 +375,22 @@ export class TownScene extends Phaser.Scene {
   private openTraining(): void {
     this.closeUpgradePanel();
     if (this.researchPanel.visible) this.researchPanel.setVisible(false);
+    if (this.heroPanel.visible) this.heroPanel.setVisible(false);
     this.trainingPanel.toggle();
   }
 
   private openResearch(): void {
     this.closeUpgradePanel();
     if (this.trainingPanel.visible) this.trainingPanel.setVisible(false);
+    if (this.heroPanel.visible) this.heroPanel.setVisible(false);
     this.researchPanel.toggle();
+  }
+
+  private openHeroes(): void {
+    this.closeUpgradePanel();
+    if (this.trainingPanel.visible) this.trainingPanel.setVisible(false);
+    if (this.researchPanel.visible) this.researchPanel.setVisible(false);
+    this.heroPanel.toggle();
   }
 
   private goBattle(): void {

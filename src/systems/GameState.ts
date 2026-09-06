@@ -1,6 +1,7 @@
 import { RESOURCE_ORDER } from '../config/GameConfig';
 import type { Army, TroopKind } from '../types';
 import { BuildingSystem } from './BuildingSystem';
+import { HeroSystem } from './HeroSystem';
 import { ResearchSystem } from './ResearchSystem';
 import { ResourceStore } from './ResourceStore';
 import { TrainingQueue } from './TrainingQueue';
@@ -37,6 +38,7 @@ export class GameState {
   readonly buildings: BuildingSystem;
   readonly training: TrainingQueue;
   readonly research: ResearchSystem;
+  readonly heroes: HeroSystem;
   private _waveCleared: number;
 
   private readonly saver: SaveManager;
@@ -54,6 +56,7 @@ export class GameState {
     this.buildings = result.snapshot.buildings;
     this.training = result.snapshot.training;
     this.research = result.snapshot.research;
+    this.heroes = result.snapshot.heroes;
     this._waveCleared = result.snapshot.waveCleared;
     this.saver = saver;
     this.loaded = result.loaded;
@@ -107,6 +110,31 @@ export class GameState {
     return (Object.keys(a) as TroopKind[]).reduce((sum, k) => sum + a[k], 0);
   }
 
+  /**
+   * The COMPOSED combat attack multiplier: the research combatAttack techs
+   * multiplied by the active war hero's combat bonus. This is the value the
+   * battle call site passes into CombatSystem.resolve so both pillars stack.
+   * Neutral (1) on a fresh game / no active war hero.
+   */
+  combatAttackMultiplier(): number {
+    return this.research.combatAttackMultiplier() * this.heroes.combatMultiplier();
+  }
+
+  /** The research combat defense multiplier (heroes do not affect defense). */
+  combatDefenseMultiplier(): number {
+    return this.research.combatDefenseMultiplier();
+  }
+
+  /**
+   * The COMPOSED economy/production multiplier: the research production techs
+   * multiplied by the active economy hero's bonus. Read at the live production
+   * seam ({@link tick}) and the offline reconciliation seam. Neutral (1) on a
+   * fresh game / no active economy hero.
+   */
+  economyMultiplier(): number {
+    return this.research.productionMultiplier() * this.heroes.economyMultiplier();
+  }
+
   /** A serializable snapshot of the live systems for the save layer. */
   snapshot(): GameSnapshot {
     return {
@@ -114,6 +142,7 @@ export class GameState {
       buildings: this.buildings,
       training: this.training,
       research: this.research,
+      heroes: this.heroes,
       waveCleared: this._waveCleared,
     };
   }
@@ -130,11 +159,12 @@ export class GameState {
     researchDone: ReturnType<ResearchSystem['update']>;
   } {
     if (deltaMs > 0) {
-      // Live production seam: building rates are scaled by the research
-      // production multiplier, and the storage soft cap is raised by the
-      // research storage multiplier. Both default neutral on a fresh game.
+      // Live production seam: building rates are scaled by the COMPOSED economy
+      // multiplier (the research production techs multiplied by the active
+      // economy hero's bonus), and the storage soft cap is raised by the
+      // research storage multiplier. All default neutral on a fresh game.
       const rates = this.buildings.productionRates();
-      const prodMult = this.research.productionMultiplier();
+      const prodMult = this.economyMultiplier();
       const boosted = ResourceStore.emptyBundle();
       for (const res of RESOURCE_ORDER) boosted[res] = rates[res] * prodMult;
       this.resources.applyProduction(boosted, deltaMs, 1, this.research.storageMultiplier());

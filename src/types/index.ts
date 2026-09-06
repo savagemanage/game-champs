@@ -94,6 +94,18 @@ export interface ResearchStateSave {
   active: { techId: string; endsAt: number } | null;
 }
 
+/**
+ * Persisted hero state: each recruited hero's progression and the single active
+ * hero id (or null). Kept as a structural type here (rather than importing the
+ * systems layer) so this dependency-light types module stays leaf-level. OLD
+ * saves written before the heroes feature simply omit this field; the save
+ * layer default-constructs a fresh (empty) hero roster when it is missing.
+ */
+export interface HeroStateSave {
+  recruited: Record<string, { level: number; stars: number; shards: number }>;
+  active: string | null;
+}
+
 /** The complete persisted game state (serialized to localStorage by the save feature). */
 export interface GameState {
   /** Save-format version so future migrations can be detected. */
@@ -111,6 +123,12 @@ export interface GameState {
    * missing value as a fresh (empty) research state.
    */
   research?: ResearchStateSave;
+  /**
+   * Hero roster progress. OPTIONAL for backward compatibility: version-1 and
+   * version-2 saves predate heroes and omit it, so the save layer treats a
+   * missing value as a fresh (empty) hero roster.
+   */
+  heroes?: HeroStateSave;
   /** Epoch ms of the last simulation update (drives offline reconciliation). */
   lastSeenAt: number;
 }

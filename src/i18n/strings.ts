@@ -59,7 +59,7 @@ export const STRINGS = {
   'town.battle': { en: 'To Battle', ko: '전투로' },
   'town.training': { en: 'Barracks', ko: '병영' },
   'town.settings': { en: 'Settings', ko: '설정' },
-  'town.hint': { en: 'Tap a building to upgrade   R Research   B Battle   S Settings', ko: '건물을 눌러 업그레이드   R 연구   B 전투   S 설정' },
+  'town.hint': { en: 'Tap a building to upgrade   R Research   H Heroes   B Battle   S Settings', ko: '건물을 눌러 업그레이드   R 연구   H 영웅   B 전투   S 설정' },
   'town.locked': { en: 'Locked', ko: '잠김' },
   'town.saved': { en: 'Saved', ko: '저장됨' },
   'town.onboarding': {
@@ -196,6 +196,59 @@ export const STRINGS = {
   'tech.scaffolding.desc': { en: 'Building upgrades 10% faster.', ko: '건물 업그레이드 속도 10% 향상.' },
   'tech.master_masons.desc': { en: 'Building upgrades 15% faster.', ko: '건물 업그레이드 속도 15% 향상.' },
   'tech.ledger_keeping.desc': { en: '+25% offline production efficiency.', ko: '오프라인 생산 효율 +25%.' },
+
+  // Heroes UI.
+  'town.heroes': { en: 'Heroes', ko: '영웅' },
+  'hero.title': { en: 'HEROES', ko: '영웅' },
+  'hero.role.war': { en: 'War', ko: '전쟁' },
+  'hero.role.economy': { en: 'Economy', ko: '경제' },
+  'hero.recruit': { en: 'Recruit', ko: '영입' },
+  'hero.recruited': { en: 'Recruited', ko: '영입 완료' },
+  'hero.recruitCost': { en: 'Recruit {cost}', ko: '영입 {cost}' },
+  'hero.levelUp': { en: 'Level Up', ko: '레벨 업' },
+  'hero.levelUpCost': { en: 'Lv Up {cost}', ko: '레벨 업 {cost}' },
+  'hero.starUp': { en: 'Star Up', ko: '승급' },
+  'hero.starUpCost': { en: 'Star ({shards} shards)', ko: '승급 (조각 {shards})' },
+  'hero.setActive': { en: 'Set Active', ko: '출전 지정' },
+  'hero.active': { en: 'Active', ko: '출전 중' },
+  'hero.maxLevel': { en: 'Max Level', ko: '최대 레벨' },
+  'hero.maxStars': { en: 'Max Stars', ko: '최대 성급' },
+  'hero.levelStars': { en: 'Lv.{level}/{max}  {stars}', ko: 'Lv.{level}/{max}  {stars}' },
+  'hero.shards': { en: 'Shards: {shards} (need {per})', ko: '조각: {shards} (승급 {per} 필요)' },
+  'hero.noneActive': { en: 'No hero active — recruit and set one to gain a bonus', ko: '출전 영웅 없음 — 영입 후 지정하면 보너스를 얻습니다' },
+  'hero.activeBonus': { en: 'Active: {name} — {domain} +{pct}%', ko: '출전: {name} — {domain} +{pct}%' },
+  'hero.bonus.combat': { en: 'Army Power', ko: '병력 전투력' },
+  'hero.bonus.economy': { en: 'Production', ko: '생산량' },
+  // Distinct locked-reason messages.
+  'hero.locked.already': { en: 'Already recruited', ko: '이미 보유' },
+  'hero.locked.cost': { en: 'Not enough resources', ko: '자원 부족' },
+  'hero.locked.shards': { en: 'Not enough shards', ko: '조각 부족' },
+  'hero.locked.maxLevel': { en: 'Already maxed', ko: '이미 최대치' },
+  'hero.locked.notRecruited': { en: 'Recruit this hero first', ko: '먼저 영웅을 영입하세요' },
+
+  // Hero names.
+  'hero.ser_alden': { en: 'Ser Alden', ko: '알덴 경' },
+  'hero.kara_stormblade': { en: 'Kara Stormblade', ko: '카라 스톰블레이드' },
+  'hero.mira_goldhand': { en: 'Mira Goldhand', ko: '미라 골드핸드' },
+  'hero.old_bram': { en: 'Old Bram', ko: '노인 브램' },
+
+  // Hero descriptions.
+  'hero.ser_alden.desc': {
+    en: 'A steadfast knight-commander whose discipline steels the whole army.',
+    ko: '규율로 전군을 단련시키는 굳건한 기사단장.',
+  },
+  'hero.kara_stormblade.desc': {
+    en: 'A ferocious cavalry captain who turns any charge into a rout.',
+    ko: '어떤 돌격도 궤멸로 바꾸는 사나운 기병 대장.',
+  },
+  'hero.mira_goldhand.desc': {
+    en: 'A shrewd guildmistress whose ledgers squeeze more from every mine and field.',
+    ko: '광산과 밭에서 더 많은 것을 짜내는 영리한 길드장.',
+  },
+  'hero.old_bram.desc': {
+    en: 'A patient master farmer whose methods swell every harvest.',
+    ko: '모든 수확을 불려 주는 노련한 농사 장인.',
+  },
 
   // Combat / battle UI.
   'battle.title': { en: 'BATTLE', ko: '전투' },

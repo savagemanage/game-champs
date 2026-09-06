@@ -99,7 +99,14 @@ export class BattleScene extends Phaser.Scene {
     }
 
     // Resolve the battle deterministically, then build the animation timeline.
-    this.result = CombatSystem.resolve(this.army, this.wave);
+    // The combat bonuses are the COMPOSED research + active-hero multipliers:
+    // attack stacks the research combatAttack techs with the active WAR hero's
+    // bonus; defense is the research combatDefense techs (heroes do not affect
+    // it). Both default neutral when nothing is unlocked / no hero is active.
+    this.result = CombatSystem.resolve(this.army, this.wave, {
+      attackMult: this.state.combatAttackMultiplier(),
+      defenseMult: this.state.combatDefenseMultiplier(),
+    });
     this.timeline = buildTimeline(this.army, this.result, TIMELINE_STEPS);
 
     // HUD overlay with skip + speed controls.

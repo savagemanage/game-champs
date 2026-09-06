@@ -4,6 +4,7 @@ import { ResourceStore } from './ResourceStore';
 import { BuildingSystem } from './BuildingSystem';
 import { TrainingQueue } from './TrainingQueue';
 import { ResearchSystem } from './ResearchSystem';
+import { HeroSystem } from './HeroSystem';
 import { ECONOMY } from '../config/GameConfig';
 import { outputPerSec } from '../config/BuildingConfig';
 import { troopDef } from '../config/TroopConfig';
@@ -22,7 +23,8 @@ describe('SaveManager', () => {
     ]);
     const training = new TrainingQueue(undefined, { spearman: 4, archer: 1, knight: 0 });
     const research = new ResearchSystem();
-    return { resources, buildings, training, research, waveCleared: 5 };
+    const heroes = new HeroSystem();
+    return { resources, buildings, training, research, heroes, waveCleared: 5 };
   }
 
   /** A full army bundle over every troop kind (new kinds default to zero). */
@@ -141,6 +143,61 @@ describe('SaveManager', () => {
     expect(loaded.snapshot.research.productionMultiplier()).toBeCloseTo(1.1, 6);
   });
 
+  it('migrates a v2 save (no heroes field) into a fresh valid empty roster', () => {
+    // A version-2 save predates the heroes feature and has no `heroes` field.
+    // It must load without crashing and yield an empty-but-valid HeroSystem
+    // (no heroes recruited, none active, both multipliers neutral).
+    const storage = memoryStorage();
+    const v2 = {
+      version: 2,
+      resources: { food: 50, wood: 50, stone: 50, gold: 50 },
+      buildings: [{ kind: 'town_center', level: 2, upgradeEndsAt: null }],
+      army: { spearman: 1, archer: 0, knight: 0 },
+      trainingQueue: [],
+      waveCleared: 1,
+      research: { unlocked: [], active: null },
+      lastSeenAt: 0,
+      // no `heroes` key
+    };
+    storage.setItem('kingdom-rise:save', JSON.stringify(v2));
+    const mgr = new SaveManager(storage);
+
+    const loaded = mgr.load(0);
+    expect(loaded.loaded).toBe(true);
+    const heroes = loaded.snapshot.heroes;
+    expect(heroes.recruited).toEqual([]);
+    expect(heroes.activeHero).toBeNull();
+    expect(heroes.combatMultiplier()).toBe(1);
+    expect(heroes.economyMultiplier()).toBe(1);
+  });
+
+  it('round-trips hero state (recruited progress + active hero) through save -> load', () => {
+    const storage = memoryStorage();
+    const mgr = new SaveManager(storage);
+    const now = 3_000_000;
+
+    const snap = snapshot();
+    const rich = new ResourceStore({ food: 99999, wood: 99999, stone: 99999, gold: 99999 });
+    snap.heroes.recruit('ser_alden', rich); // war hero, auto-active
+    snap.heroes.levelUp('ser_alden', rich);
+    snap.heroes.addShards('ser_alden', 25);
+    snap.heroes.starUp('ser_alden');
+    expect(snap.heroes.activeHero).toBe('ser_alden');
+
+    mgr.save(snap, now);
+    const loaded = mgr.load(now);
+    const heroes = loaded.snapshot.heroes;
+    expect(heroes.recruited).toEqual(['ser_alden']);
+    expect(heroes.activeHero).toBe('ser_alden');
+    const p = heroes.progress('ser_alden')!;
+    expect(p.level).toBe(2);
+    expect(p.stars).toBe(1);
+    expect(p.shards).toBe(15); // 25 accrued - 10 spent on the star
+    // A war hero's bonus round-trips into the combat multiplier (economy stays 1).
+    expect(heroes.combatMultiplier()).toBeGreaterThan(1);
+    expect(heroes.economyMultiplier()).toBe(1);
+  });
+
   it('applies offline idle gains capped and scaled by efficiency', () => {
     const storage = memoryStorage();
     const mgr = new SaveManager(storage);
@@ -175,7 +232,7 @@ describe('SaveManager', () => {
       { kind: 'farm', level: 2, upgradeEndsAt: t0 + boundaryOffset * 1000 },
     ]);
     const training = new TrainingQueue(undefined, { spearman: 0, archer: 0, knight: 0 });
-    mgr.save({ resources, buildings, training, research: new ResearchSystem(), waveCleared: 0 }, t0);
+    mgr.save({ resources, buildings, training, research: new ResearchSystem(), heroes: new HeroSystem(), waveCleared: 0 }, t0);
 
     const loaded = mgr.load(t0 + windowSec * 1000);
     expect(loaded.offlineSeconds).toBe(windowSec);

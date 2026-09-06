@@ -549,6 +549,93 @@ def build_all_characters():
 
 
 # ===========================================================================
+# HEROES: single-frame 40x40 portrait busts (head + shoulders) for the roster.
+# Each hero is an ORIGINAL design distinguished by helm/hair + cloak colors so
+# war and economy leaders read at a glance. No IP-derived likenesses.
+# ===========================================================================
+
+def draw_hero_portrait(img, ox, oy, fw, fh, palette):
+    """A head-and-shoulders bust framed by a rounded plaque background.
+
+    palette: dict with cloak/cloak_dk (shoulders), hair, skin, and a `crest`
+    color drawn as a small emblem (helm plume for war, coin/wheat for economy)
+    keyed by `kind` in {'knight','rider','coin','wheat'}.
+    """
+    cx = ox + fw // 2
+    skin = palette.get("skin", SKIN)
+    cloak = palette["cloak"]
+    cloak_dk = palette["cloak_dk"]
+    hair = palette.get("hair", HAIR)
+    crest = palette.get("crest", GOLD)
+    kind = palette["kind"]
+
+    # plaque backdrop (rounded stone tile)
+    rect(img, ox + 3, oy + 3, ox + fw - 4, oy + fh - 2, STONE_DK)
+    rect(img, ox + 5, oy + 5, ox + fw - 6, oy + fh - 3, STONE)
+    rect(img, ox + 5, oy + 5, ox + fw - 6, oy + 6, STONE_LT)
+
+    # shoulders / cloak
+    rect(img, cx - 12, oy + fh - 11, cx + 11, oy + fh - 3, cloak)
+    rect(img, cx - 12, oy + fh - 11, cx - 9, oy + fh - 3, cloak_dk)
+    rect(img, cx + 8, oy + fh - 11, cx + 11, oy + fh - 3, cloak_dk)
+    # collar trim
+    rect(img, cx - 3, oy + fh - 11, cx + 2, oy + fh - 9, crest)
+
+    # neck + head
+    rect(img, cx - 2, oy + fh - 14, cx + 1, oy + fh - 11, palette.get("skin_sh", SKIN_SH))
+    rect(img, cx - 5, oy + fh - 25, cx + 4, oy + fh - 14, skin)
+    # eyes + mouth
+    px(img, cx - 3, oy + fh - 21, OUTLINE)
+    px(img, cx + 2, oy + fh - 21, OUTLINE)
+    px(img, cx, oy + fh - 17, MOUTH)
+
+    if kind == "knight":
+        # full steel helm with a colored plume
+        rect(img, cx - 5, oy + fh - 27, cx + 4, oy + fh - 22, STEEL)
+        rect(img, cx - 5, oy + fh - 27, cx - 5, oy + fh - 22, STEEL_DK)
+        rect(img, cx + 4, oy + fh - 27, cx + 4, oy + fh - 22, STEEL_DK)
+        rect(img, cx - 5, oy + fh - 22, cx + 4, oy + fh - 21, STEEL_DK)  # visor slit
+        rect(img, cx - 1, oy + fh - 30, cx, oy + fh - 27, crest)         # plume
+    elif kind == "rider":
+        # windswept hair + a light open helm band
+        rect(img, cx - 6, oy + fh - 27, cx + 5, oy + fh - 23, hair)
+        rect(img, cx + 4, oy + fh - 26, cx + 7, oy + fh - 22, hair)      # swept tail
+        rect(img, cx - 5, oy + fh - 24, cx + 4, oy + fh - 23, crest)     # circlet
+    elif kind == "coin":
+        # merchant's hood + a gold coin emblem on the collar
+        rect(img, cx - 6, oy + fh - 27, cx + 5, oy + fh - 23, hair)
+        rect(img, cx - 6, oy + fh - 27, cx + 5, oy + fh - 26, cloak_dk)  # hood brim
+        rect(img, cx - 1, oy + fh - 8, cx + 1, oy + fh - 6, crest)       # coin
+        px(img, cx, oy + fh - 7, GOLD_DK)
+    elif kind == "wheat":
+        # straw hat brim + a wheat sprig
+        rect(img, cx - 7, oy + fh - 24, cx + 6, oy + fh - 23, THATCH)
+        rect(img, cx - 5, oy + fh - 27, cx + 4, oy + fh - 24, THATCH)
+        rect(img, cx - 5, oy + fh - 27, cx + 4, oy + fh - 26, THATCH_DK)
+        rect(img, cx + 6, oy + fh - 12, cx + 6, oy + fh - 7, GRASS_DK)   # stalk
+        px(img, cx + 6, oy + fh - 12, FOOD)
+        px(img, cx + 7, oy + fh - 11, FOOD)
+
+
+HEROES = [
+    ("hero_ser_alden", dict(kind="knight", cloak=FLAG, cloak_dk=(52, 80, 130, 255), crest=CLOTH_RED)),
+    ("hero_kara_stormblade", dict(kind="rider", cloak=(120, 70, 150, 255), cloak_dk=(84, 48, 108, 255), hair=(60, 42, 30, 255), crest=STEEL_HI)),
+    ("hero_mira_goldhand", dict(kind="coin", cloak=(150, 118, 60, 255), cloak_dk=(110, 84, 40, 255), hair=(70, 50, 36, 255), crest=GOLD)),
+    ("hero_old_bram", dict(kind="wheat", cloak=(96, 132, 70, 255), cloak_dk=(64, 96, 48, 255), hair=(210, 208, 200, 255), crest=THATCH_DK)),
+]
+
+
+def build_heroes():
+    fw = fh = 40
+    for name, palette in HEROES:
+        img = new(fw, fh)
+        draw_hero_portrait(img, 0, 0, fw, fh, palette)
+        img = outline_alpha(img)
+        save(img, os.path.join(SPR, f"{name}.png"))
+        print(f"{name}.png", img.size)
+
+
+# ===========================================================================
 # BACKGROUNDS: 480x270 layers (sky gradient, town field, battlefield).
 # ===========================================================================
 def lerp(a, b, t):
@@ -742,6 +829,7 @@ def build_ui():
 if __name__ == "__main__":
     build_buildings()
     build_all_characters()
+    build_heroes()
     build_backgrounds()
     build_fx()
     build_ui()

@@ -43,6 +43,12 @@ export const TextureKeys = {
   TroopCavalry: 'u_cavalry',
   TroopSiege: 'u_siege',
 
+  // Hero portraits (roster / recruitment UI).
+  HeroSerAlden: 'h_ser_alden',
+  HeroKaraStormblade: 'h_kara_stormblade',
+  HeroMiraGoldhand: 'h_mira_goldhand',
+  HeroOldBram: 'h_old_bram',
+
   // Enemy raider sprites (battle).
   EnemyRaider: 'e_raider',
   EnemyBrute: 'e_brute',
@@ -135,6 +141,11 @@ export const IMAGES: readonly ImageAsset[] = [
   { key: TextureKeys.UiPanel, url: 'assets/ui/panel.png' },
   { key: TextureKeys.UiButton, url: 'assets/ui/button.png' },
   { key: TextureKeys.UiBarFrame, url: 'assets/ui/bar_frame.png' },
+  // Hero portraits (single 40x40 frame each).
+  { key: TextureKeys.HeroSerAlden, url: 'assets/sprites/hero_ser_alden.png' },
+  { key: TextureKeys.HeroKaraStormblade, url: 'assets/sprites/hero_kara_stormblade.png' },
+  { key: TextureKeys.HeroMiraGoldhand, url: 'assets/sprites/hero_mira_goldhand.png' },
+  { key: TextureKeys.HeroOldBram, url: 'assets/sprites/hero_old_bram.png' },
 ] as const;
 
 /** Audio assets (WAV plays natively in all evergreen browsers + Phaser WebAudio). */
@@ -160,6 +171,17 @@ export const BUILDING_TEXTURE_BY_KIND: Record<string, TextureKey> = {
   mine: TextureKeys.Mine,
   barracks: TextureKeys.Barracks,
   research: TextureKeys.Research,
+};
+
+/**
+ * Maps a HeroId value to its portrait texture key. The heroes feature consumes
+ * this so the roster stays in sync with HeroConfig.
+ */
+export const HERO_TEXTURE_BY_ID: Record<string, TextureKey> = {
+  ser_alden: TextureKeys.HeroSerAlden,
+  kara_stormblade: TextureKeys.HeroKaraStormblade,
+  mira_goldhand: TextureKeys.HeroMiraGoldhand,
+  old_bram: TextureKeys.HeroOldBram,
 };
 
 /** Maps a TroopKind value to its spritesheet texture key. */
