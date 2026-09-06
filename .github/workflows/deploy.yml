@@ -33,17 +33,34 @@ jobs:
         run: npm ci
 
       - name: Build all games
-        run: npm run build --workspaces --if-present
+        run: npm run build:games
 
-      - name: Assemble combined site
+      # Glob over the workspaces rather than naming them: a new game is picked
+      # up by adding packages/<slug>/, with no change to this file.
+      - name: Collect game builds
         run: |
+          set -euo pipefail
           mkdir -p _site
-          cp -r packages/champs/dist   _site/champs
-          cp -r packages/whiteout/dist _site/whiteout
-          cp -r packages/lastwar/dist  _site/lastwar
-          cp -r packages/kingshot/dist _site/kingshot
-          cp -r packages/wirework/dist _site/wirework
-          cp site/index.html _site/index.html
+          shopt -s nullglob
+          found=0
+          for dist in packages/*/dist; do
+            pkg="$(basename "$(dirname "$dist")")"
+            case "$pkg" in
+              _*) continue ;;   # packages/_template and friends are scaffolding
+            esac
+            echo "collecting $pkg"
+            rm -rf "_site/$pkg"
+            cp -r "$dist" "_site/$pkg"
+            found=$((found + 1))
+          done
+          if [ "$found" -eq 0 ]; then
+            echo "::error::No packages/*/dist directories were produced" >&2
+            exit 1
+          fi
+          echo "collected $found game build(s)"
+
+      - name: Generate landing page
+        run: npm run build:site -- --out _site
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
