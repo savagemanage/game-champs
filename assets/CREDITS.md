@@ -39,19 +39,34 @@ redistributed under its own permissive OFL license (recorded below).
 
 The UI is Korean-first (한국어). To render Hangul correctly on every host
 (including GitHub Pages and headless browsers that ship no Korean system font),
-a Hangul-capable pixel monospace webfont is **bundled and self-hosted** with the
-build — no external CDN or network is used at runtime. It is declared via
-`@font-face` in `index.html` and leads the `UI_FONT_FAMILY` stack in
+a Hangul-capable **vector (outline)** webfont is **bundled and self-hosted**
+with the build — no external CDN or network is used at runtime. It is declared
+via `@font-face` in `index.html` and leads the `UI_FONT_FAMILY` stack in
 `src/ui/UiText.ts`.
+
+A vector face (rather than a pixel/bitmap font) is used deliberately: the UI
+draws small Korean text (~12–16px), and a bitmap font is only crisp at its
+native pixel size, so dense Hangul strokes smear into illegible blobs at other
+sizes once the canvas is scaled with `Scale.FIT`. Noto Sans KR stays sharp and
+readable at every UI size.
 
 | File | Name | Author | Source | License |
 | --- | --- | --- | --- | --- |
-| `fonts/GalmuriMono9.woff2` | **Galmuri Mono 9** (family `GalmuriMono9`) | Lee Minseo (quiple) | [github.com/quiple/galmuri](https://github.com/quiple/galmuri) (npm `galmuri` 2.40.3) | **SIL Open Font License 1.1** |
+| `fonts/NotoSansKR-Regular.subset.woff2` | **Noto Sans KR** (family `NotoSansKR`, Regular / wght 400) | Google / Adobe (Noto project) | [github.com/google/fonts › ofl/notosanskr](https://github.com/google/fonts/tree/main/ofl/notosanskr) | **SIL Open Font License 1.1** |
 
-- **Coverage:** all 11,172 modern Hangul syllables + Latin + digits (verified).
-- **Size:** ~402 KB (woff2), a single Regular weight.
-- **License text:** [`../public/assets/fonts/OFL.txt`](../public/assets/fonts/OFL.txt)
-  (SIL OFL-1.1 permits redistribution and web embedding).
+- **Coverage:** the full modern Hangul syllable block (U+AC00–U+D7A3, 11,172
+  syllables) + Hangul compatibility jamo + ASCII/Latin-1 + the symbols the UI
+  uses (`—`, `…`, `←`, `→`, `★`, `·`, `×`). Coverage of every string in
+  `src/i18n/strings.ts` (442 distinct chars, incl. 364 Hangul syllables) is
+  asserted by the build script.
+- **Size:** ~545 KB (woff2), a single Regular weight, subset from the upstream
+  variable font (instantiated at `wght=400`).
+- **Built by:** [`../tools/build_font.py`](../tools/build_font.py) — instantiates
+  the upstream Noto Sans KR variable font at Regular and subsets it to the range
+  above. Rebuild with `python3 tools/build_font.py <NotoSansKR[wght].ttf> public/assets/fonts/NotoSansKR-Regular.subset.woff2`
+  (requires `pip install fonttools brotli`).
+- **License text:** [`../public/assets/fonts/OFL-NotoSansKR.txt`](../public/assets/fonts/OFL-NotoSansKR.txt)
+  (SIL OFL-1.1 permits redistribution, subsetting, and web embedding).
 - Third-party font; **not** covered by this repo's Apache-2.0 grant.
 
 ---

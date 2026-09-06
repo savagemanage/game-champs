@@ -75,18 +75,20 @@ const config: Phaser.Types.Core.GameConfig = {
 /**
  * The UI is Korean-first and every glyph is drawn by Phaser to its own texture,
  * with metrics cached on first draw. If Phaser boots before the bundled Hangul
- * webfont (GalmuriMono9, declared via @font-face in index.html) is ready, those
+ * webfont (NotoSansKR, declared via @font-face in index.html) is ready, those
  * first frames rasterize Korean text with the Latin-only fallback as tofu boxes
  * (□) and cache the wrong glyphs. So we WAIT for the font to load before
  * constructing the game.
  *
- * We ask the FontFaceSet to load the exact family at a representative size with
- * a Hangul sample ('한글') so the download is actually kicked off, then also
- * await document.fonts.ready. A short timeout guarantees the game still boots
- * (with the fallback stack) if the Font Loading API is unavailable or stalls,
- * rather than leaving a blank screen.
+ * We ask the FontFaceSet to load the exact family at the small AND large sizes
+ * the UI actually draws (a 12px HUD/sublabel size and the 32px Title/brand
+ * size), each with a Hangul sample ('한글'), so the download is kicked off and
+ * the glyphs are ready before the first text is rasterized, then also await
+ * document.fonts.ready. A short timeout guarantees the game still boots (with
+ * the fallback stack) if the Font Loading API is unavailable or stalls, rather
+ * than leaving a blank screen.
  */
-const FONT_FAMILY = 'GalmuriMono9';
+const FONT_FAMILY = 'NotoSansKR';
 const FONT_SAMPLE = '한글';
 const FONT_TIMEOUT_MS = 3000;
 
@@ -100,9 +102,11 @@ function whenFontReady(): Promise<void> {
   if (!fonts || typeof fonts.load !== 'function') {
     return Promise.resolve();
   }
-  // Load the font at the largest size the UI draws (the Title/brand at 32px) so
-  // its glyphs are available before the first text is rasterized.
-  const loads = ['16px', '32px'].map((size) =>
+  // Load the font at the small UI size (12px sublabels/HUD, where the pixel
+  // font used to smear) as well as the largest size the UI draws (the
+  // Title/brand at 32px) so its glyphs are available before the first text is
+  // rasterized.
+  const loads = ['12px', '16px', '32px'].map((size) =>
     fonts.load(`${size} "${FONT_FAMILY}"`, FONT_SAMPLE).catch(() => undefined),
   );
   return Promise.all([Promise.all(loads), fonts.ready]).then(() => undefined);

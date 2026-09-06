@@ -14,16 +14,22 @@
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%2311151c'/%3E%3Crect x='3' y='3' width='2' height='9' fill='%23ffb020'/%3E%3Crect x='5' y='10' width='6' height='2' fill='%23ffb020'/%3E%3C/svg%3E"
     />
     <!--
-      Self-hosted Hangul-capable pixel monospace webfont (Galmuri Mono 9, SIL
-      OFL-1.1). Bundled under public/assets/fonts so it ships with the build and
-      resolves under the Vite base path (/game-lastwar/) with no external CDN /
-      network at runtime. The @font-face family name (GalmuriMono9) must match
-      UI_FONT_FAMILY in src/ui/UiText.ts. Text rendering is gated on
-      document.fonts in main.ts so Phaser rasterizes glyphs with this font.
+      Self-hosted Hangul-capable VECTOR (outline) webfont: Noto Sans KR
+      (Regular, SIL OFL-1.1), instantiated at wght=400 and subset to the full
+      modern Hangul syllable block plus the Latin/symbol glyphs the UI uses
+      (see tools/build_font.py). A vector face is used instead of a pixel/bitmap
+      font because the UI draws small Korean text (~12-16px) that a bitmap font
+      can only render crisply at its native pixel size; the outline font stays
+      legible at every size under Scale.FIT. Bundled under public/assets/fonts
+      so it ships with the build and resolves under the Vite base path
+      (/game-lastwar/) with no external CDN / network at runtime. The @font-face
+      family name (NotoSansKR) must match UI_FONT_FAMILY in src/ui/UiText.ts.
+      Text rendering is gated on document.fonts in main.ts so Phaser rasterizes
+      glyphs with this font.
     -->
     <style>
       @font-face {
-        font-family: 'GalmuriMono9';
+        font-family: 'NotoSansKR';
         font-style: normal;
         font-weight: 400;
         font-display: block;
@@ -33,7 +39,7 @@
           '/game-lastwar/' in production). The file lives in public/assets/fonts
           and Vite copies public/ to the base root at build time.
         */
-        src: url('assets/fonts/GalmuriMono9.woff2') format('woff2');
+        src: url('assets/fonts/NotoSansKR-Regular.subset.woff2') format('woff2');
       }
       :root {
         color-scheme: dark;
