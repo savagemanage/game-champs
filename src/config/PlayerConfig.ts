@@ -1,3 +1,5 @@
+import { PLAYER } from './GameConfig';
+
 /**
  * PlayerConfig - centralized tuning for the hero and the ODM (omni-directional
  * mobility) traversal systems in the TOP-DOWN arena: planar 8-direction
@@ -50,6 +52,44 @@ export const HERO_COMBAT = {
   INVULN_MS: 800,
   /** Knockback speed applied away from the damage source on a hit, px/s. */
   HIT_KNOCKBACK: 240,
+} as const;
+
+/**
+ * Blade slash VISUAL tuning. This controls only how the slash arc FX is drawn;
+ * the hit math (reach, arc half-height, damage, nape-crit) lives in
+ * CombatSystem and is unchanged. It exists because the raw slash FX texture
+ * (assets/fx/slash.png) is a small 24px arc that, drawn at native size, reads
+ * as a stubby poke roughly a third of the blade's true reach - so the attack
+ * LOOKED like it could not touch a giant even though the hitbox already did.
+ *
+ * We derive the drawn length from the actual reach so the telegraph stays in
+ * sync if PLAYER.BLADE_RANGE is ever retuned: the FX is scaled to span from
+ * near the hero out to where a slash truly connects.
+ */
+export const BLADE_FX = {
+  /**
+   * Half-height of the slash arc hitbox, world px. CombatSystem reads this so
+   * the drawn FX length below is derived from the SAME reach the hit test uses.
+   */
+  ARC_HALF_H: 22,
+  /**
+   * Native width of one frame of the slash FX texture, px (must match the
+   * fx_slash SHEET frame in AssetKeys). The visible arc fills ~this width, so
+   * scaling by TARGET_LENGTH / this makes the drawn arc span TARGET_LENGTH.
+   */
+  TEXTURE_SIZE: 24,
+  /**
+   * How far along the aim the drawn arc should reach from the hero centre, px.
+   * Matches the real maximum slash connection distance
+   * (BLADE_RANGE + ARC_HALF_H) so the visual telegraphs exactly where hits land.
+   */
+  TARGET_LENGTH: PLAYER.BLADE_RANGE + 22,
+  /**
+   * Perpendicular (cross-swing) scale for the arc so a lengthened slash still
+   * reads as a sweeping crescent rather than a thin line. Kept modest so the
+   * arc grows mostly along the aim.
+   */
+  CROSS_SCALE: 1.4,
 } as const;
 
 /**

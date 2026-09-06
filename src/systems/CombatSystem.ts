@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { AudioKeys, type AudioKey, TextureKeys } from '../config/AssetKeys';
 import { PLAYER } from '../config/GameConfig';
+import { BLADE_FX } from '../config/PlayerConfig';
 import { AudioManager } from './AudioManager';
 import type { Player } from '../entities/Player';
 import type { Enemy, HitResult } from '../entities/enemies';
@@ -52,8 +53,8 @@ export class CombatSystem {
   private static readonly SLASH_COOLDOWN_MS = 300;
   /** Slash reach forward from the player centre, px. */
   private static readonly SLASH_REACH = PLAYER.BLADE_RANGE;
-  /** Half-height of the slash arc, px. */
-  private static readonly SLASH_HALF_H = 22;
+  /** Half-height of the slash arc, px (shared with the FX visual tuning). */
+  private static readonly SLASH_HALF_H = BLADE_FX.ARC_HALF_H;
 
   constructor(scene: Phaser.Scene, player: Player, hooks: CombatHooks) {
     this.scene = scene;
@@ -132,7 +133,7 @@ export class CombatSystem {
     const cyp = this.player.y + ny * reach * 0.6;
 
     this.player.playSlash();
-    this.spawnSlashFx(cxp, cyp, Math.atan2(ny, nx));
+    this.spawnSlashFx(nx, ny, Math.atan2(ny, nx));
     this.playSound(AudioKeys.Slash, 0.5);
 
     // Test giants: overlap a circle of radius = reach around the contact point.
@@ -197,13 +198,33 @@ export class CombatSystem {
     this.playSound(AudioKeys.Hit, 0.3);
   }
 
-  /** Spawn a one-shot slash arc sprite oriented along the swing. */
-  private spawnSlashFx(x: number, y: number, angle: number): void {
+  /**
+   * Spawn a one-shot slash arc sprite oriented along the swing.
+   *
+   * (nx, ny) is the unit aim direction. The native FX arc texture is only
+   * {@link BLADE_FX.TEXTURE_SIZE}px, so drawn raw it reads as a stubby poke far
+   * short of the true reach. We scale it along the aim so the drawn arc spans
+   * {@link BLADE_FX.TARGET_LENGTH} (== SLASH_REACH + SLASH_HALF_H, the real max
+   * connection distance) and position its centre half that distance in front of
+   * the hero, so the crescent visibly sweeps from beside the hero out to exactly
+   * where hits register. Rotation/flip behaviour is preserved.
+   */
+  private spawnSlashFx(nx: number, ny: number, angle: number): void {
     if (!this.scene.textures.exists(TextureKeys.FxSlash)) return;
-    const fx = this.scene.add.sprite(x, y, TextureKeys.FxSlash, 0);
+
+    // Centre the scaled arc half the target length ahead of the hero so it
+    // reads as sweeping from near the hero out to the true reach.
+    const half = BLADE_FX.TARGET_LENGTH * 0.5;
+    const fxX = this.player.x + nx * half;
+    const fxY = this.player.y + ny * half;
+
+    const fx = this.scene.add.sprite(fxX, fxY, TextureKeys.FxSlash, 0);
     fx.setDepth(9);
     fx.setRotation(angle);
     fx.setFlipX(this.player.facingDir < 0);
+    // scaleX runs ALONG the aim (rotation applied), scaleY across it. Stretch
+    // along the aim to span TARGET_LENGTH; widen modestly across for a crescent.
+    fx.setScale(BLADE_FX.TARGET_LENGTH / BLADE_FX.TEXTURE_SIZE, BLADE_FX.CROSS_SCALE);
     const key = 'fx_slash_play';
     if (!this.scene.anims.exists(key)) {
       this.scene.anims.create({

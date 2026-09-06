@@ -165,10 +165,10 @@ def draw_hero(img, ox, oy, pose):
         rect(img, cx - 4, oy + 27, cx - 1, oy + 29, HERO_BOOT)
         rect(img, cx + 1, oy + 27, cx + 4, oy + 29, HERO_BOOT)
     # --- arms + blades depending on pose ---
-    if pose == 0:         # idle: blades lowered
+    if pose == 0:         # idle: blades lowered (longer blade)
         rect(img, cx - 6, oy + 12, cx - 5, oy + 18, HERO_JACKET)
         rect(img, cx + 4, oy + 12, cx + 5, oy + 18, HERO_JACKET)
-        rect(img, cx - 7, oy + 18, cx - 6, oy + 24, HERO_BLADE)      # blade down
+        rect(img, cx - 7, oy + 18, cx - 6, oy + 28, HERO_BLADE)      # blade down
         px(img, cx - 7, oy + 18, HERO_BLADE_HI)
     elif pose in (1, 2):  # running: one arm forward
         rect(img, cx - 7, oy + 11, cx - 5, oy + 13, HERO_JACKET)
@@ -186,12 +186,16 @@ def draw_hero(img, ox, oy, pose):
         rect(img, cx - 10, oy + 6, cx - 8, oy + 8, HERO_GEAR)
         rect(img, cx + 7, oy + 16, cx + 11, oy + 17, HERO_BLADE)
         px(img, cx + 11, oy + 16, HERO_BLADE_HI)
-    elif pose == 5:       # slash: both blades out to the right
+    elif pose == 5:       # slash: both blades out to the right (LONG reach)
+        # Blades extended to the frame edge so the weapon reads as a long,
+        # far-reaching slash that visibly connects with a giant (matches the
+        # extended CombatSystem reach + scaled slash FX). 32px frame: cx=+16, so
+        # cx+15 is the last in-bounds column.
         rect(img, cx + 4, oy + 10, cx + 6, oy + 12, HERO_JACKET)
-        rect(img, cx + 6, oy + 8, cx + 13, oy + 9, HERO_BLADE)
-        rect(img, cx + 6, oy + 13, cx + 13, oy + 14, HERO_BLADE)
-        px(img, cx + 13, oy + 8, HERO_BLADE_HI)
-        px(img, cx + 13, oy + 13, HERO_BLADE_HI)
+        rect(img, cx + 6, oy + 8, cx + 15, oy + 9, HERO_BLADE)
+        rect(img, cx + 6, oy + 13, cx + 15, oy + 14, HERO_BLADE)
+        px(img, cx + 15, oy + 8, HERO_BLADE_HI)
+        px(img, cx + 15, oy + 13, HERO_BLADE_HI)
     elif pose == 6:       # hurt: recoil, arms up
         rect(img, cx - 7, oy + 9, cx - 5, oy + 11, HERO_JACKET)
         rect(img, cx + 4, oy + 9, cx + 6, oy + 11, HERO_JACKET)
