@@ -28,7 +28,9 @@ const DEFAULTS: GameSettings = {
   sfxVolume: 0.9,
   musicVolume: 0.6,
   difficulty: 'standard',
-  language: 'en',
+  // Korean-first default, matching every other game in the monorepo. A valid
+  // persisted language still wins (see load()).
+  language: 'ko',
 };
 
 /** Clamp a value into [0..1], falling back to a default if not finite. */
@@ -80,6 +82,19 @@ export class AudioManager {
     return AudioManager.instance;
   }
 
+  /**
+   * Resolve the PERSISTED UI language WITHOUT constructing the singleton (which
+   * needs a running Phaser.Game / sound manager). BootScene calls this to mirror
+   * the persisted choice into the i18n runtime BEFORE the first tr() render on
+   * the preload screen, so a returning English user never sees a one-frame
+   * Korean flash. A brand-new user (no persisted value) still resolves to the
+   * Korean-first default. Reuses the same load() rule as the singleton, so the
+   * two never disagree.
+   */
+  static peekPersistedLanguage(): Language {
+    return AudioManager.load().language;
+  }
+
   /** Read the persisted settings (or the defaults) without touching the DOM twice. */
   private static load(): GameSettings {
     try {
@@ -88,8 +103,10 @@ export class AudioManager {
       const parsed = JSON.parse(raw) as Partial<GameSettings>;
       const difficulty: Difficulty =
         parsed.difficulty === 'relaxed' || parsed.difficulty === 'brutal' ? parsed.difficulty : 'standard';
+      // Persisted valid choice wins; a missing/invalid value falls back to the
+      // Korean-first default.
       const language: Language =
-        parsed.language && LANGUAGES.includes(parsed.language) ? parsed.language : 'en';
+        parsed.language && LANGUAGES.includes(parsed.language) ? parsed.language : DEFAULTS.language;
       return {
         masterVolume: clamp01(parsed.masterVolume, DEFAULTS.masterVolume),
         sfxVolume: clamp01(parsed.sfxVolume, DEFAULTS.sfxVolume),

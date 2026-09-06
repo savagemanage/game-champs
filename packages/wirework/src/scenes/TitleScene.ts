@@ -3,7 +3,10 @@ import { SceneKeys, PALETTE, CANVAS } from '../config/GameConfig';
 import { TextureKeys, AudioKeys } from '../config/AssetKeys';
 import { AudioManager } from '../systems/AudioManager';
 import { Menu } from '../ui/Menu';
+import { textStyle } from '../ui/UiText';
 import { tr } from '../i18n/i18n';
+import { LANGUAGES } from '../i18n/strings';
+import { onViewportRefit, type VisibleWorldRect } from '@open-games/shared';
 
 /**
  * TitleScene - the front door. Renders the layered pixel backdrop, the game
@@ -13,6 +16,7 @@ import { tr } from '../i18n/i18n';
 export class TitleScene extends Phaser.Scene {
   private bgSky!: Phaser.GameObjects.TileSprite;
   private bgHills!: Phaser.GameObjects.TileSprite;
+  private bgWall!: Phaser.GameObjects.Image;
   private drift = 0;
 
   constructor() {
@@ -25,13 +29,22 @@ export class TitleScene extends Phaser.Scene {
 
     const cx = CANVAS.WIDTH / 2;
 
+    // The camera shows a taller-than-540 world rect on a portrait phone. Paint
+    // the parallax backdrop across that WHOLE visible rect (not just the fixed
+    // 960x540 design band) so there are no flat-black dead margins; interactive
+    // UI below stays authored in the unchanged 960x540 space. All three layers
+    // re-fit on resize/orientationchange via the shared provider.
+
     // Parallax backdrop from the loaded background layers (slow auto-drift).
     this.bgSky = this.add.tileSprite(0, 0, CANVAS.WIDTH, CANVAS.HEIGHT, TextureKeys.BgSky).setOrigin(0, 0);
     this.bgHills = this.add
       .tileSprite(0, 0, CANVAS.WIDTH, CANVAS.HEIGHT, TextureKeys.BgHills)
       .setOrigin(0, 0)
       .setAlpha(0.92);
-    this.add.image(cx, CANVAS.HEIGHT / 2, TextureKeys.BgWall).setAlpha(0.85);
+    // The wall image stays centered on the design band but is scaled to cover
+    // the full visible width so it never leaves a bare strip on the sides.
+    this.bgWall = this.add.image(cx, CANVAS.HEIGHT / 2, TextureKeys.BgWall).setAlpha(0.85);
+    onViewportRefit(this, { width: CANVAS.WIDTH, height: CANVAS.HEIGHT }, (rect) => this.refitBackdrop(rect));
 
     // Hero silhouette perched on the wall.
     this.add.image(cx + 300, CANVAS.HEIGHT * 0.62, TextureKeys.Hero, 0).setScale(4).setFlipX(true);
@@ -45,11 +58,18 @@ export class TitleScene extends Phaser.Scene {
     Menu.button(this, cx, CANVAS.HEIGHT * 0.62, tr('title.deploy'), () => this.startGame(), { width: 240 });
     Menu.button(this, cx, CANVAS.HEIGHT * 0.77, tr('title.settings'), () => this.openSettings(), { width: 240 });
 
+    // Compact language toggle in the top-right so players can switch language
+    // straight from the front door by TAP, without opening Settings or needing a
+    // keyboard - matching kingshot/whiteout. Persists via the AudioManager.
+    this.buildLanguageToggle(36);
+
     Menu.label(this, cx, CANVAS.HEIGHT * 0.92, tr('title.hint'), 14, 0.5);
 
     // Keyboard shortcuts mirror the buttons.
     this.input.keyboard?.on('keydown-SPACE', () => this.startGame());
     this.input.keyboard?.on('keydown-S', () => this.openSettings());
+    // L cycles the language, mirroring the on-screen toggle.
+    this.input.keyboard?.on('keydown-L', () => this.stepLanguage(1));
 
     // Start the music bed (idempotent; survives across scenes via AudioManager).
     const audio = AudioManager.get(this);
@@ -58,10 +78,60 @@ export class TitleScene extends Phaser.Scene {
     this.input.once(Phaser.Input.Events.POINTER_DOWN, () => audio.playMusic(AudioKeys.MusicLoop));
   }
 
+  /**
+   * Re-fit the parallax sky/hills tiles + the wall image to the live
+   * visible-world rect. Runs at create() and on every resize/orientationchange
+   * so a mid-scene rotate never leaves a flat-black dead margin.
+   */
+  private refitBackdrop(rect: VisibleWorldRect): void {
+    this.bgSky.setPosition(rect.x, rect.y).setSize(rect.width, rect.height);
+    this.bgHills.setPosition(rect.x, rect.y).setSize(rect.width, rect.height);
+    this.bgWall.setPosition(CANVAS.WIDTH / 2, CANVAS.HEIGHT / 2).setDisplaySize(rect.width, CANVAS.HEIGHT);
+  }
+
   update(_time: number, delta: number): void {
     this.drift += delta * 0.004;
     this.bgSky.tilePositionX = this.drift * 0.4;
     this.bgHills.tilePositionX = this.drift;
+  }
+
+  /**
+   * A compact language toggle in the top-right corner: a small label, a prev
+   * button, the current language name, and a next button. Mirrors kingshot's
+   * front-door stepper so the control is reachable by TAP without a keyboard.
+   *
+   * The whole cluster is anchored a comfortable margin inside the 960px-wide
+   * canvas (the ▶ button's right edge stays well under the edge) so it never
+   * clips off on any viewport.
+   */
+  private buildLanguageToggle(y: number): void {
+    const lang = AudioManager.get(this).getSettings().language;
+
+    const nextX = CANVAS.WIDTH - 34; // 926 -> right edge ~943 (>=16px margin)
+    const prevX = nextX - 120; // 806: ◀ button, 120px gap from ▶
+    const valueX = (prevX + nextX) / 2; // 866: current-language name centered in the gap
+    const labelX = prevX - 30; // 776: right-aligned label ends here
+
+    Menu.label(this, labelX, y, tr('settings.language'), 14, 0.7).setOrigin(1, 0.5);
+    this.add.text(valueX, y, tr(`language.${lang}`), textStyle(16)).setOrigin(0.5);
+    Menu.button(this, prevX, y, '\u25C0', () => this.stepLanguage(-1), { width: 34, fontSize: 14, padY: 6 });
+    Menu.button(this, nextX, y, '\u25B6', () => this.stepLanguage(1), { width: 34, fontSize: 14, padY: 6 });
+  }
+
+  /**
+   * Cycle the UI language, persist + mirror it through the AudioManager
+   * (updateSettings persists AND calls setLanguage into the i18n runtime), then
+   * restart the scene so every Title label re-renders in the new language.
+   */
+  private stepLanguage(dir: -1 | 1): void {
+    const audio = AudioManager.get(this);
+    const current = audio.getSettings().language;
+    const len = LANGUAGES.length;
+    const idx = LANGUAGES.indexOf(current);
+    const next = LANGUAGES[(((idx + dir) % len) + len) % len];
+    if (next === current) return;
+    audio.updateSettings({ language: next });
+    Menu.fadeTo(this, () => this.scene.restart());
   }
 
   private startGame(): void {

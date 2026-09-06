@@ -1,7 +1,7 @@
 /**
  * i18n.ts - the tiny runtime around the {@link STRINGS} table.
  *
- * Holds the current {@link Language} at module level (default 'en'), exposes
+ * Holds the current {@link Language} at module level (default 'ko'), exposes
  * get/set accessors, a change-subscription list so scenes can re-render if they
  * want to, and the {@link tr} lookup used everywhere for user-facing text.
  *
@@ -11,8 +11,12 @@
 
 import { STRINGS, LANGUAGES, type Language, type TrKey } from './strings';
 
-/** The active UI language. Defaults to English until settings load. */
-let currentLang: Language = 'en';
+/**
+ * The active UI language. Korean-first by default (matching every other game in
+ * the monorepo) until a persisted setting loads; a valid persisted choice still
+ * wins via AudioManager mirroring setLanguage() at startup.
+ */
+let currentLang: Language = 'ko';
 
 /** Listeners notified whenever the language changes. */
 const listeners = new Set<(lang: Language) => void>();

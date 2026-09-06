@@ -1,7 +1,8 @@
 import Phaser from 'phaser';
 import { SceneKeys, PALETTE, CANVAS } from '../config/GameConfig';
-import { AudioKeys } from '../config/AssetKeys';
+import { AudioKeys, TextureKeys } from '../config/AssetKeys';
 import { AudioManager, type GameSettings } from '../systems/AudioManager';
+import { onViewportRefit, type VisibleWorldRect } from '@open-games/shared';
 import { DIFFICULTY_ORDER, stepDifficulty } from '../config/Difficulty';
 import { LANGUAGES } from '../i18n/strings';
 import { tr } from '../i18n/i18n';
@@ -33,6 +34,8 @@ export class SettingsScene extends Phaser.Scene {
   private settings!: GameSettings;
   private returnTo: string = SceneKeys.Title;
   private difficultyValueLabel: Phaser.GameObjects.Text | null = null;
+  /** The backdrop layer (a dim rect when overlaid, else the sky tile). */
+  private backdrop!: Phaser.GameObjects.Rectangle | Phaser.GameObjects.TileSprite;
 
   constructor() {
     super({ key: SceneKeys.Settings });
@@ -52,11 +55,22 @@ export class SettingsScene extends Phaser.Scene {
       this.cameras.main.resetFX();
       // Dim backdrop when floating over the Pause/Game scenes. Passive visual
       // only - never made interactive, so it cannot swallow button presses.
-      this.add.rectangle(0, 0, CANVAS.WIDTH, CANVAS.HEIGHT, 0x000000, 0.6).setOrigin(0, 0);
+      // Cover the FULL visible world rect (taller than 540 on a phone) so no
+      // uncovered strip of the scene below shows through above/below.
+      this.backdrop = this.add.rectangle(0, 0, CANVAS.WIDTH, CANVAS.HEIGHT, 0x000000, 0.6).setOrigin(0, 0);
     } else {
       this.cameras.main.setBackgroundColor(PALETTE.BG_FAR);
+      // Paint the sky backdrop across the whole visible rect so a portrait phone
+      // shows no flat dead margin above/below the 960x540 settings layout.
+      this.backdrop = this.add
+        .tileSprite(0, 0, CANVAS.WIDTH, CANVAS.HEIGHT, TextureKeys.BgSky)
+        .setOrigin(0, 0)
+        .setDepth(-30);
       Menu.fadeIn(this);
     }
+    // Size/position the chosen backdrop to the live visible rect now AND on
+    // every resize/orientationchange via the shared provider.
+    onViewportRefit(this, { width: CANVAS.WIDTH, height: CANVAS.HEIGHT }, (rect) => this.refitBackdrop(rect));
 
     const cx = CANVAS.WIDTH / 2;
     Menu.title(this, cx, CANVAS.HEIGHT * 0.14, tr('settings.title'), 40);
@@ -95,6 +109,15 @@ export class SettingsScene extends Phaser.Scene {
     Menu.button(this, cx, CANVAS.HEIGHT * 0.9, tr('settings.back'), () => this.close(), { width: 200 });
 
     this.input.keyboard?.on('keydown-ESC', () => this.close());
+  }
+
+  /**
+   * Re-fit the backdrop (dim rect or sky tile) to the live visible-world rect.
+   * Runs at create() and on every resize/orientationchange so a mid-scene
+   * rotate never leaves an uncovered strip above/below the settings layout.
+   */
+  private refitBackdrop(rect: VisibleWorldRect): void {
+    this.backdrop.setPosition(rect.x, rect.y).setSize(rect.width, rect.height);
   }
 
   /**

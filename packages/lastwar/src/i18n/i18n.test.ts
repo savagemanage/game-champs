@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
+import { findMissingKeys } from '@open-games/shared';
 import { tr, setLanguage, getLanguage } from './i18n';
 import { STRINGS } from './strings';
 
@@ -87,6 +88,12 @@ describe('i18n tr()', () => {
       expect(entry.en, `en missing for ${key}`).toBeTruthy();
       expect(entry.ko, `ko missing for ${key}`).toBeTruthy();
     }
+  });
+
+  it('passes the SHARED @open-games/shared parity checker', () => {
+    // Centralize the ko/en parity guarantee through the shared checker; STRINGS
+    // is a Record<string,{en,ko}>, exactly the shared LocaleTable shape.
+    expect(findMissingKeys(STRINGS)).toEqual([]);
   });
 
   /**

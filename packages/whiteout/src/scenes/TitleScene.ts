@@ -7,6 +7,7 @@ import { Menu } from '../ui/Menu';
 import { tr } from '../i18n/i18n';
 import { LANGUAGES } from '../i18n/strings';
 import { textStyle } from '../ui/UiText';
+import { onViewportRefit, type VisibleWorldRect } from '@open-games/shared';
 
 /**
  * TitleScene - the front door. Renders the layered pixel backdrop, the game
@@ -26,6 +27,7 @@ export class TitleScene extends Phaser.Scene {
   private static readonly MARGIN = 24;
 
   private bgSky!: Phaser.GameObjects.TileSprite;
+  private bgTown!: Phaser.GameObjects.Image;
   private drift = 0;
 
   constructor() {
@@ -37,12 +39,16 @@ export class TitleScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor(PALETTE.BG_SKY_CSS);
     Menu.fadeIn(this);
 
-    // Parallax sky + a settled town skyline beneath the title.
+    // Parallax sky + a settled town skyline beneath the title. Paint across the
+    // full visible world rect (taller than 540 on a portrait phone) so there is
+    // no flat dead margin: the sky fills the whole rect and the town skyline is
+    // anchored to the rect BOTTOM. UI below stays in the unchanged 960x540 band.
     this.bgSky = this.add.tileSprite(0, 0, CANVAS.WIDTH, CANVAS.HEIGHT, TextureKeys.BgSky).setOrigin(0, 0);
-    this.add
-      .image(cx, CANVAS.HEIGHT / 2 + 60, TextureKeys.BgTown)
-      .setDisplaySize(CANVAS.WIDTH, CANVAS.HEIGHT)
-      .setAlpha(0.92);
+    this.bgTown = this.add.image(cx, CANVAS.HEIGHT, TextureKeys.BgTown).setOrigin(0.5, 1).setAlpha(0.92);
+    // Size/position both backdrop layers to the live visible rect now AND on
+    // every resize/orientationchange (shared provider) so a mid-scene rotate
+    // never leaves a dead margin.
+    onViewportRefit(this, { width: CANVAS.WIDTH, height: CANVAS.HEIGHT }, (rect) => this.refitBackdrop(rect));
 
     // Title + tagline.
     const title = Menu.title(this, cx, CANVAS.HEIGHT * 0.3, tr('brand.name'), 64);
@@ -82,6 +88,18 @@ export class TitleScene extends Phaser.Scene {
     const audio = AudioManager.get(this);
     audio.playMusic(AudioKeys.MusicLoop);
     this.input.once(Phaser.Input.Events.POINTER_DOWN, () => audio.playMusic(AudioKeys.MusicLoop));
+  }
+
+  /**
+   * Re-fit the sky tileSprite + town skyline to the live visible-world rect.
+   * Called once at create() and again on every resize/orientationchange so the
+   * backdrop always covers the current (possibly rotated) viewport.
+   */
+  private refitBackdrop(rect: VisibleWorldRect): void {
+    this.bgSky.setPosition(rect.x, rect.y).setSize(rect.width, rect.height);
+    this.bgTown
+      .setPosition(CANVAS.WIDTH / 2, rect.y + rect.height)
+      .setDisplaySize(rect.width, CANVAS.HEIGHT);
   }
 
   update(_time: number, delta: number): void {

@@ -8,7 +8,7 @@ import { KO_FONT_FAMILY } from './fonts';
  * The game is laid out in a fixed 960x540 LOGICAL coordinate system. As of the
  * FEAT-002 render-pipeline fix the Phaser BACKBUFFER is sized to the device's
  * real pixel resolution (logical size * renderScale, tracking
- * devicePixelRatio - see src/main.ts and ui/renderScale.ts) and each scene's
+ * devicePixelRatio - see src/main.ts and @open-games/shared) and each scene's
  * main camera is zoomed by the same factor, so the browser no longer
  * nearest-neighbour-upscales a low-res 960x540 canvas: text now rasterizes at
  * device pixels and stays sharp, while sprites keep NEAREST filtering

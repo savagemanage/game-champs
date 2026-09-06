@@ -13,6 +13,7 @@ import { BattleHud } from '../ui/BattleHud';
 import { Menu } from '../ui/Menu';
 import { tr } from '../i18n/i18n';
 import type { GameOverData } from './GameOverScene';
+import { onViewportRefit, type VisibleWorldRect } from '@open-games/shared';
 
 /** Playback speed multipliers cycled by the HUD's speed toggle. */
 const SPEED_STEPS = [1, 2, 4] as const;
@@ -67,6 +68,7 @@ export class BattleScene extends Phaser.Scene {
   private resolved = false;
   private finished = false;
   private stepEvent?: Phaser.Time.TimerEvent;
+  private bgBattle!: Phaser.GameObjects.Image;
 
   private static readonly FRIENDLY_X = 250;
   private static readonly ENEMY_X = 710;
@@ -84,7 +86,12 @@ export class BattleScene extends Phaser.Scene {
 
     this.cameras.main.setBackgroundColor(PALETTE.BG_SKY_CSS);
     Menu.fadeIn(this);
-    this.add.image(cx, CANVAS.HEIGHT / 2, TextureKeys.BgBattle).setDisplaySize(CANVAS.WIDTH, CANVAS.HEIGHT);
+    // Stretch the battlefield backdrop to COVER the full visible world rect
+    // (taller than 540 on a portrait phone) so no flat dead margin shows; the
+    // battle UI stays in the unchanged 960x540 band. Re-fits on
+    // resize/orientationchange via the shared provider.
+    this.bgBattle = this.add.image(0, 0, TextureKeys.BgBattle);
+    onViewportRefit(this, { width: CANVAS.WIDTH, height: CANVAS.HEIGHT }, (rect) => this.refitBackdrop(rect));
 
     this.wave = this.state.waveCleared + 1;
     this.army = { ...this.state.army };
@@ -131,6 +138,17 @@ export class BattleScene extends Phaser.Scene {
     this.time.delayedCall(1100, () => this.beginClash());
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.cleanup());
+  }
+
+  /**
+   * Re-fit the battlefield backdrop to the live visible-world rect. Runs at
+   * create() and on every resize/orientationchange so a mid-battle rotate never
+   * leaves an uncovered margin around the field.
+   */
+  private refitBackdrop(rect: VisibleWorldRect): void {
+    this.bgBattle
+      .setPosition(rect.x + rect.width / 2, rect.y + rect.height / 2)
+      .setDisplaySize(rect.width, rect.height);
   }
 
   // ---- Layout / spawning ---------------------------------------------------

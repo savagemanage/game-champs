@@ -16,6 +16,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@open-games/shared": "*",
     "phaser": "^3.80.1"
   },
   "devDependencies": {

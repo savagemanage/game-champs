@@ -1,0 +1,26 @@
+{
+  "name": "@open-games/shared",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "description": "Shared, pure/testable cross-game utilities for the open-games monorepo: responsive canvas scaling, DPR/backbuffer clamping, a Phaser scale-config builder, touch-input mapping, and a tiny i18n scaffold. Consumed as TypeScript source by each game's Vite build (no dist emitted, no build script) so the deploy assemble step is unaffected.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./responsive": "./src/responsive.ts",
+    "./dpr": "./src/dpr.ts",
+    "./touch": "./src/touch.ts",
+    "./locale": "./src/locale.ts",
+    "./phaserScale": "./src/phaserScale.ts",
+    "./viewport": "./src/viewport.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "phaser": "^3.80.1",
+    "typescript": "^5.4.0",
+    "vitest": "^1.6.0"
+  }
+}

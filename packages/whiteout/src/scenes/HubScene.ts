@@ -7,6 +7,7 @@ import { GameState } from '../systems/GameState';
 import { Menu } from '../ui/Menu';
 import { textStyle } from '../ui/UiText';
 import { tr, trDyn } from '../i18n/i18n';
+import { onViewportRefit, type VisibleWorldRect } from '@open-games/shared';
 
 /**
  * HubScene - the shared base for the FEAT-006 system screens (Hero, Summon,
@@ -28,6 +29,8 @@ export abstract class HubScene extends Phaser.Scene {
   protected audio!: AudioManager;
   private currencyText!: Phaser.GameObjects.Text;
   private toastText?: Phaser.GameObjects.Text;
+  private bgTown!: Phaser.GameObjects.Image;
+  private bgDim!: Phaser.GameObjects.Rectangle;
 
   /** The i18n key for this screen's title (subclass supplies it). */
   protected abstract titleKey(): string;
@@ -41,12 +44,14 @@ export abstract class HubScene extends Phaser.Scene {
 
     this.cameras.main.setBackgroundColor(PALETTE.BG_SKY_CSS);
     Menu.fadeIn(this);
-    this.add
-      .image(CANVAS.WIDTH / 2, CANVAS.HEIGHT / 2, TextureKeys.BgTown)
-      .setDisplaySize(CANVAS.WIDTH, CANVAS.HEIGHT)
-      .setAlpha(0.55);
+    // Cover the full visible world rect (taller than 540 on a portrait phone) so
+    // there is no flat dead margin: the town art and the dim panel both span the
+    // whole rect. The hub UI stays in the unchanged 960x540 band. Both layers
+    // re-fit on resize/orientationchange via the shared provider.
+    this.bgTown = this.add.image(0, 0, TextureKeys.BgTown).setAlpha(0.55);
     // A dim panel so busy screens stay legible over the town art.
-    this.add.rectangle(0, 0, CANVAS.WIDTH, CANVAS.HEIGHT, PALETTE.BG_SKY, 0.35).setOrigin(0, 0);
+    this.bgDim = this.add.rectangle(0, 0, CANVAS.WIDTH, CANVAS.HEIGHT, PALETTE.BG_SKY, 0.35).setOrigin(0, 0);
+    onViewportRefit(this, { width: CANVAS.WIDTH, height: CANVAS.HEIGHT }, (rect) => this.refitBackdrop(rect));
 
     this.buildTopBar();
 
@@ -57,6 +62,18 @@ export abstract class HubScene extends Phaser.Scene {
     this.build();
 
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.state.save(Date.now()));
+  }
+
+  /**
+   * Re-fit the town backdrop + dim panel to the live visible-world rect. Runs at
+   * create() and on every resize/orientationchange so a mid-scene rotate never
+   * leaves an uncovered margin behind the hub UI.
+   */
+  private refitBackdrop(rect: VisibleWorldRect): void {
+    this.bgTown
+      .setPosition(rect.x + rect.width / 2, rect.y + rect.height / 2)
+      .setDisplaySize(rect.width, rect.height);
+    this.bgDim.setPosition(rect.x, rect.y).setSize(rect.width, rect.height);
   }
 
   /** Top bar: the screen title on the left, a compact currency strip on the right. */

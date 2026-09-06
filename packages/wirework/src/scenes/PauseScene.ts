@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { SceneKeys, CANVAS } from '../config/GameConfig';
 import { Menu } from '../ui/Menu';
 import { tr } from '../i18n/i18n';
+import { onViewportRefit, type VisibleWorldRect } from '@open-games/shared';
 
 /**
  * PauseScene is a translucent overlay launched ON TOP of a paused GameScene.
@@ -12,6 +13,8 @@ import { tr } from '../i18n/i18n';
  * "back" returns here); Quit fades out to the Title and stops the run.
  */
 export class PauseScene extends Phaser.Scene {
+  private bgDim!: Phaser.GameObjects.Rectangle;
+
   constructor() {
     super({ key: SceneKeys.Pause });
   }
@@ -20,8 +23,12 @@ export class PauseScene extends Phaser.Scene {
     const cx = CANVAS.WIDTH / 2;
 
     // Dim the world behind the overlay. Passive visual only - never made
-    // interactive, so it cannot intercept button presses.
-    this.add.rectangle(0, 0, CANVAS.WIDTH, CANVAS.HEIGHT, 0x000000, 0.55).setOrigin(0, 0);
+    // interactive, so it cannot intercept button presses. Cover the full visible
+    // world rect (taller than 540 on a portrait phone) so the dim reaches the
+    // screen edges rather than leaving an undimmed strip above/below. Re-fits on
+    // resize/orientationchange via the shared provider.
+    this.bgDim = this.add.rectangle(0, 0, CANVAS.WIDTH, CANVAS.HEIGHT, 0x000000, 0.55).setOrigin(0, 0);
+    onViewportRefit(this, { width: CANVAS.WIDTH, height: CANVAS.HEIGHT }, (rect) => this.refitBackdrop(rect));
 
     Menu.title(this, cx, CANVAS.HEIGHT * 0.24, tr('pause.title'), 44);
 
@@ -43,6 +50,11 @@ export class PauseScene extends Phaser.Scene {
       this.scene.setVisible(true);
       this.input.enabled = true;
     });
+  }
+
+  /** Re-fit the dim overlay to the live visible-world rect (create + resize). */
+  private refitBackdrop(rect: VisibleWorldRect): void {
+    this.bgDim.setPosition(rect.x, rect.y).setSize(rect.width, rect.height);
   }
 
   private resume(): void {

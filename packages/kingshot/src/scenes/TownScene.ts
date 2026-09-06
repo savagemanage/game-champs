@@ -14,6 +14,7 @@ import { textStyle } from '../ui/UiText';
 import { tr } from '../i18n/i18n';
 import { TutorialFlow, type TutorialAnchor, type TutorialProgress } from '../systems/TutorialFlow';
 import { TutorialOverlay, type AnchorRect } from '../ui/TutorialOverlay';
+import { onViewportRefit, type VisibleWorldRect } from '@open-games/shared';
 
 /** Fixed layout position for each building sprite on the town map. */
 const BUILDING_LAYOUT: Record<BuildingKind, { x: number; y: number; scale: number }> = {
@@ -64,6 +65,8 @@ export class TownScene extends Phaser.Scene {
 
   private resourceWidgets: ResourceWidget[] = [];
   private markers: BuildingMarker[] = [];
+  private bgSky!: Phaser.GameObjects.TileSprite;
+  private bgTown!: Phaser.GameObjects.Image;
   /** Always-visible early hint under the Lumber Mill until it is built. */
   private woodHint!: Phaser.GameObjects.Text;
   private defenseLabel!: Phaser.GameObjects.Text;
@@ -133,8 +136,20 @@ export class TownScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor(PALETTE.BG_SKY_CSS);
     Menu.fadeIn(this);
 
-    // Backdrop.
-    this.add.image(CANVAS.WIDTH / 2, CANVAS.HEIGHT / 2, TextureKeys.BgTown).setDisplaySize(CANVAS.WIDTH, CANVAS.HEIGHT);
+    // Backdrop. Cover the full visible world rect (taller than 540 on a portrait
+    // phone) so there is no flat dead margin: a sky tile fills the whole rect and
+    // the town image is anchored to the rect BOTTOM (ground reaches the bottom
+    // edge). The building/bar UI stays authored in the unchanged 960x540 band.
+    // Both layers re-fit on resize/orientationchange via the shared provider.
+    this.bgSky = this.add
+      .tileSprite(0, 0, CANVAS.WIDTH, CANVAS.HEIGHT, TextureKeys.BgSky)
+      .setOrigin(0, 0)
+      .setDepth(-30);
+    this.bgTown = this.add
+      .image(CANVAS.WIDTH / 2, CANVAS.HEIGHT, TextureKeys.BgTown)
+      .setOrigin(0.5, 1)
+      .setDepth(-29);
+    onViewportRefit(this, { width: CANVAS.WIDTH, height: CANVAS.HEIGHT }, (rect) => this.refitBackdrop(rect));
 
     this.buildBuildings();
     this.buildTopBar();
@@ -174,6 +189,18 @@ export class TownScene extends Phaser.Scene {
       this.game.events.off(Phaser.Core.Events.BLUR, this.saveNow, this);
       this.saveNow();
     });
+  }
+
+  /**
+   * Re-fit the sky tile + town skyline to the live visible-world rect. Runs at
+   * create() and on every resize/orientationchange so a mid-scene rotate never
+   * leaves a dead margin behind the town.
+   */
+  private refitBackdrop(rect: VisibleWorldRect): void {
+    this.bgSky.setPosition(rect.x, rect.y).setSize(rect.width, rect.height);
+    this.bgTown
+      .setPosition(CANVAS.WIDTH / 2, rect.y + rect.height)
+      .setDisplaySize(rect.width, CANVAS.HEIGHT);
   }
 
   update(_time: number, delta: number): void {

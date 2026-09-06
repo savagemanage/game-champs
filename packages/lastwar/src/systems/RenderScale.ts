@@ -1,38 +1,19 @@
 /**
- * RenderScale.ts - pure, Phaser-free math for the canvas backing-buffer scale.
+ * RenderScale.ts - THIN wrapper delegating to the shared @open-games/shared
+ * render-scale module (FEAT-002).
  *
- * THE PROBLEM. The game is authored in a fixed logical/design resolution of
- * 540x960 (see CANVAS in src/config/GameConfig.ts) and displayed with
- * Phaser.Scale.FIT, which uniformly scales the canvas to fit the viewport while
- * preserving aspect. By default the canvas BACKING BUFFER is exactly 540x960
- * device-independent pixels; FIT then stretches that buffer to the displayed
- * CSS size. On a typical desktop (e.g. a 1440x820 dpr=1 window) the portrait
- * canvas is displayed at ~461x820 CSS px, so a 540-wide buffer is actually
- * DOWNSCALED (~0.85x) onto the screen. Rendering the whole scene at only 540px
- * wide and shrinking it softens and mangles small, dense Korean glyphs. This is
- * the root cause of the "broken font" complaint.
- *
- * THE FIX. Phaser 3.80's game-config `scale.zoom` multiplies only the canvas
- * BACKING STORE: the canvas element becomes `width*zoom x height*zoom` physical
- * pixels while the world/camera coordinate space stays `width x height` (540x960).
- * So scene layout never changes, but the buffer gains resolution. We choose a
- * zoom that makes the backing buffer at least as large, in device pixels, as the
- * displayed canvas will occupy - so the browser never has to UPSCALE the buffer
- * (which is what smears text). Note Phaser 3 removed the old game-config
- * `resolution` property (it is a no-op now); `scale.zoom` is the supported knob.
- *
- * THE MATH. Under Scale.FIT the portrait canvas is displayed at
- *   displayScale = min(viewportW / baseW, viewportH / baseH)
- * i.e. the displayed CSS size is `baseW*displayScale x baseH*displayScale`. The
- * displayed DEVICE-pixel size is that times the device pixel ratio `dpr`. The
- * backing buffer is `baseW*zoom x baseH*zoom` device pixels, so to guarantee the
- * buffer covers the display (buffer device px >= displayed device px) we need
- *   baseW*zoom >= baseW*displayScale*dpr   <=>   zoom >= displayScale*dpr.
- * We round UP to that target (never leave the buffer below display size), clamp
- * the result to at least 1 (never shrink below the design buffer), and cap it at
- * `maxScale` to bound GPU texture memory. Any degenerate input (0, negative, or
- * NaN for a viewport dimension, dpr, or base dimension) falls back to a safe 1.
+ * lastwar is a portrait 540x960 design and was already crisp: it derives a
+ * Phaser `scale.zoom` backing-buffer multiplier so the canvas is never upscaled
+ * from a low-res 540x960 buffer (which smeared dense Korean glyphs). That exact
+ * FIT-zoom math (ceil(displayScale * dpr), clamped to [1, maxScale]) now lives
+ * ONCE in @open-games/shared (packages/shared/src/responsive.ts, resolveRenderZoom)
+ * so every game shares a single source of truth. This module keeps the local
+ * names main.ts's boot wiring already consumes and simply forwards to shared.
  */
+
+import { resolveRenderZoom as sharedResolveRenderZoom, DEFAULT_MAX_RENDER_SCALE } from '@open-games/shared';
+
+export { DEFAULT_MAX_RENDER_SCALE } from '@open-games/shared';
 
 /** Inputs for {@link computeRenderScale}. All in the caller's native units. */
 export interface RenderScaleInput {
@@ -50,13 +31,9 @@ export interface RenderScaleInput {
   maxScale: number;
 }
 
-/** Default cap on the render scale (backing-buffer multiplier). */
-export const DEFAULT_MAX_RENDER_SCALE = 4;
-
 /**
- * The subset of `window` that {@link resolveRenderZoom} reads. Kept minimal (and
- * structurally typed) so the boot wiring can be unit-tested with a plain object
- * instead of a real DOM.
+ * The subset of `window` the boot wiring reads. Kept minimal (and structurally
+ * typed) so it can be unit-tested with a plain object instead of a real DOM.
  */
 export interface WindowLike {
   innerWidth: number;
@@ -65,76 +42,33 @@ export interface WindowLike {
 }
 
 /**
- * True only for a finite, strictly-positive number. Guards against 0, negative
- * values, NaN, and +/-Infinity so any bad input triggers the safe fallback.
- */
-function isPositiveFinite(n: number): boolean {
-  return typeof n === 'number' && Number.isFinite(n) && n > 0;
-}
-
-/**
  * Compute the Phaser `scale.zoom` factor for the canvas backing buffer.
  *
- * Returns a factor `z` in the range [1, maxScale] such that the backing buffer
- * (`baseW*z x baseH*z` device pixels) is at least as large as the FIT-displayed
- * canvas measured in device pixels (`displayScale*dpr` per logical pixel, where
- * `displayScale = min(viewportW/baseW, viewportH/baseH)`). The result is rounded
- * UP so the buffer always covers the display, then clamped to [1, maxScale].
- *
- * Degenerate inputs (any non-positive or non-finite dimension/dpr, or a
- * `maxScale` below 1) fall back to `1` (the plain 540x960 backing buffer).
+ * THIN WRAPPER: delegates to the shared {@link sharedResolveRenderZoom}, which
+ * implements the identical FIT-zoom math (zoom = ceil(min(vw/bw, vh/bh) * dpr),
+ * clamped to [1, maxScale]) with the same safe fallback of 1 for any degenerate
+ * viewport/dpr/base dimension or a maxScale below 1.
  */
 export function computeRenderScale(input: RenderScaleInput): number {
   const { viewportW, viewportH, dpr, baseW, baseH, maxScale } = input;
-
-  // Any bad geometry -> safe fallback of the design-size buffer.
-  if (
-    !isPositiveFinite(viewportW) ||
-    !isPositiveFinite(viewportH) ||
-    !isPositiveFinite(dpr) ||
-    !isPositiveFinite(baseW) ||
-    !isPositiveFinite(baseH)
-  ) {
-    return 1;
-  }
-
-  // maxScale must be a sane cap (>= 1); otherwise fall back to no upscaling.
-  const cap = isPositiveFinite(maxScale) && maxScale >= 1 ? maxScale : 1;
-
-  // FIT uniform display scale, then the device-pixel target for the buffer.
-  const displayScale = Math.min(viewportW / baseW, viewportH / baseH);
-  const target = displayScale * dpr;
-
-  // Round UP so the buffer never falls below the displayed device-pixel size,
-  // then clamp into [1, cap].
-  const zoom = Math.ceil(target);
-  return Math.min(Math.max(zoom, 1), cap);
+  return sharedResolveRenderZoom(
+    { innerWidth: viewportW, innerHeight: viewportH, devicePixelRatio: dpr },
+    baseW,
+    baseH,
+    maxScale,
+  );
 }
 
 /**
- * Boot-time bridge between the live `window` and {@link computeRenderScale}.
- *
- * This is the exact zoom-derivation `main.ts` wires into the Phaser config's
- * `scale.zoom`, factored out of `main.ts` (which cannot be unit-tested because
- * it boots a real `Phaser.Game`) so the wiring itself is covered: it reads the
- * viewport + DPR off `win`, pins the design dims to CANVAS 540x960 and the
- * default cap, and returns the backing-buffer multiplier. Pass `undefined` (no
- * `window`, e.g. a non-browser/test bundle) to get the safe fallback of 1.
+ * Boot-time bridge between the live `window` and the shared render-zoom math.
+ * This is the exact zoom `main.ts` wires into the Phaser config's `scale.zoom`.
+ * Pass `undefined` (no `window`, e.g. a non-browser/test bundle) for the safe
+ * fallback of 1.
  */
 export function resolveRenderZoom(
   win: WindowLike | undefined,
   baseW: number,
   baseH: number,
 ): number {
-  if (!win) {
-    return 1;
-  }
-  return computeRenderScale({
-    viewportW: win.innerWidth,
-    viewportH: win.innerHeight,
-    dpr: win.devicePixelRatio,
-    baseW,
-    baseH,
-    maxScale: DEFAULT_MAX_RENDER_SCALE,
-  });
+  return sharedResolveRenderZoom(win, baseW, baseH, DEFAULT_MAX_RENDER_SCALE);
 }

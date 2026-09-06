@@ -1,12 +1,13 @@
 import Phaser from 'phaser';
 import { SceneKeys, PALETTE, CANVAS } from '../config/GameConfig';
-import { AudioKeys } from '../config/AssetKeys';
+import { AudioKeys, TextureKeys } from '../config/AssetKeys';
 import { AudioManager, type GameSettings } from '../systems/AudioManager';
 import { GameState } from '../systems/GameState';
 import { LANGUAGES } from '../i18n/strings';
 import { tr } from '../i18n/i18n';
 import { Menu } from '../ui/Menu';
 import { textStyle } from '../ui/UiText';
+import { onViewportRefit, type VisibleWorldRect } from '@open-games/shared';
 
 /** Data passed when launching Settings (e.g. from the Town). */
 export interface SettingsData {
@@ -31,6 +32,7 @@ export class SettingsScene extends Phaser.Scene {
   private returnTo: string = SceneKeys.Title;
   private confirmingReset = false;
   private resetButtonText: ((t: string) => void) | null = null;
+  private bgSky!: Phaser.GameObjects.TileSprite;
 
   constructor() {
     super({ key: SceneKeys.Settings });
@@ -44,6 +46,14 @@ export class SettingsScene extends Phaser.Scene {
 
     this.cameras.main.resetFX();
     this.cameras.main.setBackgroundColor(PALETTE.BG_SKY_CSS);
+    // Paint the sky across the full visible world rect (taller than 540 on a
+    // portrait phone) so the settings screen shows no flat dead margin above or
+    // below the 960x540 layout. Re-fits on resize/orientationchange (shared).
+    this.bgSky = this.add
+      .tileSprite(0, 0, CANVAS.WIDTH, CANVAS.HEIGHT, TextureKeys.BgSky)
+      .setOrigin(0, 0)
+      .setDepth(-30);
+    onViewportRefit(this, { width: CANVAS.WIDTH, height: CANVAS.HEIGHT }, (rect) => this.refitBackdrop(rect));
     Menu.fadeIn(this);
 
     const cx = CANVAS.WIDTH / 2;
@@ -82,6 +92,15 @@ export class SettingsScene extends Phaser.Scene {
     Menu.button(this, cx, CANVAS.HEIGHT * 0.92, tr('settings.back'), () => this.close(), { width: 220 });
 
     this.input.keyboard?.on('keydown-ESC', () => this.close());
+  }
+
+  /**
+   * Re-fit the sky backdrop to the live visible-world rect. Runs at create()
+   * and on every resize/orientationchange so a mid-scene rotate never leaves a
+   * dead margin above/below the settings layout.
+   */
+  private refitBackdrop(rect: VisibleWorldRect): void {
+    this.bgSky.setPosition(rect.x, rect.y).setSize(rect.width, rect.height);
   }
 
   /**

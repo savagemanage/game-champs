@@ -16,7 +16,14 @@ import { AllianceScene } from './scenes/AllianceScene';
 import { ArenaScene } from './scenes/ArenaScene';
 import { QuestsScene } from './scenes/QuestsScene';
 import { ensureFontsLoaded } from './ui/fonts';
-import { resolveRenderPlan } from './ui/renderScale';
+import {
+  resolveViewportPlan,
+  resolveVisibleWorldRect,
+  publishVisibleWorldRect,
+  clampDpr,
+  type ViewportPlan,
+  type VisibleWorldRect,
+} from '@open-games/shared';
 
 /**
  * Phaser bootstrap for Frosthold: Last Ember.
@@ -26,35 +33,33 @@ import { resolveRenderPlan } from './ui/renderScale';
  * Battle scene resolves a wave via CombatSystem and hands off to GameOver for
  * the result summary before returning to Town.
  *
- * CRISP-TEXT RENDER PIPELINE (FEAT-002)
- * -------------------------------------
+ * MOBILE-FILL + CRISP-TEXT RENDER PIPELINE (FEAT-002, shared)
+ * -----------------------------------------------------------
  * The whole game is laid out in a fixed 960x540 LOGICAL coordinate system
- * (CANVAS). Previously the Phaser drawing buffer was 960x540 (or only
- * DPR-scaled) and Scale.FIT stretched that low-res buffer up to fill the
- * window, so every UI glyph was upscaled by the browser and looked blurry. The
- * magnification a canvas undergoes on screen is
- * `devicePixelRatio * (displayedCssSize / logicalSize)`, NOT just DPR: on a
- * normal dpr=1 desktop the canvas is still CSS-stretched (e.g. 960x540 -> a
- * 1920x1080 window is a 2x blow-up), so keying the buffer off DPR alone left
- * text blurry for most desktop users.
+ * (CANVAS). Two problems are solved here through the SHARED @open-games/shared
+ * render module (single source of truth across every game):
  *
- * To fix that WITHOUT changing any scene's coordinates we size the backbuffer
- * to the REAL number of physical pixels the canvas occupies on screen (logical
- * size * renderScale, where renderScale tracks BOTH the device pixel ratio AND
- * the displayed-vs-logical size ratio - see ui/renderScale.ts) and then zoom
- * each scene's main camera by the same factor so the 960x540 logical world
- * still fills the buffer. Text now rasterizes at display resolution and stays
- * sharp; sprites keep NEAREST filtering (pixelArt:true) so they remain crisp
- * pixel-art. Because the buffer is now at least the displayed physical size,
- * Scale.FIT + autoCenter only ever DOWNSCALES it to the viewport (a sharp
- * minification), never upscales a low-res canvas.
+ *  1. PORTRAIT FILL. The game is landscape 16:9; on a portrait phone
+ *     (e.g. 390x844) Scale.FIT of a fixed 960x540 canvas shrank it into a thin
+ *     letterboxed band. We now grow the GAME SURFACE to the live viewport aspect
+ *     (resolveViewportPlan -> resolveFillPlan) so FIT fills the screen with no
+ *     band, and center the untouched 960x540 layout inside it via the camera
+ *     scroll the plan returns. Scenes need NO coordinate changes.
  *
- * The plan is recomputed on every window resize (see registerRenderScale) so
- * the buffer/zoom track the live window size - maximise the window on a dpr=1
- * display and the buffer grows to keep text crisp.
+ *  2. CRISP TEXT. The backbuffer is sized to the real displayed physical pixels
+ *     (fill size * a whole-number renderScale that tracks DPR AND the
+ *     displayed-vs-logical ratio) and each scene's main camera is zoomed by the
+ *     same scale, so text rasterizes at display resolution while the logical
+ *     coordinate space is preserved. The DPR is CLAMPED (shared clampDpr) so a
+ *     hi-DPR phone never allocates an oversized WebGL backbuffer (the reported
+ *     mobile tab crashes).
+ *
+ * The plan is recomputed on every window resize / orientationchange (see
+ * registerRenderScale) so the surface, buffer, and camera track the live
+ * viewport.
  */
 
-/** Measure the container the game is displayed in (CSS pixels) + the DPR. */
+/** Measure the container the game is displayed in (CSS pixels) + the CLAMPED DPR. */
 function measureDisplay(): { cssWidth: number; cssHeight: number; dpr: number } {
   if (typeof window === 'undefined') {
     return { cssWidth: CANVAS.WIDTH, cssHeight: CANVAS.HEIGHT, dpr: 1 };
@@ -63,12 +68,13 @@ function measureDisplay(): { cssWidth: number; cssHeight: number; dpr: number } 
   const rect = parent?.getBoundingClientRect();
   const cssWidth = rect && rect.width > 0 ? rect.width : window.innerWidth || CANVAS.WIDTH;
   const cssHeight = rect && rect.height > 0 ? rect.height : window.innerHeight || CANVAS.HEIGHT;
-  return { cssWidth, cssHeight, dpr: window.devicePixelRatio || 1 };
+  // clampDpr bounds the backbuffer so a hi-DPR phone can't OOM the tab.
+  return { cssWidth, cssHeight, dpr: clampDpr(window.devicePixelRatio || 1) };
 }
 
-function planFromDisplay(): ReturnType<typeof resolveRenderPlan> {
+function planFromDisplay(): ViewportPlan {
   const { cssWidth, cssHeight, dpr } = measureDisplay();
-  return resolveRenderPlan(CANVAS.WIDTH, CANVAS.HEIGHT, cssWidth, cssHeight, dpr);
+  return resolveViewportPlan(CANVAS.WIDTH, CANVAS.HEIGHT, cssWidth, cssHeight, dpr);
 }
 
 const RENDER_PLAN = planFromDisplay();
@@ -84,16 +90,19 @@ const config: Phaser.Types.Core.GameConfig = {
   pixelArt: true,
   roundPixels: true,
   scale: {
+    // FIT of an ASPECT-MATCHED game surface: because the game width/height now
+    // matches the viewport aspect (fillWidth x fillHeight, see resolveViewportPlan),
+    // FIT fills the screen with no thin-band letterbox on a portrait phone. The
+    // 960x540 layout is centered inside that surface via the camera scroll.
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
-    // Backbuffer sized to the DISPLAYED physical pixels (logical 960x540 *
-    // renderScale, derived from DPR AND the displayed-vs-logical size ratio).
-    // Each scene's main camera is zoomed by the same scale (see
-    // registerRenderScale) so the 960x540 logical layout is preserved and
-    // simply drawn at higher resolution. This is the BOOT size; the plan is
-    // recomputed and game.scale.resize()d on every window resize.
-    width: RENDER_PLAN.bufferWidth,
-    height: RENDER_PLAN.bufferHeight,
+    // Backbuffer sized to the DISPLAYED physical pixels (fill size * a
+    // DPR-clamped, display-aware renderScale). Each scene's main camera is
+    // zoomed by the same scale (see registerRenderScale) so the 960x540 logical
+    // layout is preserved and simply drawn at higher resolution. This is the
+    // BOOT size; the plan is recomputed and game.scale.resize()d on every resize.
+    width: RENDER_PLAN.gameWidth,
+    height: RENDER_PLAN.gameHeight,
   },
   physics: {
     default: 'arcade',
@@ -151,6 +160,18 @@ function boot(): void {
 let currentPlan = RENDER_PLAN;
 
 /**
+ * The LIVE visible world rect (the world-space rectangle the zoomed+scrolled
+ * camera actually shows, in the 960x540 design coordinate space) for the current
+ * plan. On a portrait phone it is taller than 540 and starts at a negative y, so
+ * scenes can paint their backdrop across the whole visible area (no dead
+ * margins) while keeping interactive UI in the unchanged 960x540 band. Reads the
+ * module-level currentPlan so it reflects the latest resize/orientationchange.
+ */
+export function getVisibleWorldRect(): VisibleWorldRect {
+  return resolveVisibleWorldRect(CANVAS.WIDTH, CANVAS.HEIGHT, currentPlan);
+}
+
+/**
  * Zoom a scene's main camera by the current plan's scale so the 960x540 LOGICAL
  * layout fills the display-resolution backbuffer (see the pipeline note above).
  * Because the backbuffer is `logical * scale` and the camera is zoomed by the
@@ -167,6 +188,9 @@ let currentPlan = RENDER_PLAN;
 function applyCameraZoom(cam: Phaser.Cameras.Scene2D.Camera | undefined): void {
   if (!cam) return;
   cam.setZoom(currentPlan.scale);
+  // scrollX/scrollY both anchor the zoomed camera AND center the 960x540 design
+  // rect inside the (possibly taller/wider) fill surface, so the layout stays
+  // centered on a portrait phone without any per-scene coordinate change.
   cam.setScroll(currentPlan.scrollX, currentPlan.scrollY);
 }
 
@@ -193,15 +217,18 @@ function registerRenderScale(game: Phaser.Game): void {
   const recompute = (): void => {
     const next = planFromDisplay();
     const changed =
-      next.bufferWidth !== currentPlan.bufferWidth ||
-      next.bufferHeight !== currentPlan.bufferHeight;
+      next.gameWidth !== currentPlan.gameWidth || next.gameHeight !== currentPlan.gameHeight;
     currentPlan = next;
     if (changed) {
-      game.scale.resize(next.bufferWidth, next.bufferHeight);
+      game.scale.resize(next.gameWidth, next.gameHeight);
     }
     for (const scene of game.scene.scenes) {
       applyCameraZoom(scene.cameras.main);
     }
+    // Publish the fresh visible-world rect + notify live scenes so their
+    // backdrops re-fit the new (possibly rotated) viewport instead of keeping
+    // the create()-time size. Shared across the three landscape games.
+    publishVisibleWorldRect(game, getVisibleWorldRect());
   };
 
   // The Scene Manager instantiates the config `scene` classes ASYNCHRONOUSLY
@@ -218,6 +245,9 @@ function registerRenderScale(game: Phaser.Game): void {
     recompute();
     if (typeof window !== 'undefined') {
       window.addEventListener('resize', recompute);
+      // A phone rotate fires orientationchange; recompute so the fill surface
+      // re-matches the new portrait/landscape viewport aspect.
+      window.addEventListener('orientationchange', recompute);
     }
   });
 }

@@ -1,5 +1,7 @@
 import Phaser from 'phaser';
 import { SceneKeys, PALETTE } from '../config/GameConfig';
+import { AudioManager } from '../systems/AudioManager';
+import { setLanguage } from '../i18n/i18n';
 
 /**
  * BootScene is the very first scene. It shows a minimal loading indicator for
@@ -33,6 +35,15 @@ export class BootScene extends Phaser.Scene {
   }
 
   create(): void {
+    // Mirror the PERSISTED language into the i18n runtime BEFORE PreloadScene
+    // renders its first tr() text (brand name + "Loading %"). The i18n module
+    // defaults to Korean, and the AudioManager singleton (which normally mirrors
+    // the persisted choice) is not constructed until the Title screen; without
+    // this, a returning English user would see the preload screen flash Korean
+    // then snap to English at the Title. A brand-new user with no persisted
+    // value resolves to the Korean-first default, so ko stays the true default.
+    setLanguage(AudioManager.peekPersistedLanguage());
+
     this.scene.start(SceneKeys.Preload);
   }
 }

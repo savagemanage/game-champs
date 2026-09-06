@@ -12,6 +12,7 @@ import { CombatSystem } from '../systems/CombatSystem';
 import { isTraversing } from '../systems/SiegeGeometry';
 import { WaveSystem } from '../systems/WaveSystem';
 import { AudioManager } from '../systems/AudioManager';
+import { classifyGesture, mapDragToMove } from '@open-games/shared';
 import { Hud } from '../ui/Hud';
 import type { GameOverData } from './GameOverScene';
 import type { LoseReason } from './GameOverReason';
@@ -68,6 +69,29 @@ export class GameScene extends Phaser.Scene {
     reelOut: Phaser.Input.Keyboard.Key;
   };
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
+
+  /**
+   * TOUCH movement (FEAT-002, shared). On a phone there is no WASD, so a drag
+   * with a TOUCH pointer drives 8-direction movement via the shared
+   * classifyGesture / mapDragToMove helpers. This is ADDITIVE: mouse grapple
+   * (left button) / slash (right button) and keyboard WASD are unchanged; a
+   * touch drag simply produces a normalized move vector ORed into the movement
+   * input each frame. A short stationary touch is a TAP and fires the grapple
+   * (mapped in buildInput) instead of moving.
+   */
+  private touch = {
+    active: false,
+    startX: 0,
+    startY: 0,
+    startTime: 0,
+    curX: 0,
+    curY: 0,
+    /** Normalized move intent from the current drag, each axis in [-1, 1]. */
+    moveX: 0,
+    moveY: 0,
+    /** True once the drag has travelled far enough to count as movement (not a tap). */
+    moving: false,
+  };
 
   private surfaces: GrappleSurface[] = [];
 
@@ -262,6 +286,13 @@ export class GameScene extends Phaser.Scene {
     };
 
     this.input.on(Phaser.Input.Events.POINTER_DOWN, (pointer: Phaser.Input.Pointer) => {
+      // TOUCH: begin tracking a drag for movement; a tap (little travel) will be
+      // resolved to a grapple on release. Do NOT fire the grapple yet so a
+      // touch-drag can move instead. MOUSE behaviour is unchanged.
+      if (pointer.wasTouch) {
+        this.beginTouch(pointer);
+        return;
+      }
       const world = this.pointerWorld(pointer);
       if (pointer.leftButtonDown()) {
         this.grapple.fire(world.x, world.y, this.time.now);
@@ -270,7 +301,14 @@ export class GameScene extends Phaser.Scene {
         this.combat.slash(world.x, world.y, this.time.now);
       }
     });
+    this.input.on(Phaser.Input.Events.POINTER_MOVE, (pointer: Phaser.Input.Pointer) => {
+      if (pointer.wasTouch && this.touch.active) this.updateTouchDrag(pointer);
+    });
     this.input.on(Phaser.Input.Events.POINTER_UP, (pointer: Phaser.Input.Pointer) => {
+      if (pointer.wasTouch) {
+        this.endTouch(pointer);
+        return;
+      }
       if (!pointer.leftButtonDown()) this.grapple.release();
     });
 
@@ -297,6 +335,74 @@ export class GameScene extends Phaser.Scene {
     return this.cameras.main.getWorldPoint(pointer.x, pointer.y);
   }
 
+  /** Start tracking a touch drag (screen-space) for movement. */
+  private beginTouch(pointer: Phaser.Input.Pointer): void {
+    this.touch.active = true;
+    this.touch.moving = false;
+    this.touch.startX = pointer.x;
+    this.touch.startY = pointer.y;
+    this.touch.curX = pointer.x;
+    this.touch.curY = pointer.y;
+    this.touch.startTime = this.time.now;
+    this.touch.moveX = 0;
+    this.touch.moveY = 0;
+  }
+
+  /**
+   * Update the live move intent from a touch drag using the SHARED helpers:
+   * classifyGesture decides once we have travelled far enough to be a drag (vs a
+   * still-a-tap), and mapDragToMove turns the screen displacement into a
+   * normalized [-1,1] move vector (a virtual joystick anchored at the touch
+   * start). Read by update() as the movement input.
+   */
+  private updateTouchDrag(pointer: Phaser.Input.Pointer): void {
+    this.touch.curX = pointer.x;
+    this.touch.curY = pointer.y;
+    const dx = pointer.x - this.touch.startX;
+    const dy = pointer.y - this.touch.startY;
+    const gesture = classifyGesture({
+      startX: this.touch.startX,
+      startY: this.touch.startY,
+      endX: pointer.x,
+      endY: pointer.y,
+      durationMs: this.time.now - this.touch.startTime,
+    });
+    if (gesture.type !== 'tap') {
+      this.touch.moving = true;
+    }
+    if (this.touch.moving) {
+      const move = mapDragToMove(dx, dy);
+      this.touch.moveX = move.moveX;
+      this.touch.moveY = move.moveY;
+    }
+  }
+
+  /**
+   * Release a touch drag. If it never became a drag (a quick stationary tap),
+   * treat it as a grapple fire+release at the tapped point so the core action is
+   * reachable by tap; a drag just stops the movement intent.
+   */
+  private endTouch(pointer: Phaser.Input.Pointer): void {
+    const wasMoving = this.touch.moving;
+    this.touch.active = false;
+    this.touch.moving = false;
+    this.touch.moveX = 0;
+    this.touch.moveY = 0;
+    if (wasMoving) return;
+    const gesture = classifyGesture({
+      startX: this.touch.startX,
+      startY: this.touch.startY,
+      endX: pointer.x,
+      endY: pointer.y,
+      durationMs: this.time.now - this.touch.startTime,
+    });
+    if (gesture.type === 'tap') {
+      const world = this.pointerWorld(pointer);
+      this.grapple.fire(world.x, world.y, this.time.now);
+      this.grapple.release();
+    }
+  }
+
   /**
    * Fire the dash toward WHERE THE CHARACTER IS FACING (its planar
    * movement/facing direction), NOT the mouse cursor. Player.dashFacing yields
@@ -319,11 +425,16 @@ export class GameScene extends Phaser.Scene {
     const now = this.time.now;
     if (this.gameEnded) return;
 
-    // --- 8-direction planar input ---
-    const left = this.keys.left.isDown || this.cursors.left.isDown;
-    const right = this.keys.right.isDown || this.cursors.right.isDown;
-    const up = this.keys.up.isDown || this.cursors.up.isDown;
-    const down = this.keys.down.isDown || this.cursors.down.isDown;
+    // --- 8-direction planar input (keyboard OR touch-drag joystick) ---
+    // A touch drag past a small deadzone contributes a direction on each axis,
+    // ORed with WASD/arrows so touch movement is purely additive.
+    const TOUCH_DIR = 0.35;
+    const tMoveX = this.touch.active && this.touch.moving ? this.touch.moveX : 0;
+    const tMoveY = this.touch.active && this.touch.moving ? this.touch.moveY : 0;
+    const left = this.keys.left.isDown || this.cursors.left.isDown || tMoveX < -TOUCH_DIR;
+    const right = this.keys.right.isDown || this.cursors.right.isDown || tMoveX > TOUCH_DIR;
+    const up = this.keys.up.isDown || this.cursors.up.isDown || tMoveY < -TOUCH_DIR;
+    const down = this.keys.down.isDown || this.cursors.down.isDown || tMoveY > TOUCH_DIR;
 
     // --- grapple / fling ---
     const pointer = this.input.activePointer;
@@ -334,7 +445,10 @@ export class GameScene extends Phaser.Scene {
     // grapple steps, so a hooked giant's anchor tracks its current position and
     // a giant that died this frame is dropped gracefully.
     this.grapple.setTargets(this.buildGrappleTargets());
-    this.grapple.update({ fireHeld: pointer.leftButtonDown(), aimX: world.x, aimY: world.y, reelIn, reelOut }, delta, now);
+    // A touch drag is a MOVE, not a held grapple, so the "fire held" signal is
+    // suppressed while a touch is driving movement (mouse left-hold is unchanged).
+    const fireHeld = pointer.leftButtonDown() && !(this.touch.active && this.touch.moving);
+    this.grapple.update({ fireHeld, aimX: world.x, aimY: world.y, reelIn, reelOut }, delta, now);
 
     // --- player + gas ---
     this.player.updatePlayer({ up, down, left, right }, delta, now);

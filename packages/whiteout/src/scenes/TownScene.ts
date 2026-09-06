@@ -12,6 +12,7 @@ import { PopulationPanel } from '../ui/PopulationPanel';
 import { textStyle } from '../ui/UiText';
 import { tr } from '../i18n/i18n';
 import type { TrKey } from '../i18n/strings';
+import { onViewportRefit, type VisibleWorldRect } from '@open-games/shared';
 
 /** The Town hub's links to the FEAT-006 system screens. */
 const HUB_LINKS: { key: keyof typeof MENU_ICON_FRAME; scene: SceneKey; label: TrKey }[] = [
@@ -114,6 +115,8 @@ export class TownScene extends Phaser.Scene {
   private resourceWidgets: ResourceWidget[] = [];
   private markers: BuildingMarker[] = [];
   private warmthWidgets!: WarmthWidgets;
+  private bgSky!: Phaser.GameObjects.TileSprite;
+  private bgTown!: Phaser.GameObjects.Image;
 
   private trainingPanel!: TrainingPanel;
   private populationPanel!: PopulationPanel;
@@ -180,8 +183,20 @@ export class TownScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor(PALETTE.BG_SKY_CSS);
     Menu.fadeIn(this);
 
-    // Backdrop.
-    this.add.image(CANVAS.WIDTH / 2, CANVAS.HEIGHT / 2, TextureKeys.BgTown).setDisplaySize(CANVAS.WIDTH, CANVAS.HEIGHT);
+    // Backdrop. Cover the full visible world rect (taller than 540 on a portrait
+    // phone) so there is no flat dead margin: a sky tile fills the whole rect and
+    // the town image is anchored to the rect BOTTOM. Building/bar UI stays in the
+    // unchanged 960x540 band. Both layers re-fit on resize/orientationchange
+    // (shared provider).
+    this.bgSky = this.add
+      .tileSprite(0, 0, CANVAS.WIDTH, CANVAS.HEIGHT, TextureKeys.BgSky)
+      .setOrigin(0, 0)
+      .setDepth(-30);
+    this.bgTown = this.add
+      .image(CANVAS.WIDTH / 2, CANVAS.HEIGHT, TextureKeys.BgTown)
+      .setOrigin(0.5, 1)
+      .setDepth(-29);
+    onViewportRefit(this, { width: CANVAS.WIDTH, height: CANVAS.HEIGHT }, (rect) => this.refitBackdrop(rect));
 
     this.buildBuildings();
     this.buildTopBar();
@@ -228,6 +243,18 @@ export class TownScene extends Phaser.Scene {
       this.objectivePointer = undefined;
       this.saveNow();
     });
+  }
+
+  /**
+   * Re-fit the sky tile + town skyline to the live visible-world rect. Runs at
+   * create() and on every resize/orientationchange so a mid-scene rotate never
+   * leaves a dead margin behind the town.
+   */
+  private refitBackdrop(rect: VisibleWorldRect): void {
+    this.bgSky.setPosition(rect.x, rect.y).setSize(rect.width, rect.height);
+    this.bgTown
+      .setPosition(CANVAS.WIDTH / 2, rect.y + rect.height)
+      .setDisplaySize(rect.width, CANVAS.HEIGHT);
   }
 
   update(_time: number, delta: number): void {

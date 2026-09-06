@@ -1,9 +1,11 @@
 import Phaser from 'phaser';
 import { SceneKeys, PALETTE, CANVAS } from '../config/GameConfig';
+import { TextureKeys } from '../config/AssetKeys';
 import { Menu } from '../ui/Menu';
 import { textStyle } from '../ui/UiText';
 import { tr } from '../i18n/i18n';
 import { outcomeMessageKey, type LoseReason } from './GameOverReason';
+import { onViewportRefit, type VisibleWorldRect } from '@open-games/shared';
 
 export interface GameOverData {
   victory?: boolean;
@@ -21,6 +23,8 @@ export interface GameOverData {
  * Return to Title. Fades in on show and fades out on either choice.
  */
 export class GameOverScene extends Phaser.Scene {
+  private bgSky!: Phaser.GameObjects.TileSprite;
+
   constructor() {
     super({ key: SceneKeys.GameOver });
   }
@@ -28,6 +32,17 @@ export class GameOverScene extends Phaser.Scene {
   create(data: GameOverData): void {
     this.cameras.main.setBackgroundColor(PALETTE.GROUND);
     Menu.fadeIn(this, 500);
+
+    // Cover the full visible world rect (taller than 540 on a portrait phone)
+    // with the ground-tinted backdrop so there is no flat dead margin; the
+    // summary text/buttons below stay in the fixed 960x540 band. Re-fits on
+    // resize/orientationchange via the shared provider.
+    this.bgSky = this.add
+      .tileSprite(0, 0, CANVAS.WIDTH, CANVAS.HEIGHT, TextureKeys.BgSky)
+      .setOrigin(0, 0)
+      .setDepth(-30)
+      .setTint(PALETTE.GROUND);
+    onViewportRefit(this, { width: CANVAS.WIDTH, height: CANVAS.HEIGHT }, (rect) => this.refitBackdrop(rect));
 
     const cx = CANVAS.WIDTH / 2;
     const victory = data.victory ?? false;
@@ -65,6 +80,11 @@ export class GameOverScene extends Phaser.Scene {
 
     this.input.keyboard?.on('keydown-R', () => this.retry());
     this.input.keyboard?.on('keydown-SPACE', () => this.toTitle());
+  }
+
+  /** Re-fit the ground-tinted backdrop to the live visible-world rect. */
+  private refitBackdrop(rect: VisibleWorldRect): void {
+    this.bgSky.setPosition(rect.x, rect.y).setSize(rect.width, rect.height);
   }
 
   private retry(): void {

@@ -5,6 +5,7 @@ import { Menu } from '../ui/Menu';
 import { textStyle } from '../ui/UiText';
 import { tr } from '../i18n/i18n';
 import type { ResourceCost } from '../types';
+import { onViewportRefit, type VisibleWorldRect } from '@open-games/shared';
 
 /** Data passed from BattleScene to the result overlay. */
 export interface GameOverData {
@@ -39,17 +40,25 @@ export interface GameOverData {
  *     army and wave progress from the shared GameState.
  */
 export class GameOverScene extends Phaser.Scene {
+  private bgBattle!: Phaser.GameObjects.Image;
+  private bgDim!: Phaser.GameObjects.Rectangle;
+
   constructor() {
     super({ key: SceneKeys.GameOver });
   }
 
   create(data: GameOverData): void {
     const cx = CANVAS.WIDTH / 2;
+    this.cameras.main.setBackgroundColor(PALETTE.BG_SKY_CSS);
     Menu.fadeIn(this);
 
-    // Dimmed battle backdrop.
-    this.add.image(cx, CANVAS.HEIGHT / 2, TextureKeys.BgBattle).setDisplaySize(CANVAS.WIDTH, CANVAS.HEIGHT).setTint(0x556070);
-    this.add.rectangle(0, 0, CANVAS.WIDTH, CANVAS.HEIGHT, 0x000000, 0.55).setOrigin(0, 0);
+    // Dimmed battle backdrop. Cover the full visible world rect (taller than 540
+    // on a portrait phone) with both the tinted battlefield and the dim so no
+    // flat dead margin shows; the result panel stays in the 960x540 band. Both
+    // layers re-fit on resize/orientationchange via the shared provider.
+    this.bgBattle = this.add.image(0, 0, TextureKeys.BgBattle).setTint(0x556070);
+    this.bgDim = this.add.rectangle(0, 0, CANVAS.WIDTH, CANVAS.HEIGHT, 0x000000, 0.55).setOrigin(0, 0);
+    onViewportRefit(this, { width: CANVAS.WIDTH, height: CANVAS.HEIGHT }, (rect) => this.refitBackdrop(rect));
 
     const panelW = 560;
     const panelH = 340;
@@ -132,6 +141,18 @@ export class GameOverScene extends Phaser.Scene {
     }
     this.input.keyboard?.on('keydown-SPACE', () => this.go(SceneKeys.Town));
     this.input.keyboard?.on('keydown-ESC', () => this.go(SceneKeys.Town));
+  }
+
+  /**
+   * Re-fit the tinted battle backdrop + dim overlay to the live visible-world
+   * rect. Runs at create() and on every resize/orientationchange so a mid-scene
+   * rotate never leaves an uncovered margin.
+   */
+  private refitBackdrop(rect: VisibleWorldRect): void {
+    this.bgBattle
+      .setPosition(rect.x + rect.width / 2, rect.y + rect.height / 2)
+      .setDisplaySize(rect.width, rect.height);
+    this.bgDim.setPosition(rect.x, rect.y).setSize(rect.width, rect.height);
   }
 
   private go(scene: string): void {
