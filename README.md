@@ -31,6 +31,31 @@ with English available via an in-game toggle.
 
 **Play the live build:** <https://savagemanage.github.io/game-lastwar/>
 
+## Screenshots (스크린샷)
+
+Captured from the live deployed build. The UI is Korean-first (한국어).
+
+![타이틀 화면](docs/screenshots/title.png)
+
+**타이틀 화면** — 게임 시작 화면 (출격 / 업그레이드 / 플레이 방법 / 설정).
+_Title screen with the main menu buttons._
+
+![베이스 캠프](docs/screenshots/base-hub.png)
+
+**베이스 캠프** — 여섯 개의 건물 카드(본부·테크센터·연병장·병원·병영·드론센터)와
+하단 내비게이션(기지·영웅·전역·임무·시즌·팔콘 구조대)이 있는 기지 허브.
+_The base hub with the six building cards and the persistent bottom navigation._
+
+![영웅 모집](docs/screenshots/recruit.png)
+
+**영웅 모집** — 샤드로 영웅을 뽑는 모집 패널(1회 모집 / 10회 모집)과 천장(pity) 카운터.
+_The hero recruit panel with single / ten-pull options and a pity counter._
+
+![보유 영웅](docs/screenshots/heroes.png)
+
+**보유 영웅** — 레벨·성급 배지가 표시된 보유 영웅 로스터(보유 탭).
+_The owned-heroes roster showing recruited portraits with level and star badges._
+
 ## Tech stack
 
 - [Phaser 3](https://phaser.io/): 2D game framework (arcade physics, WebAudio)
