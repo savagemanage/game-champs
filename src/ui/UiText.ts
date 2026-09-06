@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { PALETTE } from '../config/GameConfig';
+import { KO_FONT_FAMILY } from './fonts';
 
 /**
  * UiText - crisp-text strategy for the UI/HUD/menu layer.
@@ -27,13 +28,17 @@ export const TEXT_RESOLUTION = Math.max(
 );
 
 /**
- * Font stack for all UI text. Naming concrete, widely-shipped monospace faces
- * first gives a consistent, sharp glyph grid across platforms and only falls
- * back to the generic keyword last (a bare `monospace` often resolves to a
- * blurry platform default).
+ * Font stack for all UI text. The game is KOREAN-FIRST, so the bundled
+ * Korean-capable monospace face ({@link KO_FONT_FAMILY}, Nanum Gothic Coding,
+ * loaded by ui/fonts.ts) leads the stack: it covers every Hangul glyph the UI
+ * uses AND keeps the intended crisp monospace grid, so text renders identically
+ * on every browser/OS (including headless Chromium, which ships no CJK fonts).
+ * The concrete Latin monospace faces that follow are fallbacks for the rare
+ * glyph the subset does not carry, and the generic `monospace` keyword is the
+ * last resort.
  */
 export const UI_FONT_FAMILY =
-  '"DejaVu Sans Mono", "Consolas", "Liberation Mono", "Menlo", "Courier New", monospace';
+  `"${KO_FONT_FAMILY}", "DejaVu Sans Mono", "Consolas", "Liberation Mono", "Menlo", "Courier New", monospace`;
 
 /**
  * Build a monospace text style with the crisp text resolution baked in, using

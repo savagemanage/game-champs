@@ -15,6 +15,7 @@ import { GearScene } from './scenes/GearScene';
 import { AllianceScene } from './scenes/AllianceScene';
 import { ArenaScene } from './scenes/ArenaScene';
 import { QuestsScene } from './scenes/QuestsScene';
+import { ensureFontsLoaded } from './ui/fonts';
 
 /**
  * Phaser bootstrap for Frosthold: Last Ember.
@@ -64,5 +65,17 @@ const config: Phaser.Types.Core.GameConfig = {
   ],
 };
 
-// eslint-disable-next-line no-new
-new Phaser.Game(config);
+/**
+ * Boot the game once the KOREAN-FIRST UI font is registered. Phaser rasterizes
+ * text to a canvas at first paint, so if the bundled Korean face is not ready
+ * yet the opening frames fall back to a system font (or tofu). Awaiting
+ * ensureFontsLoaded() first guarantees Hangul renders correctly from frame one;
+ * it resolves immediately (and never rejects) in environments without the CSS
+ * Font Loading API, so boot is never blocked.
+ */
+function boot(): void {
+  // eslint-disable-next-line no-new
+  new Phaser.Game(config);
+}
+
+void ensureFontsLoaded().then(boot);

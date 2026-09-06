@@ -17,10 +17,14 @@ this repository:
 - Audio (SFX + music): [`tools/gen_audio.py`](../tools/gen_audio.py) (Python
   standard library synthesis — no samples, no third-party audio)
 
-Because everything is original, there are **no third-party downloads** to
-attribute. No CC0/CC-BY external assets were used. Should any external asset be
-added later, it must be CC0 or clearly redistribution-permitting FREE, and its
-file path, name, author, source URL, and license must be recorded below.
+Every **art and audio** asset is original. The **one** third-party asset is the
+Korean-capable UI web font (see the **Fonts** section below): the game is
+Korean-first, and bundling a Hangul-covering font makes text render correctly
+and identically on every browser/OS instead of relying on system fonts (which
+headless/CI browsers do not ship for CJK). It is redistributable under the SIL
+Open Font License 1.1 and is recorded in full below. Any external asset added
+later must be CC0 or clearly redistribution-permitting FREE, and its file path,
+name, author, source URL, and license must be recorded here.
 
 ## License
 
@@ -119,12 +123,42 @@ warmed by an ember-bright note where the moment calls for hope.
 
 ---
 
+## Fonts — `public/assets/fonts/`
+
+The UI is **Korean-first**. Phaser draws all text onto a canvas using whatever
+face the browser resolves, so without a Korean-capable font the Hangul renders
+as tofu (missing-glyph boxes) — most visibly in headless/CI browsers, which
+ship no CJK fonts. To make rendering deterministic we bundle a **subset** of a
+permissively-licensed Korean monospace font (the monospace face preserves the
+crisp glyph grid the UI was designed around).
+
+| File | Name | Author | Source | License |
+| --- | --- | --- | --- | --- |
+| `fonts/NanumGothicCoding-Regular.subset.woff2` | Nanum Gothic Coding (Regular, subset) | NHN Corporation | [google/fonts — ofl/nanumgothiccoding](https://github.com/google/fonts/tree/main/ofl/nanumgothiccoding) | SIL Open Font License 1.1 |
+| `fonts/NanumGothicCoding-Bold.subset.woff2` | Nanum Gothic Coding (Bold, subset) | NHN Corporation | [google/fonts — ofl/nanumgothiccoding](https://github.com/google/fonts/tree/main/ofl/nanumgothiccoding) | SIL Open Font License 1.1 |
+
+The bundled files are **subsets** built by [`tools/gen_fonts.py`](../tools/gen_fonts.py),
+containing only the glyphs used by the runtime string table
+(`src/i18n/strings.ts`) plus an ASCII/punctuation baseline, so each weight is a
+few tens of KB rather than ~2 MB. The SIL OFL 1.1 permits this bundling and
+subsetting (the reserved font name "Nanum" is unchanged and the font is not sold
+on its own). Re-run the generator whenever `strings.ts` gains new characters.
+
+---
+
 ## Regenerating assets
 
 ```sh
 pip install Pillow             # only dependency, for the sprite generator
 python3 tools/gen_sprites.py   # -> public/assets/{sprites,backgrounds,ui,fx}
 python3 tools/gen_audio.py     # -> public/assets/audio  (stdlib only)
+
+# UI font subsets (only needed when strings.ts gains new characters). Fetch the
+# OFL source TTFs from google/fonts first, then subset them:
+pip install fonttools brotli
+python3 tools/gen_fonts.py \
+    --regular NanumGothicCoding-Regular.ttf \
+    --bold NanumGothicCoding-Bold.ttf   # -> public/assets/fonts (subset woff2)
 ```
 
 Output is deterministic (the audio generator seeds its RNG), so regenerating
