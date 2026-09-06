@@ -130,6 +130,19 @@ export class TownScene extends Phaser.Scene {
     this.state = GameState.get();
     this.audio = AudioManager.get(this);
 
+    // Phaser REUSES the scene instance across scene.start() restarts, so these
+    // per-widget arrays are only initialized once (at construction) and would
+    // otherwise retain references to the Text/Image objects from a previous
+    // visit - which were destroyed on shutdown. Re-entering the Town (e.g. from
+    // a hub screen) then rebuilt fresh widgets while the stale destroyed ones
+    // lingered in the arrays; the per-frame refresh loops later called setText/
+    // setColor on those destroyed objects, whose backing canvas is null, which
+    // threw inside update() and silently killed the whole render loop (the
+    // screen froze on a ~85% black fade that never cleared). Reset them here so
+    // every entry starts from a clean slate.
+    this.resourceWidgets = [];
+    this.markers = [];
+
     this.cameras.main.setBackgroundColor(PALETTE.BG_SKY_CSS);
     Menu.fadeIn(this);
 

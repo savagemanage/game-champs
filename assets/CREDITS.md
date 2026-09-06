@@ -146,6 +146,29 @@ on its own). Re-run the generator whenever `strings.ts` gains new characters.
 
 ---
 
+## Screenshots — `docs/screenshots/`
+
+The PNGs in [`docs/screenshots/`](../docs/screenshots/) are **screenshots of
+this game running** (a real production build driven in a headless browser),
+embedded in the README. They therefore contain only this project's own original
+art/UI plus Hangul rendered with the bundled SIL OFL 1.1 Korean font documented
+above — no third-party imagery. They are captured by
+[`tools/capture_screenshots.mjs`](../tools/capture_screenshots.mjs) and covered
+by the repository's Apache-2.0 license like the rest of the project.
+
+| File | Screen | Origin |
+| --- | --- | --- |
+| `docs/screenshots/title.png` | Title screen | **Original** (game screenshot) |
+| `docs/screenshots/town.png` | Town hub (Furnace, resource HUD, warmth bar) | **Original** (game screenshot) |
+| `docs/screenshots/command-menu.png` | Command menu (expanded-systems hub) | **Original** (game screenshot) |
+| `docs/screenshots/heroes.png` | Heroes roster | **Original** (game screenshot) |
+| `docs/screenshots/research.png` | Research tech tree | **Original** (game screenshot) |
+| `docs/screenshots/campaign.png` | Expedition campaign map | **Original** (game screenshot) |
+| `docs/screenshots/summon.png` | Summon (gacha) | **Original** (game screenshot) |
+| `docs/screenshots/training.png` | Troop training panel | **Original** (game screenshot) |
+
+---
+
 ## Regenerating assets
 
 ```sh

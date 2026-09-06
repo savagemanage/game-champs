@@ -70,6 +70,17 @@
 - 🌐 **한국어 우선 · 영어 지원.** 첫 실행 시 브라우저 언어를 자동 감지하고,
   타이틀 화면과 설정에서 언제든 전환할 수 있습니다.
 
+### 📸 스크린샷
+
+실제로 빌드해 헤드리스 브라우저로 구동한 화면입니다. 게임은 **한국어 우선**이라
+UI 전체가 한글로 그려집니다 (번들된 OFL 한글 폰트로 렌더링).
+
+| | |
+| --- | --- |
+| ![타이틀 화면 — 한글 제목 "서리성채: 마지막 불씨"와 언어 토글](docs/screenshots/title.png)<br>**타이틀 화면** · 한글 제목과 언어 토글 | ![마을 허브 — 화로, 자원 HUD, 온기 바, 지휘 메뉴](docs/screenshots/town.png)<br>**마을 허브** · 화로 · 자원 HUD · 온기 바 |
+| ![지휘 메뉴 — 영웅·소환·원정·연구·장비·협정·투기장·임무](docs/screenshots/command-menu.png)<br>**지휘 메뉴** · 확장 시스템 진입점 | ![영웅 화면 — 12명 오리지널 영웅 로스터와 상세 카드](docs/screenshots/heroes.png)<br>**영웅** · 12명 로스터 · 상세/스킬 |
+| ![연구 트리 — 경제·전투·생존·발전 4개 분기 16노드](docs/screenshots/research.png)<br>**연구 트리** · 4개 분기 16노드 | ![원정 캠페인 — 단계별 탐험 지도와 출정 카드](docs/screenshots/campaign.png)<br>**원정 캠페인** · 단계별 탐험 지도 |
+
 ### 🧱 기술 스택
 
 | 도구 | 역할 |
@@ -343,6 +354,18 @@ heroes, run research, raise an army, and repel the incoming **Frozen Horde** and
   return.
 - 🌐 **Korean-first, English supported.** Browser language is auto-detected on
   first run, and you can switch anytime from the Title screen or Settings.
+
+### 📸 Screenshots
+
+Captured from a real production build driven in a headless browser. The game is
+**Korean-first**, so the entire UI is drawn in Hangul (rendered with a bundled
+OFL Korean font).
+
+| | |
+| --- | --- |
+| ![Title screen showing the Korean title "서리성채: 마지막 불씨" and the language toggle](docs/screenshots/title.png)<br>**Title screen** · Korean title + language toggle | ![Town hub with the Furnace, resource HUD, warmth bar, and Command menu](docs/screenshots/town.png)<br>**Town hub** · Furnace · resource HUD · warmth bar |
+| ![Command menu with Heroes, Summon, Expedition, Research, Gear, Alliance, Arena, Quests](docs/screenshots/command-menu.png)<br>**Command menu** · entry to the expanded systems | ![Heroes screen with the 12-hero roster and a detail card](docs/screenshots/heroes.png)<br>**Heroes** · 12-hero roster · detail/skills |
+| ![Research tree with four branches and sixteen nodes](docs/screenshots/research.png)<br>**Research tree** · four branches, 16 nodes | ![Expedition campaign map with staged nodes and a sortie card](docs/screenshots/campaign.png)<br>**Expedition campaign** · staged exploration map |
 
 ### 🧱 Tech stack
 

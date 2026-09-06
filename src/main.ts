@@ -74,8 +74,13 @@ const config: Phaser.Types.Core.GameConfig = {
  * Font Loading API, so boot is never blocked.
  */
 function boot(): void {
-  // eslint-disable-next-line no-new
-  new Phaser.Game(config);
+  const game = new Phaser.Game(config);
+  // QA/debug hook: expose the running game only when explicitly requested via
+  // ?debug in the URL, so screenshot/e2e tooling can introspect scene state.
+  // Has no effect on the normal production page (no query flag).
+  if (typeof location !== 'undefined' && location.search.includes('debug')) {
+    (globalThis as unknown as { __GAME__?: Phaser.Game }).__GAME__ = game;
+  }
 }
 
 void ensureFontsLoaded().then(boot);
