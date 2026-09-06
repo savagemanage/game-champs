@@ -5,8 +5,8 @@ Phaser 3 battle canvas, bilingual (한국어 / English), deployed to GitHub Page
 affiliated with Riot Games** — all champion names, art, and lore are original and inspired
 only by generic MOBA archetypes.
 
-- **Live site:** https://savagemanage.github.io/game-champs/
-- **Repo:** https://github.com/savagemanage/game-champs (default branch: `main`)
+- **Live site:** https://savagemanage.github.io/open-games/champs/
+- **Repo:** https://github.com/savagemanage/open-games (default branch: `main`)
 
 ---
 
@@ -60,7 +60,7 @@ npm run typecheck      # tsc --noEmit type-check only
 
 ## Deployment (GitHub Pages)
 
-- Served from the **`/game-champs/`** subpath (project page); `base: '/game-champs/'` in
+- Served from the **`/open-games/champs/`** subpath (project page); `base: '/open-games/champs/'` in
   `vite.config.ts`. Do not hardcode the base — use Vite asset handling.
 - `.github/workflows/deploy.yml` builds on push to `main` and deploys `dist/` via
   GitHub Actions (Pages **Source: GitHub Actions**). CI/workflow files must go through a
@@ -127,7 +127,7 @@ src/
 
 - `npm run typecheck` — clean
 - `npm run test -- --run` — **305 tests / 26 files** pass
-- `npm run build` — succeeds; `dist/index.html` references assets under `/game-champs/`
+- `npm run build` — succeeds; `dist/index.html` references assets under `/open-games/champs/`
 - i18n: `ko.json` / `en.json` at **229 identical keys**
 - Deploy workflow green on `main`.
 - Visual checks are done with the demo-recorder skill (headless Chromium): build, run the

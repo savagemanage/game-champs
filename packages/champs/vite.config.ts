@@ -5,7 +5,7 @@ import react from '@vitejs/plugin-react';
 // Served from a per-game subpath under the single game-champs Pages site in
 // production; local dev serves from the root.
 export default defineConfig(({ command }) => ({
-  base: command === 'build' ? '/game-champs/champs/' : '/',
+  base: command === 'build' ? '/open-games/champs/' : '/',
   plugins: [react()],
   test: {
     environment: 'jsdom',

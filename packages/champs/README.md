@@ -192,12 +192,12 @@ npm run typecheck      # tsc --noEmit type-check only
 
 ## GitHub Pages deployment
 
-This app is served from the **`/game-champs/`** subpath because it is a GitHub **project
+This app is served from the **`/open-games/champs/`** subpath because it is a GitHub **project
 page**. That subpath is configured in `vite.config.ts`:
 
 ```ts
 export default defineConfig({
-  base: '/game-champs/',
+  base: '/open-games/champs/',
   // ...
 });
 ```
@@ -208,7 +208,7 @@ under **Settings → Pages → Build and deployment → Source: GitHub Actions**
 available at:
 
 ```
-https://savagemanage.github.io/game-champs/
+https://savagemanage.github.io/open-games/champs/
 ```
 
 ---

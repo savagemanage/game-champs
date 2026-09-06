@@ -1,4 +1,4 @@
-# game-champs
+# open-games
 
 A **monorepo of five browser games**, built with TypeScript + Vite and deployed together to a
 single GitHub Pages site. The repo uses **npm workspaces**: one root `npm install`, one root
@@ -103,22 +103,22 @@ There are also `dev:<game>` shortcuts at the root (e.g. `npm run dev:whiteout`) 
 All five games deploy to a **single GitHub Pages site** at:
 
 ```
-https://savagemanage.github.io/game-champs/
+https://savagemanage.github.io/open-games/
 ```
 
 The Pages workflow at `.github/workflows/deploy.yml` builds each game and a root landing page,
 then publishes them together. Each game is served under its own subpath, matching the
-`base` configured in that game's `vite.config.ts` (production base `/game-champs/<g>/`, dev base
+`base` configured in that game's `vite.config.ts` (production base `/open-games/<g>/`, dev base
 `/`):
 
 | URL | Source |
 | --- | --- |
-| `https://savagemanage.github.io/game-champs/` | root landing page (`site/index.html`) |
-| `https://savagemanage.github.io/game-champs/champs/` | `packages/champs` |
-| `https://savagemanage.github.io/game-champs/whiteout/` | `packages/whiteout` |
-| `https://savagemanage.github.io/game-champs/lastwar/` | `packages/lastwar` |
-| `https://savagemanage.github.io/game-champs/kingshot/` | `packages/kingshot` |
-| `https://savagemanage.github.io/game-champs/wirework/` | `packages/wirework` |
+| `https://savagemanage.github.io/open-games/` | root landing page (`site/index.html`) |
+| `https://savagemanage.github.io/open-games/champs/` | `packages/champs` |
+| `https://savagemanage.github.io/open-games/whiteout/` | `packages/whiteout` |
+| `https://savagemanage.github.io/open-games/lastwar/` | `packages/lastwar` |
+| `https://savagemanage.github.io/open-games/kingshot/` | `packages/kingshot` |
+| `https://savagemanage.github.io/open-games/wirework/` | `packages/wirework` |
 
 Enable Pages once under **Settings → Pages → Build and deployment → Source: GitHub Actions**.
 

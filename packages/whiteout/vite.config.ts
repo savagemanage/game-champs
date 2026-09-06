@@ -4,7 +4,7 @@ import { defineConfig } from 'vite';
 // so production assets must resolve under the '/game-whiteout/' base path.
 // During local dev we use '/' so the Vite dev server serves from the root.
 export default defineConfig(({ command }) => ({
-  base: command === 'build' ? '/game-champs/whiteout/' : '/',
+  base: command === 'build' ? '/open-games/whiteout/' : '/',
   build: {
     outDir: 'dist',
     assetsDir: 'assets',
