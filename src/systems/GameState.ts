@@ -50,6 +50,8 @@ export class GameState {
   private _troopsTrained: number;
   /** Cumulative battles won over the game's lifetime (a quest counter). */
   private _battlesWon: number;
+  /** Whether the first-run onboarding welcome card has already been shown. */
+  private _onboardingSeen: boolean;
 
   private readonly saver: SaveManager;
   private msSinceSave = 0;
@@ -72,6 +74,7 @@ export class GameState {
     this._waveCleared = result.snapshot.waveCleared;
     this._troopsTrained = result.snapshot.troopsTrained;
     this._battlesWon = result.snapshot.battlesWon;
+    this._onboardingSeen = result.snapshot.onboardingSeen;
     // Seed the derived quest statuses from the loaded progress immediately so
     // the UI has correct locked/active/completable state before the first tick.
     this.quests.refresh(this.questProgress());
@@ -130,6 +133,40 @@ export class GameState {
   recordBattleWon(): void {
     this._battlesWon += 1;
     this.quests.refresh(this.questProgress());
+  }
+
+  /** Whether the first-run onboarding welcome card has already been shown. */
+  get onboardingSeen(): boolean {
+    return this._onboardingSeen;
+  }
+
+  /**
+   * Whether the first-run onboarding welcome card should be shown right now:
+   * true only for a brand-new game (no save loaded) that has not yet seen it.
+   *
+   * The once-only decision lives HERE (pure, testable) rather than in the
+   * Phaser scene: the scene calls this on every Town entry, but because the
+   * flag flips to `true` the moment the card is shown (see
+   * {@link markOnboardingSeen}), it returns `true` at most once for the life of
+   * a game — including across returning to Town from Settings/Battle in the
+   * SAME session, where the in-memory flag already blocks a repeat before any
+   * async save has landed. A returning player (loaded save) is treated as
+   * already onboarded and is never shown it.
+   */
+  shouldShowOnboarding(): boolean {
+    return !this.loaded && !this._onboardingSeen;
+  }
+
+  /**
+   * Mark the onboarding welcome as seen: flips the in-memory flag IMMEDIATELY
+   * (so a re-entry to Town in the same session never shows it again, even
+   * before the save completes) and persists so it never shows again across
+   * sessions. Idempotent.
+   */
+  markOnboardingSeen(now: number = Date.now()): void {
+    if (this._onboardingSeen) return;
+    this._onboardingSeen = true;
+    this.save(now);
   }
 
   /**
@@ -251,6 +288,7 @@ export class GameState {
       waveCleared: this._waveCleared,
       troopsTrained: this._troopsTrained,
       battlesWon: this._battlesWon,
+      onboardingSeen: this._onboardingSeen,
     };
   }
 

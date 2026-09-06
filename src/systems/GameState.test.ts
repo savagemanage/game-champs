@@ -335,3 +335,62 @@ describe('GameState quest counters through the real paths', () => {
     expect(state.quests.status('repel_the_raiders')).toBe('claimed');
   });
 });
+
+/**
+ * First-run onboarding "show once, ever" logic.
+ *
+ * The once-only decision lives in GameState (pure, testable) rather than the
+ * Phaser TownScene: the scene calls shouldShowOnboarding() on EVERY Town entry,
+ * so the flag must flip the moment the welcome is shown and never return true
+ * again — including after returning to Town from Settings/Battle in the same
+ * session, and across a reload.
+ */
+describe('GameState first-run onboarding', () => {
+  const NOW = 2_000_000;
+  const fresh = (): GameState => GameState.create(memoryStorage(), NOW);
+
+  it('shows the welcome exactly once on a brand-new game', () => {
+    const state = fresh();
+    expect(state.loaded).toBe(false);
+    // First Town entry: should show.
+    expect(state.shouldShowOnboarding()).toBe(true);
+    // The scene marks it seen when it shows the card.
+    state.markOnboardingSeen(NOW);
+    // Any subsequent Town entry in the SAME session: never again.
+    expect(state.shouldShowOnboarding()).toBe(false);
+    expect(state.shouldShowOnboarding()).toBe(false);
+    expect(state.onboardingSeen).toBe(true);
+  });
+
+  it('does not show the welcome to a returning player (loaded save)', () => {
+    // Persist a fresh game (which marks onboarding seen), then reload from the
+    // same storage: the reloaded state is a returning player and must not show.
+    const storage = memoryStorage();
+    const first = GameState.create(storage, NOW);
+    first.markOnboardingSeen(NOW);
+    const returning = GameState.create(storage, NOW + 1000);
+    expect(returning.loaded).toBe(true);
+    expect(returning.shouldShowOnboarding()).toBe(false);
+    expect(returning.onboardingSeen).toBe(true);
+  });
+
+  it('never shows the welcome again after a reload even if never dismissed', () => {
+    // A fresh game persists on markOnboardingSeen; but even a fresh game that is
+    // simply saved (e.g. autosave) is a "loaded" save on the next launch, so
+    // shouldShowOnboarding is false regardless of the persisted flag.
+    const storage = memoryStorage();
+    const first = GameState.create(storage, NOW);
+    expect(first.shouldShowOnboarding()).toBe(true);
+    first.save(NOW); // autosave, onboarding not yet marked
+    const relaunch = GameState.create(storage, NOW + 1000);
+    expect(relaunch.loaded).toBe(true);
+    expect(relaunch.shouldShowOnboarding()).toBe(false);
+  });
+
+  it('markOnboardingSeen is idempotent', () => {
+    const state = fresh();
+    state.markOnboardingSeen(NOW);
+    expect(() => state.markOnboardingSeen(NOW)).not.toThrow();
+    expect(state.onboardingSeen).toBe(true);
+  });
+});

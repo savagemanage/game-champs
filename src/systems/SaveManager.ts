@@ -33,11 +33,17 @@ import { WarmthSystem } from './WarmthSystem';
  *     fully-WARM keep when the field is missing/malformed, so old saves migrate
  *     forward to a warm start rather than a frozen one, exactly like the
  *     earlier migrations.
+ * v6: adds the `onboardingSeen` flag (whether the first-run welcome card has
+ *     been shown). A v1..v5 save (no flag) still loads: because that save
+ *     already EXISTS, its owner is a returning player who has already seen the
+ *     game, so deserialize() migrates a missing flag to `true` and they are
+ *     never shown the welcome. A brand-new game (freshGame) starts `false`, so
+ *     the welcome is shown exactly once.
  */
-export const SAVE_VERSION = 5;
+export const SAVE_VERSION = 6;
 
 /** Save versions this build can load and migrate forward from. */
-export const SUPPORTED_SAVE_VERSIONS: readonly number[] = [1, 2, 3, 4, 5];
+export const SUPPORTED_SAVE_VERSIONS: readonly number[] = [1, 2, 3, 4, 5, 6];
 
 /** Default localStorage key for the single save slot. */
 export const SAVE_KEY = 'kingdom-rise:save';
@@ -67,6 +73,8 @@ export interface GameSnapshot {
   troopsTrained: number;
   /** Cumulative battles won over the game's lifetime (a quest counter). */
   battlesWon: number;
+  /** Whether the first-run onboarding welcome card has already been shown. */
+  onboardingSeen: boolean;
 }
 
 /** Extra info returned from a load so the caller can surface offline gains. */
@@ -109,6 +117,7 @@ export class SaveManager {
       troopsTrained: Math.max(0, Math.floor(snapshot.troopsTrained)),
       battlesWon: Math.max(0, Math.floor(snapshot.battlesWon)),
       warmth: snapshot.warmth.toJSON(),
+      onboardingSeen: snapshot.onboardingSeen,
       lastSeenAt: now,
     };
   }
@@ -144,6 +153,11 @@ export class SaveManager {
     const warmth = WarmthSystem.fromJSON(state.warmth);
     const troopsTrained = Math.max(0, Math.floor(state.troopsTrained ?? 0));
     const battlesWon = Math.max(0, Math.floor(state.battlesWon ?? 0));
+    // v1..v5 saves omit `onboardingSeen`. Because this save EXISTS, its owner is
+    // a returning player who has already seen the game, so a missing flag
+    // migrates to `true` (they are never shown the first-run welcome). Only a
+    // brand-new game (freshGame) starts `false`.
+    const onboardingSeen = typeof state.onboardingSeen === 'boolean' ? state.onboardingSeen : true;
 
     // Training that finished while away joins the army. (Trained troops do not
     // produce resources, so this ordering has no bearing on offline gains.)
@@ -224,6 +238,7 @@ export class SaveManager {
         waveCleared: state.waveCleared ?? 0,
         troopsTrained,
         battlesWon,
+        onboardingSeen,
       },
       loaded: true,
       offlineSeconds,
@@ -244,6 +259,7 @@ export class SaveManager {
       waveCleared: 0,
       troopsTrained: 0,
       battlesWon: 0,
+      onboardingSeen: false,
     };
   }
 

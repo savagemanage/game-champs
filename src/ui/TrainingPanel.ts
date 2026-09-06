@@ -103,22 +103,28 @@ export class TrainingPanel {
       .setOrigin(0, 0);
     this.root.add(this.queueText);
 
-    // Prominent locked banner shown over the roster when the Barracks is not
-    // built yet, explaining the prerequisite instead of leaving the Train
-    // button silently disabled. Centered near the panel body.
+    const closeY = cy + panelH / 2 - 30;
+    // Prominent locked banner explaining the Barracks prerequisite. It sits in
+    // the band BELOW the roster rows (where the queue readout would be) and
+    // clearly ABOVE the Close button, so it never overlaps the per-troop labels
+    // nor the Close button. A single-line 16px string (wide wrap so it does not
+    // wrap) keeps its footprint small enough to clear the crowded lower band.
+    // While locked the per-row controls + queue readout are hidden (see
+    // refresh), so this banner is the only text in the lower band.
+    const bannerY = closeY - 42;
     this.lockedText = this.scene.add
-      .text(cx, cy, '', textStyle(20, {
+      .text(cx, bannerY, '', textStyle(16, {
         color: PALETTE.DANGER_CSS,
         fontStyle: 'bold',
         align: 'center',
-        wordWrap: { width: panelW - 120 },
+        wordWrap: { width: panelW - 40 },
       }))
       .setOrigin(0.5)
       .setDepth(1)
       .setVisible(false);
     this.root.add(this.lockedText);
 
-    const close = Menu.button(this.scene, cx, cy + panelH / 2 - 30, tr('common.close'), () => this.setVisible(false), {
+    const close = Menu.button(this.scene, cx, closeY, tr('common.close'), () => this.setVisible(false), {
       width: 180,
     });
     this.root.add(close.container);
@@ -222,28 +228,36 @@ export class TrainingPanel {
     const hasBarracks = this.state.buildings.hasBarracks;
     const army = this.state.training.army;
 
-    // Prominent locked banner while the Barracks is missing: explains the
-    // prerequisite instead of leaving the Train button silently disabled.
+    // Prominent locked banner while the Barracks is missing: it is the ONE
+    // place the full "build a Barracks first…" explanation appears. When locked
+    // we also HIDE the per-row +/-/count/Train controls and the queue readout
+    // so the long hint can never overlap them — the panel then reads cleanly as
+    // "here is the roster, and here is why you cannot train yet".
     this.lockedText.setVisible(!hasBarracks);
     if (!hasBarracks) this.lockedText.setText(tr('training.noBarracksHint'));
 
     for (const row of this.rows) {
       row.armyLabel.setText(tr('training.army', { count: army[row.troop] }));
 
-      // When the Barracks is not built, keep every control disabled and show
-      // the prerequisite hint on the Train button; the prominent banner above
-      // carries the full explanation.
+      // When the Barracks is not built, hide the interactive controls entirely
+      // (rather than disabling them under overflowing hint text). The single
+      // centered banner carries the whole explanation; the Train button keeps
+      // its SHORT normal label so nothing overflows across the adjacent rows.
       if (!hasBarracks) {
-        row.minusButton.setEnabled(false);
-        row.plusButton.setEnabled(false);
+        row.minusButton.container.setVisible(false);
+        row.plusButton.container.setVisible(false);
+        row.countLabel.setVisible(false);
+        row.trainButton.container.setVisible(false);
         row.trainButton.setEnabled(false);
-        row.trainButton.setText(tr('training.noBarracksHint'));
+        row.trainButton.setText(tr('training.train'));
         continue;
       }
 
-      // Barracks exists: the +/- selectors are usable, and the Train button is
-      // enabled only when the batch is affordable. When it is not, explain the
-      // disabled state as a distinct "not enough resources" reason.
+      // Barracks exists: reveal the selectors + Train button and update state.
+      row.minusButton.container.setVisible(true);
+      row.plusButton.container.setVisible(true);
+      row.countLabel.setVisible(true);
+      row.trainButton.container.setVisible(true);
       row.minusButton.setEnabled(true);
       row.plusButton.setEnabled(true);
       const affordable = this.affordable(row);
@@ -251,10 +265,11 @@ export class TrainingPanel {
       row.trainButton.setText(affordable ? tr('training.trainCount', { count: row.count }) : tr('training.notEnough'));
     }
 
-    // Queue readout.
+    // Queue readout — hidden while locked (the banner explains the state and a
+    // locked player has no queue), shown once the Barracks exists.
     const orders = this.state.training.orders;
     if (!hasBarracks) {
-      this.queueText.setText(tr('training.noBarracks'));
+      this.queueText.setText('');
     } else if (orders.length === 0) {
       this.queueText.setText(`${tr('training.queue')}: ${tr('training.queueEmpty')}`);
     } else {

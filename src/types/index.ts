@@ -183,6 +183,14 @@ export interface GameState {
    * old saves forward without penalty. Persisted as a plain number.
    */
   warmth?: number;
+  /**
+   * Whether the first-run onboarding welcome card has already been shown.
+   * OPTIONAL for backward compatibility: saves predating this flag omit it. The
+   * save layer treats a missing value on an EXISTING save as `true` (a returning
+   * player has already seen the game, so they are never shown the welcome), while
+   * a brand-new game starts `false` so the welcome is shown exactly once.
+   */
+  onboardingSeen?: boolean;
   /** Epoch ms of the last simulation update (drives offline reconciliation). */
   lastSeenAt: number;
 }

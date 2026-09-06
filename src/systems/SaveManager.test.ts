@@ -39,6 +39,7 @@ describe('SaveManager', () => {
       waveCleared: 5,
       troopsTrained: 0,
       battlesWon: 0,
+      onboardingSeen: false,
     };
   }
 
@@ -415,6 +416,7 @@ describe('SaveManager', () => {
         waveCleared: 0,
         troopsTrained: 0,
         battlesWon: 0,
+        onboardingSeen: false,
       },
       t0,
     );
@@ -499,5 +501,52 @@ describe('SaveManager', () => {
     mgr.save(snapshot(), 0);
     mgr.clear();
     expect(mgr.load(0).loaded).toBe(false);
+  });
+
+  it('current SAVE_VERSION is 6 (onboardingSeen field)', () => {
+    expect(SAVE_VERSION).toBe(6);
+  });
+
+  it('a fresh game starts with onboardingSeen=false so the welcome shows once', () => {
+    const mgr = new SaveManager(memoryStorage());
+    const fresh = mgr.load(0);
+    expect(fresh.loaded).toBe(false);
+    expect(fresh.snapshot.onboardingSeen).toBe(false);
+  });
+
+  it('serialize round-trips the onboardingSeen flag', () => {
+    const snap = snapshot();
+    snap.onboardingSeen = true;
+    const state = SaveManager.serialize(snap, 0);
+    expect(state.onboardingSeen).toBe(true);
+    expect(state.version).toBe(6);
+  });
+
+  it('migrates an old save (no onboardingSeen) to onboardingSeen=true (returning player is never re-shown the welcome)', () => {
+    // A save that predates the flag belongs to a returning player who has
+    // already seen the game, so a missing flag must migrate to `true`.
+    const storage = memoryStorage();
+    const v5 = {
+      version: 5,
+      resources: { food: 50, wood: 50, stone: 50, gold: 50 },
+      buildings: [{ kind: 'town_center', level: 2, upgradeEndsAt: null }],
+      army: { spearman: 1, archer: 0, knight: 0 },
+      trainingQueue: [],
+      waveCleared: 1,
+      lastSeenAt: 0,
+      // no `onboardingSeen` key
+    };
+    storage.setItem('kingdom-rise:save', JSON.stringify(v5));
+    const loaded = new SaveManager(storage).load(0);
+    expect(loaded.loaded).toBe(true);
+    expect(loaded.snapshot.onboardingSeen).toBe(true);
+  });
+
+  it('preserves an explicit onboardingSeen=false on a versioned save', () => {
+    const storage = memoryStorage();
+    const state = SaveManager.serialize(snapshot(), 0); // onboardingSeen=false
+    storage.setItem('kingdom-rise:save', JSON.stringify(state));
+    const loaded = new SaveManager(storage).load(0);
+    expect(loaded.snapshot.onboardingSeen).toBe(false);
   });
 });

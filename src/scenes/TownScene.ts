@@ -142,10 +142,14 @@ export class TownScene extends Phaser.Scene {
 
     // Surface offline gains once, if any were credited on load; on a brand-new
     // kingdom, show a one-time onboarding hint instead.
-    if (this.state.loaded) {
-      this.maybeShowOfflineGains();
-    } else {
+    if (this.state.shouldShowOnboarding()) {
+      // Show the first-run welcome exactly once, ever. Marking it seen here
+      // (in memory + persisted) means returning to Town from Settings/Battle in
+      // this same session — or any later session — never shows it again.
+      this.state.markOnboardingSeen();
       this.showOnboarding();
+    } else {
+      this.maybeShowOfflineGains();
     }
 
     // Persist on leaving the tab / closing.
