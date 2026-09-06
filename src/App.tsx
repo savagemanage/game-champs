@@ -84,7 +84,25 @@ export default function App() {
           title={t('settings.open')}
           onClick={() => setSettingsOpen(true)}
         >
-          <span aria-hidden="true">{'\u2699'}</span>
+          {/* Inline gear icon so the control renders identically regardless of
+             which webfonts load. Uses currentColor to inherit the button's
+             gold color and hover state. */}
+          <svg
+            className="app-controls__gear"
+            viewBox="0 0 24 24"
+            width="20"
+            height="20"
+            aria-hidden="true"
+            focusable="false"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.75"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <circle cx="12" cy="12" r="3.25" />
+            <path d="M12 2.5v3M12 18.5v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M2.5 12h3M18.5 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12" />
+          </svg>
         </button>
       </div>
 
