@@ -69,7 +69,10 @@ export class TrainingPanel {
     const cx = CANVAS.WIDTH / 2;
     const cy = CANVAS.HEIGHT / 2;
     const panelW = 620;
-    const panelH = 440;
+    // Height scales with the troop roster so every row (plus the queue readout
+    // and close button) fits legibly. Header + rows + a queue/footer band.
+    const rowStep = 70;
+    const panelH = 150 + TROOP_ORDER.length * rowStep;
 
     // Dim backdrop that also swallows clicks behind the panel (closes it).
     const backdrop = this.scene.add
@@ -88,7 +91,6 @@ export class TrainingPanel {
 
     const left = cx - panelW / 2 + 40;
     let y = cy - panelH / 2 + 84;
-    const rowStep = 78;
 
     for (const troop of TROOP_ORDER) {
       this.buildTroopRow(troop, left, y, panelW - 80);

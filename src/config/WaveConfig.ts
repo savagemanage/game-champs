@@ -51,6 +51,14 @@ export function waveComposition(n: number): WaveEntry[] {
     entries.push({ kind: 'ram', count: rams });
   }
 
+  // Riders: fast raider-cavalry from wave 7, one more roughly every two waves.
+  // Their cavalry-role exercises the extended counter cycle (spearman/knight
+  // counter them, off-counter defences bleed) in real late-game battles.
+  if (wave >= 7) {
+    const riders = 1 + Math.floor((wave - 7) / 2);
+    entries.push({ kind: 'rider', count: riders });
+  }
+
   return entries;
 }
 

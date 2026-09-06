@@ -51,7 +51,16 @@ export interface BattleTimeline {
 }
 
 function cloneArmy(a: Army): Army {
-  return { spearman: a.spearman ?? 0, archer: a.archer ?? 0, knight: a.knight ?? 0 };
+  const out = {} as Army;
+  for (const k of TROOP_ORDER) out[k] = a[k] ?? 0;
+  return out;
+}
+
+/** A fresh all-zero {@link Army} built from {@link TROOP_ORDER}. */
+function zeroArmy(): Army {
+  const out = {} as Army;
+  for (const k of TROOP_ORDER) out[k] = 0;
+  return out;
 }
 
 function totalArmy(a: Army): number {
@@ -121,7 +130,7 @@ export function buildTimeline(army: Army, result: CombatResult, steps = 8): Batt
 
   const timelineSteps: TimelineStep[] = [];
   for (let i = 1; i <= stepCount; i++) {
-    const friendly: Army = { spearman: 0, archer: 0, knight: 0 };
+    const friendly: Army = zeroArmy();
     for (const k of TROOP_ORDER) {
       friendly[k] = drainAt(startFriendly[k] ?? 0, endFriendly[k] ?? 0, i, stepCount);
     }

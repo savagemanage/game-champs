@@ -12,7 +12,14 @@ import type { Army } from '../types';
  * sequence must be monotonic, and the enemy side must end at zero on a win.
  */
 describe('CasualtyTimeline', () => {
-  const army = (a: Partial<Army>): Army => ({ spearman: 0, archer: 0, knight: 0, ...a });
+  const army = (a: Partial<Army>): Army => ({
+    spearman: 0,
+    archer: 0,
+    knight: 0,
+    cavalry: 0,
+    siege: 0,
+    ...a,
+  });
 
   const startEnemyTotal = (wave: number): number =>
     waveComposition(wave).reduce((s, e) => s + e.count, 0);

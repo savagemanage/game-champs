@@ -123,8 +123,8 @@ export class CombatSystem {
     const armyPower = CombatSystem.effectiveArmyPower(army, wave);
     const wavePower = CombatSystem.wavePower(wave);
 
-    const casualties: Army = { spearman: 0, archer: 0, knight: 0 };
-    const survivors: Army = { spearman: 0, archer: 0, knight: 0 };
+    const casualties = emptyArmy();
+    const survivors = emptyArmy();
 
     const win = armyPower >= wavePower && armyPower > 0;
 
@@ -178,6 +178,17 @@ export class CombatSystem {
 function troopUnitPower(kind: TroopKind): number {
   const s = troopDef(kind).stats;
   return s.attack * s.attackSpeed + s.hp * 0.25;
+}
+
+/**
+ * A fresh, all-zero {@link Army}, built from {@link TROOP_ORDER} so every troop
+ * kind is present. Keeping this derived from the canonical order means new
+ * troop kinds never drift out of sync with the survivor/casualty bundles.
+ */
+function emptyArmy(): Army {
+  const out = {} as Army;
+  for (const kind of TROOP_ORDER) out[kind] = 0;
+  return out;
 }
 
 // Re-export for callers that want the enemy stat table alongside combat logic.

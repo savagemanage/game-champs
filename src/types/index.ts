@@ -30,14 +30,28 @@ export type BuildingKind =
 /** Producer buildings map to the single resource they generate. */
 export type ProducerKind = Exclude<BuildingKind, 'town_center' | 'barracks'>;
 
-/** The trainable troop kinds. */
-export type TroopKind = 'spearman' | 'archer' | 'knight';
+/**
+ * The trainable troop kinds. Five roles form a soft rock-paper-scissors cycle
+ * (see TroopConfig.TROOP_COUNTER):
+ *   - spearman: light infantry (anti-cavalry pikes)
+ *   - archer:   ranged skirmisher
+ *   - knight:   heavy cavalry
+ *   - cavalry:  fast flanker (runs down archers/ranged)
+ *   - siege:    slow anti-armour engine (crushes heavy units)
+ */
+export type TroopKind = 'spearman' | 'archer' | 'knight' | 'cavalry' | 'siege';
 
 /** A standing army: a count for every troop kind. */
 export type Army = Record<TroopKind, number>;
 
-/** The enemy raider kinds faced in battle. */
-export type EnemyKind = 'raider' | 'brute' | 'ram';
+/**
+ * The enemy raider kinds faced in battle:
+ *   - raider: light, fast skirmisher (spearman-role)
+ *   - brute:  durable heavy infantry (knight-role)
+ *   - ram:    slow, armored siege engine (siege-role)
+ *   - rider:  fast raider-cavalry appearing at higher waves (cavalry-role)
+ */
+export type EnemyKind = 'raider' | 'brute' | 'ram' | 'rider';
 
 /** A combatant's shared stat block (troops and enemies both use this shape). */
 export interface UnitStats {

@@ -104,11 +104,15 @@ export const STRINGS = {
   'troop.spearman': { en: 'Spearman', ko: '창병' },
   'troop.archer': { en: 'Archer', ko: '궁병' },
   'troop.knight': { en: 'Knight', ko: '기사' },
+  'troop.cavalry': { en: 'Cavalry', ko: '기병' },
+  'troop.siege': { en: 'Siege Engine', ko: '공성 병기' },
 
   // Troop descriptions.
   'troop.spearman.desc': { en: 'Cheap, sturdy front-line infantry.', ko: '저렴하고 튼튼한 최전선 보병.' },
   'troop.archer.desc': { en: 'Ranged damage from behind the line.', ko: '전열 뒤에서 원거리 피해를 준다.' },
   'troop.knight.desc': { en: 'Elite heavy cavalry with high health.', ko: '높은 체력을 지닌 정예 중기병.' },
+  'troop.cavalry.desc': { en: 'Fast flanker that runs down archers and siege.', ko: '궁병과 공성 병기를 덮치는 빠른 측면 기동병.' },
+  'troop.siege.desc': { en: 'Slow anti-armour engine that crushes heavy units.', ko: '중장갑 유닛을 짓밟는 느린 대장갑 공성 병기.' },
 
   // Training UI.
   'training.title': { en: 'TRAINING', ko: '병력 훈련' },

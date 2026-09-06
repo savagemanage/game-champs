@@ -39,11 +39,14 @@ export const TextureKeys = {
   TroopSpearman: 'u_spearman',
   TroopArcher: 'u_archer',
   TroopKnight: 'u_knight',
+  TroopCavalry: 'u_cavalry',
+  TroopSiege: 'u_siege',
 
   // Enemy raider sprites (battle).
   EnemyRaider: 'e_raider',
   EnemyBrute: 'e_brute',
   EnemyRam: 'e_ram',
+  EnemyRider: 'e_rider',
 
   // Resource icons (packed 16x16 sheet: food, wood, stone, gold).
   ResourceIcons: 'ui_resource_icons',
@@ -110,9 +113,12 @@ export const SHEETS: readonly SheetAsset[] = [
   { key: TextureKeys.TroopSpearman, url: 'assets/sprites/troop_spearman.png', frame: { frameWidth: 24, frameHeight: 28 } },
   { key: TextureKeys.TroopArcher, url: 'assets/sprites/troop_archer.png', frame: { frameWidth: 24, frameHeight: 28 } },
   { key: TextureKeys.TroopKnight, url: 'assets/sprites/troop_knight.png', frame: { frameWidth: 24, frameHeight: 28 } },
+  { key: TextureKeys.TroopCavalry, url: 'assets/sprites/troop_cavalry.png', frame: { frameWidth: 32, frameHeight: 32 } },
+  { key: TextureKeys.TroopSiege, url: 'assets/sprites/troop_siege.png', frame: { frameWidth: 40, frameHeight: 32 } },
   { key: TextureKeys.EnemyRaider, url: 'assets/sprites/enemy_raider.png', frame: { frameWidth: 24, frameHeight: 28 } },
   { key: TextureKeys.EnemyBrute, url: 'assets/sprites/enemy_brute.png', frame: { frameWidth: 32, frameHeight: 36 } },
   { key: TextureKeys.EnemyRam, url: 'assets/sprites/enemy_ram.png', frame: { frameWidth: 40, frameHeight: 32 } },
+  { key: TextureKeys.EnemyRider, url: 'assets/sprites/enemy_rider.png', frame: { frameWidth: 32, frameHeight: 32 } },
   { key: TextureKeys.ResourceIcons, url: 'assets/ui/resource_icons.png', frame: { frameWidth: 16, frameHeight: 16 } },
   { key: TextureKeys.FxSpark, url: 'assets/fx/spark.png', frame: { frameWidth: 16, frameHeight: 16 } },
   { key: TextureKeys.FxDust, url: 'assets/fx/dust.png', frame: { frameWidth: 16, frameHeight: 16 } },
@@ -158,6 +164,8 @@ export const TROOP_TEXTURE_BY_KIND: Record<string, TextureKey> = {
   spearman: TextureKeys.TroopSpearman,
   archer: TextureKeys.TroopArcher,
   knight: TextureKeys.TroopKnight,
+  cavalry: TextureKeys.TroopCavalry,
+  siege: TextureKeys.TroopSiege,
 };
 
 /** Maps a resource kind to its frame index in the packed resource-icon sheet. */

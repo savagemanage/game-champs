@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { CombatSystem } from './CombatSystem';
-import { waveReward } from '../config/WaveConfig';
+import { waveComposition, waveReward } from '../config/WaveConfig';
 import type { Army } from '../types';
 
 /**
@@ -9,7 +9,14 @@ import type { Army } from '../types';
  * by resolving the same inputs twice.
  */
 describe('CombatSystem', () => {
-  const army = (a: Partial<Army>): Army => ({ spearman: 0, archer: 0, knight: 0, ...a });
+  const army = (a: Partial<Army>): Army => ({
+    spearman: 0,
+    archer: 0,
+    knight: 0,
+    cavalry: 0,
+    siege: 0,
+    ...a,
+  });
 
   it('is deterministic: same inputs give identical results', () => {
     const a = army({ knight: 10 });
@@ -73,49 +80,84 @@ describe('CombatSystem', () => {
   });
 
   it('army composition matters: the countering troop is more effective', () => {
-    // Wave 1 is all raiders (light/fast, spearman-role). Archers counter
-    // spearman-role (1.5x); knights are weak against it (0.75x). With equal
-    // COUNTS, the archer stack must field more effective power than the knight
-    // stack against this wave, even though a lone knight has more raw power.
+    // Wave 1 is all raiders (light/fast, spearman-role). Under the extended
+    // counter cycle, KNIGHTS counter spearman-role (1.5x) while CAVALRY are
+    // weak against it (0.75x). With equal COUNTS the knight stack must field
+    // more effective power than the cavalry stack against this wave.
     const wave = 1;
-    const counters = army({ archer: 20 });
-    const offCounter = army({ knight: 20 });
+    const counters = army({ knight: 20 });
+    const offCounter = army({ cavalry: 20 });
 
     const counterEff = CombatSystem.effectiveArmyPower(counters, wave);
     const offEff = CombatSystem.effectiveArmyPower(offCounter, wave);
-    // The counter multiplier genuinely feeds the resolver.
-    expect(counterEff).toBeGreaterThan(CombatSystem.armyPower(counters) * 0.99);
+    // The counter multiplier genuinely feeds the resolver: the countering stack
+    // exceeds its raw power, the off-counter stack falls short of its own.
+    expect(counterEff).toBeGreaterThan(CombatSystem.armyPower(counters));
     expect(offEff).toBeLessThan(CombatSystem.armyPower(offCounter));
 
-    // Same raw power, better matchup -> the resolver sees the difference. Build
-    // two armies with (near) equal RAW power but different composition and show
-    // the counter army wins a wave the off-counter army loses.
-    // 1 knight raw ~= 5 spearmen raw; against a spearman-role wave archers get
-    // the counter bonus, so an archer-heavy mix beats a knight-heavy mix of the
-    // same raw power.
+    // Same-matchup normalized: the counter army converts a higher fraction of
+    // its raw power into effective power than the off-counter army.
     expect(counterEff / CombatSystem.armyPower(counters)).toBeGreaterThan(
       offEff / CombatSystem.armyPower(offCounter),
     );
   });
 
-  it('the counter matrix changes a knife-edge outcome (win vs loss on mix)', () => {
-    // Pick a wave and two equal-RAW-power armies whose only difference is which
-    // troop role they field; the countering one wins where the other loses.
-    const wave = 6; // raiders + brutes + a ram: mixed roles.
-    // Archers counter raiders (spearman-role, the bulk of early waves).
-    // Find the smallest archer count that wins.
-    let archers = 1;
-    while (!CombatSystem.resolve(army({ archer: archers }), wave).win) archers++;
-    const archerRaw = CombatSystem.armyPower(army({ archer: archers }));
+  it('the counter matrix flips a knife-edge outcome (win vs loss on equal raw power)', () => {
+    // Wave 1 is all raiders (spearman-role). Knights counter them (1.5x),
+    // cavalry are weak (0.75x). Build two armies of (near) EQUAL raw power and
+    // show the countering composition wins where the off-counter one loses.
+    const wave = 1;
 
-    // A knight stack of equal raw power should be weaker vs this raider-heavy
-    // wave (knights are 0.75x into raiders), so it does worse (fewer or equal
-    // effective power, and never strictly more).
-    const knightsEqualRaw = Math.round(
-      archerRaw / CombatSystem.armyPower(army({ knight: 1 })),
+    // Smallest knight count whose EFFECTIVE power beats the wave.
+    let knights = 1;
+    while (CombatSystem.effectiveArmyPower(army({ knight: knights }), wave) < CombatSystem.wavePower(wave)) {
+      knights++;
+    }
+    const knightRaw = CombatSystem.armyPower(army({ knight: knights }));
+
+    // A cavalry stack of the SAME raw power (cavalry is cheaper raw power per
+    // unit, so this needs more bodies) - but weak into the wave, so it should
+    // lose the same fight the knights win.
+    const cavalryCount = Math.floor(knightRaw / CombatSystem.armyPower(army({ cavalry: 1 })));
+
+    const knightResult = CombatSystem.resolve(army({ knight: knights }), wave);
+    const cavalryResult = CombatSystem.resolve(army({ cavalry: cavalryCount }), wave);
+
+    // Equal raw power within a modest tolerance (integer unit counts make exact
+    // equality impossible; the point is the matchup, not the rounding).
+    expect(Math.abs(CombatSystem.armyPower(army({ cavalry: cavalryCount })) - knightRaw)).toBeLessThan(
+      knightRaw * 0.25,
     );
-    const archerEff = CombatSystem.effectiveArmyPower(army({ archer: archers }), wave);
-    const knightEff = CombatSystem.effectiveArmyPower(army({ knight: knightsEqualRaw }), wave);
-    expect(archerEff).toBeGreaterThan(knightEff);
+    // The matchup decides it: counter wins, off-counter loses.
+    expect(knightResult.win).toBe(true);
+    expect(cavalryResult.win).toBe(false);
+  });
+
+  it('every troop kind contributes power and appears in survivor/casualty bundles', () => {
+    // Each troop kind, fielded alone, must add positive raw power (proving the
+    // new kinds are wired into the resolver, not silently ignored).
+    for (const kind of ['spearman', 'archer', 'knight', 'cavalry', 'siege'] as const) {
+      expect(CombatSystem.armyPower(army({ [kind]: 5 }))).toBeGreaterThan(0);
+    }
+    // A win result carries a full per-kind survivor/casualty bundle over every
+    // troop kind (built from TROOP_ORDER, so no kind is missing).
+    const result = CombatSystem.resolve(army({ knight: 60, siege: 10 }), 1);
+    expect(result.win).toBe(true);
+    const kinds: (keyof Army)[] = ['spearman', 'archer', 'knight', 'cavalry', 'siege'];
+    for (const kind of kinds) {
+      expect(result.survivors[kind]).toBeDefined();
+      expect(result.casualties[kind]).toBeDefined();
+    }
+  });
+
+  it('the new rider enemy appears at higher waves and is exercised in combat', () => {
+    // Riders (cavalry-role) join from wave 7, so late waves carry them and the
+    // resolver must account for them (a rider-inclusive wave has more power).
+    const early = waveComposition(6);
+    const late = waveComposition(9);
+    expect(early.some((e) => e.kind === 'rider')).toBe(false);
+    expect(late.some((e) => e.kind === 'rider')).toBe(true);
+    // The rider slice adds enemy power, so wave 9 is strictly harder than wave 6.
+    expect(CombatSystem.wavePower(9)).toBeGreaterThan(CombatSystem.wavePower(6));
   });
 });

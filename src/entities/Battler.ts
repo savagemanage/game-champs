@@ -13,6 +13,7 @@ const ENEMY_TEXTURE_BY_KIND: Record<EnemyKind, TextureKey> = {
   raider: TextureKeys.EnemyRaider,
   brute: TextureKeys.EnemyBrute,
   ram: TextureKeys.EnemyRam,
+  rider: TextureKeys.EnemyRider,
 };
 
 /**

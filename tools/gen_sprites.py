@@ -371,6 +371,105 @@ def build_character(name, fw, fh, palette):
     print(f"{name}.png", sheet.size)
 
 
+def draw_horse_rider(img, ox, oy, fw, fh, step, palette):
+    """A mounted rider: a small horse with a soldier on its back. 32x32.
+
+    palette: dict with tunic/tunic_dk (rider), horse/horse_dk colors, and a
+    weapon 'kind' ('lance' for player cavalry, 'saber' for enemy rider).
+    """
+    ground = oy + fh - 1
+    horse = palette.get("horse", (120, 84, 54, 255))
+    horse_dk = palette.get("horse_dk", (86, 58, 36, 255))
+    tunic = palette["tunic"]
+    tunic_dk = palette["tunic_dk"]
+    skin = palette.get("skin", SKIN)
+    kind = palette["kind"]
+    gait = 1 if step == 1 else -1
+    cx = ox + fw // 2
+
+    # horse body
+    body_top = oy + fh - 16
+    rect(img, ox + 6, body_top, ox + fw - 7, oy + fh - 10, horse)
+    rect(img, ox + 6, oy + fh - 10, ox + fw - 7, oy + fh - 10, horse_dk)
+    # neck + head (facing right)
+    rect(img, ox + fw - 10, body_top - 6, ox + fw - 7, body_top + 1, horse)
+    rect(img, ox + fw - 8, body_top - 8, ox + fw - 5, body_top - 5, horse)
+    px(img, ox + fw - 5, body_top - 7, horse_dk)  # muzzle
+    # mane + tail
+    rect(img, ox + fw - 12, body_top - 5, ox + fw - 11, body_top + 1, horse_dk)
+    rect(img, ox + 5, body_top - 2, ox + 6, body_top + 3, horse_dk)  # tail
+    # legs (animate with gait)
+    for i, lx in enumerate((ox + 8, ox + 12, ox + fw - 13, ox + fw - 9)):
+        swing = gait if i % 2 == 0 else -gait
+        rect(img, lx + swing, oy + fh - 10, lx + 1 + swing, ground, horse_dk)
+    # rider torso + head sitting on the back
+    rx = cx - 1
+    rect(img, rx - 3, body_top - 7, rx + 2, body_top - 1, tunic)
+    rect(img, rx + 1, body_top - 7, rx + 2, body_top - 1, tunic_dk)
+    rect(img, rx - 2, body_top - 12, rx + 2, body_top - 7, skin)  # head
+    if kind == "lance":
+        rect(img, rx - 3, body_top - 13, rx + 2, body_top - 12, STEEL)  # helm
+        # couched lance angled forward-right
+        for i in range(10):
+            px(img, rx + 3 + i, body_top - 9 + i // 2, WOOD)
+        rect(img, rx + 12, body_top - 5, rx + 13, body_top - 3, STEEL_HI)  # tip
+    else:  # saber
+        rect(img, rx - 3, body_top - 12, rx + 2, body_top - 11, CLOTH_RED)  # bandana
+        for i in range(6):  # curved saber raised
+            px(img, rx + 3 + i, body_top - 9 - i, STEEL)
+        px(img, rx + 9, body_top - 15, STEEL_HI)
+
+
+def build_rider(name, palette):
+    fw, fh = 32, 32
+    sheet = new(fw * 2, fh)
+    for step in (0, 1):
+        draw_horse_rider(sheet, step * fw, 0, fw, fh, step, palette)
+    sheet = outline_alpha(sheet)
+    save(sheet, os.path.join(SPR, f"{name}.png"))
+    print(f"{name}.png", sheet.size)
+
+
+def draw_siege_engine(img, ox, oy, fw, fh, step):
+    """A wheeled catapult/ballista: a heavy timber frame with a throwing arm on
+    wheels. 40x32. The arm cocks/releases between the two frames."""
+    ground = oy + fh - 1
+    # wheels
+    for wx in (ox + 5, ox + fw - 11):
+        rect(img, wx, ground - 6, wx + 5, ground, WOOD_DK)
+        rect(img, wx + 1, ground - 5, wx + 4, ground - 1, WOOD)
+        px(img, wx + 2, ground - 3, WOOD_DK)
+    # chassis / base beam
+    rect(img, ox + 4, oy + fh - 12, ox + fw - 5, oy + fh - 8, WOOD)
+    rect(img, ox + 4, oy + fh - 12, ox + fw - 5, oy + fh - 12, WOOD_LT)
+    # A-frame uprights
+    rect(img, ox + 12, oy + 10, ox + 14, oy + fh - 12, WOOD_DK)
+    rect(img, ox + fw - 15, oy + 10, ox + fw - 13, oy + fh - 12, WOOD_DK)
+    rect(img, ox + 12, oy + 9, ox + fw - 13, oy + 11, WOOD)  # crossbeam
+    # throwing arm: cocked (step 0) vs released (step 1)
+    pivot_x, pivot_y = ox + 13, oy + 10
+    if step == 0:
+        rect(img, pivot_x - 8, pivot_y + 2, pivot_x + 1, pivot_y + 4, WOOD_LT)  # arm back
+        rect(img, pivot_x - 9, pivot_y + 1, pivot_x - 7, pivot_y + 4, STEEL_DK)  # bucket
+    else:
+        for i in range(8):  # arm swung up-forward
+            px(img, pivot_x + 2 + i, pivot_y - 1 - i, WOOD_LT)
+        rect(img, pivot_x + 9, pivot_y - 9, pivot_x + 11, pivot_y - 7, STEEL_DK)  # payload
+    # iron reinforcement plate
+    rect(img, ox + fw - 12, oy + fh - 18, ox + fw - 7, oy + fh - 13, STEEL_DK)
+    px(img, ox + fw - 11, oy + fh - 17, STEEL_HI)
+
+
+def build_siege():
+    fw, fh = 40, 32
+    sheet = new(fw * 2, fh)
+    for step in (0, 1):
+        draw_siege_engine(sheet, step * fw, 0, fw, fh, step)
+    sheet = outline_alpha(sheet)
+    save(sheet, os.path.join(SPR, "troop_siege.png"))
+    print("troop_siege.png", sheet.size)
+
+
 def draw_ram(img, ox, oy, fw, fh, step):
     """Battering ram on wheels: a log in a wooden frame. 40x32."""
     ground = oy + fh - 1
@@ -407,6 +506,11 @@ def build_all_characters():
     build_character("troop_knight", 24, 28, dict(kind="knight", tunic=STEEL_DK, tunic_dk=(90, 96, 108, 255)))
     build_character("enemy_raider", 24, 28, dict(kind="raider", tunic=CLOTH_RED, tunic_dk=CLOTH_RED_DK, skin=(196, 160, 130, 255)))
     build_character("enemy_brute", 32, 36, dict(kind="brute", tunic=(96, 70, 60, 255), tunic_dk=(70, 50, 44, 255), skin=(170, 140, 116, 255)))
+    # Player cavalry: a kingdom-blue lancer on a chestnut horse.
+    build_rider("troop_cavalry", dict(kind="lance", tunic=TUNIC_BLUE, tunic_dk=TUNIC_BLUE_DK, horse=(120, 84, 54, 255), horse_dk=(86, 58, 36, 255)))
+    # Enemy raider-cavalry: a red-bandana saber rider on a dark horse.
+    build_rider("enemy_rider", dict(kind="saber", tunic=CLOTH_RED, tunic_dk=CLOTH_RED_DK, skin=(196, 160, 130, 255), horse=(92, 70, 58, 255), horse_dk=(64, 48, 40, 255)))
+    build_siege()
     build_ram()
 
 

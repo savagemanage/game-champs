@@ -104,8 +104,35 @@ describe('TrainingQueue', () => {
     const q = new TrainingQueue();
     const store = richStore();
     q.enqueue('archer', 2, store, 100, true);
-    const restored = TrainingQueue.fromJSON(q.toJSON(), { spearman: 5, archer: 0, knight: 1 });
+    const restored = TrainingQueue.fromJSON(q.toJSON(), { spearman: 5, archer: 0, knight: 1, cavalry: 3, siege: 2 });
     expect(restored.length).toBe(1);
-    expect(restored.army).toEqual({ spearman: 5, archer: 0, knight: 1 });
+    expect(restored.army).toEqual({ spearman: 5, archer: 0, knight: 1, cavalry: 3, siege: 2 });
+  });
+
+  it('trains and accumulates the new cavalry and siege troop kinds', () => {
+    const q = new TrainingQueue();
+    const store = richStore();
+    const cavT = troopDef('cavalry').trainTimeMs;
+    const siegeT = troopDef('siege').trainTimeMs;
+
+    expect(q.enqueue('cavalry', 2, store, 0, true).ok).toBe(true);
+    q.advance(2 * cavT);
+    expect(q.army.cavalry).toBe(2);
+
+    expect(q.enqueue('siege', 1, store, 2 * cavT, true).ok).toBe(true);
+    q.advance(2 * cavT + siegeT);
+    expect(q.army.siege).toBe(1);
+  });
+
+  it('a fresh army includes every troop kind defaulted to zero', () => {
+    const q = new TrainingQueue();
+    expect(q.army).toEqual({ spearman: 0, archer: 0, knight: 0, cavalry: 0, siege: 0 });
+  });
+
+  it('backfills missing new kinds when restoring an OLD army (pre-cavalry/siege)', () => {
+    // An old save's army object lacks the new kinds entirely.
+    const oldArmy = { spearman: 4, archer: 2, knight: 1 } as never;
+    const restored = TrainingQueue.fromJSON(undefined, oldArmy);
+    expect(restored.army).toEqual({ spearman: 4, archer: 2, knight: 1, cavalry: 0, siege: 0 });
   });
 });

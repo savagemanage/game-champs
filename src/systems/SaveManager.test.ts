@@ -23,6 +23,11 @@ describe('SaveManager', () => {
     return { resources, buildings, training, waveCleared: 5 };
   }
 
+  /** A full army bundle over every troop kind (new kinds default to zero). */
+  function fullArmy(a: Partial<Record<string, number>>): Record<string, number> {
+    return { spearman: 0, archer: 0, knight: 0, cavalry: 0, siege: 0, ...a };
+  }
+
   it('loads a fresh game when storage is empty', () => {
     const mgr = new SaveManager(memoryStorage());
     const result = mgr.load(0);
@@ -35,7 +40,7 @@ describe('SaveManager', () => {
     const state = SaveManager.serialize(snapshot(), 123456);
     expect(state.version).toBe(SAVE_VERSION);
     expect(state.lastSeenAt).toBe(123456);
-    expect(state.army).toEqual({ spearman: 4, archer: 1, knight: 0 });
+    expect(state.army).toEqual(fullArmy({ spearman: 4, archer: 1 }));
     expect(state.waveCleared).toBe(5);
     // Must be plain-JSON serializable.
     expect(() => JSON.stringify(state)).not.toThrow();
@@ -53,8 +58,32 @@ describe('SaveManager', () => {
     expect(loaded.snapshot.resources.balances).toEqual({ food: 100, wood: 200, stone: 300, gold: 40 });
     expect(loaded.snapshot.buildings.townCenterLevel).toBe(3);
     expect(loaded.snapshot.buildings.level('farm')).toBe(2);
-    expect(loaded.snapshot.training.army).toEqual({ spearman: 4, archer: 1, knight: 0 });
+    expect(loaded.snapshot.training.army).toEqual(fullArmy({ spearman: 4, archer: 1 }));
     expect(loaded.snapshot.waveCleared).toBe(5);
+  });
+
+  it('loads an OLD save whose army lacks the new troop kinds without crashing', () => {
+    // Simulate a save written before cavalry/siege existed: the army object has
+    // only the three original kinds. deserialize/normalizeArmy must backfill
+    // the new kinds to 0 rather than crash or leave them undefined.
+    const storage = memoryStorage();
+    const oldState = {
+      version: SAVE_VERSION,
+      resources: { food: 10, wood: 10, stone: 10, gold: 10 },
+      buildings: [{ kind: 'town_center', level: 1, upgradeEndsAt: null }],
+      army: { spearman: 3, archer: 2, knight: 1 }, // no cavalry / siege
+      trainingQueue: [],
+      waveCleared: 2,
+      lastSeenAt: 0,
+    };
+    storage.setItem('kingdom-rise:save', JSON.stringify(oldState));
+    const mgr = new SaveManager(storage);
+
+    const loaded = mgr.load(0);
+    expect(loaded.loaded).toBe(true);
+    expect(loaded.snapshot.training.army).toEqual(
+      fullArmy({ spearman: 3, archer: 2, knight: 1 }),
+    );
   });
 
   it('applies offline idle gains capped and scaled by efficiency', () => {

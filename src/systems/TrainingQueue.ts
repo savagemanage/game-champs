@@ -1,5 +1,5 @@
 import { TRAINING } from '../config/GameConfig';
-import { troopDef } from '../config/TroopConfig';
+import { TROOP_ORDER, troopDef } from '../config/TroopConfig';
 import type { Army, ResourceCost, TrainingOrder, TroopKind } from '../types';
 import { ResourceStore } from './ResourceStore';
 
@@ -27,7 +27,10 @@ export class TrainingQueue {
 
   constructor(queue?: TrainingOrder[], army?: Partial<Army>) {
     this._queue = queue ? queue.map((o) => ({ ...o })) : [];
-    this._army = { spearman: 0, archer: 0, knight: 0 };
+    // Build the army tally from TROOP_ORDER so every troop kind is present and
+    // new kinds never drift out of sync with this literal.
+    this._army = {} as Army;
+    for (const kind of TROOP_ORDER) this._army[kind] = 0;
     if (army) {
       for (const kind of Object.keys(this._army) as TroopKind[]) {
         this._army[kind] = Math.max(0, Math.floor(army[kind] ?? 0));

@@ -1,5 +1,6 @@
 import { ECONOMY } from '../config/GameConfig';
-import type { Army, GameState, TroopKind } from '../types';
+import { TROOP_ORDER } from '../config/TroopConfig';
+import type { Army, GameState } from '../types';
 import { BuildingSystem } from './BuildingSystem';
 import { ResourceStore } from './ResourceStore';
 import { TrainingQueue } from './TrainingQueue';
@@ -197,13 +198,16 @@ function accumulate(
   }
 }
 
-/** Coerce a possibly-partial army object into a full, non-negative integer Army. */
+/**
+ * Coerce a possibly-partial army object into a full, non-negative integer Army.
+ * Built from {@link TROOP_ORDER} so every troop kind is represented; kinds
+ * missing from an OLD save (saved before a new troop kind existed) default to
+ * 0, so pre-existing saves load without crashing.
+ */
 function normalizeArmy(army: Partial<Army> | undefined): Army {
-  const out: Army = { spearman: 0, archer: 0, knight: 0 };
-  if (army) {
-    for (const kind of Object.keys(out) as TroopKind[]) {
-      out[kind] = Math.max(0, Math.floor(army[kind] ?? 0));
-    }
+  const out = {} as Army;
+  for (const kind of TROOP_ORDER) {
+    out[kind] = Math.max(0, Math.floor(army?.[kind] ?? 0));
   }
   return out;
 }
