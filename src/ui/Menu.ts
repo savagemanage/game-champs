@@ -104,8 +104,15 @@ export const Menu = {
 
     const label = scene.add.text(0, 0, text, textStyle(fontSize)).setOrigin(0.5);
 
-    const w = opts.width ?? Math.ceil(label.width) + padX * 2;
-    const h = opts.height ?? Math.ceil(label.height) + padY * 2;
+    // The button (and its hit area) must always be at least as large as the
+    // label, even when a caller passes a fixed width/height. Otherwise glyphs
+    // can overflow the bg and a press directly over the visible text lands
+    // outside the interactive rectangle and never registers. Padding keeps a
+    // comfortable click margin around the text in both axes.
+    const minW = Math.ceil(label.width) + padX * 2;
+    const minH = Math.ceil(label.height) + padY * 2;
+    const w = Math.max(opts.width ?? minW, minW);
+    const h = Math.max(opts.height ?? minH, minH);
 
     const bg = scene.add.rectangle(0, 0, w, h, PALETTE.PANEL).setOrigin(0.5);
     bg.setStrokeStyle(2, accent);
@@ -135,7 +142,17 @@ export const Menu = {
 
     // Fire onClick synchronously ON PRESS; the squash is purely cosmetic and
     // never gates the action (a hover tween sharing this target could otherwise
-    // drop an onComplete-based click). A per-press latch guards double-fires.
+    // drop an onComplete-based click). A per-press latch guards against one
+    // press dispatching twice within the same pointer cycle.
+    //
+    // The latch is re-armed (reset to fireable) on ANY pointer release in the
+    // scene, not just this container's own POINTER_UP/OUT. Re-arming only on the
+    // container's own events was fragile: when onClick starts a scene transition
+    // (fadeTo -> scene.start/restart) or the pointer lifts off the container,
+    // that container never receives its own POINTER_UP, so `fired` stayed stuck
+    // true and swallowed the next genuine press until a hover-out/in re-armed
+    // it. A scene-level pointerup always fires, so the button is guaranteed
+    // pressable again on the next real press with no dead period.
     let fired = false;
     const arm = (): void => {
       fired = false;
@@ -149,6 +166,17 @@ export const Menu = {
     });
     container.on(Phaser.Input.Events.POINTER_UP, arm);
     container.on(Phaser.Input.Events.POINTER_OUT, arm);
+    // Re-arm on ANY release in the scene (covers releases off the container and
+    // presses that triggered a scene transition before the container's own
+    // POINTER_UP could fire).
+    scene.input.on(Phaser.Input.Events.POINTER_UP, arm);
+    scene.input.on(Phaser.Input.Events.POINTER_UP_OUTSIDE, arm);
+    // The scene-level listeners outlive this container's own events, so drop
+    // them when the button is destroyed to avoid leaks across scene restarts.
+    container.once(Phaser.GameObjects.Events.DESTROY, () => {
+      scene.input.off(Phaser.Input.Events.POINTER_UP, arm);
+      scene.input.off(Phaser.Input.Events.POINTER_UP_OUTSIDE, arm);
+    });
 
     const setEnabled = (next: boolean): void => {
       enabled = next;
@@ -198,8 +226,17 @@ export const Menu = {
     };
   },
 
-  /** Fade the camera in from black on scene create. Call at the top of create(). */
+  /**
+   * Fade the camera in from black on scene create. Call at the top of create().
+   *
+   * `resetFX()` runs first so a scene that was left faded-to-black by a prior
+   * `fadeTo()` transition always starts from a clean camera. Without this a
+   * destination scene can inherit the previous scene's completed fade-out and
+   * render fully black (e.g. pressing Back). Centralising the reset here means
+   * every scene using this shared helper is correct by construction.
+   */
   fadeIn(scene: Phaser.Scene, durationMs = 350): void {
+    scene.cameras.main.resetFX();
     scene.cameras.main.fadeIn(durationMs, 0, 0, 0);
   },
 
