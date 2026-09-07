@@ -263,6 +263,19 @@ export const CAMERA = {
   /** Deadzone rectangle (logical px) centered on the viewport. */
   DEADZONE_W: 140,
   DEADZONE_H: 100,
+  /**
+   * How far the camera drifts from the hero toward the arena centre, 0..1.
+   *
+   * The outer ring is 720px across but the camera only ever shows ~600px of
+   * world height, so a camera locked to the hero frames him against empty
+   * pavement with the thing he is defending sliced off the bottom of the
+   * screen. Biasing the focus toward the core keeps the rings and the citizens
+   * in frame - which is the information the player is actually acting on -
+   * without taking control of the camera away from his movement.
+   */
+  CENTER_BIAS: 0.4,
+  /** Cap on that drift, world px, so the hero never leaves the frame. */
+  CENTER_BIAS_MAX: 190,
 } as const;
 
 /**

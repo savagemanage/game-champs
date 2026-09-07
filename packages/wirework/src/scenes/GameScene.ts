@@ -274,6 +274,23 @@ export class GameScene extends Phaser.Scene {
     cam.setBounds(0, 0, ARENA.WIDTH, ARENA.HEIGHT);
     cam.startFollow(this.player, true, CAMERA.LERP_X, CAMERA.LERP_Y);
     cam.setDeadzone(CAMERA.DEADZONE_W, CAMERA.DEADZONE_H);
+    this.applyCentreBias();
+  }
+
+  /**
+   * Pull the camera's focus part-way from the hero toward the arena centre.
+   *
+   * Phaser subtracts the follow offset from the target position, so an offset
+   * of `bias * (hero - centre)` lands the focus at `hero + bias * (centre -
+   * hero)`. Recomputed each frame because the required shift changes as the
+   * hero moves; capped so he is never pushed out of frame.
+   */
+  private applyCentreBias(): void {
+    const dx = this.player.x - ARENA.CENTER_X;
+    const dy = this.player.y - ARENA.CENTER_Y;
+    const clamp = (v: number): number =>
+      Phaser.Math.Clamp(v * CAMERA.CENTER_BIAS, -CAMERA.CENTER_BIAS_MAX, CAMERA.CENTER_BIAS_MAX);
+    this.cameras.main.setFollowOffset(clamp(dx), clamp(dy));
   }
 
   private buildInput(): void {
@@ -428,6 +445,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   update(_time: number, delta: number): void {
+    this.applyCentreBias();
     const now = this.time.now;
     if (this.gameEnded) return;
 
