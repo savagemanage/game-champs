@@ -85,6 +85,10 @@ export const STRINGS = {
   // Locked building label that names the unlock requirement instead of a bare
   // 'Locked' (FEAT-003 guidance pass).
   'town.lockedRequires': { en: 'Furnace Lv.{level} required', ko: '용광로 Lv.{level} 필요' },
+  // Short form for the overhead map badge, where the full sentence is wide
+  // enough to collide with the badges of neighbouring buildings. The long form
+  // above is still used in the upgrade panel, which has room for it.
+  'town.lockedRequiresShort': { en: 'Needs Lv.{level}', ko: 'Lv.{level} 필요' },
 
   // --- FEAT-003: new-player objective / guidance flow ---
   // A SHORT first-run welcome that hands off to the guided objective flow

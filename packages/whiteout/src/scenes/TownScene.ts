@@ -74,6 +74,8 @@ interface BuildingMarker {
   levelBadge: Phaser.GameObjects.Text;
   /** Dark backing chip sized to the badge text for legibility over the town art. */
   badgeChip: Phaser.GameObjects.Rectangle;
+  /** The y the badge was authored at; the de-overlap pass solves from here. */
+  badgeAnchorY: number;
 }
 
 /** Live warmth readout widgets in the HUD. */
@@ -309,7 +311,7 @@ export class TownScene extends Phaser.Scene {
         .setDepth(21)
         .setShadow(0, 1, '#000000', 2, true, true);
 
-      this.markers.push({ kind, sprite, levelBadge, badgeChip });
+      this.markers.push({ kind, sprite, levelBadge, badgeChip, badgeAnchorY: badgeY });
     }
   }
 
@@ -328,7 +330,7 @@ export class TownScene extends Phaser.Scene {
         // exactly what unlocks it; otherwise fall back to the plain label.
         const req = unlockRequirement(marker.kind, level, this.state.buildings.furnaceLevel);
         const text = req.locked
-          ? tr('town.lockedRequires', { level: req.requiredFurnaceLevel })
+          ? tr('town.lockedRequiresShort', { level: req.requiredFurnaceLevel })
           : tr('town.locked');
         marker.levelBadge.setText(text).setColor(PALETTE.FROST_CSS);
         marker.sprite.setAlpha(0.5);
@@ -339,6 +341,48 @@ export class TownScene extends Phaser.Scene {
       // Grow the backing chip to hug the current label so the dark plate always
       // frames the text (level/locked strings differ in width).
       marker.badgeChip.setSize(Math.ceil(marker.levelBadge.width) + 8, Math.ceil(marker.levelBadge.height) + 4);
+    }
+    this.deoverlapBadges();
+  }
+
+  /**
+   * Lift badges off each other where their chips collide.
+   *
+   * Badges hang over their own building, and the plots are packed closer than
+   * an unlock label is wide, so neighbouring buildings' labels ran into each
+   * other - four of them piled up mid-map and none could be read. Rather than
+   * hand-tuning plot positions (which would break again the moment a string or
+   * a building is added), walk the badges in reading order and push any one
+   * that overlaps an already-placed badge up by a row until it is clear.
+   */
+  private deoverlapBadges(): void {
+    const GAP = 2;
+    const ROW = 14;
+    const MAX_LIFT = 4;
+
+    const placed: Phaser.Geom.Rectangle[] = [];
+    const ordered = [...this.markers].sort(
+      (a, b) => a.badgeChip.y - b.badgeChip.y || a.badgeChip.x - b.badgeChip.x,
+    );
+
+    for (const marker of ordered) {
+      const chip = marker.badgeChip;
+      // Reset to the anchor this badge was built at before re-solving, so the
+      // lift never accumulates across refreshes.
+      chip.y = marker.badgeAnchorY;
+      const w = chip.width + GAP * 2;
+      const h = chip.height + GAP * 2;
+      for (let lift = 0; lift <= MAX_LIFT; lift += 1) {
+        const y = marker.badgeAnchorY - lift * ROW;
+        const rect = new Phaser.Geom.Rectangle(chip.x - w / 2, y - h / 2, w, h);
+        const clear = !placed.some((other) => Phaser.Geom.Rectangle.Overlaps(rect, other));
+        if (clear || lift === MAX_LIFT) {
+          chip.y = y;
+          marker.levelBadge.y = y;
+          placed.push(rect);
+          break;
+        }
+      }
     }
   }
 
