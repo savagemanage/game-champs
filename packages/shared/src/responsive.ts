@@ -43,12 +43,35 @@ export const MAX_RENDER_SCALE = 4;
 /** Default cap shared by the FIT-zoom helper; kept aligned with the games. */
 export const DEFAULT_MAX_RENDER_SCALE = MAX_RENDER_SCALE;
 
+/**
+ * How much larger than the physical display the backbuffer may be, by AREA,
+ * before the whole-number preference is abandoned.
+ *
+ * Rounding the scale UP to an integer keeps the camera zoom whole, which is
+ * what keeps nearest-neighbour pixel art on an exact pixel grid. But the
+ * rounding can overshoot badly: a 1280x800 display at dpr 1 needs a ratio of
+ * 1.33, and `ceil` turns that into 2 - a 1920x1200 buffer, 2.25x the pixels the
+ * screen can actually show. That is pure fill-rate spent on detail the display
+ * cannot resolve, and it measurably halves the frame rate.
+ *
+ * 1.5 keeps the integer step wherever it is a reasonable amount of
+ * supersampling (which does sharpen text) and rejects only the cases where
+ * rounding up would cost far more than it returns.
+ */
+export const DEFAULT_MAX_OVERSAMPLE = 1.5;
+
 /** Options for {@link resolveRenderScale}. */
 export interface RenderScaleOptions {
   /** Lower bound on the returned scale. Defaults to {@link MIN_RENDER_SCALE}. */
   minScale?: number;
   /** Upper bound on the returned scale. Defaults to {@link MAX_RENDER_SCALE}. */
   maxScale?: number;
+  /**
+   * Backbuffer area budget as a multiple of the physical display area.
+   * Defaults to {@link DEFAULT_MAX_OVERSAMPLE}; pass `Infinity` to always take
+   * the whole-number scale.
+   */
+  maxOversample?: number;
 }
 
 /** True only for a finite, strictly-positive number. */
@@ -100,8 +123,22 @@ export function resolveRenderScale(
     return minScale;
   }
 
+  // Prefer the whole-number scale: an integer camera zoom keeps pixel art on an
+  // exact grid. Take it only while the buffer it implies stays within the
+  // oversample budget; when `ceil` overshoots the display badly, render at the
+  // exact ratio instead, which is 1:1 with the physical pixels - the cheapest
+  // option that still never under-samples.
+  // Infinity is a meaningful value here ("always round up"), so it is accepted
+  // even though it is not finite.
+  const rawOversample = opts?.maxOversample;
+  const maxOversample =
+    typeof rawOversample === 'number' && rawOversample > 0 && !Number.isNaN(rawOversample)
+      ? rawOversample
+      : DEFAULT_MAX_OVERSAMPLE;
   const stepped = Math.ceil(ratio);
-  return Math.min(maxScale, Math.max(minScale, stepped));
+  const oversample = (stepped / ratio) ** 2;
+  const chosen = oversample <= maxOversample ? stepped : ratio;
+  return Math.min(maxScale, Math.max(minScale, chosen));
 }
 
 /** The backbuffer + camera-zoom plan for a given logical canvas and display. */

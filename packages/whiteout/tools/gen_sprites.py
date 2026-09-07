@@ -22,6 +22,7 @@ Out:  public/assets/{sprites,backgrounds,ui,fx}/*.png
 """
 
 import math
+import random
 import os
 from PIL import Image
 
@@ -1017,106 +1018,316 @@ def lerp(a, b, t):
     return tuple(int(a[i] + (b[i] - a[i]) * t) for i in range(len(a)))
 
 
-def build_backgrounds():
-    W, H = 480, 270
+def blend(img, x, y, c):
+    """Alpha-composite a single pixel instead of overwriting it.
 
-    # --- sky: deep frozen-dusk gradient + a soft aurora band + drifting snow ---
+    `px` replaces the pixel outright, which is right for solid pixel art but
+    wrong for the translucent passes below (aurora, glows, snow haze) where the
+    whole point is to tint what is already there.
+    """
+    w, h = img.size
+    if not (0 <= x < w and 0 <= y < h):
+        return
+    a = c[3] / 255.0
+    if a <= 0:
+        return
+    dr, dg, db, da = img.getpixel((x, y))
+    img.putpixel((x, y), (
+        int(dr + (c[0] - dr) * a),
+        int(dg + (c[1] - dg) * a),
+        int(db + (c[2] - db) * a),
+        max(da, c[3]),
+    ))
+
+
+def vgrad(img, y0, y1, top, bot):
+    """Vertical gradient band, inclusive of both rows."""
+    w = img.size[0]
+    span = max(1, y1 - y0)
+    for y in range(y0, y1 + 1):
+        rect(img, 0, y, w - 1, y, lerp(top, bot, (y - y0) / span))
+
+
+def wrapped_sin(x, w, cycles, phase=0.0):
+    """A sine that completes a whole number of cycles across the width.
+
+    Backgrounds are drawn at the canvas size and may still be tiled or scrolled
+    horizontally, so every horizontal wave has to close on itself: an arbitrary
+    period leaves a hard seam at the wrap point (the old 480px sky tiled twice
+    across the 960px canvas and showed exactly that).
+    """
+    return math.sin((x / w) * cycles * 2 * math.pi + phase)
+
+
+def starfield(img, horizon, seed=7):
+    """Cold stars, denser and brighter high in the sky."""
+    rnd = random.Random(seed)
+    w = img.size[0]
+    for _ in range(260):
+        x = rnd.randrange(w)
+        y = int(rnd.random() ** 1.7 * horizon)
+        depth = 1.0 - y / max(1, horizon)
+        roll = rnd.random()
+        if roll > 0.94:
+            blend(img, x, y, (*SNOW_LT[:3], int(230 * depth)))
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                blend(img, x + dx, y + dy, (*SNOW_LT[:3], int(70 * depth)))
+        elif roll > 0.7:
+            blend(img, x, y, (*SNOW_LT[:3], int(170 * depth)))
+        else:
+            blend(img, x, y, (*ICE[:3], int(90 * depth)))
+
+
+def aurora(img, horizon, seed=3):
+    """Layered aurora ribbons.
+
+    Each ribbon is a wrapped sine spine with a soft vertical falloff, so the
+    band fades out top and bottom instead of ending on a hard edge, and several
+    ribbons at different frequencies overlap into something that reads as
+    curtains rather than as stripes.
+    """
+    w = img.size[0]
+    ribbons = [
+        # (centre y, amplitude, thickness, cycles, phase, colour, peak alpha)
+        (0.30, 26, 34, 1.5, 0.0, (104, 214, 192), 86),
+        (0.40, 34, 46, 1.0, 1.3, (132, 224, 158), 66),
+        (0.24, 18, 26, 2.5, 2.4, (150, 176, 240), 58),
+        (0.50, 22, 30, 2.0, 4.1, (96, 186, 214), 44),
+    ]
+    for cy, amp, thick, cycles, phase, col, peak in ribbons:
+        base = horizon * cy
+        for x in range(w):
+            spine = base + amp * wrapped_sin(x, w, cycles, phase)
+            # A second, slower wave makes the curtain breathe in brightness.
+            gain = 0.55 + 0.45 * (0.5 + 0.5 * wrapped_sin(x, w, 1, phase * 1.7))
+            for dy in range(-thick, thick + 1):
+                fall = 1.0 - abs(dy) / thick
+                a = int(peak * fall * fall * gain)
+                if a > 1:
+                    blend(img, x, int(spine + dy), (*col, a))
+
+
+def ridge(img, base_y, height, cycles, phase, colour, cap=None, seed=1):
+    """One parallax mountain ridge, filled down to the bottom of the frame."""
+    w, h = img.size
+    rnd = random.Random(seed)
+    jitter = [rnd.randint(-2, 2) for _ in range(w)]
+    for x in range(w):
+        peak = base_y - int(
+            height * (0.55 + 0.45 * wrapped_sin(x, w, cycles, phase))
+        ) + jitter[x]
+        rect(img, x, peak, x, h - 1, colour)
+        if cap is not None:
+            # Snow only settles on the upper slopes, and thicker near a summit.
+            depth = 3 + int(5 * max(0.0, wrapped_sin(x, w, cycles, phase)))
+            rect(img, x, peak, x, peak + depth, cap)
+
+
+def snowfall(img, count=170, seed=11):
+    """Drifting flakes at three depths, so the air has volume."""
+    rnd = random.Random(seed)
+    w, h = img.size
+    for _ in range(count):
+        x, y = rnd.randrange(w), rnd.randrange(h)
+        roll = rnd.random()
+        if roll > 0.9:
+            for dx in (0, 1):
+                for dy in (0, 1):
+                    blend(img, x + dx, y + dy, (*SNOW_LT[:3], 210))
+        elif roll > 0.55:
+            blend(img, x, y, (*SNOW_LT[:3], 150))
+        else:
+            blend(img, x, y, (*SNOW_LT[:3], 80))
+
+
+def snowfield(img, horizon, seed=5):
+    """Wind-sculpted snow ground: banded tone, drifts, and sastrugi ripples."""
+    w, h = img.size
+    vgrad(img, horizon, h - 1, SNOW, SNOW_DK)
+    rnd = random.Random(seed)
+    # Wind drifts. Drawn as SEGMENTS with a soft rim, never as a stroke spanning
+    # the frame: a full-width line reads as a drawn rule across the snow rather
+    # than as a bank of it.
+    for i in range(14):
+        cy = horizon + int((h - horizon) * (i + 0.6) / 14)
+        amp = rnd.randint(2, 7)
+        cycles = rnd.choice([2, 3, 4])
+        phase = rnd.random() * 6.28
+        x = rnd.randrange(w)
+        remaining = rnd.randint(2, 4)
+        while remaining > 0:
+            run = rnd.randint(70, 190)
+            near = (cy - horizon) / max(1, h - horizon)
+            thick = 1 + int(3 * near)
+            for k in range(run):
+                xx = (x + k) % w
+                # Taper the ends so a drift fades in and out of the surface.
+                edge = min(k, run - k) / max(1.0, run * 0.35)
+                fade = min(1.0, edge)
+                y = cy + int(amp * wrapped_sin(xx, w, cycles, phase))
+                # blend(), not rect(): rect OVERWRITES the pixel with the given
+                # RGBA, so a "translucent" highlight became a semi-transparent
+                # hole in the snow and read as a hard white rule.
+                for dy in range(thick + 1):
+                    blend(img, xx, y + dy, (*SNOW_LT[:3], int(46 * fade)))
+                blend(img, xx, y + thick + 1, (*SNOW_DK[:3], int(52 * fade)))
+            x = (x + run + rnd.randint(60, 200)) % w
+            remaining -= 1
+    # Fine sastrugi flecks catching the light, denser in the foreground.
+    for _ in range(900):
+        x = rnd.randrange(w)
+        y = rnd.randint(horizon, h - 1)
+        near = (y - horizon) / max(1, h - horizon)
+        if rnd.random() > near * 0.85 + 0.15:
+            continue
+        blend(img, x, y, (*SNOW_LT[:3], rnd.randint(30, 95)))
+
+
+def build_backgrounds():
+    # Drawn at the CANVAS size (GameConfig CANVAS 960x540), not half of it.
+    # The old 480x270 sheets were stretched or tiled to fill the canvas: the sky
+    # tiled exactly twice and left a visible seam down the middle of the frame.
+    W, H = 960, 540
+
+    # ---------------------------------------------------------------- sky ----
     sky = new(W, H)
-    top = (29, 43, 63, 255)          # BG_SKY
-    bot = (47, 61, 92, 255)          # BG_DUSK
-    for y in range(H):
-        rect(sky, 0, y, W - 1, y, lerp(top, bot, y / H))
-    # aurora ribbons (cold teal/green shimmer)
-    for band, (ay, amp, col) in enumerate([
-        (70, 22, (110, 200, 190, 70)),
-        (95, 30, (140, 210, 175, 55)),
-        (55, 16, (150, 190, 230, 60)),
-    ]):
-        for x in range(W):
-            y = ay + int(amp * math.sin(x / 48.0 + band))
-            for dy in range(6 + band * 2):
-                px(sky, x, y + dy, col)
-    # cold stars
-    for (sx, sy) in [(40, 30), (120, 22), (210, 40), (330, 26), (430, 34), (280, 18)]:
-        px(sky, sx, sy, SNOW_LT)
-    # drifting snow specks
-    for (sx, sy) in [(60, 140), (150, 190), (240, 120), (360, 200), (410, 150), (90, 220), (300, 240)]:
-        px(sky, sx, sy, (230, 242, 251, 180))
+    horizon = int(H * 0.62)
+    vgrad(sky, 0, horizon, (16, 22, 38, 255), (58, 74, 108, 255))
+    vgrad(sky, horizon + 1, H - 1, (58, 74, 108, 255), (86, 104, 138, 255))
+    starfield(sky, horizon)
+    aurora(sky, horizon)
+    # Far range: low contrast, hazed into the sky.
+    ridge(sky, horizon + 6, 58, 1.0, 0.4, (48, 62, 92, 255), seed=2)
+    ridge(sky, horizon + 16, 40, 2.0, 2.2, (40, 53, 80, 255), cap=(62, 78, 108, 255), seed=4)
+    snowfall(sky, 150)
     save(sky, os.path.join(BG, "sky.png"))
 
-    # --- town: snowfield settlement with a soft horizon + build plots ---
+    # --------------------------------------------------------------- town ----
+    # The settlement backdrop. Build plots are NOT drawn here: the engine places
+    # real building sprites at its own coordinates, and the old blind 3x6 grid of
+    # flat slate rectangles showed through underneath them as stray grey boxes.
     town = new(W, H)
-    horizon = int(H * 0.42)
-    for y in range(horizon, H):
+    horizon = int(H * 0.46)
+    vgrad(town, 0, horizon, (20, 28, 46, 255), (74, 92, 126, 255))
+    starfield(town, horizon, seed=9)
+    aurora(town, horizon, seed=6)
+    ridge(town, horizon + 4, 66, 1.0, 1.1, (44, 58, 86, 255), seed=8)
+    ridge(town, horizon + 12, 44, 2.0, 3.4, (56, 72, 100, 255), cap=(96, 116, 146, 255), seed=3)
+
+    # A distant frozen settlement on the skyline: roofs, chimneys, lit windows.
+    rnd = random.Random(21)
+    x = -10
+    while x < W:
+        bw = rnd.randint(22, 46)
+        bh = rnd.randint(16, 40)
+        top = horizon - bh
+        rect(town, x, top, x + bw, horizon, (38, 46, 66, 255))
+        rect(town, x, top, x + bw, top + 2, (58, 70, 94, 255))       # snow-lit ridge
+        # Pitched gable: one filled column per x, height falling away from the
+        # ridge line. (Drawing a horizontal bar per step instead produced a
+        # stepped brim that read as a hat, not a roof.)
+        pitch = rnd.uniform(0.45, 0.7)
+        half = bw / 2.0
+        for i in range(bw + 1):
+            rise = int((half - abs(i - half)) * pitch)
+            if rise > 0:
+                rect(town, x + i, top - rise, x + i, top, (30, 38, 56, 255))
+        rect(town, x, top - 1, x + bw, top, (52, 64, 88, 255))  # snow-lit eaves
+        # warm windows, sparse
+        for _ in range(rnd.randint(0, 3)):
+            wx = x + rnd.randint(3, max(4, bw - 6))
+            wy = rnd.randint(top + 5, horizon - 4)
+            for dx in (0, 1):
+                for dy in (0, 1):
+                    blend(town, wx + dx, wy + dy, (*EMBER_LT[:3], 190))
+        # chimney + a thin smoke column drifting with the wind
+        if rnd.random() > 0.45:
+            cx0 = x + rnd.randint(4, max(5, bw - 6))
+            rect(town, cx0, top - 8, cx0 + 2, top, (32, 40, 58, 255))
+            for k in range(rnd.randint(8, 22)):
+                blend(town, cx0 + 1 + k // 3, top - 9 - k, (210, 220, 235, max(8, 60 - k * 3)))
+        x += bw + rnd.randint(4, 14)
+
+    for x in range(W):
+        bank = int(4 + 5 * (0.5 + 0.5 * wrapped_sin(x, W, 3, 1.9)))
+        rect(town, x, horizon - bank, x, horizon, (*SNOW_DK[:3], 255))
+    snowfield(town, horizon)
+    for x in range(W):
+        bank = int(4 + 5 * (0.5 + 0.5 * wrapped_sin(x, W, 3, 1.9)))
+        for dy in range(bank):
+            blend(town, x, horizon - bank + dy, (*SNOW_LT[:3], 90 - dy * 8))
+    # A trodden path running from the foreground up to the settlement gate.
+    # Drawn per SCANLINE with a perspective width so it narrows into the
+    # distance; the earlier version swept a fixed-width ribbon horizontally
+    # across the frame, which read as a wire lying on the snow.
+    gate_x = W * 0.54
+    for y in range(horizon + 2, H):
         t = (y - horizon) / (H - horizon)
-        rect(town, 0, y, W - 1, y, lerp(SNOW, SNOW_DK, t))
-    # a low ice ridge on the horizon
-    for x in range(W):
-        ridge = horizon - int(8 * abs(math.sin(x / 90.0)))
-        rect(town, x, ridge, x, horizon, ICE_DK)
-        px(town, x, ridge, SNOW_LT)
-    # scattered build-plot squares (cleared snow / packed slate)
-    for gy in range(horizon + 20, H - 20, 46):
-        for gx in range(30, W - 30, 70):
-            rect(town, gx, gy, gx + 40, gy + 26, SLATE)
-            rect(town, gx, gy, gx + 40, gy, SLATE_DK)
-            rect(town, gx, gy + 26, gx + 40, gy + 26, (24, 28, 36, 255))
-            px(town, gx + 2, gy + 2, SNOW_LT)  # snow in the corner
-    # a trodden snow path winding through
-    for x in range(W):
-        y = horizon + 12 + int(30 * math.sin(x / 60.0))
-        rect(town, x, y, x, y + 6, SNOW_LT)
-        px(town, x, y + 6, SNOW_DK)
+        cx = gate_x + (W * 0.055) * math.sin(t * 1.15) * t
+        half = 2 + int(46 * t * t)
+        for dx in range(-half, half + 1):
+            edge = 1.0 - abs(dx) / max(1, half)
+            blend(town, int(cx + dx), y, (*SLATE[:3], int(120 * (0.35 + 0.65 * edge))))
+        blend(town, int(cx - half), y, (*SNOW_LT[:3], 110))
+        blend(town, int(cx + half), y, (*SNOW_LT[:3], 110))
+    snowfall(town, 120)
     save(town, os.path.join(BG, "town.png"))
 
-    # --- battlefield: frozen ground + the hold's icy wall on the right ---
+    # ----------------------------------------------------------- battle -----
     battle = new(W, H)
-    horizon = int(H * 0.5)
-    # frozen sky with a faint aurora
-    for y in range(horizon):
-        rect(battle, 0, y, W - 1, y, lerp((29, 43, 63, 255), (60, 78, 110, 255), y / horizon))
-    for x in range(W):
-        y = 40 + int(12 * math.sin(x / 52.0))
-        for dy in range(5):
-            px(battle, x, y + dy, (120, 200, 185, 55))
-    # trampled snow / ice ground
-    for y in range(horizon, H):
-        t = (y - horizon) / (H - horizon)
-        rect(battle, 0, y, W - 1, y, lerp(SNOW_DK, SLATE_DK, t))
-    # scuffs of exposed ice
-    for (sx, sy, sw) in [(60, 200, 40), (180, 230, 60), (300, 210, 50), (120, 250, 30)]:
-        rect(battle, sx, sy, sx + sw, sy + 3, ICE_DK)
-    # the hold's defended wall on the right (frost-worn stone + ice sheen)
-    # Build it as a self-contained bastion that sits fully INSIDE the frame:
-    # the block stops a few px short of the right edge with its own shadowed
-    # right face (and a sliver of ground/sky beyond it) so the wall reads as a
-    # solid structure standing in the scene rather than a sprite sliced off the
-    # canvas edge. Left face is highlit, right face shadowed, crenellations and
-    # gate are laid out WITHIN [wx, wex] so nothing overruns the edge.
-    wx = W - 76          # wall left face
-    wex = W - 8          # wall right face (leaves an 8px margin to the edge)
-    wtop = horizon - 56  # wall top (grounded lower than before so it doesn't float)
+    horizon = int(H * 0.52)
+    vgrad(battle, 0, horizon, (22, 30, 48, 255), (72, 92, 126, 255))
+    starfield(battle, horizon, seed=13)
+    aurora(battle, horizon, seed=17)
+    ridge(battle, horizon + 8, 50, 1.0, 2.7, (46, 60, 88, 255), seed=6)
+    snowfield(battle, horizon, seed=23)
+    # Trampled ground: churned snow and exposed ice where the lines have met.
+    rnd = random.Random(31)
+    for _ in range(70):
+        sx = rnd.randrange(W)
+        sy = rnd.randint(horizon + 10, H - 1)
+        sw = rnd.randint(10, 46)
+        th = rnd.randint(1, 3)
+        for k in range(sw):
+            for dy in range(th + 1):
+                blend(battle, sx + k, sy + dy, (*ICE_DK[:3], 120))
+
+    # The hold's wall stands fully inside the frame with its own shadowed right
+    # face, so it reads as a structure in the scene rather than a sprite sliced
+    # off at the canvas edge.
+    wx, wex = W - 168, W - 18
+    wtop = horizon - 118
     rect(battle, wx, wtop, wex, H - 1, STONE)
-    for y in range(wtop, H, 14):      # horizontal masonry courses
+    for y in range(wtop, H, 26):
         rect(battle, wx, y, wex, y, STONE_DK)
-    for x in range(wx, wex, 22):      # vertical block seams
-        rect(battle, x, wtop, x, H - 1, STONE_DK)
-    rect(battle, wx, wtop, wx, H - 1, STONE_LT)   # lit left face
-    rect(battle, wex, wtop, wex, H - 1, STONE_DK) # shadowed right face -> reads as depth, not a cut
-    # crenellations, snow-capped, kept within [wx, wex]
-    for x in range(wx, wex - 9, 22):
-        rect(battle, x, wtop - 4, x + 10, wtop, STONE)
-        rect(battle, x, wtop - 4, x + 10, wtop - 4, SNOW_LT)
-    # icicles hanging from the wall top
-    for x in range(wx, wex, 6):
-        px(battle, x, wtop + 1, ICE)
-    # a timber gate glowing warm from within the hold, CENTERED on the wall
+    for bx in range(wx, wex, 42):
+        rect(battle, bx, wtop, bx, H - 1, STONE_DK)
+    rect(battle, wx, wtop, wx + 1, H - 1, STONE_LT)
+    rect(battle, wex - 1, wtop, wex, H - 1, STONE_DK)
+    for bx in range(wx, wex - 18, 42):
+        rect(battle, bx, wtop - 9, bx + 20, wtop, STONE)
+        rect(battle, bx, wtop - 9, bx + 20, wtop - 6, SNOW_LT)
+    for bx in range(wx, wex, 11):
+        rect(battle, bx, wtop + 1, bx, wtop + rnd.randint(2, 6), ICE)
+    # Timber gate, centred, glowing warm from inside the hold.
     gcx = (wx + wex) // 2
-    rect(battle, gcx - 11, horizon - 6, gcx + 11, H - 1, WOOD_DK)
-    rect(battle, gcx - 11, horizon - 6, gcx + 11, horizon - 4, WOOD)
-    rect(battle, gcx - 3, horizon + 2, gcx + 3, horizon + 14, EMBER_DK)
-    px(battle, gcx, horizon + 8, EMBER)
+    rect(battle, gcx - 24, horizon - 14, gcx + 24, H - 1, WOOD_DK)
+    rect(battle, gcx - 24, horizon - 14, gcx + 24, horizon - 9, WOOD)
+    for r in range(26, 0, -1):
+        a = int(70 * (1 - r / 26))
+        for dx in range(-r, r + 1):
+            for dy in range(-r, r + 1):
+                if dx * dx + dy * dy <= r * r:
+                    blend(battle, gcx + dx, horizon + 22 + dy, (*EMBER[:3], a))
+    rect(battle, gcx - 7, horizon + 8, gcx + 7, horizon + 34, EMBER_DK)
+    rect(battle, gcx - 3, horizon + 14, gcx + 3, horizon + 30, EMBER)
+    snowfall(battle, 130)
     save(battle, os.path.join(BG, "battle.png"))
+    for name in ("sky.png", "town.png", "battle.png"):
+        path = os.path.join(BG, name)
+        img = Image.open(path).convert("RGBA")
+        if min(img.getchannel("A").getextrema()) != 255:
+            raise SystemExit(f"{name} has translucent pixels; backgrounds must be opaque")
     print("backgrounds: sky.png town.png battle.png", (W, H))
 
 

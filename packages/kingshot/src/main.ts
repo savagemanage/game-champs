@@ -1,4 +1,6 @@
 import Phaser from 'phaser';
+import { setLanguage } from './i18n/i18n';
+import { loadSettings } from './systems/SettingsStore';
 import { CANVAS, PHYSICS, PALETTE } from './config/GameConfig';
 import {
   resolveViewportPlan,
@@ -143,5 +145,21 @@ function registerRenderScale(game: Phaser.Game): void {
   });
 }
 
+/**
+ * Resolve the UI language BEFORE any scene renders.
+ *
+ * The language was previously set as a side effect of the first
+ * `AudioManager.get()` call, which happens partway through TitleScene.create().
+ * Labels built before that call rendered in the module default (Korean) and
+ * labels built after it rendered in the resolved language, so a first-run
+ * English browser saw a title screen that was half Korean and half English.
+ * Seeding here makes the whole session render in one language from the first
+ * frame.
+ */
+function seedLanguage(): void {
+  setLanguage(loadSettings().language);
+}
+
+seedLanguage();
 const game = new Phaser.Game(config);
 registerRenderScale(game);

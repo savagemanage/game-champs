@@ -1,4 +1,6 @@
 import Phaser from 'phaser';
+import { setLanguage } from './i18n/i18n';
+import { AudioManager } from './systems/AudioManager';
 import { CANVAS, PHYSICS, PALETTE } from './config/GameConfig';
 import { resolveRenderZoom } from './systems/RenderScale';
 import { BootScene } from './scenes/BootScene';
@@ -158,7 +160,20 @@ const FONT_FAMILY = 'NotoSansKR';
 const FONT_SAMPLE = '한글';
 const FONT_TIMEOUT_MS = 3000;
 
+/**
+ * Resolve the UI language BEFORE any scene renders.
+ *
+ * The language used to be set as a side effect of the first
+ * `AudioManager.get()` call, which lands partway through scene construction, so
+ * labels built either side of it could render in different languages. Settling
+ * it here makes the whole session render in one language from the first frame.
+ */
+function seedLanguage(): void {
+  setLanguage(AudioManager.peekPersistedLanguage());
+}
+
 function startGame(): void {
+  seedLanguage();
   // eslint-disable-next-line no-new
   new Phaser.Game(config);
 }

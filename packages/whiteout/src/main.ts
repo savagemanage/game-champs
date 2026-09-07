@@ -1,5 +1,7 @@
 import Phaser from 'phaser';
 import { CANVAS, PHYSICS, PALETTE } from './config/GameConfig';
+import { setLanguage } from './i18n/i18n';
+import { loadSettings } from './systems/SettingsStore';
 import { BootScene } from './scenes/BootScene';
 import { PreloadScene } from './scenes/PreloadScene';
 import { TitleScene } from './scenes/TitleScene';
@@ -140,7 +142,23 @@ const config: Phaser.Types.Core.GameConfig = {
  * it resolves immediately (and never rejects) in environments without the CSS
  * Font Loading API, so boot is never blocked.
  */
+/**
+ * Resolve the UI language BEFORE any scene renders.
+ *
+ * The language was previously set as a side effect of the first
+ * `AudioManager.get()` call, which happens partway through TitleScene.create().
+ * Labels built before that call rendered in the module default (Korean) and
+ * labels built after it rendered in the resolved language, so a first-run
+ * English browser saw a title screen that was half Korean and half English.
+ * Seeding here makes the whole session render in one language from the first
+ * frame.
+ */
+function seedLanguage(): void {
+  setLanguage(loadSettings().language);
+}
+
 function boot(): void {
+  seedLanguage();
   const game = new Phaser.Game(config);
   registerRenderScale(game);
   // QA/debug hook: expose the running game only when explicitly requested via

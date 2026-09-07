@@ -28,6 +28,15 @@ export class TitleScene extends Phaser.Scene {
 
   private bgSky!: Phaser.GameObjects.TileSprite;
   private bgTown!: Phaser.GameObjects.Image;
+  /**
+   * Dark gradient laid over the backdrop, under the text.
+   *
+   * The title sits at 0.3H and the tagline at 0.44H, which is exactly where the
+   * skyline and the lit horizon are busiest, so both were reading as noise. The
+   * scrim darkens that band and fades out above and below, keeping the art
+   * visible while giving the type something quiet to sit on.
+   */
+  private scrim!: Phaser.GameObjects.Graphics;
   private drift = 0;
 
   constructor() {
@@ -44,16 +53,27 @@ export class TitleScene extends Phaser.Scene {
     // no flat dead margin: the sky fills the whole rect and the town skyline is
     // anchored to the rect BOTTOM. UI below stays in the unchanged 960x540 band.
     this.bgSky = this.add.tileSprite(0, 0, CANVAS.WIDTH, CANVAS.HEIGHT, TextureKeys.BgSky).setOrigin(0, 0);
-    this.bgTown = this.add.image(cx, CANVAS.HEIGHT, TextureKeys.BgTown).setOrigin(0.5, 1).setAlpha(0.92);
+    // Full opacity: the town plate is now a complete 960x540 composition with
+    // its own sky, so blending it 92% over the DIFFERENT sky behind it just
+    // desaturated the art into mud. The sky layer still shows in the overflow
+    // above the plate on a taller-than-540 viewport, and still drifts.
+    this.bgTown = this.add.image(cx, CANVAS.HEIGHT, TextureKeys.BgTown).setOrigin(0.5, 1);
     // Size/position both backdrop layers to the live visible rect now AND on
     // every resize/orientationchange (shared provider) so a mid-scene rotate
     // never leaves a dead margin.
+    this.scrim = this.add.graphics();
     onViewportRefit(this, { width: CANVAS.WIDTH, height: CANVAS.HEIGHT }, (rect) => this.refitBackdrop(rect));
 
     // Title + tagline.
     const title = Menu.title(this, cx, CANVAS.HEIGHT * 0.3, tr('brand.name'), 64);
     this.tweens.add({ targets: title, y: title.y - 4, duration: 1800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-    Menu.label(this, cx, CANVAS.HEIGHT * 0.44, tr('title.tagline'), 20, 0.9).setColor(PALETTE.ACCENT_CSS);
+    // The tagline lands on the skyline, the busiest part of the backdrop, so it
+    // carries its own dark outline on top of the scrim rather than relying on
+    // colour contrast alone.
+    Menu.label(this, cx, CANVAS.HEIGHT * 0.44, tr('title.tagline'), 20, 0.95)
+      .setColor(PALETTE.ACCENT_CSS)
+      .setStroke('#05080f', 5)
+      .setShadow(0, 2, '#05080f', 4, true, true);
 
     // Detect an existing save without mutating global state.
     const hasSave = GameState.get().loaded;
@@ -100,6 +120,23 @@ export class TitleScene extends Phaser.Scene {
     this.bgTown
       .setPosition(CANVAS.WIDTH / 2, rect.y + rect.height)
       .setDisplaySize(rect.width, CANVAS.HEIGHT);
+    this.drawScrim(rect);
+  }
+
+  /** Repaint the readability scrim for the current visible rect. */
+  private drawScrim(rect: VisibleWorldRect): void {
+    // Kept tight around the title block. A broad scrim reads as the whole
+    // screen being dimmed and washes the backdrop out; this one only quiets the
+    // band the title and tagline actually sit on (0.24H-0.50H) and falls off to
+    // nothing either side.
+    const top = rect.y + rect.height * 0.16;
+    const mid = rect.y + rect.height * 0.36;
+    const bottom = rect.y + rect.height * 0.54;
+    this.scrim.clear();
+    this.scrim.fillGradientStyle(0x050a14, 0x050a14, 0x050a14, 0x050a14, 0, 0, 0.55, 0.55);
+    this.scrim.fillRect(rect.x, top, rect.width, mid - top);
+    this.scrim.fillGradientStyle(0x050a14, 0x050a14, 0x050a14, 0x050a14, 0.55, 0.55, 0, 0);
+    this.scrim.fillRect(rect.x, mid, rect.width, bottom - mid);
   }
 
   update(_time: number, delta: number): void {

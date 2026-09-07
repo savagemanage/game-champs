@@ -12,14 +12,21 @@ import {
 } from './responsive';
 
 describe('resolveRenderScale', () => {
-  it('returns a whole number', () => {
+  it('returns a whole number when the ratio is already whole', () => {
     const scale = resolveRenderScale(960, 540, 1920, 1080, 1);
     expect(Number.isInteger(scale)).toBe(true);
   });
 
-  it('rounds UP the display-vs-logical ratio (never below display resolution)', () => {
-    // 1440 CSS px across 960 logical = 1.5x; dpr 1 -> ratio 1.5 -> ceil 2.
-    expect(resolveRenderScale(960, 540, 1440, 810, 1)).toBe(2);
+  it('rounds UP to a whole scale while the oversample budget allows it', () => {
+    // 1600 CSS px across 960 logical = 1.67x; ceil 2 costs 1.44x the display
+    // area, inside the budget, so the integer camera zoom is kept.
+    expect(resolveRenderScale(960, 600, 1600, 1000, 1)).toBe(2);
+  });
+
+  it('renders 1:1 with the display when rounding up would overshoot it', () => {
+    // 1440 CSS px across 960 logical = 1.5x. Rounding to 2 would be 1.78x the
+    // pixels the display can show; the exact ratio is sharper per pixel spent.
+    expect(resolveRenderScale(960, 540, 1440, 810, 1)).toBeCloseTo(1.5, 10);
   });
 
   it('factors in devicePixelRatio (dpr multiplies the ratio)', () => {
@@ -63,8 +70,12 @@ describe('resolveRenderScale', () => {
   });
 
   it('treats a bad dpr as 1', () => {
-    // dpr NaN -> treated as 1; 1440/960 = 1.5 -> ceil 2.
-    expect(resolveRenderScale(960, 540, 1440, 810, NaN)).toBe(2);
+    // dpr NaN -> treated as 1, so the ratio is 1440/960 = 1.5, the same result
+    // an explicit dpr of 1 gives.
+    expect(resolveRenderScale(960, 540, 1440, 810, NaN)).toBe(
+      resolveRenderScale(960, 540, 1440, 810, 1),
+    );
+    expect(resolveRenderScale(960, 540, 1440, 810, NaN)).toBeCloseTo(1.5, 10);
   });
 });
 
@@ -267,5 +278,30 @@ describe('resolveVisibleWorldRect', () => {
   it('falls back to the design rect on degenerate fill sizes', () => {
     const rect = resolveVisibleWorldRect(960, 540, { fillWidth: NaN, fillHeight: 0 });
     expect(rect).toEqual({ x: 0, y: 0, width: 960, height: 540 });
+  });
+});
+
+describe('resolveRenderScale oversample budget', () => {
+  it('drops to the exact ratio when rounding up would overshoot the display', () => {
+    // 1280 CSS px of a 960-wide surface at dpr 1: ratio 1.33, and ceil 2 would
+    // be a 1920x1200 buffer - 2.25x the pixels the screen can show.
+    expect(resolveRenderScale(960, 600, 1280, 800, 1)).toBeCloseTo(4 / 3, 10);
+  });
+
+  it('never returns below the minimum scale', () => {
+    // A dense phone asks for less than 1x of the design surface; clamping keeps
+    // the buffer at the logical size rather than shrinking below it.
+    expect(resolveRenderScale(960, 2130, 390, 844, 2)).toBe(1);
+  });
+
+  it('honours an explicit budget of Infinity by always rounding up', () => {
+    expect(resolveRenderScale(960, 600, 1280, 800, 1, { maxOversample: Infinity })).toBe(2);
+  });
+
+  it('still never under-samples: buffer >= physical pixels', () => {
+    for (const css of [800, 1024, 1280, 1440, 1600, 1920, 2560]) {
+      const scale = resolveRenderScale(960, 600, css, (css * 600) / 960, 1);
+      expect(960 * scale).toBeGreaterThanOrEqual(css - 1e-9);
+    }
   });
 });

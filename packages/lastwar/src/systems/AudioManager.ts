@@ -72,6 +72,20 @@ export class AudioManager {
     return AudioManager.instance;
   }
 
+  /**
+   * Resolve the language the session should open in, without constructing the
+   * singleton (which needs a Phaser.Game).
+   *
+   * Lets main.ts settle the language before the first scene renders. Previously
+   * the language was set as a side effect of the first `AudioManager.get()`,
+   * partway through scene construction, so labels built either side of that
+   * call could disagree. Reuses the same load() rule as the singleton, so the
+   * two never diverge.
+   */
+  static peekPersistedLanguage(): Language {
+    return AudioManager.load().language;
+  }
+
   /** Read the persisted settings (or the defaults). */
   private static load(): GameSettings {
     try {

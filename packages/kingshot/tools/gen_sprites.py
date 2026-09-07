@@ -17,6 +17,7 @@ Out:  public/assets/{sprites,backgrounds,ui,fx}/*.png
 """
 
 import math
+import random
 import os
 from PIL import Image
 
@@ -723,62 +724,255 @@ def lerp(a, b, t):
     return tuple(int(a[i] + (b[i] - a[i]) * t) for i in range(len(a)))
 
 
-def build_backgrounds():
-    W, H = 480, 270
+def blend(img, x, y, c):
+    """Alpha-composite a single pixel instead of overwriting it.
 
-    # --- sky (vertical dusk gradient + a few clouds) ---
+    `px` replaces the pixel outright, which is right for solid pixel art but
+    wrong for the translucent passes below (haze, glow, foliage speckle) where
+    the point is to tint what is already there.
+    """
+    w, h = img.size
+    if not (0 <= x < w and 0 <= y < h):
+        return
+    a = c[3] / 255.0
+    if a <= 0:
+        return
+    dr, dg, db, da = img.getpixel((x, y))
+    img.putpixel((x, y), (
+        int(dr + (c[0] - dr) * a),
+        int(dg + (c[1] - dg) * a),
+        int(db + (c[2] - db) * a),
+        max(da, c[3]),
+    ))
+
+
+def vgrad(img, y0, y1, top, bot):
+    w = img.size[0]
+    span = max(1, y1 - y0)
+    for y in range(y0, y1 + 1):
+        rect(img, 0, y, w - 1, y, lerp(top, bot, (y - y0) / span))
+
+
+def wrapped_sin(x, w, cycles, phase=0.0):
+    """A sine completing a whole number of cycles across the width.
+
+    Backgrounds are drawn at the canvas size but may still be tiled or scrolled,
+    so every horizontal wave has to close on itself; an arbitrary period leaves a
+    hard seam at the wrap point.
+    """
+    return math.sin((x / w) * cycles * 2 * math.pi + phase)
+
+
+def dusk_sky(img, horizon, seed=5):
+    """Warm medieval dusk: banded gradient, sun glow, layered cloud decks."""
+    w = img.size[0]
+    vgrad(img, 0, int(horizon * 0.55), (34, 44, 74, 255), (92, 84, 116, 255))
+    vgrad(img, int(horizon * 0.55) + 1, horizon, (92, 84, 116, 255), (206, 142, 104, 255))
+    # Low sun sitting just above the horizon, with a wide falloff.
+    sun_x, sun_y = int(w * 0.72), int(horizon * 0.86)
+    # Fill the glow by scanning the bounding box, not by stepping an angle:
+    # a polar sweep leaves unvisited pixels between successive rays and the
+    # halo comes out with visible spokes.
+    R, SQUASH = 150, 0.6
+    for dy in range(-int(R * SQUASH), int(R * SQUASH) + 1):
+        for dx in range(-R, R + 1):
+            d = math.hypot(dx, dy / SQUASH)
+            if d > R:
+                continue
+            a = int(46 * (1 - d / R) ** 2.2)
+            if a >= 1:
+                blend(img, sun_x + dx, sun_y + dy, (255, 196, 128, a))
+    for dy in range(-17, 18):
+        for dx in range(-17, 18):
+            d = math.hypot(dx, dy)
+            if d <= 15:
+                blend(img, sun_x + dx, sun_y + dy, (255, 236, 198, 235))
+            elif d <= 17:
+                blend(img, sun_x + dx, sun_y + dy, (255, 220, 170, 120))
+    # Cloud decks: stretched ellipses, lit underneath by the low sun.
+    rnd = random.Random(seed)
+    for _ in range(16):
+        cx = rnd.randrange(w)
+        cy = rnd.randint(int(horizon * 0.12), int(horizon * 0.78))
+        rx = rnd.randint(40, 130)
+        ry = rnd.randint(5, 13)
+        lit = 1.0 - abs(cx - sun_x) / w
+        for dy in range(-ry, ry + 1):
+            for dx in range(-rx, rx + 1):
+                if (dx * dx) / (rx * rx) + (dy * dy) / (ry * ry) > 1:
+                    continue
+                warm = dy > 0
+                col = (238, 186, 150) if warm else (176, 168, 190)
+                a = int((66 if warm else 52) * (0.5 + 0.5 * lit))
+                blend(img, cx + dx, cy + dy, (*col, a))
+
+
+def hills(img, base_y, height, cycles, phase, colour, seed=1, trees=None):
+    """One parallax hill band, filled to the bottom of the frame."""
+    w, h = img.size
+    rnd = random.Random(seed)
+    for x in range(w):
+        crest = base_y - int(height * (0.5 + 0.5 * wrapped_sin(x, w, cycles, phase)))
+        rect(img, x, crest, x, h - 1, colour)
+        blend(img, x, crest, (255, 220, 180, 40))  # sun-caught rim
+        if trees is not None and rnd.random() < 0.045:
+            th = rnd.randint(5, 11)
+            for k in range(th):
+                half = max(0, (th - k) // 3)
+                rect(img, x - half, crest - th + k, x + half, crest - th + k, trees)
+
+
+def build_backgrounds():
+    # Drawn at the CANVAS size (GameConfig CANVAS 960x540), not half of it. The
+    # old 480x270 sheets were tiled twice across the canvas and left a visible
+    # seam down the middle of the frame.
+    W, H = 960, 540
+
+    # ---------------------------------------------------------------- sky ----
     sky = new(W, H)
-    top = (42, 59, 82, 255)
-    bot = (108, 92, 100, 255)
-    for y in range(H):
-        rect(sky, 0, y, W - 1, y, lerp(top, bot, y / H))
-    for (cxp, cyp, r) in [(90, 60, 14), (300, 40, 18), (400, 90, 12)]:
-        for dy in range(-r, r):
-            for dx in range(-r * 2, r * 2):
-                if (dx * dx) / (r * 2 * r * 2) + (dy * dy) / (r * r) < 1:
-                    px(sky, cxp + dx, cyp + dy, (200, 176, 168, 150))
+    horizon = int(H * 0.66)
+    dusk_sky(sky, horizon)
+    vgrad(sky, horizon + 1, H - 1, (74, 96, 62, 255), (48, 72, 44, 255))
+    hills(sky, horizon + 8, 54, 1.0, 0.7, (58, 70, 78, 255), seed=2)
+    hills(sky, horizon + 20, 34, 2.0, 2.6, (62, 88, 62, 255), seed=4, trees=(38, 62, 42, 255))
     save(sky, os.path.join(BG, "sky.png"))
 
-    # --- town field: grassy ground with a soft horizon + dirt plots ---
+    # --------------------------------------------------------------- town ----
+    # The settlement backdrop. Build plots are NOT drawn here: the engine places
+    # real building sprites at its own coordinates, and the old blind 3x6 grid of
+    # flat dirt rectangles showed through underneath them as stray brown boxes.
     town = new(W, H)
-    horizon = int(H * 0.42)
-    for y in range(horizon, H):
-        t = (y - horizon) / (H - horizon)
-        rect(town, 0, y, W - 1, y, lerp(GRASS, GRASS_DK, t))
-    # scattered plot squares (build slots hint)
-    for gy in range(horizon + 20, H - 20, 46):
-        for gx in range(30, W - 30, 70):
-            rect(town, gx, gy, gx + 40, gy + 26, DIRT)
-            rect(town, gx, gy, gx + 40, gy, DIRT_DK)
-    # a winding path
-    for x in range(W):
-        y = horizon + 10 + int(30 * math.sin(x / 60.0))
-        rect(town, x, y, x, y + 6, (150, 128, 92, 255))
+    horizon = int(H * 0.44)
+    dusk_sky(town, horizon, seed=9)
+    hills(town, horizon + 4, 58, 1.0, 1.4, (54, 66, 76, 255), seed=6)
+    hills(town, horizon + 14, 36, 2.0, 3.1, (58, 84, 58, 255), seed=8, trees=(36, 58, 40, 255))
+
+    # A distant walled town on the ridge: curtain wall, roofs, a keep, banners.
+    rnd = random.Random(17)
+    wall_y = horizon - 6
+    rect(town, 0, wall_y, W - 1, horizon, (78, 74, 66, 255))
+    for x in range(0, W, 26):
+        rect(town, x, wall_y - 5, x + 12, wall_y, (86, 82, 73, 255))
+    x = -8
+    while x < W:
+        bw = rnd.randint(20, 40)
+        bh = rnd.randint(14, 34)
+        top = wall_y - bh
+        rect(town, x, top, x + bw, wall_y, (64, 58, 52, 255))
+        pitch = rnd.uniform(0.5, 0.8)
+        half = bw / 2.0
+        for i in range(bw + 1):
+            rise = int((half - abs(i - half)) * pitch)
+            if rise > 0:
+                rect(town, x + i, top - rise, x + i, top, ROOF_DK)
+        for _ in range(rnd.randint(0, 2)):
+            wx = x + rnd.randint(3, max(4, bw - 5))
+            wy = rnd.randint(top + 3, wall_y - 3)
+            for dx in (0, 1):
+                for dy in (0, 1):
+                    blend(town, wx + dx, wy + dy, (*GOLD[:3], 200))
+        x += bw + rnd.randint(3, 10)
+    # The keep, taller than the town, with a banner on the tower.
+    kx, kw = int(W * 0.46), 66
+    ktop = wall_y - 78
+    rect(town, kx, ktop, kx + kw, wall_y, (70, 64, 58, 255))
+    for tx in (kx - 8, kx + kw - 4):
+        rect(town, tx, ktop - 16, tx + 12, wall_y, (78, 72, 64, 255))
+        for i in range(6):
+            rise = int((6 - i) * 1.4)
+            rect(town, tx + i, ktop - 16 - rise, tx + 11 - i, ktop - 16 - rise, ROOF_DK)
+    rect(town, kx + kw // 2, ktop - 34, kx + kw // 2 + 1, ktop - 16, (60, 54, 48, 255))
+    rect(town, kx + kw // 2 + 2, ktop - 34, kx + kw // 2 + 16, ktop - 27, ROOF)
+
+    # ---- foreground: cultivated fields running back to the town gate ----
+    vgrad(town, horizon, H - 1, GRASS, GRASS_DK)
+    rnd = random.Random(23)
+    # Field strips, alternating crop tone, narrowing with distance.
+    y = horizon + 4
+    band = 5
+    while y < H:
+        tone = rnd.choice([(88, 132, 62), (72, 112, 52), (104, 140, 70)])
+        for x in range(W):
+            wob = int(2 * wrapped_sin(x, W, 2, y * 0.05))
+            for dy in range(band):
+                blend(town, x, y + dy + wob, (*tone, 130))
+        # hedge line between strips
+        for x in range(W):
+            wob = int(2 * wrapped_sin(x, W, 2, y * 0.05))
+            blend(town, x, y + band + wob, (40, 66, 38, 150))
+        y += band + 2
+        band = int(band * 1.28) + 1
+    # Grass speckle, denser in the foreground.
+    for _ in range(2600):
+        x = rnd.randrange(W)
+        gy = rnd.randint(horizon, H - 1)
+        near = (gy - horizon) / max(1, H - horizon)
+        if rnd.random() > near * 0.9 + 0.1:
+            continue
+        blend(town, x, gy, (*(rnd.choice([(120, 158, 84), (52, 84, 44)])), rnd.randint(40, 110)))
+    # The road up to the gate, per scanline so it narrows into the distance.
+    gate_x = kx + kw // 2
+    for gy in range(horizon + 2, H):
+        t = (gy - horizon) / (H - horizon)
+        cx = gate_x + (W * 0.06) * math.sin(t * 1.2) * t
+        half = 2 + int(44 * t * t)
+        for dx in range(-half, half + 1):
+            edge = 1.0 - abs(dx) / max(1, half)
+            blend(town, int(cx + dx), gy, (*DIRT[:3], int(225 * (0.45 + 0.55 * edge))))
+        blend(town, int(cx - half), gy, (*DIRT_DK[:3], 140))
+        blend(town, int(cx + half), gy, (*DIRT_DK[:3], 140))
     save(town, os.path.join(BG, "town.png"))
 
-    # --- battlefield: trampled ground + a defended gate on the right ---
+    # ------------------------------------------------------------- battle ---
     battle = new(W, H)
-    horizon = int(H * 0.5)
-    for y in range(horizon, H):
-        t = (y - horizon) / (H - horizon)
-        rect(battle, 0, y, W - 1, y, lerp((120, 104, 74, 255), DIRT_DK, t))
-    # sky
-    for y in range(horizon):
-        rect(battle, 0, y, W - 1, y, lerp((60, 66, 84, 255), (110, 98, 96, 255), y / horizon))
-    # the defended gate/wall on the right
-    wx = W - 70
-    rect(battle, wx, horizon - 60, W - 1, H - 1, STONE)
-    for y in range(horizon - 60, H, 14):
-        rect(battle, wx, y, W - 1, y, STONE_DK)
-    for x in range(wx, W, 22):
-        rect(battle, x, horizon - 60, x, H - 1, STONE_DK)
-    rect(battle, wx, horizon - 60, wx, H - 1, STONE_LT)
-    for x in range(wx, W, 22):        # crenellations
-        rect(battle, x, horizon - 64, x + 10, horizon - 60, STONE)
-    # gate
-    rect(battle, W - 34, horizon - 6, W - 12, H - 1, WOOD_DK)
-    rect(battle, W - 34, horizon - 6, W - 12, horizon - 4, WOOD)
+    horizon = int(H * 0.52)
+    dusk_sky(battle, horizon, seed=29)
+    hills(battle, horizon + 10, 46, 1.0, 2.2, (52, 64, 74, 255), seed=12)
+    vgrad(battle, horizon, H - 1, (122, 106, 76, 255), DIRT_DK)
+    rnd = random.Random(37)
+    # Churned earth where the lines have met.
+    for _ in range(90):
+        sx = rnd.randrange(W)
+        sy = rnd.randint(horizon + 8, H - 1)
+        sw = rnd.randint(12, 54)
+        th = rnd.randint(1, 3)
+        for k in range(sw):
+            for dy in range(th + 1):
+                blend(battle, sx + k, sy + dy, (*DIRT_DK[:3], 130))
+    for _ in range(700):
+        x = rnd.randrange(W)
+        gy = rnd.randint(horizon, H - 1)
+        blend(battle, x, gy, (*(rnd.choice([(148, 128, 92), (86, 66, 42)])), rnd.randint(40, 110)))
+
+    # The defended wall, standing fully inside the frame with its own shadowed
+    # right face so it reads as a structure rather than a sprite cut off at the
+    # canvas edge.
+    wx, wex = W - 170, W - 18
+    wtop = horizon - 122
+    rect(battle, wx, wtop, wex, H - 1, STONE)
+    for y in range(wtop, H, 26):
+        rect(battle, wx, y, wex, y, STONE_DK)
+    for bx in range(wx, wex, 42):
+        rect(battle, bx, wtop, bx, H - 1, STONE_DK)
+    rect(battle, wx, wtop, wx + 1, H - 1, STONE_LT)
+    rect(battle, wex - 1, wtop, wex, H - 1, STONE_DK)
+    for bx in range(wx, wex - 18, 42):
+        rect(battle, bx, wtop - 10, bx + 20, wtop, STONE)
+        rect(battle, bx, wtop - 10, bx + 20, wtop - 7, STONE_LT)
+    # Banner over the gate.
+    gcx = (wx + wex) // 2
+    rect(battle, gcx - 26, horizon - 16, gcx + 26, H - 1, WOOD_DK)
+    rect(battle, gcx - 26, horizon - 16, gcx + 26, horizon - 10, WOOD)
+    for i in range(6):
+        rect(battle, gcx - 22 + i * 8, horizon - 10, gcx - 18 + i * 8, H - 1, WOOD)
+    rect(battle, gcx - 9, wtop - 4, gcx + 9, wtop + 26, ROOF)
+    rect(battle, gcx - 9, wtop + 20, gcx + 9, wtop + 26, ROOF_DK)
     save(battle, os.path.join(BG, "battle.png"))
+    for name in ("sky.png", "town.png", "battle.png"):
+        path = os.path.join(BG, name)
+        img = Image.open(path).convert("RGBA")
+        if min(img.getchannel("A").getextrema()) != 255:
+            raise SystemExit(f"{name} has translucent pixels; backgrounds must be opaque")
     print("backgrounds: sky.png town.png battle.png", (W, H))
 
 
