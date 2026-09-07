@@ -222,25 +222,72 @@ body {
 /* ============================================================
    Main menu
    ============================================================ */
-.main-menu {
-  max-width: 560px;
+/* ------------------------------------------------------------------
+   Main menu.
+
+   This is the first screen anyone sees, and it was a small bordered card
+   marooned in the middle of an almost flat page - the surrounding space
+   carried nothing. The card is now larger and the space around it does
+   some work: layered radial glows in the gold/steel palette plus a faint
+   diagonal weave, all pure CSS, so there is atmosphere without another
+   asset to download.
+   ------------------------------------------------------------------ */
+.screen--menu {
+  position: relative;
+  max-width: 42rem;
+  width: min(92vw, 42rem);
+  padding: clamp(2.25rem, 5vw, 3.5rem) clamp(1.75rem, 5vw, 3.5rem);
+  isolation: isolate;
+}
+
+/* Ambient light pooled behind and around the card. Sits BEHIND the card
+   (z-index -1) and overflows it deliberately, so the empty page reads as
+   a lit space rather than a void. */
+.screen--menu::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: -55% -40%;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 46% 40% at 50% 30%, rgba(200, 170, 110, 0.16), transparent 70%),
+    radial-gradient(ellipse 60% 46% at 50% 78%, rgba(70, 130, 180, 0.13), transparent 72%),
+    repeating-linear-gradient(
+      115deg,
+      rgba(200, 170, 110, 0.045) 0 1px,
+      transparent 1px 26px
+    );
 }
 
 .main-menu__title {
-  font-size: clamp(1.6rem, 3.5vw, 2.5rem);
+  font-size: clamp(1.9rem, 4.4vw, 3rem);
+  line-height: 1.2;
+  letter-spacing: 0.01em;
 }
 
 .main-menu__tagline {
   font-family: var(--font-display);
   color: var(--color-gold);
-  font-size: 1.05rem;
-  letter-spacing: 0.04em;
-  margin: 0.25rem 0 1rem;
+  font-size: clamp(1rem, 1.6vw, 1.2rem);
+  letter-spacing: 0.05em;
+  margin: 0.4rem 0 1.25rem;
+}
+
+/* Hairline rule under the tagline: gives the title block a base and splits
+   it from the body copy without adding another element to the markup. */
+.main-menu__tagline::after {
+  content: '';
+  display: block;
+  width: min(14rem, 60%);
+  height: 1px;
+  margin: 1.1rem auto 0;
+  background: linear-gradient(90deg, transparent, var(--color-gold-muted), transparent);
 }
 
 .main-menu__play {
-  font-size: 1.05rem;
-  padding: 0.8rem 2.4rem;
+  font-size: 1.15rem;
+  padding: 0.95rem 3rem;
+  margin-top: 1.6rem;
 }
 
 /* ============================================================

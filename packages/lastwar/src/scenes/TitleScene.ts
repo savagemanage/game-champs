@@ -80,17 +80,20 @@ export class TitleScene extends Phaser.Scene {
     // its centre), so these two lines are pushed clearly below that edge and
     // spaced apart from each other; `step` below is widened so the following
     // Upgrades button clears the key cue with a comfortable gap.
+    // Gaps widened from 50/74: the explainer sat 20px under the CTA's bottom
+    // edge and only 24px above the key cue, so the three elements read as one
+    // crowded block with the explainer appearing to touch the button border.
     const [subKey, keyCueKey] = startCtaSubKeys();
     this.add
-      .text(cx, y + 50, tr(subKey), textStyle(16, { color: PALETTE.MUTED_CSS, align: 'center' }))
+      .text(cx, y + 60, tr(subKey), textStyle(16, { color: PALETTE.MUTED_CSS, align: 'center' }))
       .setOrigin(0.5);
     this.add
-      .text(cx, y + 74, tr(keyCueKey), textStyle(15, { color: PALETTE.ACCENT_CSS, fontStyle: 'bold', allowSmall: true }))
+      .text(cx, y + 90, tr(keyCueKey), textStyle(15, { color: PALETTE.ACCENT_CSS, fontStyle: 'bold', allowSmall: true }))
       .setOrigin(0.5);
-    // The explainer + key cue occupy the band ~42..82px below the button
-    // centre; advance well past them (well over the normal step) so the
-    // Upgrades button top clears the key cue with a comfortable gap.
-    y += step + 50;
+    // The explainer + key cue now occupy the band ~52..98px below the button
+    // centre; advance past them (well over the normal step) so the Upgrades
+    // button top clears the key cue with a comfortable gap.
+    y += step + 62;
     Menu.button(this, cx, y, tr('title.upgrades'), () => this.go(SceneKeys.Upgrade), { width: 260 });
     y += step;
     Menu.button(this, cx, y, tr('title.howto'), () => this.toggleHowTo(), { width: 260 });
