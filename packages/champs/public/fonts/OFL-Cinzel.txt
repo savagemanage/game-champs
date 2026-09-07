@@ -1,0 +1,10 @@
+Cinzel is licensed under the SIL Open Font License, Version 1.1.
+Copyright (c) Natanael Gama (https://ndiscovered.com).
+
+The files in this directory are subsets of the upstream release, produced with
+fonttools (pyftsubset) and restricted to the codepoint ranges this game renders.
+Subsetting does not change the license: the full OFL-1.1 text applies, and is
+reproduced at https://openfontlicense.org/open-font-license-official-text/.
+
+The Noto Sans KR subsets in this directory carry their own OFL notice in
+OFL-NotoSansKR.txt.

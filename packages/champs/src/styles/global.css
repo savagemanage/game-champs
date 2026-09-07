@@ -35,6 +35,13 @@ body {
 body {
   font-family: var(--font-body);
   color: var(--color-text);
+  /* Korean has no spaces inside a word, so the default `break-word` splits
+     mid-word: "아레나에 오신 것을 환영합니 / 다". `keep-all` breaks at the spaces
+     between eojeol instead, which is how Korean is meant to wrap. Latin text is
+     unaffected; the companion `overflow-wrap` still rescues a single token that
+     genuinely cannot fit. */
+  word-break: keep-all;
+  overflow-wrap: break-word;
   background:
     radial-gradient(circle at 50% -10%, rgba(9, 20, 40, 0.9), transparent 60%),
     linear-gradient(180deg, #010a13 0%, #04121f 100%);
@@ -138,6 +145,9 @@ body {
   font-family: var(--font-display);
   color: var(--color-gold-bright);
   margin-top: 0;
+  /* Spread a wrapped heading evenly over its lines rather than leaving one
+     orphaned word on the last line. */
+  text-wrap: balance;
 }
 
 .screen__description {

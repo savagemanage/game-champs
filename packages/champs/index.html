@@ -4,14 +4,49 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="League of Legends inspired arena battle web game." />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&family=Cinzel:wght@600;700&display=swap"
-      rel="stylesheet"
+    <meta
+      name="description"
+      content="Arena Champions - an original three-lane 5v5 MOBA you play in the browser. Korean and English."
     />
-    <title>Arena Champions</title>
+    <!--
+      Fonts are SELF-HOSTED, not pulled from a CDN. The previous Google Fonts
+      <link> was render-blocking on a third-party origin, which cost ~12s to
+      first paint on a slow link and made the game unusable offline. The subsets
+      in public/fonts/ cover every codepoint this game renders; licenses sit
+      beside them. Paths are RELATIVE so they resolve under both the dev base
+      ("/") and the Pages base ("/open-games/champs/").
+    -->
+    <style>
+      @font-face {
+        font-family: 'Noto Sans KR';
+        src: url('fonts/NotoSansKR-Regular.subset.woff2') format('woff2');
+        font-weight: 400 500;
+        font-style: normal;
+        font-display: swap;
+      }
+      @font-face {
+        font-family: 'Noto Sans KR';
+        src: url('fonts/NotoSansKR-Bold.subset.woff2') format('woff2');
+        font-weight: 600 900;
+        font-style: normal;
+        font-display: swap;
+      }
+      @font-face {
+        font-family: 'Cinzel';
+        src: url('fonts/Cinzel-SemiBold.subset.woff2') format('woff2');
+        font-weight: 600;
+        font-style: normal;
+        font-display: swap;
+      }
+      @font-face {
+        font-family: 'Cinzel';
+        src: url('fonts/Cinzel-Bold.subset.woff2') format('woff2');
+        font-weight: 700;
+        font-style: normal;
+        font-display: swap;
+      }
+    </style>
+    <title>아레나 챔피언스 · Arena Champions</title>
   </head>
   <body>
     <div id="root"></div>

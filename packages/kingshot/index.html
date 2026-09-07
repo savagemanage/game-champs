@@ -2,6 +2,12 @@
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
+    <!--
+      RELATIVE href so the icon resolves under both the dev base ("/") and the
+      Pages base ("/open-games/kingshot/"); an absolute "/favicon.ico" 404s on a
+      subpath deploy.
+    -->
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>킹덤 라이즈</title>
     <style>

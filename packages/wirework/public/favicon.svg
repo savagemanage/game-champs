@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" shape-rendering="crispEdges">
+  <!-- Wirework: a grapple hook on its wire, over the game's night-steel palette. -->
+  <rect width="32" height="32" rx="4" fill="#141d2b" />
+  <path d="M5 27L18 9" stroke="#7f8fa6" stroke-width="2" />
+  <rect x="16" y="4" width="3" height="7" fill="#d7dee8" />
+  <path d="M13 6h3v3h-3z" fill="#d7dee8" />
+  <path d="M19 6h3v3h-3z" fill="#d7dee8" />
+  <path d="M11 8h2v4h-2z" fill="#9fb0c4" />
+  <path d="M22 8h2v4h-2z" fill="#9fb0c4" />
+  <rect x="4" y="26" width="4" height="4" rx="1" fill="#e0a458" />
+</svg>

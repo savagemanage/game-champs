@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" shape-rendering="crispEdges">
+  <!-- Kingdom Rise: a pixel keep with a raised banner, in the game's gold-on-loam palette. -->
+  <rect width="32" height="32" rx="4" fill="#14100c" />
+  <rect x="7" y="14" width="18" height="12" fill="#8a6a44" />
+  <rect x="7" y="14" width="18" height="2" fill="#a98455" />
+  <rect x="7" y="11" width="3" height="3" fill="#8a6a44" />
+  <rect x="13" y="11" width="3" height="3" fill="#8a6a44" />
+  <rect x="19" y="11" width="3" height="3" fill="#8a6a44" />
+  <rect x="14" y="19" width="4" height="7" fill="#3b2a19" />
+  <rect x="15" y="4" width="2" height="8" fill="#e8c877" />
+  <path d="M17 5h7l-2 2 2 2h-7z" fill="#c9563f" />
+</svg>

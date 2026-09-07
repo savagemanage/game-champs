@@ -38,11 +38,23 @@ function parseArgs(argv) {
 const ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 const escapeHtml = (value) => String(value).replace(/[&<>"']/g, (char) => ESCAPES[char]);
 
-/** Stable per-slug hue so each placeholder tile gets its own colour. */
+/**
+ * Widely separated hues for the placeholder tiles.
+ *
+ * Hashing a slug straight to `hue % 360` put every real slug in the greens
+ * (156, 109, 121, ...) and the tiles were indistinguishable. Pick from a fixed
+ * wheel of far-apart hues instead: the choice is still stable per slug, but two
+ * slugs can only ever land on the same hue, never on adjacent ones.
+ */
+const PLACEHOLDER_HUES = [210, 28, 145, 320, 45, 265, 175, 5, 95, 240];
+
 function hueFor(slug) {
-  let hash = 0;
-  for (const char of slug) hash = (hash * 31 + char.charCodeAt(0)) % 360;
-  return hash;
+  let hash = 2166136261;
+  for (const char of slug) {
+    hash ^= char.charCodeAt(0);
+    hash = Math.imul(hash, 16777619) >>> 0;
+  }
+  return PLACEHOLDER_HUES[hash % PLACEHOLDER_HUES.length];
 }
 
 /** "Arena Champions" -> "AC"; "Wirework" -> "WI". */
