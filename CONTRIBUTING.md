@@ -74,6 +74,19 @@ letters, digits and hyphens, 3-32 characters, starting with a letter.
 | `status` | yes | `playable`, `wip`, or `archived` |
 | `thumbnail` | no | Path inside the package, e.g. `thumb.png`. Omit it and the landing page draws a monogram placeholder instead |
 
+Thumbnails are captured, not hand-made. Once the game runs:
+
+```bash
+npm run build          # assemble _site/ first
+npm run thumbs         # writes packages/<slug>/thumb.png for every game
+```
+
+`npm run thumbs` opens each game in headless Chromium, waits for the title
+screen to settle, and shoots the game canvas. It needs `playwright` installed
+locally (`npm i -D playwright`) and is a maintainer tool, not part of the build:
+the PNGs are committed so a normal `npm run build` stays fast and browser-free.
+Re-run it when a game's look changes.
+
 `status` drives the listings: `wip` games are listed with a badge, `archived` games are dropped
 from the landing page and the README entirely. Start at `wip` and switch to `playable` when the
 game is worth playing.
@@ -149,6 +162,7 @@ assets, docs, commit messages, and metadata alike.
 | `npm run docs:readme` | Regenerate the README tables from `game.json` |
 | `npm run docs:check` | Fail if those tables are stale |
 | `npm run new-game` | Scaffold `packages/<slug>` from the template |
+| `npm run thumbs` | Re-capture every game's landing-page thumbnail (needs playwright) |
 
 The pieces behind them:
 

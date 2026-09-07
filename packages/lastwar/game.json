@@ -5,6 +5,10 @@
   "genre": "Squad Auto-Battler",
   "summary": "A survival base-builder and squad auto-battler with a story campaign, endless horde defense, and a lane gate-runner mini-game.",
   "summaryKo": "생존 기지 건설과 스쿼드 오토배틀러. 스토리 캠페인, 무한 호드 디펜스, 레인 게이트 러너 미니게임을 함께 즐길 수 있습니다.",
-  "stack": ["typescript", "phaser3"],
-  "status": "playable"
+  "stack": [
+    "typescript",
+    "phaser3"
+  ],
+  "status": "playable",
+  "thumbnail": "thumb.png"
 }

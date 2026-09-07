@@ -5,6 +5,10 @@
   "genre": "Strategy / Idle",
   "summary": "A medieval kingdom builder with idle resource output, a town-center-gated building tree, troop training queues, and wave-based combat.",
   "summaryKo": "중세 왕국 건설 게임. 방치형 자원 생산, 중앙 청사 단계로 열리는 건물 트리, 병력 훈련 대기열, 웨이브 전투를 갖췄습니다.",
-  "stack": ["typescript", "phaser3"],
-  "status": "playable"
+  "stack": [
+    "typescript",
+    "phaser3"
+  ],
+  "status": "playable",
+  "thumbnail": "thumb.png"
 }

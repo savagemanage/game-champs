@@ -73,46 +73,77 @@
         gap: 1rem;
         width: 100%;
         max-width: 68rem;
-        grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(21rem, 1fr));
       }
       a.game {
-        display: grid;
-        grid-template-columns: 4.5rem 1fr;
-        gap: 1rem;
+        display: flex;
+        flex-direction: column;
         height: 100%;
-        align-items: start;
         text-decoration: none;
         color: inherit;
         background: var(--bg-card);
         border: 1px solid var(--border-card);
         border-radius: 14px;
-        padding: 1.1rem 1.25rem;
+        overflow: hidden;
         transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
       }
       a.game:hover,
       a.game:focus-visible {
-        transform: translateY(-2px);
+        transform: translateY(-3px);
         border-color: rgba(120, 150, 255, 0.6);
-        background: rgba(120, 150, 255, 0.1);
+        background: rgba(120, 150, 255, 0.08);
         outline: none;
       }
-      .thumb {
-        width: 4.5rem;
-        height: 4.5rem;
-        border-radius: 10px;
+      /* 16:9 media well. aspect-ratio holds the slot before the image decodes,
+         so cards do not reflow as thumbnails stream in. */
+      .shot-frame {
+        position: relative;
+        display: block;
+        aspect-ratio: 16 / 9;
+        background: #05070d;
+        border-bottom: 1px solid var(--border-card);
+        overflow: hidden;
+      }
+      .shot {
+        display: block;
+        width: 100%;
+        height: 100%;
         object-fit: cover;
+      }
+      .shot--placeholder {
         display: grid;
         place-items: center;
-        font-size: 1.35rem;
+        font-size: 2.6rem;
         font-weight: 700;
-        letter-spacing: 0.04em;
+        letter-spacing: 0.06em;
         color: rgba(255, 255, 255, 0.92);
         background: linear-gradient(145deg, hsl(var(--hue) 55% 42%), hsl(var(--hue) 60% 22%));
+      }
+      .play {
+        position: absolute;
+        inset: auto 0.7rem 0.7rem auto;
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        padding: 0.3rem 0.7rem;
+        border-radius: 999px;
+        color: #05070d;
+        background: rgba(230, 238, 255, 0.9);
+        opacity: 0;
+        transform: translateY(4px);
+        transition: opacity 0.15s ease, transform 0.15s ease;
+      }
+      a.game:hover .play,
+      a.game:focus-visible .play {
+        opacity: 1;
+        transform: translateY(0);
       }
       .body {
         display: flex;
         flex-direction: column;
         gap: 0.3rem;
+        padding: 0.95rem 1.1rem 1.15rem;
         min-width: 0;
       }
       .title-row {
@@ -122,7 +153,7 @@
         flex-wrap: wrap;
       }
       .name {
-        font-size: 1.1rem;
+        font-size: 1.05rem;
         font-weight: 600;
         line-height: 1.25;
       }
@@ -138,19 +169,19 @@
         color: #ffcf8a;
       }
       .name-ko {
-        font-size: 0.85rem;
+        font-size: 0.82rem;
         color: var(--text-dim);
       }
       .genre {
-        font-size: 0.7rem;
-        letter-spacing: 0.08em;
+        font-size: 0.68rem;
+        letter-spacing: 0.09em;
         text-transform: uppercase;
         color: var(--accent);
       }
       .summary {
-        margin-top: 0.15rem;
-        font-size: 0.85rem;
-        line-height: 1.5;
+        margin-top: 0.2rem;
+        font-size: 0.82rem;
+        line-height: 1.55;
         color: var(--text-dim);
       }
       footer {
@@ -164,7 +195,8 @@
         color: var(--text-dim);
       }
       @media (prefers-reduced-motion: reduce) {
-        a.game {
+        a.game,
+        .play {
           transition: none;
         }
         a.game:hover,

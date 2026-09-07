@@ -107,6 +107,7 @@ npm run typecheck    # type-check every game
 npm run docs:readme  # regenerate the tables in this README from game.json
 npm run docs:check   # verify those tables are up to date (no writes)
 npm run new-game     # scaffold a new game; see below
+npm run thumbs       # re-capture the landing-page thumbnails (maintainer tool)
 ```
 
 ---
@@ -121,7 +122,8 @@ Four steps, none of which touch a shared file:
    `status` to `playable` when it is ready to list.
 3. **Wire the install.** Run `npm install` from the root so the new workspace is linked.
 4. **Verify.** `npm run typecheck && npm run test && npm run build`, then `npm run docs:readme`
-   to refresh the tables above.
+   to refresh the tables above. Run `npm run thumbs` once the game renders, so the landing
+   page shows a real screenshot instead of a placeholder tile.
 
 The landing page, the tables in this README, and `.github/workflows/deploy.yml` all pick the
 game up on their own. See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full checklist and the

@@ -67,7 +67,7 @@ function monogram(title) {
 function renderThumb(game, outDir) {
   const hue = hueFor(game.slug);
   if (!game.thumbnail) {
-    return `<span class="thumb" style="--hue: ${hue}" aria-hidden="true">${escapeHtml(
+    return `<span class="shot shot--placeholder" style="--hue: ${hue}" aria-hidden="true">${escapeHtml(
       monogram(game.title),
     )}</span>`;
   }
@@ -75,7 +75,9 @@ function renderThumb(game, outDir) {
   const rel = `thumbs/${game.slug}${ext}`;
   mkdirSync(join(outDir, 'thumbs'), { recursive: true });
   copyFileSync(join(game.packageDir, game.thumbnail), join(outDir, rel));
-  return `<img class="thumb" src="${escapeHtml(rel)}" alt="" width="72" height="72" loading="lazy" />`;
+  // Decorative: the card's own heading already names the game, so an alt text
+  // here would just be read out twice.
+  return `<img class="shot" src="${escapeHtml(rel)}" alt="" width="640" height="360" loading="lazy" decoding="async" />`;
 }
 
 function renderCard(game, outDir) {
@@ -102,7 +104,10 @@ function renderCard(game, outDir) {
   // subpath, a user site, or a local preview) without being regenerated.
   return `      <li>
         <a class="game" href="./${escapeHtml(game.slug)}/">
-          ${renderThumb(game, outDir)}
+          <span class="shot-frame">
+            ${renderThumb(game, outDir)}
+            <span class="play" aria-hidden="true">Play</span>
+          </span>
           <span class="body">
             <span class="title-row">
               <span class="name">${escapeHtml(game.title)}</span>${badge}

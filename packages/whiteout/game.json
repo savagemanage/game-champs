@@ -5,6 +5,10 @@
   "genre": "Survival City-Builder",
   "summary": "A frozen-survival city-builder: keep the central furnace burning, run idle resource buildings, and repel escalating cold-season sieges.",
   "summaryKo": "혹한 생존 도시 건설 게임. 중앙 화로의 불씨를 지키고 방치형 자원 건물을 돌리며 점점 거세지는 습격을 막아냅니다.",
-  "stack": ["typescript", "phaser3"],
-  "status": "playable"
+  "stack": [
+    "typescript",
+    "phaser3"
+  ],
+  "status": "playable",
+  "thumbnail": "thumb.png"
 }
