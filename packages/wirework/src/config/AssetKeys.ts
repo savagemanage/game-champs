@@ -38,6 +38,7 @@ export const TextureKeys = {
   Tiles: 'tiles',
   Hook: 'hook',
   BgSky: 'bg_sky',
+  BgGround: 'bg_ground',
   BgHills: 'bg_hills',
   BgWall: 'bg_wall',
   FxSlash: 'fx_slash',
@@ -109,6 +110,7 @@ export const SHEETS: readonly SheetAsset[] = [
 export const IMAGES: readonly ImageAsset[] = [
   { key: TextureKeys.Hook, url: 'assets/sprites/hook.png' },
   { key: TextureKeys.BgSky, url: 'assets/backgrounds/sky.png' },
+  { key: TextureKeys.BgGround, url: 'assets/backgrounds/ground.png' },
   { key: TextureKeys.BgHills, url: 'assets/backgrounds/hills.png' },
   { key: TextureKeys.BgWall, url: 'assets/backgrounds/wall.png' },
   { key: TextureKeys.UiPanel, url: 'assets/ui/panel.png' },

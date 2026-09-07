@@ -137,3 +137,10 @@ function registerRenderScale(game: Phaser.Game): void {
 
 const game = new Phaser.Game(config);
 registerRenderScale(game);
+// QA/debug hook: expose the running game only when explicitly requested via
+// ?debug in the URL, so screenshot/e2e tooling can introspect scene state.
+// Has no effect on the normal production page (no query flag). Mirrors the
+// hook the other games already carry.
+if (typeof location !== 'undefined' && location.search.includes('debug')) {
+  (globalThis as unknown as { __GAME__?: Phaser.Game }).__GAME__ = game;
+}

@@ -475,7 +475,90 @@ def build_backgrounds():
     for x in range(wx, W, 24):
         rect(wall, x, 0, x + 11, 8, PLATE)
     save(wall, os.path.join(BG, "wall.png"))
-    print("backgrounds: sky.png hills.png wall.png", (W, H))
+
+    # --- arena floor: a SEAMLESS top-down ground tile ---
+    # The floor used to tile the SKY texture, so the arena read as a black void
+    # with cloud ellipses drifting across it. This is a real surface: packed
+    # earth graded from the ring inwards, flagstone courses, grass tufts and
+    # scuffed dirt, all wrapped so the tile repeats without a seam.
+    import random as _random
+
+    G = 256  # power-of-two tile, wraps cleanly at any arena size
+    ground = new(G, G)
+    rnd = _random.Random(1971)
+    # Bright enough to read as a lit courtyard at night rather than a void; the
+    # arena is the play space and the player has to see where they are standing.
+    EARTH = (86, 79, 66, 255)
+    EARTH_LT = (104, 96, 80, 255)
+    EARTH_DK = (68, 62, 52, 255)
+    FLAG = (124, 120, 110, 255)
+    FLAG_DK = (52, 49, 44, 255)
+    TUFT = (88, 110, 72, 255)
+    TUFT_DK = (62, 82, 54, 255)
+
+    def gblend(x, y, c):
+        # Wrap so every mark that runs off one edge continues on the opposite
+        # one; without this the tile shows a grid of seams across the arena.
+        xi, yi = x % G, y % G
+        a = c[3] / 255.0
+        dr, dg, db, da = ground.getpixel((xi, yi))
+        ground.putpixel((xi, yi), (
+            int(dr + (c[0] - dr) * a),
+            int(dg + (c[1] - dg) * a),
+            int(db + (c[2] - db) * a),
+            255,
+        ))
+
+    rect(ground, 0, 0, G - 1, G - 1, EARTH)
+    # Broad tonal variation: a few wrapped sine fields keep it from reading flat.
+    for y in range(G):
+        for x in range(G):
+            n = (
+                math.sin(x / G * 2 * math.pi * 2) * math.cos(y / G * 2 * math.pi * 3)
+                + 0.6 * math.sin(x / G * 2 * math.pi * 5 + 1.7) * math.sin(y / G * 2 * math.pi * 2)
+            )
+            # Kept faint: at high alpha the noise field reads as camouflage
+            # blotches and swamps the flagstone pattern.
+            if n > 0.45:
+                gblend(x, y, (*EARTH_LT[:3], 26))
+            elif n < -0.55:
+                gblend(x, y, (*EARTH_DK[:3], 26))
+    # Flagstone courses: offset brick rows, worn and irregular.
+    course = 32
+    for row, y in enumerate(range(0, G, course)):
+        offset = (row % 2) * (course // 2)
+        for x in range(offset, G + offset, course):
+            if rnd.random() < 0.35:
+                continue  # a missing stone: bare earth shows through
+            # Face first, then the recessed joint around it, so each stone reads
+            # as a raised slab rather than an outline drawn on dirt.
+            for jy in range(1, course - 3):
+                for jx in range(1, course - 3):
+                    gblend(x + jx, y + jy, (*FLAG[:3], 150))
+            for k in range(course - 2):
+                gblend(x + k, y, (*FLAG_DK[:3], 200))
+                gblend(x + k, y + course - 3, (*FLAG_DK[:3], 200))
+                gblend(x, y + k, (*FLAG_DK[:3], 200))
+                gblend(x + course - 3, y + k, (*FLAG_DK[:3], 200))
+            for k in range(1, course - 3):  # lit top-left bevel
+                gblend(x + k, y + 1, (255, 250, 240, 26))
+                gblend(x + 1, y + k, (255, 250, 240, 26))
+            for _ in range(70):  # wear speckle on the face
+                gblend(x + rnd.randint(2, course - 5), y + rnd.randint(2, course - 5),
+                       (*EARTH_DK[:3], rnd.randint(20, 60)))
+    # Grass pushing up through the joints.
+    for _ in range(150):
+        gx, gy = rnd.randrange(G), rnd.randrange(G)
+        for k in range(rnd.randint(2, 5)):
+            gblend(gx + rnd.randint(-1, 1), gy - k, (*(TUFT if k % 2 else TUFT_DK)[:3], 190))
+    # Scuffs and pebbles.
+    for _ in range(500):
+        gx, gy = rnd.randrange(G), rnd.randrange(G)
+        tone = rnd.choice([EARTH_LT, EARTH_DK, FLAG])
+        gblend(gx, gy, (*tone[:3], rnd.randint(50, 130)))
+    save(ground, os.path.join(BG, "ground.png"))
+
+    print("backgrounds: sky.png hills.png wall.png ground.png", (W, H), "ground", (G, G))
 
 
 # ===========================================================================

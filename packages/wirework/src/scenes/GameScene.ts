@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { SceneKeys, PALETTE, WALL } from '../config/GameConfig';
+import { PALETTE, SceneKeys, WALL } from '../config/GameConfig';
 import { AudioKeys, TextureKeys } from '../config/AssetKeys';
 import { HERO_THREAT } from '../config/EnemyConfig';
 import { ARENA, CAMERA, GAS } from '../config/PlayerConfig';
@@ -139,11 +139,17 @@ export class GameScene extends Phaser.Scene {
 
   /** Top-down arena floor: a tiled ground fill spanning the whole arena. */
   private buildArena(): void {
+    // A dedicated seamless ground tile. This used to tile the SKY texture and
+    // tint it, which left the arena reading as a black void with cloud ellipses
+    // drifting across the floor; the player could not tell where they stood.
     this.add
-      .tileSprite(0, 0, ARENA.WIDTH, ARENA.HEIGHT, TextureKeys.BgSky)
+      .tileSprite(0, 0, ARENA.WIDTH, ARENA.HEIGHT, TextureKeys.BgGround)
       .setOrigin(0, 0)
       .setDepth(-30)
-      .setTint(PALETTE.GROUND);
+      // At 1:1 a flagstone is 32 world px - wider than the hero, which makes
+      // the arena read as a giant's courtyard. Halved, a stone sits at roughly
+      // hero shoulder width and the floor reads as ground rather than pattern.
+      .setTileScale(0.5);
     // A subtle concentric guide ring at the center reads as the plaza floor.
     const plaza = this.add.graphics().setDepth(-29);
     plaza.fillStyle(PALETTE.BG_NEAR, 0.35);

@@ -73,8 +73,47 @@ export class Hud {
   private static readonly BAR_H = 12;
   private static readonly DEPTH = 50;
 
+  /**
+   * Every HUD element, with the design-space offset it was authored at.
+   *
+   * These were pinned with `setScrollFactor(0)`, which anchors an object to the
+   * camera's SCROLL ORIGIN rather than to the visible viewport. GameScene's
+   * camera follows the player, so that origin moves: the HUD slid off the top
+   * of the frame and only a sliver of one gauge stayed on screen. Anchoring to
+   * `camera.worldView` every frame instead is exact whatever the camera is
+   * doing, at any viewport aspect.
+   */
+  private readonly anchored: { obj: Phaser.GameObjects.GameObject & { x: number; y: number }; ox: number; oy: number }[] = [];
+
+  /**
+   * Record everything the constructor added to the display list. Snapshotting
+   * the list either side of construction avoids threading a registration call
+   * through two dozen builder chains.
+   */
+  private captureAnchors(from: number): void {
+    const list = this.scene.children.list;
+    for (let i = from; i < list.length; i += 1) {
+      const obj = list[i] as Phaser.GameObjects.GameObject & { x?: number; y?: number };
+      if (typeof obj.x !== 'number' || typeof obj.y !== 'number') continue;
+      // World-space now; `layout` does the following, so the object must move
+      // with the camera rather than being pinned to its scroll origin.
+      (obj as unknown as Phaser.GameObjects.Components.ScrollFactor).setScrollFactor(1);
+      this.anchored.push({ obj: obj as never, ox: obj.x, oy: obj.y });
+    }
+  }
+
+  /** Re-place every HUD element against the camera's current visible rect. */
+  layout(): void {
+    const view = this.scene.cameras.main.worldView;
+    for (const a of this.anchored) {
+      a.obj.x = view.x + a.ox;
+      a.obj.y = view.y + a.oy;
+    }
+  }
+
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
+    const displayListStart = scene.children.list.length;
 
     // --- Health gauge ---
     scene.add
@@ -175,20 +214,29 @@ export class Hud {
 
     // --- Weak-point reticle graphics ---
     this.cueGfx = scene.add.graphics().setScrollFactor(0).setDepth(Hud.DEPTH + 2);
+    this.captureAnchors(displayListStart);
+    this.layout();
   }
 
   /** Refresh the bars + readout from the current game state. */
   update(state: HudState): void {
-    this.hpBar.width = Math.max(0, Math.floor(Hud.BAR_W * state.hpRatio));
+    this.layout();
+
+    // setSize(), not `.width =`. A Phaser Shape renders from its cached `geom`
+    // and path data; assigning the display width alone leaves that geometry
+    // stale, so the gauges did not track the values they were reporting.
+    const fill = (ratio: number): number => Math.max(0, Math.floor(Hud.BAR_W * ratio));
+
+    this.hpBar.setSize(fill(state.hpRatio), Hud.BAR_H);
     this.hpBar.fillColor = state.hpRatio < 0.3 ? PALETTE.ENEMY_WEAKPOINT : PALETTE.CITIZEN;
 
-    this.gasBar.width = Math.max(0, Math.floor(Hud.BAR_W * state.gasRatio));
+    this.gasBar.setSize(fill(state.gasRatio), Hud.BAR_H);
     this.gasBar.fillColor = state.gasEmpty ? PALETTE.ENEMY_WEAKPOINT : PALETTE.PLAYER;
 
-    this.outerBar.width = Math.max(0, Math.floor(Hud.BAR_W * state.outerRatio));
+    this.outerBar.setSize(fill(state.outerRatio), Hud.BAR_H);
     this.outerBar.fillColor = state.outerRatio < 0.3 ? PALETTE.ENEMY_WEAKPOINT : PALETTE.ACCENT;
 
-    this.innerBar.width = Math.max(0, Math.floor(Hud.BAR_W * state.innerRatio));
+    this.innerBar.setSize(fill(state.innerRatio), Hud.BAR_H);
     this.innerBar.fillColor = state.innerRatio < 0.3 ? PALETTE.ENEMY_WEAKPOINT : PALETTE.ACCENT;
 
     const total = state.citizensTotal || WALL.START_CITIZENS;
