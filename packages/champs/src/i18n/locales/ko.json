@@ -1,7 +1,7 @@
 {
   "app": {
     "title": "아레나 챔피언스",
-    "subtitle": "리그 오브 레전드 스타일 아레나 대전"
+    "subtitle": "오리지널 전략 아레나 대전"
   },
   "nav": {
     "play": "플레이",
@@ -9,10 +9,15 @@
   },
   "menu": {
     "heading": "아레나에 오신 것을 환영합니다",
-    "description": "챔피언을 선택하고 영광을 위해 싸우세요.",
+    "eyebrow": "살아 움직이는 아레나에 입장하세요",
+    "description": "전투 방식을 고르고, 나만의 챔피언을 익혀 빠르고 전략적인 전장을 지휘하세요.",
     "start": "전투 시작",
-    "tagline": "다섯 명의 챔피언, 하나의 아레나, 끝없는 영광.",
-    "play": "지금 플레이"
+    "tagline": "나의 챔피언. 나의 선택. 나의 아레나.",
+    "play": "아레나 입장",
+    "featuresLabel": "게임 특징",
+    "featureStrategy": "전략적 전투",
+    "featureChampions": "오리지널 챔피언 5명",
+    "featureInstant": "바로 플레이"
   },
   "select": {
     "heading": "챔피언을 선택하세요",
@@ -34,10 +39,10 @@
   },
   "client": {
     "home": "홈",
-    "tft": "전략적 팀 전투",
-    "clash": "격돌",
+    "tft": "전략전",
+    "clash": "도전전",
     "essence": "정수",
-    "riotPoints": "RP",
+    "riotPoints": "크레딧",
     "profile": "프로필",
     "level": "레벨 {{value}}",
     "social": {
@@ -53,8 +58,8 @@
   },
   "battle": {
     "title": "아레나 전투",
-    "yourNexus": "아군 넥서스",
-    "enemyNexus": "적 넥서스",
+    "yourNexus": "아군 코어",
+    "enemyNexus": "적 코어",
     "resource": "자원",
     "controlsHint": "좌/우클릭으로 이동 · Q/W/E/R로 커서 방향에 스킬 사용 · 사거리 내 적을 자동 공격",
     "surrender": "항복"
@@ -64,7 +69,7 @@
     "victory": "승리",
     "defeat": "패배",
     "winSubtitle": "아레나는 당신의 것입니다. 챔피언에게 영광을.",
-    "loseSubtitle": "넥서스가 무너졌습니다. 전열을 가다듬고 다시 도전하세요.",
+    "loseSubtitle": "코어가 무너졌습니다. 전열을 가다듬고 다시 도전하세요.",
     "vs": "대",
     "duration": "경기 시간",
     "championKills": "챔피언 처치",
@@ -76,13 +81,15 @@
     "gold": "획득 골드"
   },
   "mode": {
-    "heading": "모드를 선택하세요",
-    "hint": "협곡에서 어떻게 전투할지 선택하세요.",
-    "select": "선택",
-    "rift": "소환사의 협곡",
-    "riftDesc": "완전한 3라인 5대5: 구조물, 미니언, 정글, 드래곤과 바론.",
-    "aram": "칼바람 나락",
-    "aramDesc": "모두 무작위, 모두 미드: 단일 라인, 무작위 챔피언, 끝없는 한타."
+    "eyebrow": "전투 프로토콜",
+    "heading": "전장을 선택하세요",
+    "hint": "아레나마다 전투의 흐름이 다릅니다. 전장을 고르면 챔피언 선택으로 이동합니다.",
+    "select": "출전",
+    "recommended": "추천",
+    "rift": "삼로 정복전",
+    "riftDesc": "세 개의 공격로에서 구조물, 미니언 부대, 정글의 위협과 주요 목표물을 공략하는 완전한 전략전입니다.",
+    "aram": "중앙로 격돌",
+    "aramDesc": "무작위 챔피언으로 하나의 공격로에 집중해 빠른 교전과 끊임없는 한타를 펼칩니다."
   },
   "shop": {
     "open": "상점",
@@ -92,7 +99,8 @@
     "notEnoughGold": "골드가 부족합니다",
     "recommended": "추천",
     "close": "닫기",
-    "gold": "골드"
+    "gold": "골드",
+    "purchaseQueued": "{{item}} 구매를 요청했습니다"
   },
   "items": {
     "huntersRelic": {
@@ -145,14 +153,14 @@
     }
   },
   "buff": {
-    "blue": "푸른 버프",
-    "red": "붉은 버프",
-    "baron": "바론 버프"
+    "blue": "푸른 가호",
+    "red": "잿불 가호",
+    "baron": "공허의 가호"
   },
   "objective": {
     "dragon": "드래곤",
-    "herald": "협곡의 전령",
-    "baron": "내셔 남작"
+    "herald": "바위 파수꾼",
+    "baron": "공허의 폭군"
   },
   "laneRole": {
     "top": "탑",

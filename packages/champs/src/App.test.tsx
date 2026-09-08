@@ -8,11 +8,12 @@ describe('App', () => {
     await i18n.changeLanguage('en');
   });
 
-  it('renders the main menu heading', () => {
+  it('renders the main menu title and eyebrow', () => {
     render(<App />);
     expect(
-      screen.getByRole('heading', { level: 2, name: 'Welcome to the Arena' }),
+      screen.getByRole('heading', { level: 1, name: 'Arena Champions' }),
     ).toBeInTheDocument();
+    expect(screen.getByText('ENTER THE LIVING ARENA')).toBeInTheDocument();
   });
 
   it('keeps a settings control reachable without the header bar', () => {
@@ -29,14 +30,12 @@ describe('App', () => {
 
   it('switches visible text between English and Korean via the language toggle', async () => {
     render(<App />);
-    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent(
-      'Welcome to the Arena',
-    );
+    expect(screen.getByText('ENTER THE LIVING ARENA')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '한국어' }));
-    // React re-renders on language change; the heading should now be Korean.
+    // React re-renders on language change; the eyebrow should now be Korean.
     expect(
-      await screen.findByText('아레나에 오신 것을 환영합니다'),
+      await screen.findByText('살아 움직이는 아레나에 입장하세요'),
     ).toBeInTheDocument();
   });
 });

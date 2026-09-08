@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { battleStore } from './battleStore';
 import { getChampionById } from '../data/champions';
 import { abilitySvgFor } from './render/abilityIcons';
+import ChampionFigure from '../components/ChampionFigure';
 
 interface BattleHudProps {
   /** Open the item shop (also bound to the `B` key by the battle screen). */
@@ -106,9 +107,10 @@ export default function BattleHud({ onOpenShop }: BattleHudProps) {
           <span
             className="battle-hud__portrait"
             style={{ borderColor: player.accentColor, color: player.accentColor }}
+            aria-hidden="true"
           >
             <span className="battle-hud__level">{state.level}</span>
-            {player.id.slice(0, 2).toUpperCase()}
+            <ChampionFigure champion={player} className="battle-hud__figure" />
           </span>
           <div className="battle-hud__bars">
             <div className="battle-hud__bar-row">
@@ -156,11 +158,22 @@ export default function BattleHud({ onOpenShop }: BattleHudProps) {
               def ? def.behavior : 'skillshot',
             );
             return (
-              <div
+              <button
+                type="button"
                 key={ability.slot}
                 className={`battle-ability${ability.ready ? ' is-ready' : ' is-cooling'}`}
                 style={{ borderColor: player.accentColor, color: player.accentColor }}
                 title={def ? t(def.nameKey) : ability.slot}
+                aria-label={`${ability.slot} — ${def ? t(def.nameKey) : ability.slot}`}
+                aria-keyshortcuts={ability.slot}
+                disabled={!ability.ready}
+                onClick={() => {
+                  window.dispatchEvent(
+                    new CustomEvent('champs:cast-ability', {
+                      detail: { slot: ability.slot },
+                    }),
+                  );
+                }}
               >
                 <span
                   className="battle-ability__icon"
@@ -177,7 +190,7 @@ export default function BattleHud({ onOpenShop }: BattleHudProps) {
                     <span className="battle-ability__timer">{ability.remaining}</span>
                   </>
                 )}
-              </div>
+              </button>
             );
           })}
         </div>

@@ -41,12 +41,30 @@ export default function BattleScreen({
     audio.resume();
   }, [matchNonce]);
 
-  // `B` toggles the shop (matching the settings help panel keybind).
+  // `B` toggles the shop. Global shortcuts stay dormant while any modal is
+  // open or while the player is interacting with a form control.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'b' || e.key === 'B') {
+    const onKey = (event: KeyboardEvent) => {
+      const shopDialogOpen = document.querySelector('.shop-panel[aria-modal="true"]');
+      if ((event.key === 'b' || event.key === 'B') && shopDialogOpen) {
+        event.preventDefault();
+        event.stopPropagation();
+        setShopOpen(false);
+        return;
+      }
+
+      const target = event.target;
+      const isFormControl =
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLSelectElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLButtonElement;
+      const modalOpen = document.querySelector('[aria-modal="true"]');
+      if (isFormControl || modalOpen) return;
+
+      if (event.key === 'b' || event.key === 'B') {
         setShopOpen((open) => !open);
-      } else if (e.key === 'Escape') {
+      } else if (event.key === 'Escape') {
         setShopOpen(false);
       }
     };
@@ -63,18 +81,20 @@ export default function BattleScreen({
 
   return (
     <section className="battle-screen" aria-label={t('battle.title')}>
-      <div className="battle-stage">
-        <Suspense fallback={<div className="battle-stage__loading">{t('common.loading')}</div>}>
-          <PhaserGame
-            playerChampionId={match.playerChampionId}
-            enemyChampionId={match.enemyChampionId}
-            mode={match.mode}
-            matchNonce={matchNonce}
-            onGameEnd={handleGameEnd}
-          />
-        </Suspense>
-        <BattleHud onOpenShop={() => setShopOpen(true)} />
-        <ShopPanel open={shopOpen} onClose={() => setShopOpen(false)} />
+      <div className="battle-stage-slot">
+        <div className="battle-stage">
+          <Suspense fallback={<div className="battle-stage__loading">{t('common.loading')}</div>}>
+            <PhaserGame
+              playerChampionId={match.playerChampionId}
+              enemyChampionId={match.enemyChampionId}
+              mode={match.mode}
+              matchNonce={matchNonce}
+              onGameEnd={handleGameEnd}
+            />
+          </Suspense>
+          <BattleHud onOpenShop={() => setShopOpen(true)} />
+          <ShopPanel open={shopOpen} onClose={() => setShopOpen(false)} />
+        </div>
       </div>
       <button type="button" className="btn battle-screen__quit" onClick={onQuit}>
         {t('battle.surrender')}

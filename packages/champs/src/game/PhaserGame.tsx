@@ -1,6 +1,5 @@
 import { useEffect, useRef } from 'react';
 import Phaser from 'phaser';
-import { clampDpr } from '@open-games/shared';
 import BattleScene, { type BattleSceneData } from './scenes/BattleScene';
 import type { BattleOutcome, GameMode } from './battleStore';
 
@@ -52,16 +51,9 @@ export default function PhaserGame({
       onGameEnd: (outcome) => onGameEndRef.current(outcome),
     };
 
-    // Backbuffer zoom for crisp text/sprites in the embedded battle canvas: the
-    // fixed 900x640 world is CSS-scaled up to fill .battle-stage, so keying the
-    // backbuffer off a DPR-clamped multiplier (shared @open-games/shared clampDpr
-    // - bounded so a hi-DPR phone can't OOM the tab) renders the scene at device
-    // resolution instead of upscaling a 900-wide buffer. The world/camera
-    // coordinate space stays 900x640, so scene layout, combat, and screen-shake
-    // are untouched.
-    const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
-    const backbufferZoom = clampDpr(dpr);
-
+    // Keep Phaser's logical world at 900×640 and let FIT own the canvas CSS
+    // dimensions. The stylesheet does not stretch the result a second time,
+    // avoiding the fractional double-scaling that blurred and cropped it.
     const game = new Phaser.Game({
       type: Phaser.AUTO,
       parent: containerRef.current,
@@ -73,11 +65,8 @@ export default function PhaserGame({
         autoCenter: Phaser.Scale.CENTER_BOTH,
         width: GAME_WIDTH,
         height: GAME_HEIGHT,
-        // Multiplies ONLY the backing buffer (900*zoom x 640*zoom device px);
-        // world coords stay 900x640 so no layout/shake logic changes.
-        zoom: backbufferZoom,
       },
-      render: { antialias: true, roundPixels: false },
+      render: { antialias: true, roundPixels: true },
       scene: [BattleScene],
     });
     gameRef.current = game;

@@ -1,7 +1,8 @@
-import { useSyncExternalStore, useCallback } from 'react';
+import { useSyncExternalStore, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import LanguageToggle from './LanguageToggle';
 import { audio, type AudioSettings } from '../game/audio';
+import { useDialogFocusTrap } from '../hooks/useDialogFocusTrap';
 
 interface SettingsPanelProps {
   onClose: () => void;
@@ -26,6 +27,12 @@ const KEYBINDS: { keys: string; actionKey: string }[] = [
  */
 export default function SettingsPanel({ onClose }: SettingsPanelProps) {
   const { t } = useTranslation();
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useDialogFocusTrap<HTMLDivElement>(
+    true,
+    onClose,
+    closeButtonRef,
+  );
   const settings = useSyncExternalStore<AudioSettings>(
     audio.subscribe,
     audio.getSettings,
@@ -40,15 +47,22 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
   return (
     <div
       className="settings-overlay"
-      role="dialog"
-      aria-modal="true"
-      aria-label={t('settings.title')}
-      onClick={onClose}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
     >
-      <div className="settings-panel" onClick={(e) => e.stopPropagation()}>
+      <div
+        ref={panelRef}
+        className="settings-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="settings-title"
+        tabIndex={-1}
+      >
         <div className="settings-panel__head">
-          <h2 className="settings-panel__title">{t('settings.title')}</h2>
+          <h2 id="settings-title" className="settings-panel__title">{t('settings.title')}</h2>
           <button
+            ref={closeButtonRef}
             type="button"
             className="settings-panel__close"
             aria-label={t('settings.close')}

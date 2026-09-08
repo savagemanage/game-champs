@@ -1,7 +1,7 @@
 {
   "app": {
     "title": "Arena Champions",
-    "subtitle": "A League-inspired arena brawl"
+    "subtitle": "An original tactical arena brawl"
   },
   "nav": {
     "play": "Play",
@@ -9,10 +9,15 @@
   },
   "menu": {
     "heading": "Welcome to the Arena",
-    "description": "Choose your champion and battle for glory.",
+    "eyebrow": "ENTER THE LIVING ARENA",
+    "description": "Choose a combat style, master an original champion, and command the field in a fast tactical battle.",
     "start": "Start Battle",
-    "tagline": "Five champions. One arena. Endless glory.",
-    "play": "Play Now"
+    "tagline": "Your champion. Your call. Your arena.",
+    "play": "Enter Arena",
+    "featuresLabel": "Game highlights",
+    "featureStrategy": "Tactical combat",
+    "featureChampions": "5 original champions",
+    "featureInstant": "Instant play"
   },
   "select": {
     "heading": "Choose Your Champion",
@@ -34,10 +39,10 @@
   },
   "client": {
     "home": "Home",
-    "tft": "TFT",
-    "clash": "Clash",
+    "tft": "Tactics",
+    "clash": "Gauntlet",
     "essence": "Essence",
-    "riotPoints": "RP",
+    "riotPoints": "Credits",
     "profile": "Profile",
     "level": "Level {{value}}",
     "social": {
@@ -45,7 +50,7 @@
       "online": "Online",
       "inGame": "In Game",
       "away": "Away",
-      "friend1": "SummonerFox",
+      "friend1": "ArenaFox",
       "friend2": "MidLaneMuse",
       "friend3": "JungleGank",
       "friend4": "TopDiff"
@@ -53,8 +58,8 @@
   },
   "battle": {
     "title": "Arena Battle",
-    "yourNexus": "Your Nexus",
-    "enemyNexus": "Enemy Nexus",
+    "yourNexus": "Your Core",
+    "enemyNexus": "Enemy Core",
     "resource": "Resource",
     "controlsHint": "Left/right-click to move · Q/W/E/R to cast at cursor · attacks auto-fire in range",
     "surrender": "Surrender"
@@ -64,7 +69,7 @@
     "victory": "Victory",
     "defeat": "Defeat",
     "winSubtitle": "The arena is yours. Glory to the champion.",
-    "loseSubtitle": "The nexus has fallen. Regroup and try again.",
+    "loseSubtitle": "The core has fallen. Regroup and try again.",
     "vs": "vs",
     "duration": "Duration",
     "championKills": "Champion Takedowns",
@@ -76,13 +81,15 @@
     "gold": "Gold Earned"
   },
   "mode": {
-    "heading": "Choose Your Mode",
-    "hint": "Pick how you want to battle on the Rift.",
-    "select": "Select",
-    "rift": "Summoner's Rift",
-    "riftDesc": "The full three-lane 5v5: structures, minions, jungle, dragons and Baron.",
-    "aram": "ARAM",
-    "aramDesc": "All random, all mid: one lane, randomized champions, endless teamfights."
+    "eyebrow": "BATTLE PROTOCOL",
+    "heading": "Choose Your Battlefield",
+    "hint": "Each arena rewards a different rhythm. Pick one to continue to champion selection.",
+    "select": "Deploy",
+    "recommended": "Recommended",
+    "rift": "Three-Lane Conquest",
+    "riftDesc": "A full tactical campaign across three lanes, with structures, minion waves, jungle threats, and major objectives.",
+    "aram": "Midline Clash",
+    "aramDesc": "A focused single-lane skirmish with a random roster, rapid encounters, and constant team fights."
   },
   "shop": {
     "open": "Shop",
@@ -92,7 +99,8 @@
     "notEnoughGold": "Not enough gold",
     "recommended": "Recommended",
     "close": "Close",
-    "gold": "Gold"
+    "gold": "Gold",
+    "purchaseQueued": "{{item}} purchase queued"
   },
   "items": {
     "huntersRelic": {
@@ -145,14 +153,14 @@
     }
   },
   "buff": {
-    "blue": "Blue Buff",
-    "red": "Red Buff",
-    "baron": "Baron Buff"
+    "blue": "Azure Boon",
+    "red": "Ember Boon",
+    "baron": "Void Boon"
   },
   "objective": {
     "dragon": "Dragon",
-    "herald": "Rift Herald",
-    "baron": "Baron Nashor"
+    "herald": "Stone Warden",
+    "baron": "Void Tyrant"
   },
   "laneRole": {
     "top": "Top",
