@@ -20,7 +20,7 @@ the deploy workflow are all generated from it.
 
 | Package | Game | Genre | Stack | Summary |
 | --- | --- | --- | --- | --- |
-| [`packages/champs`](./packages/champs) | **Arena Champions** (아레나 챔피언스) | MOBA | Vite + React 18 + TypeScript + Phaser 3.80 | A three-lane 5v5 MOBA with champion select, turrets and inhibitors, minion waves, jungle camps, and a 2.5D vector battle view. |
+| [`packages/champs`](./packages/champs) | **Arena Champions** (아레나 챔피언스) | MOBA | Vite + React 18 + TypeScript + Phaser 3.80 | A three-lane 5v5 MOBA with champion select, turrets and inhibitors, minion waves, major neutral objectives, and a 2.5D vector battle view. |
 | [`packages/whiteout`](./packages/whiteout) | **Frosthold: Last Ember** (서리성채: 마지막 불씨) | Survival City-Builder | Vite + TypeScript + Phaser 3.80 | A frozen-survival city-builder: keep the central furnace burning, run idle resource buildings, and repel escalating cold-season sieges. |
 | [`packages/kingshot`](./packages/kingshot) | **Kingdom Rise** (킹덤 라이즈) | Strategy / Idle | Vite + TypeScript + Phaser 3.80 | A medieval kingdom builder with idle resource output, a town-center-gated building tree, troop training queues, and wave-based combat. |
 | [`packages/lastwar`](./packages/lastwar) | **LAST SQUAD** (라스트 스쿼드) | Squad Auto-Battler | Vite + TypeScript + Phaser 3.80 | A survival base-builder and squad auto-battler with a story campaign, endless horde defense, and a lane gate-runner mini-game. |

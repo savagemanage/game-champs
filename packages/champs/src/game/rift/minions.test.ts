@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   FIRST_WAVE_DELAY,
   WAVE_INTERVAL_SECONDS,
+  WAVE_UNIT_STAGGER_MS,
   SIEGE_EVERY_N_WAVES,
   MELEE_PER_WAVE,
   CASTER_PER_WAVE,
@@ -34,6 +35,15 @@ describe('wave scheduling', () => {
     for (let n = 1; n <= 10; n++) {
       expect(nextWaveNumberAt(waveSpawnTime(n))).toBe(n);
     }
+  });
+
+  it('uses compressed, mode-aware golden-match cadence', () => {
+    expect(FIRST_WAVE_DELAY).toBe(10);
+    expect(WAVE_INTERVAL_SECONDS).toBe(24);
+    expect(WAVE_UNIT_STAGGER_MS).toBe(180);
+    expect(waveSpawnTime(2, 'midline')).toBe(30);
+    expect(nextWaveNumberAt(30, 'midline')).toBe(2);
+    expect(waveSpawnTime(2, 'conquest')).toBe(34);
   });
 });
 

@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   decideAction,
+  decideScoredAction,
+  scoreAiIntent,
   canCast,
   isNonOffensive,
   RETREAT_HP_THRESHOLD,
@@ -203,5 +205,85 @@ describe('non-offensive (self) abilities', () => {
       cooldowns: cds,
     });
     expect(decideAction(s)).toBe('retreat');
+  });
+});
+
+
+describe('contextual action scoring', () => {
+  it('keeps approaching when role is the only strategic signal', () => {
+    for (const role of ['marksman', 'enchanter'] as const) {
+      const snapshot = makeSnapshot({
+        distanceToTarget: 1_500,
+        context: { role },
+      });
+      expect(decideAction(snapshot)).toBe('approach');
+      expect(scoreAiIntent(snapshot, 'approach')).toBeGreaterThan(
+        scoreAiIntent(snapshot, 'retreat'),
+      );
+    }
+  });
+
+  it('retreats from severe turret danger with a fragile ranged role', () => {
+    const snapshot = makeSnapshot({
+      distanceToTarget: 400,
+      context: {
+        role: 'marksman',
+        turretDanger: 1,
+        nearbyAllies: 0,
+        nearbyEnemies: 2,
+      },
+    });
+    expect(scoreAiIntent(snapshot, 'retreat')).toBeGreaterThan(
+      scoreAiIntent(snapshot, 'castR'),
+    );
+    expect(decideScoredAction(snapshot)).toBe('retreat');
+    expect(decideAction(snapshot)).toBe('retreat');
+  });
+
+  it('engages with allied wave and objective pressure when numbers are favorable', () => {
+    const snapshot = makeSnapshot({
+      distanceToTarget: 400,
+      targetLowHp: true,
+      context: {
+        role: 'assassin',
+        wavePressure: 1,
+        objectivePressure: 1,
+        nearbyAllies: 3,
+        nearbyEnemies: 1,
+      },
+    });
+    expect(decideAction(snapshot)).toBe('castR');
+    expect(scoreAiIntent(snapshot, 'castR')).toBeGreaterThan(
+      scoreAiIntent(snapshot, 'retreat'),
+    );
+  });
+
+  it('values a shop reset when enough unspent gold is ready', () => {
+    const snapshot = makeSnapshot({
+      distanceToTarget: 1_500,
+      context: {
+        role: 'enchanter',
+        gold: 1_200,
+        nextPurchaseCost: 900,
+        shopAvailable: false,
+      },
+    });
+    expect(decideAction(snapshot)).toBe('retreat');
+
+    const urgentObjective = makeSnapshot({
+      distanceToTarget: 400,
+      context: {
+        role: 'bruiser',
+        gold: 1_200,
+        nextPurchaseCost: 900,
+        objectivePressure: 1,
+        wavePressure: 1,
+        nearbyAllies: 2,
+        nearbyEnemies: 1,
+      },
+    });
+    expect(scoreAiIntent(urgentObjective, 'castR')).toBeGreaterThan(
+      scoreAiIntent(urgentObjective, 'retreat'),
+    );
   });
 });

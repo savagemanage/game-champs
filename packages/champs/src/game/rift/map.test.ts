@@ -86,7 +86,7 @@ describe('base / fountain positions', () => {
   });
 });
 
-describe('structures (LoL counts)', () => {
+describe('structures (arena topology)', () => {
   it('each side has 2 turrets per lane, an inhibitor per lane, 2 nexus turrets and a nexus', () => {
     for (const side of SIDES) {
       const s = STRUCTURES[side];

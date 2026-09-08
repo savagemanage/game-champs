@@ -3,6 +3,8 @@ import {
   computeEffectiveStats,
   affordable,
   recommendPurchase,
+  recommendBuild,
+  ROLE_BUILD_TARGETS,
   ROLE_BUY_ORDER,
   BASE_ARMOR,
 } from './loadout';
@@ -157,5 +159,34 @@ describe('recommendPurchase', () => {
         expect(known.has(archetype)).toBe(true);
       }
     }
+  });
+});
+
+
+describe('recommendBuild', () => {
+  it('returns a role target even when no component is affordable', () => {
+    const recommendation = recommendBuild('mage', [], 0)!;
+    expect(recommendation.targetItem.id).toBe(ROLE_BUILD_TARGETS.mage[0]);
+    expect(recommendation.nextPurchasableComponent).toBeUndefined();
+    expect(recommendation.remainingCost).toBe(recommendation.targetItem.cost);
+    expect(recommendation.alternatives.length).toBeGreaterThan(0);
+  });
+
+  it('recommends the cheapest affordable missing component', () => {
+    const recommendation = recommendBuild('marksman', [], 500)!;
+    expect(recommendation.nextPurchasableComponent?.id).toBe('shortsword');
+  });
+
+  it('credits owned components and advances past completed targets', () => {
+    const initial = recommendBuild('mage', ['emberRod'], 1000)!;
+    expect(initial.remainingCost).toBe(initial.targetItem.cost - 850);
+    expect(initial.nextPurchasableComponent?.id).toBe('manaCrystal');
+
+    const next = recommendBuild('mage', [initial.targetItem.id], 0)!;
+    expect(next.targetItem.id).toBe(ROLE_BUILD_TARGETS.mage[1]);
+  });
+
+  it('returns undefined after every role target is owned', () => {
+    expect(recommendBuild('bruiser', ROLE_BUILD_TARGETS.bruiser, 1000)).toBeUndefined();
   });
 });

@@ -1,5 +1,5 @@
 /**
- * Jungle simulation for Summoner's Rift: neutral camps with respawn timers and
+ * Jungle simulation for the original three-lane arena: neutral camps with respawn timers and
  * bounties, plus the Blue and Red buffs granted by the two buff camps.
  *
  * This module deliberately contains NO Phaser (or any DOM) imports so it can be
@@ -30,7 +30,7 @@ export interface Camp {
   bounty: Bounty;
 }
 
-/** Respawn cooldown per camp type, in seconds (roughly matching LoL). */
+/** Respawn cooldown per camp type, in seconds. */
 export const CAMP_RESPAWN_SECONDS: Record<CampType, number> = {
   blue: 300,
   red: 300,
@@ -116,7 +116,7 @@ export function isCampAlive(
 /** The buff kinds granted by the two buff camps. */
 export type BuffKind = 'blue' | 'red';
 
-/** How long a buff lasts once picked up, in seconds (LoL: 2 minutes). */
+/** How long a buff lasts once picked up, in seconds. */
 export const BUFF_DURATION_SECONDS = 120;
 
 /**

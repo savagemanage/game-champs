@@ -19,15 +19,14 @@ import {
 } from './objectives';
 
 describe('spawn timings', () => {
-  it('are ordered sanely: dragon before herald window end before baron', () => {
-    expect(DRAGON_FIRST_SPAWN).toBeGreaterThan(0);
-    expect(DRAGON_RESPAWN).toBeGreaterThan(0);
+  it('uses the compressed objective cadence from golden-match rules', () => {
+    expect(DRAGON_FIRST_SPAWN).toBe(120);
+    expect(DRAGON_RESPAWN).toBe(150);
+    expect(HERALD_SPAWN_WINDOW).toEqual({ start: 180, end: 420 });
+    expect(BARON_SPAWN).toBe(480);
+    expect(BARON_BUFF_DURATION).toBe(90);
     expect(DRAGON_FIRST_SPAWN).toBeLessThan(HERALD_SPAWN_WINDOW.end);
-    expect(HERALD_SPAWN_WINDOW.start).toBeLessThan(HERALD_SPAWN_WINDOW.end);
-    // Herald despawns as Baron arrives; dragon comes well before Baron.
     expect(HERALD_SPAWN_WINDOW.end).toBeLessThanOrEqual(BARON_SPAWN);
-    expect(DRAGON_FIRST_SPAWN).toBeLessThan(BARON_SPAWN);
-    expect(BARON_BUFF_DURATION).toBeGreaterThan(0);
   });
 });
 
@@ -74,7 +73,7 @@ describe('dragon stacks', () => {
   });
 });
 
-describe('rift herald', () => {
+describe('stone warden', () => {
   it('is a deployable pushing advantage that damages structures', () => {
     const reward = heraldReward();
     expect(reward.deployable).toBe(true);
@@ -90,7 +89,7 @@ describe('rift herald', () => {
   });
 });
 
-describe('baron buff', () => {
+describe('void tyrant buff', () => {
   it('sets the team modifier when applied and expires after the duration', () => {
     const none = noBaronBuff();
     expect(none.active).toBe(false);

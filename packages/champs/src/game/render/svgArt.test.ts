@@ -3,10 +3,12 @@ import { CHAMPIONS, getChampionById, type ChampionRole } from '../../data/champi
 import type { MinionType } from '../rift/minions';
 import { derivePalette, hexToInt } from './palette';
 import {
+  CHAMPION_POSES,
   MARKER_PALETTES,
   TEAM_RIM,
   championArt,
   championArtSvg,
+  championArtVariant,
   markerArt,
   minionArt,
   structureArt,
@@ -92,6 +94,28 @@ describe('championArt', () => {
     const b = championArt('bruiser', derivePalette(0x33ff88, RIM)).svg;
     expect(a).not.toBe(b);
   });
+
+  it('maps the finite pose vocabulary to four distinctive Embermage variants', () => {
+    const markups = CHAMPION_POSES.map((pose) =>
+      championArt('mage', pal, { championId: 'embermage', pose }).svg,
+    );
+    expect(new Set(markups).size).toBe(4);
+    expect(new Set(CHAMPION_POSES.map(championArtVariant))).toEqual(
+      new Set(['idle', 'stride', 'strike', 'channel']),
+    );
+    for (const markup of markups) {
+      expect(markup).toContain('data-champion="embermage"');
+      expectValidSvg(markup, 64, 92, 90 / 92);
+    }
+  });
+
+  it('uses generic fallback art for non-benchmark mage identities', () => {
+    const benchmark = championArt('mage', pal, { championId: 'embermage' }).svg;
+    const fallback = championArt('mage', pal, { championId: 'unknown-mage' }).svg;
+    expect(benchmark).toContain('data-champion="embermage"');
+    expect(fallback).not.toContain('data-champion="embermage"');
+    expect(fallback).toBe(championArt('mage', pal).svg);
+  });
 });
 
 describe('championArtSvg', () => {
@@ -126,6 +150,17 @@ describe('championArtSvg', () => {
     expect(championArtSvg(marksman)).not.toBe(championArtSvg(assassin));
     // accent color is embedded as the base tone
     expect(championArtSvg(marksman)).toContain(toHex(hexToInt(marksman.accentColor)));
+  });
+
+  it('selects Embermage identity and a requested bounded pose', () => {
+    const embermage = getChampionById('embermage')!;
+    const expected = championArt(
+      embermage.role,
+      derivePalette(hexToInt(embermage.accentColor), TEAM_RIM.ally),
+      { championId: embermage.id, pose: 'castR' },
+    ).svg;
+    expect(championArtSvg(embermage, 'ally', 'castR')).toBe(expected);
+    expect(expected).toContain('data-variant="channel"');
   });
 });
 

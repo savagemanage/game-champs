@@ -9,6 +9,9 @@ import { audio } from './audio';
  */
 describe('audio engine (headless-safe)', () => {
   beforeEach(() => {
+    audio.setMuted(false);
+    audio.setVolume(0.6);
+    audio.setAmbient(false);
     localStorage.clear();
   });
 
@@ -21,6 +24,13 @@ describe('audio engine (headless-safe)', () => {
       audio.play('victory');
       audio.play('defeat');
       audio.play('ui');
+      audio.play('hit', { pan: -0.5, distance: 4 });
+      audio.playChampionCue('embermage', 'P');
+      audio.playChampionCue('embermage', 'Q');
+      audio.playChampionCue('embermage', 'W');
+      audio.playChampionCue('embermage', 'E');
+      audio.playChampionCue('embermage', 'R');
+      audio.playChampionCue('ashborne', 'Q');
       audio.resume();
     }).not.toThrow();
   });
@@ -40,11 +50,30 @@ describe('audio engine (headless-safe)', () => {
     expect(typeof settings.ambient).toBe('boolean');
   });
 
-  it('clamps volume into the 0..1 range', () => {
+  it('clamps volume into the 0..1 range and rejects non-finite input', () => {
     audio.setVolume(5);
     expect(audio.getSettings().volume).toBe(1);
     audio.setVolume(-2);
     expect(audio.getSettings().volume).toBe(0);
+    audio.setVolume(Number.NaN);
+    expect(audio.getSettings().volume).toBe(0);
+  });
+
+  it('keeps the settings snapshot stable when no value changes', () => {
+    const snapshot = audio.getSettings();
+    audio.setMuted(snapshot.muted);
+    audio.setVolume(snapshot.volume);
+    audio.setAmbient(snapshot.ambient);
+    expect(audio.getSettings()).toBe(snapshot);
+  });
+
+  it('reports the bounded voice/buffer and five-bus contract', () => {
+    expect(audio.getDiagnostics()).toMatchObject({
+      buses: ['master', 'music', 'ambience', 'sfx', 'ui'],
+      activeVoices: 0,
+      maxVoices: 24,
+      cachedBuffers: 0,
+    });
   });
 
   it('notifies subscribers on change', () => {

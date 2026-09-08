@@ -1,45 +1,18 @@
 /**
- * SVG-VECTOR sprite/texture factory for the battle renderer.
+ * Bounded procedural SVG texture factory for the battle renderer.
  *
- * The project ships ZERO binary art assets. Every in-canvas entity is authored
- * as REAL illustrated vector art (SVG markup strings built by the pure,
- * Phaser-free {@link ./svgArt} module), rasterized ONCE to a GPU texture and
- * cached by a key derived from the entity type + team + variant. A given sprite
- * is therefore rasterized a single time and thereafter reused by many
- * {@link Phaser.GameObjects.Image} billboards. Nothing here regenerates a
- * texture per frame.
- *
- * PIPELINE: {@link SpriteFactory.ensure} derives the caller's five-tone palette
- * from the accent + team rim (see {@link ./palette}), asks {@link ./svgArt} for
- * the matching SVG string + intrinsic geometry, and bakes it. Because decoding
- * an SVG into an image is ASYNC, `ensure` returns immediately with a synchronous
- * transparent PLACEHOLDER texture of the correct `{width, height}` (so
- * billboards created right away are positioned correctly but invisible), kicks
- * off the async decode, and when it resolves REPLACES/REFRESHES that same
- * texture key in-place so the existing Images pick up the finished art. The
- * public contract - `ensure(spec) -> {key, size:{width,height,footY}}` with
- * `footY` marking the ground-contact point - is unchanged, so BattleScene needs
- * no changes.
- *
- * HEADLESS GUARD: rasterization needs `document`/`Image`/`<canvas>`, which
- * jsdom (the unit-test environment) cannot decode SVG through. When those are
- * unavailable we register only the blank placeholder texture and skip the
- * decode entirely - mirroring the {@link ../audio} no-op-when-unavailable
- * precedent - so the Vitest suite and the production build stay green. All the
- * unit-testable string/geometry logic lives in {@link ./svgArt}; nothing here
- * is unit tested.
- *
- * Each entity is drawn as an upright BILLBOARD (a stylized front-facing figure)
- * meant to be paired, at draw time, with a separate ground-shadow ellipse and
- * lifted off the ground plane so it reads as "standing" in the dimetric view
- * (see BattleScene syncVisuals + iso.ts HEIGHT_SCALE).
+ * Specs resolve to deterministic keys and one cached rasterization. Champion
+ * keys include canonical identity + a finite pose, while legacy callers that
+ * only provide role/accent/team are matched back to the canonical roster and
+ * default to `idle`. Unknown identities deliberately share role-generic art.
  */
 
 import Phaser from 'phaser';
-import type { ChampionRole } from '../../data/champions';
+import { CHAMPIONS, type ChampionRole } from '../../data/champions';
 import type { MinionType } from '../rift/minions';
 import { derivePalette, hexToInt } from './palette';
 import {
+  CHAMPION_POSES,
   MARKER_PALETTES,
   TEAM_RIM,
   championArt,
@@ -47,22 +20,20 @@ import {
   minionArt,
   structureArt,
   vfxArt,
+  type ChampionPose,
   type SpriteTeam,
   type SvgArt,
   type VfxKind,
 } from './svgArt';
 
-export type { SpriteTeam };
+export { CHAMPION_POSES };
+export type { ChampionPose, SpriteTeam };
 
-/** Baked size (in texture pixels) of a generated billboard sprite. */
+/** Baked display size of a generated billboard sprite. */
 export interface SpriteSize {
   width: number;
   height: number;
-  /**
-   * Y offset (in texture pixels, measured from the texture's top) of the
-   * sprite's ground-contact point. The billboard image is placed so this point
-   * sits on the projected ground, then lifted by the entity's height.
-   */
+  /** Ground-contact offset measured from the texture top. */
   footY: number;
 }
 
@@ -72,9 +43,12 @@ export interface ChampionSpriteSpec {
   role: ChampionRole;
   accent: string;
   team: SpriteTeam;
+  /** Optional for source compatibility; canonical roster identity is inferred. */
+  championId?: string;
+  /** Optional for source compatibility; omitted poses resolve to `idle`. */
+  pose?: ChampionPose;
 }
 
-/** A description of a lane-minion billboard to bake. */
 export interface MinionSpriteSpec {
   kind: 'minion';
   type: MinionType;
@@ -82,7 +56,6 @@ export interface MinionSpriteSpec {
   team: SpriteTeam;
 }
 
-/** A description of a structure billboard to bake. */
 export interface StructureSpriteSpec {
   kind: 'structure';
   tier: 'turret' | 'inhibitor' | 'nexus';
@@ -90,7 +63,6 @@ export interface StructureSpriteSpec {
   team: SpriteTeam;
 }
 
-/** A description of an epic/jungle marker billboard to bake. */
 export interface MarkerSpriteSpec {
   kind: 'marker';
   variant: 'jungle' | 'dragon' | 'baron' | 'herald';
@@ -102,23 +74,59 @@ export type SpriteSpec =
   | StructureSpriteSpec
   | MarkerSpriteSpec;
 
-/**
- * Resolution multiplier: the backing CanvasTexture is created at
- * `intrinsic * RASTER_SCALE` pixels and the decoded SVG is drawn at that higher
- * density, so the texture genuinely carries extra detail. The on-screen
- * (display) size reported via {@link SpriteSize} stays at the intrinsic viewBox
- * dimensions, so BattleScene anchoring/shadows/depth are unchanged; callers pin
- * the Image's display size to the intrinsic {@link SpriteSize} (see
- * `makeBillboard`/`spawnMarker`), letting Phaser scale the denser texture down
- * at draw time for crisp vectors when Scale.FIT blows up the 900x640 stage.
- */
+export type TextureReadiness = 'pending' | 'ready' | 'placeholder' | 'failed';
+
+/** Additive handle: existing callers can keep destructuring only key + size. */
+export interface SpriteTextureHandle {
+  key: string;
+  size: SpriteSize;
+  /** Resolves after browser decode, or immediately to placeholder in headless mode. */
+  ready: Promise<Exclude<TextureReadiness, 'pending'>>;
+}
+
+export interface TextureCacheCardinality {
+  total: number;
+  champion: number;
+  vfx: number;
+  pending: number;
+  ready: number;
+  placeholder: number;
+  failed: number;
+}
+
+/** Four representative poses, matching the four authored Embermage variants. */
+export const CHAMPION_PREWARM_POSES: readonly ChampionPose[] = [
+  'idle',
+  'move',
+  'attack',
+  'castR',
+];
+
 const RASTER_SCALE = 3;
 
-/**
- * True when we can actually decode an SVG to a texture (real browser). jsdom
- * lacks working `<canvas>`/`Image` SVG decode, so we detect that and fall back
- * to a blank placeholder, mirroring the audio.ts no-op-when-unavailable guard.
- */
+type TextureCategory = SpriteSpec['kind'] | 'vfx';
+type SettledReadiness = Exclude<TextureReadiness, 'pending'>;
+
+interface TextureEntry {
+  key: string;
+  size: SpriteSize;
+  category: TextureCategory;
+  status: TextureReadiness;
+  ready: Promise<SettledReadiness>;
+}
+
+/** Share metadata between factories that point at the same TextureManager. */
+const MANAGER_CACHES = new WeakMap<object, Map<string, TextureEntry>>();
+
+function cacheFor(manager: object): Map<string, TextureEntry> {
+  let cache = MANAGER_CACHES.get(manager);
+  if (!cache) {
+    cache = new Map<string, TextureEntry>();
+    MANAGER_CACHES.set(manager, cache);
+  }
+  return cache;
+}
+
 function canRasterize(): boolean {
   return (
     typeof document !== 'undefined' &&
@@ -127,98 +135,184 @@ function canRasterize(): boolean {
   );
 }
 
-/**
- * Factory that bakes and caches illustrated SVG billboard textures. One
- * instance is created per {@link Phaser.Scene}; textures live in the scene's
- * texture manager and are keyed so repeated requests reuse the same baked image.
- */
+function normalizedHex(accent: string): string {
+  return (hexToInt(accent) & 0xffffff).toString(16).padStart(6, '0');
+}
+
+/** Runtime guard keeps JavaScript/unsafe callers inside the finite pose cache. */
+function normalizedPose(pose: ChampionPose | undefined): ChampionPose {
+  return pose && (CHAMPION_POSES as readonly string[]).includes(pose) ? pose : 'idle';
+}
+
+function rosterIdentity(spec: ChampionSpriteSpec): string {
+  const explicit = spec.championId
+    ? CHAMPIONS.find((champion) => champion.id === spec.championId)
+    : undefined;
+  if (explicit) return explicit.id;
+
+  const accent = normalizedHex(spec.accent);
+  const inferred = CHAMPIONS.find(
+    (champion) =>
+      champion.role === spec.role && normalizedHex(champion.accentColor) === accent,
+  );
+  return inferred?.id ?? `generic-${spec.role}`;
+}
+
+function prefersReducedMotion(): boolean {
+  try {
+    return typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  } catch {
+    return false;
+  }
+}
+
 export class SpriteFactory {
   private readonly scene: Phaser.Scene;
-  /** Cache of baked sizes, keyed by texture key. */
-  private readonly sizes = new Map<string, SpriteSize>();
-  /** Whether we've already logged a decode failure (log at most once). */
+  private readonly entries: Map<string, TextureEntry>;
   private loggedDecodeError = false;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
+    this.entries = cacheFor(scene.textures as unknown as object);
   }
 
-  /** Stable texture key for a spec (drives the once-only generation cache). */
+  /** Deterministic key; champion identity and pose are always represented. */
   private keyFor(spec: SpriteSpec): string {
     switch (spec.kind) {
-      case 'champion':
-        return `spr-champ-${spec.role}-${spec.accent.replace('#', '')}-${spec.team}`;
+      case 'champion': {
+        const championId = rosterIdentity(spec);
+        const pose = normalizedPose(spec.pose);
+        return `spr-champ-${championId}-${spec.role}-${pose}-${normalizedHex(spec.accent)}-${spec.team}`;
+      }
       case 'minion':
-        return `spr-minion-${spec.type}-${spec.accent.replace('#', '')}-${spec.team}`;
+        return `spr-minion-${spec.type}-${normalizedHex(spec.accent)}-${spec.team}`;
       case 'structure':
-        return `spr-struct-${spec.tier}-${spec.accent.replace('#', '')}-${spec.team}`;
+        return `spr-struct-${spec.tier}-${normalizedHex(spec.accent)}-${spec.team}`;
       case 'marker':
         return `spr-marker-${spec.variant}`;
     }
   }
 
-  /**
-   * Return the texture key for a spec, baking and caching the texture on first
-   * request. Never regenerates an existing texture. The returned key resolves
-   * synchronously (as a placeholder if the real art is still decoding).
-   */
-  ensure(spec: SpriteSpec): { key: string; size: SpriteSize } {
+  /** Ensure one figure texture and expose its asynchronous readiness. */
+  ensure(spec: SpriteSpec): SpriteTextureHandle {
     const key = this.keyFor(spec);
-    if (this.scene.textures.exists(key)) {
-      return { key, size: this.sizes.get(key)! };
-    }
-    const art = this.artFor(spec);
-    const width = art.viewW;
-    const height = art.viewH;
-    const size: SpriteSize = {
-      width,
-      height,
-      footY: Math.round(art.footYFrac * height),
-    };
-    this.sizes.set(key, size);
-    this.registerPlaceholder(key, width, height);
-    if (canRasterize()) {
-      this.rasterize(key, art, width, height);
-    }
-    return { key, size };
+    const cached = this.entries.get(key);
+    if (cached) return this.handle(cached);
+    return this.ensureArt(key, this.artFor(spec), spec.kind);
   }
 
-  /**
-   * Return the texture key for a combat/skill VFX texture, baking and caching
-   * it on first request. VFX are keyed by (kind + color) so a given effect is
-   * rasterized ONCE and reused across many transient effect instances. Reuses
-   * the exact same rasterize-once/placeholder/headless-guard path as
-   * {@link ensure}. Returns the key + baked size (intrinsic viewBox pixels).
-   */
-  ensureVfx(kind: VfxKind, color: number): { key: string; size: SpriteSize } {
+  /** Ensure one bounded kind/color VFX texture. */
+  ensureVfx(kind: VfxKind, color: number): SpriteTextureHandle {
     const hex = (color & 0xffffff).toString(16).padStart(6, '0');
     const key = `spr-vfx-${kind}-${hex}`;
-    if (this.scene.textures.exists(key)) {
-      return { key, size: this.sizes.get(key)! };
-    }
-    const art = vfxArt(kind, color);
-    const width = art.viewW;
-    const height = art.viewH;
-    const size: SpriteSize = {
-      width,
-      height,
-      footY: Math.round(art.footYFrac * height),
-    };
-    this.sizes.set(key, size);
-    this.registerPlaceholder(key, width, height);
-    if (canRasterize()) {
-      this.rasterize(key, art, width, height);
-    }
-    return { key, size };
+    const cached = this.entries.get(key);
+    if (cached) return this.handle(cached);
+    return this.ensureArt(key, vfxArt(kind, color), 'vfx');
   }
 
-  /** Build the SVG art description for a spec via the pure svgArt builders. */
+  /** Batch ensure arbitrary specs without introducing a separate cache path. */
+  prewarm(specs: readonly SpriteSpec[]): SpriteTextureHandle[] {
+    return specs.map((spec) => this.ensure(spec));
+  }
+
+  /**
+   * Prewarm the four authored champion variants. Reduced-motion clients only
+   * prewarm idle unless a caller explicitly supplies a finite pose list.
+   */
+  prewarmChampion(
+    spec: Omit<ChampionSpriteSpec, 'pose'>,
+    poses?: readonly ChampionPose[],
+  ): SpriteTextureHandle[] {
+    const selected = poses ?? (prefersReducedMotion() ? ['idle'] : CHAMPION_PREWARM_POSES);
+    return selected.map((pose) => this.ensure({ ...spec, pose }));
+  }
+
+  /** Manager-local cardinality/status accounting for budgets and diagnostics. */
+  getCacheCardinality(): TextureCacheCardinality {
+    const result: TextureCacheCardinality = {
+      total: this.entries.size,
+      champion: 0,
+      vfx: 0,
+      pending: 0,
+      ready: 0,
+      placeholder: 0,
+      failed: 0,
+    };
+    for (const entry of this.entries.values()) {
+      if (entry.category === 'champion') result.champion += 1;
+      if (entry.category === 'vfx') result.vfx += 1;
+      result[entry.status] += 1;
+    }
+    return result;
+  }
+
+  private handle(entry: TextureEntry): SpriteTextureHandle {
+    return { key: entry.key, size: entry.size, ready: entry.ready };
+  }
+
+  private ensureArt(
+    key: string,
+    art: SvgArt,
+    category: TextureCategory,
+  ): SpriteTextureHandle {
+    const size: SpriteSize = {
+      width: art.viewW,
+      height: art.viewH,
+      footY: Math.round(art.footYFrac * art.viewH),
+    };
+
+    // Respect textures registered outside this factory while restoring size
+    // metadata instead of returning the old undefined non-null assertion.
+    if (this.scene.textures.exists(key)) {
+      const entry: TextureEntry = {
+        key,
+        size,
+        category,
+        status: 'ready',
+        ready: Promise.resolve('ready'),
+      };
+      this.entries.set(key, entry);
+      return this.handle(entry);
+    }
+
+    this.registerPlaceholder(key, size.width, size.height);
+    if (!canRasterize()) {
+      const entry: TextureEntry = {
+        key,
+        size,
+        category,
+        status: 'placeholder',
+        ready: Promise.resolve('placeholder'),
+      };
+      this.entries.set(key, entry);
+      return this.handle(entry);
+    }
+
+    let settle!: (status: SettledReadiness) => void;
+    const ready = new Promise<SettledReadiness>((resolve) => {
+      settle = resolve;
+    });
+    const entry: TextureEntry = { key, size, category, status: 'pending', ready };
+    this.entries.set(key, entry);
+    this.rasterize(key, art, size.width, size.height, (status) => {
+      entry.status = status;
+      settle(status);
+    });
+    return this.handle(entry);
+  }
+
   private artFor(spec: SpriteSpec): SvgArt {
     switch (spec.kind) {
       case 'champion':
         return championArt(
           spec.role,
           derivePalette(hexToInt(spec.accent), TEAM_RIM[spec.team]),
+          {
+            championId: rosterIdentity(spec),
+            pose: normalizedPose(spec.pose),
+          },
         );
       case 'minion':
         return minionArt(
@@ -231,78 +325,63 @@ export class SpriteFactory {
           derivePalette(hexToInt(spec.accent), TEAM_RIM[spec.team]),
         );
       case 'marker': {
-        const mp = MARKER_PALETTES[spec.variant];
-        return markerArt(spec.variant, derivePalette(mp.base, mp.rim));
+        const palette = MARKER_PALETTES[spec.variant];
+        return markerArt(spec.variant, derivePalette(palette.base, palette.rim));
       }
     }
   }
 
-  /**
-   * Synchronously register a transparent placeholder texture of the correct
-   * size so billboards created immediately are anchored/depth-sorted correctly
-   * even before the real art finishes decoding (or forever, in headless tests).
-   */
   private registerPlaceholder(key: string, width: number, height: number): void {
     if (this.scene.textures.exists(key)) return;
-    // A CanvasTexture is a real, drawable texture of exactly this size and is
-    // fully transparent until we draw onto it - perfect as a placeholder we can
-    // later refresh in place when the SVG decodes.
     if (canRasterize()) {
-      // Create the backing canvas at RASTER_SCALE density so the decoded SVG
-      // can be drawn at extra detail; callers pin the Image display size to the
-      // intrinsic SpriteSize so the extra pixels are pure crispness, not scale.
-      // The higher density keeps vectors crisp now that the FEAT-002 camera
-      // zoom renders sprites larger on screen.
       this.scene.textures.createCanvas(key, width * RASTER_SCALE, height * RASTER_SCALE);
     } else {
-      // jsdom: no working canvas. Register a 1-frame blank so exists()/getFrame
-      // succeed without needing a real 2D context.
       this.scene.textures.addBase64(
         key,
-        // A tiny transparent GIF; the frame is resized via the size cache, and
-        // headless tests never actually render pixels.
         'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
       );
     }
   }
 
-  /**
-   * Kick off the async SVG decode and, when it resolves, draw the decoded image
-   * onto the placeholder CanvasTexture and refresh it in place so existing
-   * Images pick up the finished art. Rasterized exactly once per key. Decode
-   * errors are swallowed (logged at most once) so the console stays clean.
-   */
-  private rasterize(key: string, art: SvgArt, width: number, height: number): void {
+  private rasterize(
+    key: string,
+    art: SvgArt,
+    width: number,
+    height: number,
+    settle: (status: SettledReadiness) => void,
+  ): void {
     const url = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(art.svg)}`;
     const img = new Image();
     img.onload = () => {
       try {
-        const tex = this.scene.textures.get(key) as Phaser.Textures.CanvasTexture;
-        if (!tex || typeof tex.getContext !== 'function') return;
-        const ctx = tex.getContext();
-        ctx.clearRect(0, 0, tex.width, tex.height);
-        ctx.drawImage(img, 0, 0, tex.width, tex.height);
-        tex.refresh();
-      } catch (err) {
-        this.reportDecodeError(err);
+        const texture = this.scene.textures.get(key) as Phaser.Textures.CanvasTexture;
+        if (!texture || typeof texture.getContext !== 'function') {
+          settle('failed');
+          return;
+        }
+        const context = texture.getContext();
+        context.clearRect(0, 0, texture.width, texture.height);
+        context.drawImage(img, 0, 0, texture.width, texture.height);
+        texture.refresh();
+        settle('ready');
+      } catch (error) {
+        this.reportDecodeError(error);
+        settle('failed');
       }
     };
-    img.onerror = (err) => this.reportDecodeError(err);
-    // Decode the SVG at RASTER_SCALE density; the CanvasTexture backing this key
-    // was created at width*RASTER_SCALE x height*RASTER_SCALE, and the onload
-    // draws the image onto it at that full size (drawImage -> tex.width/height),
-    // so the baked texture retains the extra detail. Callers scale the Image
-    // display size back down to the intrinsic SpriteSize.
+    img.onerror = (error) => {
+      this.reportDecodeError(error);
+      settle('failed');
+    };
     img.width = width * RASTER_SCALE;
     img.height = height * RASTER_SCALE;
     img.src = url;
   }
 
-  /** Log an SVG decode/rasterize failure at most once to keep the console clean. */
-  private reportDecodeError(err: unknown): void {
+  private reportDecodeError(error: unknown): void {
     if (this.loggedDecodeError) return;
     this.loggedDecodeError = true;
     // eslint-disable-next-line no-console
-    console.warn('[sprites] SVG rasterization failed; using placeholder texture', err);
+    console.warn('[sprites] SVG rasterization failed; using placeholder texture', error);
   }
 }

@@ -1,5 +1,5 @@
 /**
- * Summoner's Rift world model: pure geometry for the three-lane map, lane
+ * Original three-lane world model: pure geometry for the arena map, lane
  * waypoint polylines, jungle/river anchors, and structure (turret / inhibitor /
  * nexus) positions.
  *
@@ -14,8 +14,8 @@
  * The origin (0,0) is the top-left corner and (WORLD_SIZE, WORLD_SIZE) is the
  * bottom-right, matching the usual screen convention (y grows downward).
  *
- * Team orientation mirrors League of Legends: the ALLY base sits in the
- * bottom-left corner and the ENEMY base sits in the top-right corner. Lanes run
+ * Team orientation places the ALLY base in the bottom-left corner and the
+ * ENEMY base in the top-right corner. Lanes run
  * from one base to the other:
  *   - MID  is a straight diagonal from bottom-left to top-right.
  *   - BOT  hugs the bottom then the right edge (an L along the south/east).
@@ -28,7 +28,7 @@
 /** Side length of the square world, in world units. */
 export const WORLD_SIZE = 3000;
 
-/** The three lanes of Summoner's Rift. */
+/** The three lanes of the conquest arena. */
 export type Lane = 'top' | 'mid' | 'bot';
 
 /** Which team a position/structure belongs to. */
@@ -54,8 +54,8 @@ export const SIDES: readonly MapSide[] = ['ally', 'enemy'];
 const BASE_INSET = 260;
 
 /**
- * Fountain (spawn) position for each side. Ally spawns bottom-left, enemy
- * spawns top-right, mirroring LoL.
+ * Fountain (spawn) position for each side. Ally spawns bottom-left and enemy
+ * spawns top-right.
  */
 export const BASE_POSITIONS: Record<MapSide, Vec2> = {
   ally: { x: BASE_INSET, y: WORLD_SIZE - BASE_INSET },
@@ -134,7 +134,7 @@ export function laneWaypoints(lane: Lane, forTeam: MapSide): Vec2[] {
 // ---------------------------------------------------------------------------
 
 /**
- * Structure anchor positions for one side. Mirrors LoL structure counts:
+ * Structure anchor positions for one side. The original topology includes:
  *   - per lane: outer turret, inner turret, inhibitor turret, inhibitor
  *   - base: two nexus turrets + the nexus itself
  */
@@ -256,8 +256,8 @@ export const JUNGLE_CAMPS: readonly JungleCamp[] = [
 ];
 
 /**
- * An epic monster pit anchor on the river. Dragon sits in the bottom-right
- * river (bot side); Baron/Herald share the top-left river pit (top side).
+ * An epic monster pit anchor on the river. Ember Dragon sits in the bottom-right
+ * river; the Void Tyrant and Stone Warden share the top-left river pit.
  */
 export interface EpicPit {
   id: 'dragon' | 'baron' | 'herald';
@@ -266,9 +266,8 @@ export interface EpicPit {
 
 /**
  * Epic-monster pits. The river runs along the anti-diagonal (top-left <->
- * bottom-right). Dragon pit sits in the bottom-side river near the bot lane;
- * Baron and Herald share the top-side river pit near the top lane (Herald
- * before 20:00, Baron after, exactly as in LoL).
+ * bottom-right). The Ember Dragon pit sits near the bottom lane; the Void Tyrant
+ * and Stone Warden share the top-side pit at their configured match phases.
  */
 export const EPIC_PITS: readonly EpicPit[] = [
   { id: 'dragon', pos: { x: WORLD_SIZE * 0.66, y: WORLD_SIZE * 0.66 } },

@@ -28,6 +28,50 @@ import { darken, derivePalette, hexToInt, lighten, type SpritePalette } from './
 /** Team a figure belongs to; drives the ally/enemy rim tell. */
 export type SpriteTeam = 'ally' | 'enemy';
 
+/** Finite champion animation/pose vocabulary used by generated texture keys. */
+export const CHAMPION_POSES = [
+  'idle',
+  'move',
+  'attack',
+  'castQ',
+  'castW',
+  'castE',
+  'castR',
+  'hit',
+  'death',
+] as const;
+
+export type ChampionPose = (typeof CHAMPION_POSES)[number];
+
+/** Four authored silhouettes shared by the bounded pose vocabulary. */
+export type ChampionArtVariant = 'idle' | 'stride' | 'strike' | 'channel';
+
+export interface ChampionArtOptions {
+  /** Canonical roster id. Unknown ids deliberately use role-generic art. */
+  championId?: string;
+  /** Defaults to idle so legacy callers keep their original call shape. */
+  pose?: ChampionPose;
+}
+
+/** Collapse nine gameplay states into four intentionally authored art layers. */
+export function championArtVariant(pose: ChampionPose): ChampionArtVariant {
+  switch (pose) {
+    case 'idle':
+      return 'idle';
+    case 'move':
+      return 'stride';
+    case 'attack':
+    case 'hit':
+      return 'strike';
+    case 'castQ':
+    case 'castW':
+    case 'castE':
+    case 'castR':
+    case 'death':
+      return 'channel';
+  }
+}
+
 /**
  * Rim/outline color per team, kept bright so the ally/enemy tell reads. This is
  * the single source of truth shared by both the battle sprite factory (which
@@ -246,22 +290,88 @@ function bruiser(id: string, pal: SpritePalette): string {
   );
 }
 
-/** Mage: robed caster with a tall staff and glowing orb. */
+/** Mage fallback: robed caster with a tall staff and glowing orb. */
 function mage(id: string, pal: SpritePalette): string {
   const outline = toHex(pal.outline);
   const shaft = toHex(darken(lighten(pal.base, 0.3), 0.2));
   return (
     championBase(id, pal) +
-    // flowing robe hem widening at the base
     `<path d="M18 44 C12 58 14 70 12 74 L42 74 C40 70 42 58 36 44 Z" ` +
     `fill="${bodyFill(id)}" stroke="${outline}" stroke-width="1.2" opacity="0.96"/>` +
-    // staff
     `<path d="M43 16 L41 66" stroke="${shaft}" stroke-width="2.4" stroke-linecap="round"/>` +
-    // glowing orb
     `<circle cx="42" cy="12" r="6" fill="${coreFill(id)}" stroke="${outline}" stroke-width="1"/>` +
     `<circle cx="40" cy="10" r="1.8" fill="${toHex(lighten(pal.rim, 0.4))}"/>` +
-    // wide wizard hat
     `<path d="M17 12 L27 -2 L37 12 Z" fill="${bodyFill(id)}" stroke="${outline}" stroke-width="1.2"/>`
+  );
+}
+
+/**
+ * Embermage benchmark art. Nine gameplay poses resolve to four authored,
+ * cacheable silhouettes so state reads clearly without creating an open-ended
+ * texture family. Every layer remains palette/team driven and procedural.
+ */
+function embermage(id: string, pal: SpritePalette, variant: ChampionArtVariant): string {
+  const outline = toHex(pal.outline);
+  const shaft = toHex(darken(lighten(pal.base, 0.42), 0.18));
+  const hot = toHex(lighten(pal.rim, 0.55));
+  const glow = coreFill(id);
+  const robe =
+    `<path data-layer="ember-robe" d="M18 43 C11 56 13 69 10 75 L44 75 C41 68 43 56 36 43 Z" ` +
+    `fill="${bodyFill(id)}" stroke="${outline}" stroke-width="1.3"/>` +
+    `<path d="M27 44 L20 72 M27 44 L35 72" fill="none" stroke="${toHex(pal.rim)}" ` +
+    `stroke-width="1.1" opacity="0.55"/>`;
+
+  if (variant === 'stride') {
+    return (
+      `<g data-champion="embermage" data-variant="stride">` +
+      championBase(id, pal) + robe +
+      `<path d="M41 18 L13 66" stroke="${shaft}" stroke-width="2.6" stroke-linecap="round"/>` +
+      `<circle cx="42" cy="16" r="6.5" fill="${glow}" stroke="${outline}" stroke-width="1"/>` +
+      `<path d="M17 39 C7 42 7 50 2 52 M20 47 C10 51 11 58 5 62" fill="none" ` +
+      `stroke="${hot}" stroke-width="1.4" stroke-linecap="round" opacity="0.8"/>` +
+      `<path d="M18 13 L27 2 L38 14 L31 12 L25 15 Z" fill="${bodyFill(id)}" stroke="${outline}"/>` +
+      `</g>`
+    );
+  }
+
+  if (variant === 'strike') {
+    return (
+      `<g data-champion="embermage" data-variant="strike">` +
+      championBase(id, pal) + robe +
+      `<path d="M14 39 L51 24" stroke="${shaft}" stroke-width="3" stroke-linecap="round"/>` +
+      `<circle cx="51" cy="24" r="8" fill="${glow}" stroke="${outline}" stroke-width="1"/>` +
+      `<path d="M45 17 Q56 13 61 24 Q56 35 45 31" fill="none" stroke="${hot}" ` +
+      `stroke-width="1.8" opacity="0.9"/>` +
+      `<path d="M18 13 L27 1 L37 13 L31 12 L26 15 Z" fill="${bodyFill(id)}" stroke="${outline}"/>` +
+      `</g>`
+    );
+  }
+
+  if (variant === 'channel') {
+    return (
+      `<g data-champion="embermage" data-variant="channel">` +
+      championBase(id, pal) + robe +
+      `<path d="M43 11 L39 66" stroke="${shaft}" stroke-width="2.7" stroke-linecap="round"/>` +
+      `<circle cx="43" cy="10" r="8" fill="${glow}" stroke="${outline}" stroke-width="1"/>` +
+      `<circle cx="27" cy="38" r="13" fill="none" stroke="${hot}" stroke-width="1.4" ` +
+      `stroke-dasharray="3 3" opacity="0.85"/>` +
+      `<circle cx="27" cy="38" r="8" fill="none" stroke="${toHex(pal.rim)}" stroke-width="1" opacity="0.7"/>` +
+      `<path d="M20 13 L27 0 L35 13 L30 11 L27 15 L24 11 Z" fill="${bodyFill(id)}" stroke="${outline}"/>` +
+      `<circle cx="18" cy="29" r="2" fill="${hot}"/><circle cx="36" cy="29" r="2" fill="${hot}"/>` +
+      `</g>`
+    );
+  }
+
+  return (
+    `<g data-champion="embermage" data-variant="idle">` +
+    championBase(id, pal) + robe +
+    `<path d="M44 15 L41 66" stroke="${shaft}" stroke-width="2.5" stroke-linecap="round"/>` +
+    `<circle cx="44" cy="12" r="7" fill="${glow}" stroke="${outline}" stroke-width="1"/>` +
+    `<circle cx="41.5" cy="9.5" r="1.8" fill="${hot}"/>` +
+    `<path d="M18 13 L27 0 L37 13 L31 11 L27 15 L24 11 Z" fill="${bodyFill(id)}" stroke="${outline}"/>` +
+    `<path d="M12 29 A4 4 0 0 0 16 25 M38 35 A4 4 0 0 0 42 31" fill="none" ` +
+    `stroke="${hot}" stroke-width="1.3" stroke-linecap="round"/>` +
+    `</g>`
   );
 }
 
@@ -301,10 +411,22 @@ const CHAMPION_BUILDERS: Record<ChampionRole, (id: string, pal: SpritePalette) =
 const CH_ART_W = 54;
 const CH_ART_H = 78;
 
-/** Build the illustrated SVG for a champion of the given role. */
-export function championArt(role: ChampionRole, pal: SpritePalette): SvgArt {
-  const id = `ch-${role}`;
-  const inner = CHAMPION_BUILDERS[role](id, pal);
+/**
+ * Build the illustrated SVG for a champion. The third argument is additive;
+ * callers that only know role/palette retain the generic idle art contract.
+ */
+export function championArt(
+  role: ChampionRole,
+  pal: SpritePalette,
+  options: ChampionArtOptions = {},
+): SvgArt {
+  const pose = options.pose ?? 'idle';
+  const benchmark = role === 'mage' && options.championId === 'embermage';
+  const variant = championArtVariant(pose);
+  const id = benchmark ? `ch-embermage-${variant}` : `ch-${role}`;
+  const inner = benchmark
+    ? embermage(id, pal, variant)
+    : CHAMPION_BUILDERS[role](id, pal);
   // Uniformly scale the 54x78-authored figure up into the larger baked box.
   const sx = (CH_W / CH_ART_W).toFixed(4);
   const sy = (CH_H / CH_ART_H).toFixed(4);
@@ -314,16 +436,16 @@ export function championArt(role: ChampionRole, pal: SpritePalette): SvgArt {
 
 /**
  * Convenience: build the full inline `<svg>` markup string for a champion,
- * tinted exactly like the battle art for the given team. Derives the palette
- * from the champion's accent color and the shared {@link TEAM_RIM} so the DOM
- * figure matches the in-battle sprite without duplicating the rim literal.
- *
- * Pure and Phaser-free, so React components can import it and it can be unit
- * tested directly (no rasterization involved for DOM inline SVG).
+ * tinted exactly like the battle art for the given team. `pose` is optional so
+ * existing DOM callers continue to receive the idle figure.
  */
-export function championArtSvg(champion: Champion, team: SpriteTeam = 'ally'): string {
+export function championArtSvg(
+  champion: Champion,
+  team: SpriteTeam = 'ally',
+  pose: ChampionPose = 'idle',
+): string {
   const pal = derivePalette(hexToInt(champion.accentColor), TEAM_RIM[team]);
-  return championArt(champion.role, pal).svg;
+  return championArt(champion.role, pal, { championId: champion.id, pose }).svg;
 }
 
 // ---------------------------------------------------------------------------
@@ -460,7 +582,7 @@ export function structureArt(
 }
 
 // ---------------------------------------------------------------------------
-// Markers: jungle gem/leaf + epic beasts (dragon / herald / baron).
+// Markers: jungle gem/leaf + original epic beasts.
 // ---------------------------------------------------------------------------
 
 /** Fixed accent palette per marker variant (markers are not team-tinted). */

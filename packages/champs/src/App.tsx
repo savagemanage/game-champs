@@ -4,10 +4,33 @@ import LanguageToggle from './components/LanguageToggle';
 import SettingsPanel from './components/SettingsPanel';
 import MainMenu from './screens/MainMenu';
 import ModeSelect from './screens/ModeSelect';
-import ChampionSelect from './screens/ChampionSelect';
+import ChampionSelect, { CHAMPION_UNLOCK_COST } from './screens/ChampionSelect';
 import BattleScreen from './screens/BattleScreen';
 import ResultScreen from './screens/ResultScreen';
 import type { BattleOutcome, GameMode } from './game/battleStore';
+import type { Difficulty, MatchKind } from './game/tutorial/config';
+import {
+  accountLevelForXp,
+  applyMatchOutcome,
+  loadProfile,
+  rewardsForMatch,
+  saveProfile,
+  setLastSetup,
+  unlockChampion,
+  type ChampsProfile,
+  type LastMatchSetup,
+  type MatchRewards,
+} from './profile';
+import {
+  clearTelemetryData,
+  denyTelemetryConsent,
+  exportTelemetryData,
+  grantTelemetryConsent,
+  matchDurationBucket,
+  recordTelemetry,
+  startConsentGatedTelemetryCapture,
+  telemetryRuntimeStatus,
+} from './telemetry/runtime';
 
 /** Re-export so screens can import the shared game-mode type from `../App`. */
 export type { GameMode } from './game/battleStore';
@@ -15,33 +38,90 @@ export type { GameMode } from './game/battleStore';
 /** The high-level screens the app can display. */
 export type Screen = 'menu' | 'mode' | 'select' | 'battle' | 'result';
 
-/** The champions + mode chosen in select, passed down to the battle screen. */
-export interface MatchSetup {
-  playerChampionId: string;
-  enemyChampionId: string;
-  mode: GameMode;
-}
+/** Complete local setup passed unchanged through React into BattleScene. */
+export type MatchSetup = LastMatchSetup;
+
+const defaultsForKind = (matchKind: MatchKind): Difficulty =>
+  matchKind === 'standard' ? 'normal' : 'easy';
 
 export default function App() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const [profile, setProfile] = useState<ChampsProfile>(() => loadProfile());
   const [screen, setScreen] = useState<Screen>('menu');
-  const [mode, setMode] = useState<GameMode>('rift');
+  const [mode, setMode] = useState<GameMode>('conquest');
+  const [matchKind, setMatchKind] = useState<MatchKind>('standard');
+  const [difficulty, setDifficulty] = useState<Difficulty>('normal');
   const [match, setMatch] = useState<MatchSetup | null>(null);
   const [outcome, setOutcome] = useState<BattleOutcome | null>(null);
+  const [rewards, setRewards] = useState<MatchRewards | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [matchNonce, setMatchNonce] = useState(0);
+  const [telemetryStatus, setTelemetryStatus] = useState(telemetryRuntimeStatus);
   const openSettings = useCallback(() => setSettingsOpen(true), []);
   const closeSettings = useCallback(() => setSettingsOpen(false), []);
-  // Bumped on every (re)entry into battle. Passed to the battle canvas so an
-  // identical-champion rematch still forces a fresh Phaser scene restart -
-  // without this, the scene would not recreate when the champion ids are the
-  // same across a rematch.
-  const [matchNonce, setMatchNonce] = useState(0);
 
-  // The old header showed the game title; with the header removed we surface
-  // the localized title as the document title so the branding is not lost.
   useEffect(() => {
     document.title = t('app.title');
-  }, [t]);
+    document.documentElement.lang = i18n.resolvedLanguage ?? i18n.language;
+  }, [i18n.language, i18n.resolvedLanguage, t]);
+
+  useEffect(() => {
+    if (!telemetryStatus.enabled) return undefined;
+    return startConsentGatedTelemetryCapture();
+  }, [telemetryStatus.enabled]);
+
+  const grantDiagnostics = useCallback(() => {
+    setTelemetryStatus(grantTelemetryConsent());
+  }, []);
+
+  const denyDiagnostics = useCallback(() => {
+    setTelemetryStatus(denyTelemetryConsent());
+  }, []);
+
+  const clearDiagnostics = useCallback(() => {
+    clearTelemetryData();
+  }, []);
+
+  const downloadDiagnostics = useCallback(async () => {
+    const json = await exportTelemetryData();
+    const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `champs-diagnostics-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }, []);
+
+  const persistSetup = useCallback((setup: MatchSetup) => {
+    setProfile((current) => {
+      const next = setLastSetup(current, setup);
+      saveProfile(next);
+      return next;
+    });
+  }, []);
+
+  const enterBattle = useCallback((setup: MatchSetup) => {
+    recordTelemetry({
+      type: 'session-started',
+      sessionKind: setup.matchKind === 'practice' ? 'practice' : 'local',
+    });
+    setMode(setup.mode);
+    setMatchKind(setup.matchKind);
+    setDifficulty(setup.difficulty);
+    setMatch(setup);
+    setOutcome(null);
+    setRewards(null);
+    persistSetup(setup);
+    setMatchNonce((nonce) => nonce + 1);
+    setScreen('battle');
+  }, [persistSetup]);
+
+  const beginFlow = (kind: MatchKind) => {
+    setMatchKind(kind);
+    setDifficulty(defaultsForKind(kind));
+    setMode('conquest');
+    setScreen('mode');
+  };
 
   const handleModeSelect = (chosen: GameMode) => {
     setMode(chosen);
@@ -49,31 +129,59 @@ export default function App() {
   };
 
   const handleLockIn = (playerChampionId: string, enemyChampionId: string) => {
-    setMatch({ playerChampionId, enemyChampionId, mode });
-    setOutcome(null);
-    setMatchNonce((n) => n + 1);
-    setScreen('battle');
+    if (!profile.unlockedChampionIds.includes(playerChampionId)) return;
+    enterBattle({
+      playerChampionId,
+      enemyChampionId,
+      mode,
+      matchKind,
+      difficulty,
+    });
+  };
+
+  const handleContinue = () => {
+    const setup = profile.lastSetup;
+    if (!setup) return;
+    if (!profile.unlockedChampionIds.includes(setup.playerChampionId)) {
+      setMode(setup.mode);
+      setMatchKind(setup.matchKind);
+      setDifficulty(setup.difficulty);
+      setScreen('select');
+      return;
+    }
+    enterBattle(setup);
+  };
+
+  const handleUnlock = (championId: string) => {
+    setProfile((current) => {
+      const next = unlockChampion(current, championId, CHAMPION_UNLOCK_COST);
+      if (next !== current) saveProfile(next);
+      return next;
+    });
   };
 
   const handleGameEnd = (result: BattleOutcome) => {
+    recordTelemetry({
+      type: 'match-completed',
+      mode: result.mode,
+      result: result.win ? 'win' : 'loss',
+      durationBucket: matchDurationBucket(result.stats.durationSeconds),
+    });
+    setProfile((current) => {
+      const next = applyMatchOutcome(current, result);
+      saveProfile(next);
+      return next;
+    });
+    setRewards(rewardsForMatch(result));
     setOutcome(result);
     setScreen('result');
   };
 
   const handleRematch = () => {
-    if (match) {
-      setOutcome(null);
-      setMatchNonce((n) => n + 1);
-      setScreen('battle');
-    } else {
-      setScreen('mode');
-    }
+    if (match) enterBattle(match);
+    else setScreen('mode');
   };
 
-  // The settings gear + language toggle, shared between the floating overlay
-  // (most screens) and the client nav bar (champion select). Rendering the
-  // exact same element in one place at a time keeps them reachable without
-  // ever duplicating them.
   const controls = (
     <>
       <LanguageToggle />
@@ -84,9 +192,6 @@ export default function App() {
         title={t('settings.open')}
         onClick={openSettings}
       >
-        {/* Inline gear icon so the control renders identically regardless of
-           which webfonts load. Uses currentColor to inherit the button's
-           gold color and hover state. */}
         <svg
           className="app-controls__gear"
           viewBox="0 0 24 24"
@@ -107,25 +212,30 @@ export default function App() {
     </>
   );
 
-  // On champion select the controls live inside the client nav bar, so the
-  // floating overlay is suppressed there to avoid duplicating them.
   const controlsInNav = screen === 'select';
 
   return (
     <div className="app-shell">
-      {/* Compact floating controls in the top-right corner. This replaces the
-          old full-width header bar/frame so the game fills the viewport
-          edge-to-edge, while keeping language switching visible and the
-          settings/help panel one click away on every screen. Kept clear of the
-          battle HUD's shop button, minimap and QWER bar, which sit lower/left. */}
       {!controlsInNav && <div className="app-controls">{controls}</div>}
 
       <main className="app-main">
-        {screen === 'menu' && <MainMenu onPlay={() => setScreen('mode')} />}
+        {screen === 'menu' && (
+          <MainMenu
+            profile={profile}
+            accountLevel={accountLevelForXp(profile.accountXp)}
+            onContinue={profile.lastSetup ? handleContinue : undefined}
+            onStandard={() => beginFlow('standard')}
+            onPractice={() => beginFlow('practice')}
+            onTutorial={() => beginFlow('tutorial')}
+          />
+        )}
 
         {screen === 'mode' && (
           <ModeSelect
             selected={mode}
+            matchKind={matchKind}
+            difficulty={difficulty}
+            onDifficultyChange={setDifficulty}
             onSelect={handleModeSelect}
             onBack={() => setScreen('menu')}
           />
@@ -134,6 +244,9 @@ export default function App() {
         {screen === 'select' && (
           <ChampionSelect
             mode={mode}
+            profile={profile}
+            accountLevel={accountLevelForXp(profile.accountXp)}
+            onUnlock={handleUnlock}
             onLockIn={handleLockIn}
             onBack={() => setScreen('mode')}
             navControls={controls}
@@ -149,16 +262,27 @@ export default function App() {
           />
         )}
 
-        {screen === 'result' && outcome && (
+        {screen === 'result' && outcome && rewards && (
           <ResultScreen
             outcome={outcome}
+            profile={profile}
+            rewards={rewards}
             onRematch={handleRematch}
             onMenu={() => setScreen('menu')}
           />
         )}
       </main>
 
-      {settingsOpen && <SettingsPanel onClose={closeSettings} />}
+      {settingsOpen && (
+        <SettingsPanel
+          onClose={closeSettings}
+          telemetryStatus={telemetryStatus}
+          onTelemetryGrant={grantDiagnostics}
+          onTelemetryDeny={denyDiagnostics}
+          onTelemetryExport={downloadDiagnostics}
+          onTelemetryClear={clearDiagnostics}
+        />
+      )}
     </div>
   );
 }

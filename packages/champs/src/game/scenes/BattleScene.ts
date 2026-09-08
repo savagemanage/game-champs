@@ -8,12 +8,17 @@ import {
 } from '../../data/champions';
 import {
   advanceAttackCooldown,
+  abilityDamage,
   applyDamage,
   applyHeal,
+  areHostile,
   canBasicAttack,
   createCooldownState,
   distance,
   nearestTargetableEnemy,
+  partitionImpacts,
+  persistentEnemy,
+  projectileImpactTime,
   resetAttackCooldown,
   resolveAbility,
   startCooldown,
@@ -25,8 +30,38 @@ import {
   type Unit,
   type Vec2,
 } from '../combat';
-import { decideAction, type AiSnapshot } from '../ai';
-import { battleStore, type BattleOutcome, type GameMode } from '../battleStore';
+import { decideAction, type AiIntent, type AiSnapshot } from '../ai';
+import {
+  battleStore,
+  DEFAULT_DIFFICULTY,
+  DEFAULT_MATCH_KIND,
+  type BattleOutcome,
+  type GameMode,
+} from '../battleStore';
+import {
+  activeLanesForMode,
+  rulesForMode,
+  type MatchModeRules,
+} from '../../config/matchRules';
+import {
+  advanceChampionLife,
+  championLifeTimerRemaining,
+  createChampionLifeState,
+  isChampionDamageable,
+  isChampionPresent,
+  killChampion,
+  type ChampionLifeState,
+} from '../championLifeState';
+import {
+  matchPhaseAt,
+  resolveMatch,
+  type MatchResolution,
+} from '../matchResolution';
+import {
+  DIFFICULTY_CONFIG,
+  type Difficulty,
+  type MatchKind,
+} from '../tutorial/config';
 import { audio } from '../audio';
 
 // --- Rift pure modules (all Phaser-free, unit tested) --------------------
@@ -52,7 +87,13 @@ import {
   HEIGHT_SCALE,
   DEFAULT_PROJECTION,
 } from '../rift/iso';
-import { SpriteFactory, type SpriteSize } from '../render/sprites';
+import {
+  CHAMPION_PREWARM_POSES,
+  SpriteFactory,
+  type ChampionPose,
+  type SpriteSize,
+  type SpriteTextureHandle,
+} from '../render/sprites';
 import type { VfxKind } from '../render/svgArt';
 import {
   classifyHit,
@@ -88,6 +129,7 @@ import {
   addXp,
   passiveGold,
   minionBounty,
+  structureBounty,
   CHAMPION_TAKEDOWN_BOUNTY,
   STARTING_GOLD,
   type ProgressState,
@@ -96,6 +138,8 @@ import { composeTeams, enemyFacingSlot } from '../rift/teams';
 import {
   computeEffectiveStats,
   getItemById,
+  recommendBuild,
+  recommendPurchase,
 } from '../rift/loadout';
 import { totalModifiers } from '../../data/items';
 import {
@@ -106,15 +150,17 @@ import {
 } from '../rift/jungle';
 import {
   addModifiers,
+  applyBaronBuff,
   dragonStackBonus,
   expireBaronBuff,
+  heraldReward,
+  monsterStats,
   noBaronBuff,
   isHeraldWindowOpen,
-  DRAGON_FIRST_SPAWN,
-  BARON_SPAWN,
   type TeamModifiers,
   type BaronBuffState,
 } from '../rift/objectives';
+import type { EpicMonster } from '../rift/economy';
 
 /** Data passed into the scene from React via `scene.start(key, data)`. */
 export interface BattleSceneData {
@@ -122,6 +168,13 @@ export interface BattleSceneData {
   enemyChampionId: string;
   mode: GameMode;
   onGameEnd: (outcome: BattleOutcome) => void;
+  /** Initial OS preference; PhaserGame forwards runtime changes via setReducedMotion. */
+  reducedMotion?: boolean;
+  /** Fires after create, bounded critical-texture settlement, and initial visual sync. */
+  onSceneReady?: () => void;
+  matchId?: string;
+  matchKind?: MatchKind;
+  difficulty?: Difficulty;
 }
 
 // Canvas dimensions (kept in sync with PhaserGame). The 3000x3000 rift world is
@@ -137,7 +190,7 @@ const OFF_Y = (VIEW_H - WORLD_SIZE * SCALE) / 2;
  * Battle-camera tuning. The projection (see {@link ./rift/iso}) fits the WHOLE
  * world diamond into the 900x640 view; the Phaser camera is layered on top to
  * ZOOM IN on the player's champion and FOLLOW it so only a portion of the map
- * is visible at once (LoL-style). The whole map still lives on the HUD minimap.
+ * uses a focused arena camera. The whole map still lives on the HUD minimap.
  *   - CAMERA_ZOOM: >1 magnifies; ~2.4 shows a champion + immediate surroundings
  *     (nearby turret / minions) without revealing the whole map.
  *   - CAMERA_LERP: follow smoothing (0..1 per axis); small = gentle pan.
@@ -156,6 +209,27 @@ const TURRET_RANGE = 260;
 const TURRET_DAMAGE = 152;
 const TURRET_ATTACK_SPEED = 0.83;
 const RESOURCE_REGEN = 8; // per second
+const MAX_FRAME_SECONDS = 0.05;
+const HUD_INTERVAL_SECONDS = 0.1;
+const BASIC_PROJECTILE_SPEED = 1650 * SCALE;
+const SKILLSHOT_PROJECTILE_SPEED = 1350 * SCALE;
+const OBJECTIVE_ATTACK_RANGE = 280 * SCALE;
+const OBJECTIVE_LEASH_RANGE = 520 * SCALE;
+
+/** Bounded cosmetic/runtime populations; authoritative impacts are never budgeted. */
+const MAX_TRANSIENT_VFX = 96;
+const MAX_DAMAGE_TEXTS = 24;
+const RESERVED_DAMAGE_TEXT_SLOTS = MAX_DAMAGE_TEXTS;
+const MAX_LIVE_MINIONS_PER_SIDE_LANE = 24;
+const WAVE_SPAWN_RETRY_SECONDS = 0.75;
+const CRITICAL_TEXTURE_TIMEOUT_MS = 2500;
+const CHAMPION_DEATH_POSE_MS = 420;
+
+const CHAMPION_POSE_HOLD_MS = {
+  attack: 180,
+  cast: 280,
+  hit: 140,
+} as const;
 
 // How far (screen px) each entity's billboard is lifted off its ground point,
 // so it reads as "standing" in the dimetric view. Structures are taller; the
@@ -237,6 +311,13 @@ interface BotState {
   resource: number;
   maxResource: number;
   progress: ProgressState;
+  ownedItems: string[];
+  goldAccrual: number;
+  totalGoldEarned: number;
+  currentIntent: AiIntent;
+  pendingIntent: AiIntent | null;
+  intentReadyAt: number;
+  nextDecisionAt: number;
   /** The active map lane this bot walks/pushes. */
   lane: Lane;
   /** Cached lane push waypoints (flat gameplay pixels), enemy-nexus-ward. */
@@ -274,21 +355,79 @@ interface Entity {
   path?: Vec2[];
   /** For minions/monsters, their bounty type key. */
   minionType?: MinionType;
+  /** Champion-only deterministic death/respawn state. */
+  life?: ChampionLifeState;
+  /** Champion-only source data and finite pose state. */
+  champion?: Champion;
+  championPose?: ChampionPose;
+  poseLockedUntil?: number;
+  posePriority?: number;
+  movedThisFrame?: boolean;
+  deathVisibleUntil?: number;
+  /** Effective champion regeneration and ability power. */
+  hpRegen?: number;
+  abilityPower?: number;
+  /** Neutral epic objective identity. */
+  objectiveId?: EpicMonster;
+}
+
+interface PendingImpact {
+  dueAt: number;
+  source: Unit;
+  targetId?: string;
+  point?: Vec2;
+  radius: number;
+  rawDamage: number;
+  color: number;
+  stunDuration: number;
+  ability: boolean;
+  ultimate: boolean;
+  singleTarget: boolean;
+}
+
+interface PendingWaveSpawn {
+  dueAt: number;
+  type: MinionType;
+  team: MapSide;
+  lane: Lane;
+}
+
+interface ObjectiveRuntime {
+  id: EpicMonster;
+  entity: Entity | null;
+  nextSpawnAt: number;
+  permanentlyGone: boolean;
+}
+
+interface TeamFacts {
+  championKills: number;
+  objectives: number;
+  totalGoldEarned: number;
 }
 
 /**
- * The full Summoner's Rift battle. Renders the three-lane map (Rift mode) or a
- * single mid lane (ARAM) by scaling the pure {@link WORLD_SIZE} world model into
+ * The complete arena battle. Renders the three-lane Conquest map or the
+ * single-lane Midline Skirmish map by scaling the pure {@link WORLD_SIZE} model into
  * the canvas. All map geometry, structure gating, minion waves, economy,
  * jungle/buffs and epic objectives come from the Phaser-free `rift/` modules and
  * `combat.ts`; this scene only renders and calls them.
  */
 export default class BattleScene extends Phaser.Scene {
   private onGameEnd!: (outcome: BattleOutcome) => void;
-  private mode: GameMode = 'rift';
+  private onSceneReady: () => void = () => {};
+  private reducedMotion = false;
+  private sceneReady = false;
+  private shuttingDown = false;
+  private criticalTextureReadiness: Promise<unknown>[] = [];
+  private readinessTimeoutId: ReturnType<typeof globalThis.setTimeout> | undefined;
+  private mode: GameMode = 'conquest';
+  private rules: MatchModeRules = rulesForMode('conquest');
+  private matchKind: MatchKind = DEFAULT_MATCH_KIND;
+  private difficulty: Difficulty = DEFAULT_DIFFICULTY;
+  private matchId = '';
   private playerChampion!: Champion;
   private enemyChampion!: Champion;
-  /** The lanes active this match (all three for Rift, mid only for ARAM). */
+  /** The lanes active this match (all three for Conquest, mid only for Midline Skirmish). */
   private lanes: Lane[] = [...LANES];
 
   private player!: Entity;
@@ -299,6 +438,10 @@ export default class BattleScene extends Phaser.Scene {
   private structures: Entity[] = [];
   private minions: Entity[] = [];
   private allEntities: Entity[] = [];
+  /** Constant-time authoritative entity lookup for targeting and impacts. */
+  private entityById = new Map<string, Entity>();
+  /** Last acquired target per acting entity; retained until it becomes invalid. */
+  private targetByEntityId = new Map<string, string>();
   /** Structure entities keyed by their pure graph id. */
   private structureById = new Map<string, Entity>();
   private allyNexus!: Entity;
@@ -315,6 +458,13 @@ export default class BattleScene extends Phaser.Scene {
   private playerProgress: ProgressState = createProgress();
   private ownedItems: string[] = [];
   private goldAccrual = 0;
+  private playerTotalGoldEarned = STARTING_GOLD;
+  private playerDeaths = 0;
+
+  private teamFacts: Record<MapSide, TeamFacts> = {
+    ally: { championKills: 0, objectives: 0, totalGoldEarned: STARTING_GOLD * 5 },
+    enemy: { championKills: 0, objectives: 0, totalGoldEarned: STARTING_GOLD * 5 },
+  };
 
   // Buffs / objectives (ally-team perspective drives HUD + player stats).
   private playerBuffs: BuffState = createBuffState();
@@ -322,9 +472,9 @@ export default class BattleScene extends Phaser.Scene {
   private enemyBaron: BaronBuffState = noBaronBuff();
   private allyDragonStacks = 0;
   private enemyDragonStacks = 0;
-  private dragonNextSpawn = DRAGON_FIRST_SPAWN;
-  private baronAlive = false;
-  private heraldTaken = false;
+  private objectives: ObjectiveRuntime[] = [];
+  private pendingImpacts: PendingImpact[] = [];
+  private pendingWaveSpawns: PendingWaveSpawn[] = [];
 
   // Wave scheduling.
   private spawnedWaves = 0;
@@ -332,13 +482,20 @@ export default class BattleScene extends Phaser.Scene {
   private inhibitorKillTimes = new Map<string, number>();
 
   private moveTarget: Vec2 | null = null;
+  private playerOrder: 'move' | 'attack-move' | 'target' | 'stop' = 'stop';
+  private attackMoveArmed = false;
   private abilityKeys!: Record<CooldownKey, Phaser.Input.Keyboard.Key>;
   private touchCastHandler?: EventListener;
 
   /** Procedural sprite/texture factory (baked once, cached, reused). */
   private sprites!: SpriteFactory;
+  /** Live cosmetic objects only; gameplay impacts are tracked separately above. */
+  private transientVfx = new Set<Phaser.GameObjects.GameObject>();
+  private damageTexts = new Set<Phaser.GameObjects.Text>();
+  private minionSequence = 0;
 
   private elapsed = 0;
+  private nextHudAt = 0;
   private ended = false;
   /** Guards the cosmetic kill slow-mo so rapid kills cannot stack/strand it. */
   private slowMoActive = false;
@@ -374,19 +531,32 @@ export default class BattleScene extends Phaser.Scene {
 
   init(data: BattleSceneData) {
     this.onGameEnd = data.onGameEnd;
-    this.mode = data.mode ?? 'rift';
-    // ARAM randomizes both champions onto a single mid lane.
-    if (this.mode === 'aram') {
+    this.onSceneReady = data.onSceneReady ?? (() => {});
+    this.reducedMotion = data.reducedMotion ?? false;
+    this.sceneReady = false;
+    this.shuttingDown = false;
+    this.criticalTextureReadiness = [];
+    this.transientVfx.clear();
+    this.damageTexts.clear();
+    this.minionSequence = 0;
+    this.slowMoActive = false;
+    this.lastShakeAt = Number.NEGATIVE_INFINITY;
+    this.mode = data.mode ?? 'conquest';
+    this.rules = rulesForMode(this.mode);
+    this.lanes = activeLanesForMode(this.mode);
+    this.matchKind = data.matchKind ?? DEFAULT_MATCH_KIND;
+    this.difficulty = data.difficulty ?? DEFAULT_DIFFICULTY;
+    this.matchId = data.matchId?.trim() || `local-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    // Midline Skirmish randomizes both champions onto its configured single active lane.
+    if (this.mode === 'midline') {
       const p = randomChampionId();
       this.playerChampion = getChampionById(p)!;
       this.enemyChampion = getChampionById(randomChampionId(p))!;
-      this.lanes = ['mid'];
     } else {
       this.playerChampion =
         getChampionById(data.playerChampionId) ?? getChampionById('ashborne')!;
       this.enemyChampion =
         getChampionById(data.enemyChampionId) ?? getChampionById('nightveil')!;
-      this.lanes = [...LANES];
     }
 
     // Reset per-run state so a restart/rematch starts clean.
@@ -394,6 +564,8 @@ export default class BattleScene extends Phaser.Scene {
     this.structures = [];
     this.minions = [];
     this.allEntities = [];
+    this.entityById.clear();
+    this.targetByEntityId.clear();
     this.structureById.clear();
     this.structureLines = [];
     this.playerCds = createCooldownState();
@@ -401,18 +573,33 @@ export default class BattleScene extends Phaser.Scene {
     this.playerProgress = createProgress(STARTING_GOLD);
     this.ownedItems = [];
     this.goldAccrual = 0;
+    this.playerTotalGoldEarned = STARTING_GOLD;
+    this.playerDeaths = 0;
+    this.teamFacts = {
+      ally: { championKills: 0, objectives: 0, totalGoldEarned: STARTING_GOLD * 5 },
+      enemy: { championKills: 0, objectives: 0, totalGoldEarned: STARTING_GOLD * 5 },
+    };
     this.playerBuffs = createBuffState();
     this.allyBaron = noBaronBuff();
     this.enemyBaron = noBaronBuff();
     this.allyDragonStacks = 0;
     this.enemyDragonStacks = 0;
-    this.dragonNextSpawn = DRAGON_FIRST_SPAWN;
-    this.baronAlive = false;
-    this.heraldTaken = false;
+    this.objectives = this.rules.objectives.enabled
+      ? [
+          { id: 'dragon', entity: null, nextSpawnAt: this.rules.objectives.firstSpawnSeconds, permanentlyGone: false },
+          { id: 'herald', entity: null, nextSpawnAt: this.rules.objectives.heraldStartSeconds, permanentlyGone: false },
+          { id: 'baron', entity: null, nextSpawnAt: this.rules.objectives.majorSpawnSeconds, permanentlyGone: false },
+        ]
+      : [];
+    this.pendingImpacts = [];
+    this.pendingWaveSpawns = [];
     this.spawnedWaves = 0;
     this.inhibitorKillTimes.clear();
     this.moveTarget = null;
+    this.playerOrder = 'stop';
+    this.attackMoveArmed = false;
     this.elapsed = 0;
+    this.nextHudAt = 0;
     this.ended = false;
     this.stats = { championKills: 0, minionKills: 0, damageDealt: 0 };
     battleStore.reset(this.playerChampion.id, this.enemyChampion.id, this.mode);
@@ -421,6 +608,7 @@ export default class BattleScene extends Phaser.Scene {
   create() {
     this.cameras.main.setBackgroundColor('#05140c');
     this.sprites = new SpriteFactory(this);
+    this.input.enabled = false;
     this.drawMap();
 
     this.buildStructures();
@@ -429,7 +617,55 @@ export default class BattleScene extends Phaser.Scene {
 
     this.setupInput();
     this.setupCamera();
+    this.syncVisuals();
     this.pushHud();
+    this.nextHudAt = HUD_INTERVAL_SECONDS;
+    this.settleCriticalTextures();
+  }
+
+  /** PhaserGame forwards both the initial preference and live media-query changes. */
+  setReducedMotion(reduced: boolean): void {
+    if (this.reducedMotion === reduced) return;
+    this.reducedMotion = reduced;
+    if (!reduced) return;
+
+    this.tweens.timeScale = 1;
+    this.slowMoActive = false;
+    this.clearTransientVfx();
+    for (const champion of this.champions) {
+      this.tweens.killTweensOf(champion.body);
+      this.tweens.killTweensOf(champion.container);
+      if (champion.body.active) champion.body.setPosition(0, 0);
+      if (champion.container.active) champion.container.setScale(1);
+    }
+    this.cameras.main.shakeEffect.reset();
+    this.cameras.main.flashEffect.reset();
+  }
+
+  private trackCritical<T extends SpriteTextureHandle>(handle: T): T {
+    if (!this.sceneReady && !this.shuttingDown) {
+      this.criticalTextureReadiness.push(handle.ready.catch(() => 'failed'));
+    }
+    return handle;
+  }
+
+  /** Texture failures and browser decode stalls fall back to placeholders. */
+  private settleCriticalTextures(): void {
+    const settled = Promise.allSettled([...this.criticalTextureReadiness]);
+    const timeout = new Promise<void>((resolve) => {
+      this.readinessTimeoutId = globalThis.setTimeout(resolve, CRITICAL_TEXTURE_TIMEOUT_MS);
+    });
+    void Promise.race([settled, timeout]).then(() => {
+      if (this.readinessTimeoutId !== undefined) {
+        globalThis.clearTimeout(this.readinessTimeoutId);
+        this.readinessTimeoutId = undefined;
+      }
+      if (this.shuttingDown || !this.scene.isActive()) return;
+      this.sceneReady = true;
+      this.input.enabled = true;
+      this.syncVisuals();
+      this.onSceneReady();
+    });
   }
 
   /**
@@ -503,6 +739,13 @@ export default class BattleScene extends Phaser.Scene {
             resource: 300,
             maxResource: 300,
             progress: createProgress(STARTING_GOLD),
+            ownedItems: [],
+            goldAccrual: 0,
+            totalGoldEarned: STARTING_GOLD,
+            currentIntent: 'approach',
+            pendingIntent: null,
+            intentReadyAt: 0,
+            nextDecisionAt: 0,
             lane: slot.lane,
             pushPath: laneWaypoints(slot.lane, side).map(toScreen),
             pushIndex: 0,
@@ -673,8 +916,8 @@ export default class BattleScene extends Phaser.Scene {
       g.strokeEllipse(b.x, b.y, 150, 76);
     }
 
-    // Jungle camp + epic pit markers (Rift only), as depth-sorted billboards.
-    if (this.mode === 'rift') {
+    // Jungle camp + epic pit markers (Conquest only), as depth-sorted billboards.
+    if (this.mode === 'conquest') {
       for (const camp of JUNGLE_CAMPS) {
         this.spawnMarker('jungle', camp.pos);
       }
@@ -691,7 +934,9 @@ export default class BattleScene extends Phaser.Scene {
    */
   private spawnMarker(variant: 'jungle' | 'dragon' | 'baron' | 'herald', worldPos: Vec2) {
     const screen = worldToScreen(worldPos, DEFAULT_PROJECTION);
-    const { key, size } = this.sprites.ensure({ kind: 'marker', variant });
+    const { key, size } = this.trackCritical(
+      this.sprites.ensure({ kind: 'marker', variant }),
+    );
     const heightPx = variant === 'jungle' ? 4 : 10;
     if (variant !== 'jungle') {
       const shadow = this.add.ellipse(screen.x, screen.y, size.width * 0.8, size.width * 0.36, 0x000000, 0.32);
@@ -707,12 +952,12 @@ export default class BattleScene extends Phaser.Scene {
 
   private buildStructures() {
     for (const side of ['ally', 'enemy'] as MapSide[]) {
-      const team: Team = side;
-      const graph = buildStructureGraph(side);
+      const team = side;
+      const graph = buildStructureGraph(side, this.mode);
       const anchors = STRUCTURES[side];
 
       for (const node of graph) {
-        // Skip lanes that are not active in this mode (e.g. ARAM = mid only).
+        // Skip lanes that are not active in this mode (Midline Skirmish uses mid only).
         if (node.lane && !this.lanes.includes(node.lane)) continue;
 
         const pos = this.structurePosition(node, anchors);
@@ -750,6 +995,11 @@ export default class BattleScene extends Phaser.Scene {
     }
   }
 
+  private addEntity(entity: Entity) {
+    this.allEntities.push(entity);
+    this.entityById.set(entity.unit.id, entity);
+  }
+
   private makeUnit(
     id: string,
     kind: Unit['kind'],
@@ -774,7 +1024,7 @@ export default class BattleScene extends Phaser.Scene {
     };
   }
 
-  private spawnChampion(id: string, champion: Champion, team: Team, pos: Vec2): Entity {
+  private spawnChampion(id: string, champion: Champion, team: MapSide, pos: Vec2): Entity {
     const unit = this.makeUnit(id, 'champion', team, pos, {
       maxHp: champion.stats.hp,
       ad: champion.stats.attackDamage,
@@ -783,12 +1033,23 @@ export default class BattleScene extends Phaser.Scene {
       attackSpeed: champion.stats.attackSpeed,
       moveSpeed: champion.stats.moveSpeed * SCALE,
     });
-    const { key, size } = this.sprites.ensure({
-      kind: 'champion',
+    const spriteSpec = {
+      kind: 'champion' as const,
+      championId: champion.id,
       role: champion.role,
       accent: champion.accentColor,
       team,
-    });
+    };
+    // Player and facing-enemy benchmark poses are critical for first battle
+    // paint. Other finite poses remain lazily cached by SpriteFactory.
+    if (id === 'player' || id === 'enemy') {
+      for (const handle of this.sprites.prewarmChampion(spriteSpec, CHAMPION_PREWARM_POSES)) {
+        this.trackCritical(handle);
+      }
+    }
+    const { key, size } = this.trackCritical(
+      this.sprites.ensure({ ...spriteSpec, pose: 'idle' }),
+    );
     const heightPx = CHAMPION_HEIGHT_PX;
     const body = this.makeBillboard(key, size);
     // Only the player-facing picks carry nameplates. Labeling all ten units at
@@ -808,9 +1069,24 @@ export default class BattleScene extends Phaser.Scene {
     label.setOrigin(0.5);
     const container = this.add.container(pos.x, pos.y, [body, label]);
     const shadow = this.makeShadow(size.width * 0.7);
-    const entity: Entity = { unit, container, body, shadow, heightPx, stunned: 0 };
+    const entity: Entity = {
+      unit,
+      container,
+      body,
+      shadow,
+      heightPx,
+      stunned: 0,
+      life: createChampionLifeState(),
+      champion,
+      championPose: 'idle',
+      poseLockedUntil: 0,
+      posePriority: 0,
+      movedThisFrame: false,
+      hpRegen: champion.stats.hpRegen,
+      abilityPower: 0,
+    };
     this.attachHpBar(entity, size.height + 12);
-    this.allEntities.push(entity);
+    this.addEntity(entity);
     return entity;
   }
 
@@ -831,12 +1107,50 @@ export default class BattleScene extends Phaser.Scene {
     return img;
   }
 
+  private setChampionPose(
+    entity: Entity,
+    pose: ChampionPose,
+    holdMs = 0,
+    priority = 0,
+  ): void {
+    const champion = entity.champion;
+    if (!champion || !entity.body.active) return;
+    const lockedUntil = entity.poseLockedUntil ?? 0;
+    const currentPriority = entity.posePriority ?? 0;
+    if (this.elapsed < lockedUntil && priority < currentPriority) return;
+    if (entity.championPose !== pose) {
+      const team = entity.unit.team === 'enemy' ? 'enemy' : 'ally';
+      const { key, size } = this.sprites.ensure({
+        kind: 'champion',
+        championId: champion.id,
+        role: champion.role,
+        accent: champion.accentColor,
+        team,
+        pose,
+      });
+      entity.body.setTexture(key);
+      entity.body.setOrigin(0.5, size.footY / size.height);
+      entity.body.setDisplaySize(size.width, size.height);
+      entity.championPose = pose;
+    }
+    entity.poseLockedUntil = holdMs > 0 ? this.elapsed + holdMs / 1000 : this.elapsed;
+    entity.posePriority = priority;
+  }
+
+  private refreshChampionLocomotionPoses(): void {
+    for (const champion of this.champions) {
+      if (!isChampionPresent(champion.life!)) continue;
+      if (this.elapsed < (champion.poseLockedUntil ?? 0)) continue;
+      this.setChampionPose(champion, champion.movedThisFrame ? 'move' : 'idle');
+    }
+  }
+
   /** A soft ground-shadow ellipse laid on the floor plane (its own object). */
   private makeShadow(width: number): Phaser.GameObjects.Ellipse {
     return this.add.ellipse(0, 0, width, width * 0.45, 0x000000, 0.32);
   }
 
-  private spawnStructure(node: StructureNode, team: Team, pos: Vec2): Entity {
+  private spawnStructure(node: StructureNode, team: MapSide, pos: Vec2): Entity {
     const maxHp =
       node.kind === 'nexus'
         ? NEXUS_HP
@@ -862,13 +1176,15 @@ export default class BattleScene extends Phaser.Scene {
       node.kind === 'nexus' ? 'nexus' : node.kind === 'inhibitor' ? 'inhibitor' : 'turret';
     const heightPx =
       tier === 'nexus' ? NEXUS_HEIGHT_PX : tier === 'inhibitor' ? INHIBITOR_HEIGHT_PX : TURRET_HEIGHT_PX;
-    const { key, size } = this.sprites.ensure({ kind: 'structure', tier, accent, team });
+    const { key, size } = this.trackCritical(
+      this.sprites.ensure({ kind: 'structure', tier, accent, team }),
+    );
     const body = this.makeBillboard(key, size);
     const container = this.add.container(pos.x, pos.y, [body]);
     const shadow = this.makeShadow(size.width * 0.8);
     const entity: Entity = { unit, container, body, shadow, heightPx, stunned: 0, node };
     this.attachHpBar(entity, size.height + 8);
-    this.allEntities.push(entity);
+    this.addEntity(entity);
     return entity;
   }
 
@@ -897,7 +1213,7 @@ export default class BattleScene extends Phaser.Scene {
     const isHuman = entity === this.player;
     const champion = isHuman ? this.playerChampion : entity.bot!.champion;
     const level = isHuman ? this.playerProgress.level : entity.bot!.progress.level;
-    const items = isHuman ? this.ownedItems : [];
+    const items = isHuman ? this.ownedItems : entity.bot!.ownedItems;
     const team = this.teamModifiers(side);
     const eff = computeEffectiveStats(champion, level, items, team);
     const u = entity.unit;
@@ -909,8 +1225,10 @@ export default class BattleScene extends Phaser.Scene {
     u.ad = eff.attackDamage;
     u.armor = eff.armor;
     u.attackSpeed = eff.attackSpeed;
-    u.moveSpeed = champion.stats.moveSpeed * SCALE + eff.moveSpeed * SCALE;
-    u.attackRange = champion.stats.attackRange * SCALE;
+    u.moveSpeed = eff.moveSpeed * SCALE;
+    u.attackRange = eff.attackRange * SCALE;
+    entity.hpRegen = eff.hpRegen;
+    entity.abilityPower = eff.abilityPower;
     if (isHuman) {
       this.playerMaxResource = 300 + eff.resource;
     } else {
@@ -929,7 +1247,7 @@ export default class BattleScene extends Phaser.Scene {
 
   private setupInput() {
     const kb = this.input.keyboard!;
-    // LoL-style controls: movement is CLICK-only (below); Q/W/E/R are the sole
+    // Arena controls: movement is CLICK-only (below); Q/W/E/R are the sole
     // keyboard bindings and cast abilities aimed at the cursor. WASD movement is
     // intentionally NOT bound, so physical W is no longer double-bound.
     this.abilityKeys = {
@@ -940,6 +1258,15 @@ export default class BattleScene extends Phaser.Scene {
     };
     (['Q', 'W', 'E', 'R'] as CooldownKey[]).forEach((slot) => {
       this.abilityKeys[slot].on('down', () => this.tryPlayerCast(slot));
+    });
+    kb.addKey(Phaser.Input.Keyboard.KeyCodes.A).on('down', () => {
+      this.attackMoveArmed = true;
+    });
+    kb.addKey(Phaser.Input.Keyboard.KeyCodes.S).on('down', () => {
+      this.attackMoveArmed = false;
+      this.moveTarget = null;
+      this.playerOrder = 'stop';
+      this.targetByEntityId.delete(this.player.unit.id);
     });
 
     // Touch HUD buttons dispatch this lightweight event. It enters the exact
@@ -953,21 +1280,49 @@ export default class BattleScene extends Phaser.Scene {
     }) as EventListener;
     window.addEventListener('champs:cast-ability', this.touchCastHandler);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.shuttingDown = true;
+      this.sceneReady = false;
+      if (this.readinessTimeoutId !== undefined) {
+        globalThis.clearTimeout(this.readinessTimeoutId);
+        this.readinessTimeoutId = undefined;
+      }
       if (this.touchCastHandler) {
         window.removeEventListener('champs:cast-ability', this.touchCastHandler);
         this.touchCastHandler = undefined;
       }
+      this.tweens.timeScale = 1;
+      this.slowMoActive = false;
+      this.clearTransientVfx();
+      this.pendingWaveSpawns = [];
+      this.pendingImpacts = [];
+      this.criticalTextureReadiness = [];
     });
 
     // Suppress the browser context menu over the canvas so right-click can be
-    // used to issue move commands (LoL-style) without popping a menu.
+    // used to issue move commands without opening a browser menu.
     this.input.mouse?.disableContextMenu();
 
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-      // BOTH left- and right-click issue a move command. Convert the click's
-      // SCREEN point back to the flat gameplay plane so click-to-move still
-      // lands where the player pointed in world terms.
-      this.moveTarget = this.pointerToGround(pointer);
+      const ground = this.pointerToGround(pointer);
+      if (this.attackMoveArmed) {
+        this.attackMoveArmed = false;
+        this.playerOrder = 'attack-move';
+        this.moveTarget = ground;
+        this.targetByEntityId.delete(this.player.unit.id);
+        return;
+      }
+
+      const clicked = this.entityAtPoint(ground, this.player.unit);
+      if (clicked) {
+        this.playerOrder = 'target';
+        this.moveTarget = null;
+        this.targetByEntityId.set(this.player.unit.id, clicked.unit.id);
+        return;
+      }
+
+      this.playerOrder = 'move';
+      this.moveTarget = ground;
+      this.targetByEntityId.delete(this.player.unit.id);
     });
   }
 
@@ -982,17 +1337,42 @@ export default class BattleScene extends Phaser.Scene {
     return toScreen(world);
   }
 
+  private entityAtPoint(point: Vec2, source: Unit): Entity | undefined {
+    const livingIds = new Set(
+      this.allEntities.filter((entity) => !entity.unit.dead).map((entity) => entity.unit.id),
+    );
+    let best: Entity | undefined;
+    let bestDistance = 90 * SCALE;
+    for (const entity of this.allEntities) {
+      if (!areHostile(source.team, entity.unit.team) || !this.isEntityDamageable(entity)) continue;
+      if (
+        (entity.unit.kind === 'turret' || entity.unit.kind === 'nexus') &&
+        !isStructureTargetable(entity.unit.id, livingIds, this.mode)
+      ) {
+        continue;
+      }
+      const d = distance(point, entity.unit.pos);
+      if (d <= bestDistance) {
+        best = entity;
+        bestDistance = d;
+      }
+    }
+    return best;
+  }
+
   // ---- Main loop -----------------------------------------------------------
 
   update(_time: number, deltaMs: number) {
-    if (this.ended) return;
-    const dt = deltaMs / 1000;
+    if (this.ended || !this.sceneReady) return;
+    for (const champion of this.champions) champion.movedThisFrame = false;
+    const dt = Math.min(MAX_FRAME_SECONDS, Math.max(0, deltaMs / 1000));
     this.elapsed += dt;
 
+    this.advanceChampionLives();
+    this.reviveInhibitors();
     tickCooldowns(this.playerCds, dt);
     const blueRegen = this.blueBuffRegen();
     this.playerResource = Math.min(this.playerMaxResource, this.playerResource + (RESOURCE_REGEN + blueRegen) * dt);
-    // Tick every bot's own cooldowns + resource regen.
     for (const c of this.champions) {
       if (!c.bot) continue;
       tickCooldowns(c.bot.cds, dt);
@@ -1003,26 +1383,27 @@ export default class BattleScene extends Phaser.Scene {
     this.tickBuffsAndObjectives();
     this.processPurchases();
     this.maybeSpawnWaves();
-
-    // Build ONE living-unit snapshot for this frame, consumed by every
-    // findTarget/turret-targeting call below. Refreshed here, before the
-    // player/bot/minion/turret loops, so the whole frame targets against the
-    // same living set instead of each caller rebuilding it.
+    this.processWaveSpawns();
+    this.processPendingImpacts();
     this.refreshLivingSnapshot();
 
     this.updatePlayerMovement(dt);
-    // Drive all nine AI champions through the pure AI each tick.
     for (const c of this.champions) {
       if (c.bot) this.updateBotChampion(c, dt);
     }
     this.updateMinions(dt);
+    this.updateObjectiveMonsters();
     for (const s of this.structures) {
       if (s.unit.kind === 'turret') this.updateTurret(s);
     }
     this.regenAndTick(dt);
+    this.refreshChampionLocomotionPoses();
     this.syncVisuals();
     this.checkWinLose();
-    this.pushHud();
+    if (!this.ended && this.elapsed >= this.nextHudAt) {
+      this.pushHud();
+      this.nextHudAt = this.elapsed + HUD_INTERVAL_SECONDS;
+    }
   }
 
   private blueBuffRegen(): number {
@@ -1032,20 +1413,63 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   private tickEconomy(dt: number) {
-    // Passive gold trickle for the player.
     this.goldAccrual += passiveGold(dt);
     if (this.goldAccrual >= 1) {
       const whole = Math.floor(this.goldAccrual);
       addGold(this.playerProgress, whole);
+      this.playerTotalGoldEarned += whole;
+      this.teamFacts.ally.totalGoldEarned += whole;
       this.goldAccrual -= whole;
+    }
+
+    for (const entity of this.champions) {
+      const bot = entity.bot;
+      if (!bot) continue;
+      bot.goldAccrual += passiveGold(dt);
+      if (bot.goldAccrual >= 1) {
+        const whole = Math.floor(bot.goldAccrual);
+        addGold(bot.progress, whole);
+        bot.totalGoldEarned += whole;
+        this.teamFacts[bot.side].totalGoldEarned += whole;
+        bot.goldAccrual -= whole;
+      }
+      if (!this.inBase(entity.unit, bot.side) || !isChampionPresent(entity.life!)) continue;
+      const item = recommendPurchase(bot.champion.role, bot.progress.gold, bot.ownedItems);
+      if (!item || bot.progress.gold < item.cost) continue;
+      bot.progress.gold -= item.cost;
+      bot.ownedItems.push(item.id);
+      this.applyChampionStats(entity, bot.side);
     }
   }
 
   private tickBuffsAndObjectives() {
     expireBuffs(this.playerBuffs, this.elapsed);
+    const allyWasActive = this.allyBaron.active;
+    const enemyWasActive = this.enemyBaron.active;
     this.allyBaron = expireBaronBuff(this.allyBaron, this.elapsed);
     this.enemyBaron = expireBaronBuff(this.enemyBaron, this.elapsed);
-    if (this.elapsed >= BARON_SPAWN) this.baronAlive = true;
+    if (allyWasActive !== this.allyBaron.active) this.applyTeamChampionStats('ally');
+    if (enemyWasActive !== this.enemyBaron.active) this.applyTeamChampionStats('enemy');
+    if (!this.rules.objectives.enabled) return;
+
+    for (const runtime of this.objectives) {
+      if (
+        runtime.id === 'herald' &&
+        runtime.entity &&
+        this.elapsed > this.rules.objectives.heraldEndSeconds
+      ) {
+        runtime.entity.unit.dead = true;
+        runtime.entity = null;
+        runtime.permanentlyGone = true;
+        continue;
+      }
+      if (runtime.permanentlyGone || runtime.entity || this.elapsed < runtime.nextSpawnAt) continue;
+      if (runtime.id === 'herald' && !isHeraldWindowOpen(this.elapsed)) {
+        if (this.elapsed > this.rules.objectives.heraldEndSeconds) runtime.permanentlyGone = true;
+        continue;
+      }
+      runtime.entity = this.spawnObjective(runtime.id);
+    }
   }
 
   private processPurchases() {
@@ -1073,7 +1497,7 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   private maybeSpawnWaves() {
-    const wanted = nextWaveNumberAt(this.elapsed);
+    const wanted = nextWaveNumberAt(this.elapsed, this.mode);
     while (this.spawnedWaves < wanted) {
       this.spawnedWaves += 1;
       this.spawnWave(this.spawnedWaves);
@@ -1081,29 +1505,59 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   private spawnWave(waveNumber: number) {
-    for (const team of ['ally', 'enemy'] as Team[]) {
+    for (const team of ['ally', 'enemy'] as MapSide[]) {
       for (const lane of this.lanes) {
         // Super minions spawn when the enemy inhibitor for that lane is down.
         const enemySide: MapSide = team === 'ally' ? 'enemy' : 'ally';
         const inhibId = `${enemySide}-${lane}-inhibitor`;
         const killedAt = this.inhibitorKillTimes.get(inhibId) ?? null;
-        const inhibitorsDown = isInhibitorAlive(this.elapsed, killedAt) ? 0 : 1;
+        const inhibitorsDown = isInhibitorAlive(this.elapsed, killedAt, this.mode) ? 0 : 1;
         const comp = laneWaveComposition(waveNumber, inhibitorsDown);
         comp.forEach((type, i) => {
-          this.time.delayedCall(i * 220, () => {
-            if (!this.ended) this.spawnLaneMinion(type, team, lane);
+          this.pendingWaveSpawns.push({
+            dueAt: this.elapsed + (i * this.rules.waves.unitStaggerMilliseconds) / 1000,
+            type,
+            team,
+            lane,
           });
         });
       }
     }
   }
 
-  private spawnLaneMinion(type: MinionType, team: Team, lane: Lane) {
+  private processWaveSpawns() {
+    const partitioned = partitionImpacts(this.pendingWaveSpawns, this.elapsed);
+    this.pendingWaveSpawns = partitioned.pending;
+    const liveByBucket = new Map<string, number>();
+    for (const minion of this.minions) {
+      if (minion.unit.dead || !minion.rift) continue;
+      const key = `${minion.rift.team}:${minion.rift.lane}`;
+      liveByBucket.set(key, (liveByBucket.get(key) ?? 0) + 1);
+    }
+    for (const spawn of partitioned.due) {
+      const key = `${spawn.team}:${spawn.lane}`;
+      const live = liveByBucket.get(key) ?? 0;
+      // The population cap protects frame time, but scheduled wave members are
+      // authoritative. Defer admission instead of deleting actors from the
+      // simulation; the 15-minute hard cap bounds the retry queue naturally.
+      if (live >= MAX_LIVE_MINIONS_PER_SIDE_LANE) {
+        this.pendingWaveSpawns.push({
+          ...spawn,
+          dueAt: this.elapsed + WAVE_SPAWN_RETRY_SECONDS,
+        });
+        continue;
+      }
+      this.spawnLaneMinion(spawn.type, spawn.team, spawn.lane);
+      liveByBucket.set(key, live + 1);
+    }
+  }
+
+  private spawnLaneMinion(type: MinionType, team: MapSide, lane: Lane) {
     const rift = spawnMinion(type, team, lane);
     const stats = minionStats(type);
     const screenPos = toScreen(rift.pos);
     const unit = this.makeUnit(
-      `minion-${team}-${lane}-${type}-${this.time.now}-${Math.random().toString(36).slice(2, 6)}`,
+      `minion-${team}-${lane}-${type}-${this.minionSequence++}`,
       'minion',
       team,
       screenPos,
@@ -1134,7 +1588,7 @@ export default class BattleScene extends Phaser.Scene {
     };
     this.attachHpBar(entity, size.height + 6);
     this.minions.push(entity);
-    this.allEntities.push(entity);
+    this.addEntity(entity);
   }
 
   // ---- Update helpers ------------------------------------------------------
@@ -1144,18 +1598,18 @@ export default class BattleScene extends Phaser.Scene {
       if (e.stunned > 0) e.stunned = Math.max(0, e.stunned - dt);
       advanceAttackCooldown(e.unit, dt);
     }
-    if (!this.player.unit.dead) {
-      applyHeal(this.player.unit, this.playerChampion.stats.hpRegen * dt);
+    if (isChampionPresent(this.player.life!)) {
+      applyHeal(this.player.unit, (this.player.hpRegen ?? 0) * dt);
       if (this.inBase(this.player.unit, 'ally')) {
         applyHeal(this.player.unit, this.player.unit.maxHp * 0.08 * dt);
         this.playerResource = Math.min(this.playerMaxResource, this.playerResource + this.playerMaxResource * 0.08 * dt);
       }
     }
-    // Every AI champion regenerates from its own champion's base regen, plus a
-    // strong fountain heal when it is home (so respawned bots top up and push).
+    // Every AI champion regenerates from effective level/item stats, plus a
+    // strong fountain heal when it is home.
     for (const c of this.champions) {
-      if (!c.bot || c.unit.dead) continue;
-      applyHeal(c.unit, c.bot.champion.stats.hpRegen * dt);
+      if (!c.bot || !isChampionPresent(c.life!)) continue;
+      applyHeal(c.unit, (c.hpRegen ?? 0) * dt);
       if (this.inBase(c.unit, c.bot.side)) {
         applyHeal(c.unit, c.unit.maxHp * 0.08 * dt);
         c.bot.resource = Math.min(c.bot.maxResource, c.bot.resource + c.bot.maxResource * 0.08 * dt);
@@ -1165,27 +1619,38 @@ export default class BattleScene extends Phaser.Scene {
 
   private updatePlayerMovement(dt: number) {
     const u = this.player.unit;
-    if (u.dead) {
-      this.respawnIfNeeded(this.player, 'ally', dt);
+    if (!isChampionPresent(this.player.life!)) return;
+    if (this.player.stunned > 0 || this.playerOrder === 'stop') return;
+
+    if (this.playerOrder === 'target') {
+      const target = this.findTarget(u, 1600 * SCALE, true);
+      if (!target) {
+        this.playerOrder = 'stop';
+        return;
+      }
+      if (distance(u.pos, target.pos) <= u.attackRange) this.tryBasicAttack(this.player, target);
+      else this.moveUnitToward(u, target.pos, dt);
       return;
     }
-    if (this.player.stunned > 0) return;
 
-    // Movement is click-to-move only (LoL-style): walk toward the last clicked
-    // world point. WASD is intentionally gone so Q/W/E/R stay unambiguous casts.
+    if (this.playerOrder === 'attack-move') {
+      const target = this.findTarget(u, 450 * SCALE);
+      if (target) {
+        if (distance(u.pos, target.pos) <= u.attackRange) this.tryBasicAttack(this.player, target);
+        else this.moveUnitToward(u, target.pos, dt);
+        return;
+      }
+    }
+
     if (this.moveTarget) {
       const d = distance(u.pos, this.moveTarget);
       if (d < 4) {
         this.moveTarget = null;
+        this.playerOrder = 'stop';
       } else {
-        const travel = Math.min(d, u.moveSpeed * dt);
-        u.pos.x += ((this.moveTarget.x - u.pos.x) / d) * travel;
-        u.pos.y += ((this.moveTarget.y - u.pos.y) / d) * travel;
+        this.moveUnitToward(u, this.moveTarget, dt);
       }
     }
-
-    const target = this.findTarget(u, u.attackRange, true);
-    if (target) this.tryBasicAttack(this.player, target);
   }
 
   /**
@@ -1198,15 +1663,27 @@ export default class BattleScene extends Phaser.Scene {
   private updateBotChampion(bot: Entity, dt: number) {
     const u = bot.unit;
     const state = bot.bot!;
-    if (u.dead) {
-      this.respawnIfNeeded(bot, state.side, dt);
-      return;
-    }
+    if (!isChampionPresent(bot.life!)) return;
     if (bot.stunned > 0) return;
 
-    const target = this.findTarget(u, 1200 * SCALE, true);
-    const snapshot = this.buildAiSnapshot(bot, target);
-    const intent = decideAction(snapshot);
+    const objective = this.objectiveForBot(bot);
+    const target = objective?.unit ?? this.findTarget(u, 1200 * SCALE, true);
+    const cadence = DIFFICULTY_CONFIG[this.difficulty];
+
+    // Difficulty changes both how quickly a bot can react and how often it may
+    // reconsider. Keep executing the accepted intent between decisions so the
+    // simulation remains smooth rather than freezing between AI ticks.
+    if (state.pendingIntent && this.elapsed >= state.intentReadyAt) {
+      state.currentIntent = state.pendingIntent;
+      state.pendingIntent = null;
+    }
+    if (this.elapsed >= state.nextDecisionAt) {
+      state.pendingIntent = decideAction(this.buildAiSnapshot(bot, target));
+      state.intentReadyAt = this.elapsed + cadence.reactionDelayMs / 1000;
+      state.nextDecisionAt = this.elapsed + cadence.decisionIntervalMs / 1000;
+    }
+
+    const intent = state.currentIntent;
     const homeBase = toScreen(BASE_POSITIONS[state.side]);
 
     switch (intent) {
@@ -1251,6 +1728,23 @@ export default class BattleScene extends Phaser.Scene {
     }
   }
 
+  private objectiveForBot(bot: Entity): Entity | undefined {
+    if (!this.rules.objectives.enabled || bot.unit.hp / bot.unit.maxHp < 0.45) return undefined;
+    return this.objectives
+      .map((objective) => objective.entity)
+      .filter(
+        (objective): objective is Entity =>
+          objective != null &&
+          this.isEntityDamageable(objective) &&
+          distance(bot.unit.pos, objective.unit.pos) <= 1800 * SCALE,
+      )
+      .sort(
+        (a, b) =>
+          distance(bot.unit.pos, a.unit.pos) - distance(bot.unit.pos, b.unit.pos) ||
+          a.unit.id.localeCompare(b.unit.id),
+      )[0];
+  }
+
   /**
    * The next lane waypoint a bot should walk toward while pushing. Advances the
    * bot's cached push index as it reaches each waypoint so it marches down its
@@ -1269,6 +1763,34 @@ export default class BattleScene extends Phaser.Scene {
     const state = bot.bot!;
     const dist = target ? distance(u.pos, target.pos) : Infinity;
     const [q, w, e, r] = state.champion.abilities;
+    const nearbyChampions = this.champions.filter(
+      (entity) => isChampionPresent(entity.life!) && distance(entity.unit.pos, u.pos) <= 650 * SCALE,
+    );
+    const nearbyMinions = this.minions.filter(
+      (entity) => !entity.unit.dead && distance(entity.unit.pos, u.pos) <= 600 * SCALE,
+    );
+    const alliedWave = nearbyMinions.filter((entity) => entity.unit.team === u.team).length;
+    const hostileWave = nearbyMinions.filter((entity) => areHostile(u.team, entity.unit.team)).length;
+    const waveTotal = Math.max(1, alliedWave + hostileWave);
+    const build = recommendBuild(state.champion.role, state.ownedItems, state.progress.gold);
+    const nextPurchaseCost = build?.nextPurchasableComponent?.cost ?? build?.remainingCost;
+    const objectivePressure = this.objectives.some(
+      (objective) =>
+        objective.entity != null &&
+        !objective.entity.unit.dead &&
+        distance(objective.entity.unit.pos, u.pos) <= 1000 * SCALE,
+    )
+      ? 1
+      : 0;
+    const turretDanger = this.structures.some(
+      (structure) =>
+        !structure.unit.dead &&
+        areHostile(u.team, structure.unit.team) &&
+        structure.node?.kind.endsWith('Turret') &&
+        distance(structure.unit.pos, u.pos) <= structure.unit.attackRange,
+    )
+      ? 1
+      : 0;
     return {
       selfHpPct: u.hp / u.maxHp,
       selfResourcePct: state.resource / state.maxResource,
@@ -1286,6 +1808,17 @@ export default class BattleScene extends Phaser.Scene {
       abilityBehaviors: { Q: q.behavior, W: w.behavior, E: e.behavior, R: r.behavior },
       maxResource: state.maxResource,
       targetLowHp: target ? target.hp / target.maxHp < 0.35 : false,
+      context: {
+        role: state.champion.role,
+        turretDanger,
+        wavePressure: (alliedWave - hostileWave) / waveTotal,
+        objectivePressure,
+        nearbyAllies: nearbyChampions.filter((entity) => entity.unit.team === u.team).length,
+        nearbyEnemies: nearbyChampions.filter((entity) => areHostile(u.team, entity.unit.team)).length,
+        gold: state.progress.gold,
+        nextPurchaseCost,
+        shopAvailable: this.inBase(u, state.side),
+      },
     };
   }
 
@@ -1299,7 +1832,7 @@ export default class BattleScene extends Phaser.Scene {
       } else {
         // Route movement through the tested advanceMinion helper (in world
         // units), then mirror the result onto the screen position.
-        const worldPath = laneWaypoints(m.rift.lane, u.team);
+        const worldPath = laneWaypoints(m.rift.lane, m.rift.team);
         const worldDt = dt; // advanceMinion uses world-unit speeds internally.
         const res = advanceMinion(m.rift, worldPath, worldDt);
         m.rift.pos = res.pos;
@@ -1315,21 +1848,16 @@ export default class BattleScene extends Phaser.Scene {
   private updateTurret(turret: Entity) {
     const u = turret.unit;
     if (u.dead) return;
-    const target = nearestTargetableEnemy(
-      u,
-      this.livingSnapshot.units,
-      this.structureLines,
-      this.livingSnapshot.ids,
-      u.attackRange,
-    );
+    const target = this.findTarget(u, u.attackRange);
     if (target && canBasicAttack(u)) {
-      const res = applyDamage(target, u.ad);
-      this.registerKill(u, target, res.lethal);
-      this.onDamage(this.entityForUnit(target), target.pos, res.dealt, 0xffcc55, res.lethal, {
-        fromPos: u.pos,
-        attacker: u,
-      });
-      this.drawBeam(u.pos, target.pos, 0xffcc55);
+      const dueAt = this.queueTargetedImpact(
+        turret,
+        target,
+        u.ad,
+        0xffcc55,
+        BASIC_PROJECTILE_SPEED,
+      );
+      this.drawBeam(u.pos, target.pos, 0xffcc55, Math.max(1, (dueAt - this.elapsed) * 1000));
       resetAttackCooldown(u);
     }
   }
@@ -1344,24 +1872,37 @@ export default class BattleScene extends Phaser.Scene {
     const u = attacker.unit;
     if (!canBasicAttack(u) || target.dead) return;
     if (distance(u.pos, target.pos) > u.attackRange) return;
+    const targetEntity = this.entityForUnit(target);
+    if (!targetEntity || !this.isEntityDamageable(targetEntity)) return;
     let ad = u.ad;
-    // Red buff adds flat on-hit damage for the player.
     if (attacker === this.player && this.playerBuffs.buffs.some((b) => b.kind === 'red')) {
       ad += BUFF_EFFECTS.red.bonusDamage;
     }
-    const res = applyDamage(target, ad);
-    if (attacker === this.player) this.stats.damageDealt += res.dealt;
-    this.registerKill(u, target, res.lethal);
-    this.onDamage(this.entityForUnit(target), target.pos, res.dealt, 0xf0e6d2, res.lethal, {
-      fromPos: u.pos,
-      attacker: u,
-    });
-    if (u.attackRange > 220 * SCALE) this.drawProjectile(u.pos, target.pos, 0xf0e6d2);
+    if (attacker.champion) {
+      this.setChampionPose(attacker, 'attack', CHAMPION_POSE_HOLD_MS.attack, 1);
+    }
+    if (u.attackRange > 220 * SCALE) {
+      const dueAt = this.queueTargetedImpact(
+        attacker,
+        target,
+        ad,
+        0xf0e6d2,
+        BASIC_PROJECTILE_SPEED,
+      );
+      this.drawProjectile(
+        u.pos,
+        target.pos,
+        0xf0e6d2,
+        Math.max(1, (dueAt - this.elapsed) * 1000),
+      );
+    } else {
+      this.applyTargetedDamage(attacker, targetEntity, ad, 0xf0e6d2);
+    }
     resetAttackCooldown(u);
   }
 
   private tryPlayerCast(slot: CooldownKey) {
-    if (this.ended || this.player.unit.dead || this.player.stunned > 0) return;
+    if (this.ended || !isChampionPresent(this.player.life!) || this.player.stunned > 0) return;
     const pointer = this.input.activePointer;
     // Aim is taken from the pointer, re-mapped through the projection to the
     // flat gameplay plane so cursor-aimed abilities land where intended.
@@ -1371,7 +1912,7 @@ export default class BattleScene extends Phaser.Scene {
       if (this.playerResource < cost || this.playerCds[slot] > 0) return false;
       this.playerResource -= cost;
       return true;
-    }, true);
+    });
   }
 
   private botCast(bot: Entity, slot: CooldownKey, aim: Vec2) {
@@ -1381,7 +1922,7 @@ export default class BattleScene extends Phaser.Scene {
       if (state.resource < cost || state.cds[slot] > 0) return false;
       state.resource -= cost;
       return true;
-    }, false);
+    });
   }
 
   private abilityBySlot(champion: Champion, slot: CooldownKey): Ability {
@@ -1394,12 +1935,13 @@ export default class BattleScene extends Phaser.Scene {
     return map[slot];
   }
 
-  private cooldownFor(champion: Champion, slot: CooldownKey, side: MapSide): number {
+  private cooldownFor(caster: Entity, champion: Champion, slot: CooldownKey): number {
     const base = this.abilityBySlot(champion, slot).cooldown;
-    // Blue buff + item CDR reduce cooldowns for the player.
-    if (side !== 'ally') return base;
-    let cdr = totalModifiers(this.ownedItems).cooldownReduction;
-    if (this.playerBuffs.buffs.some((b) => b.kind === 'blue')) cdr += BUFF_EFFECTS.blue.cooldownReduction;
+    const itemIds = caster === this.player ? this.ownedItems : caster.bot?.ownedItems ?? [];
+    let cdr = totalModifiers(itemIds).cooldownReduction;
+    if (caster === this.player && this.playerBuffs.buffs.some((b) => b.kind === 'blue')) {
+      cdr += BUFF_EFFECTS.blue.cooldownReduction;
+    }
     return base * (1 - Math.min(0.5, cdr));
   }
 
@@ -1410,16 +1952,21 @@ export default class BattleScene extends Phaser.Scene {
     champion: Champion,
     cds: CooldownState,
     spend: () => boolean,
-    isPlayer: boolean,
   ) {
     const ability = this.abilityBySlot(champion, slot);
     if (!spend()) return;
-    startCooldown(cds, slot, this.cooldownFor(champion, slot, isPlayer ? 'ally' : 'enemy'));
+    startCooldown(cds, slot, this.cooldownFor(caster, champion, slot));
     const effect = resolveAbility(ability);
     const color = Phaser.Display.Color.HexStringToColor(champion.accentColor).color;
     const origin = { ...caster.unit.pos };
 
-    audio.play(slot === 'R' ? 'ability' : 'cast');
+    this.setChampionPose(
+      caster,
+      `cast${slot}` as ChampionPose,
+      slot === 'R' ? 420 : CHAMPION_POSE_HOLD_MS.cast,
+      2,
+    );
+    audio.playChampionCue(champion.id, slot, this.audioOptionsFor(origin));
     this.castFlare(caster, color, slot === 'R');
 
     const dir = this.clampAim(origin, aim, ability.range * SCALE);
@@ -1441,29 +1988,40 @@ export default class BattleScene extends Phaser.Scene {
     if (effect.damage > 0) {
       const center = dir;
       const hitRadius = effect.area ? effect.radius * SCALE : effect.dashes ? 40 : 34;
+      const damage = abilityDamage(effect.damage, caster.abilityPower ?? 0);
+      const dueAt = effect.dashes
+        ? this.elapsed
+        : projectileImpactTime(this.elapsed, origin, center, SKILLSHOT_PROJECTILE_SPEED);
       if (effect.area) this.drawAoe(center, hitRadius, color);
-      else if (!effect.dashes) this.drawProjectile(origin, center, color);
-
-      for (const e of this.allEntities) {
-        if (e.unit.dead || e.unit.team === caster.unit.team) continue;
-        if (distance(e.unit.pos, center) <= hitRadius) {
-          const res = applyDamage(e.unit, effect.damage);
-          if (isPlayer) this.stats.damageDealt += res.dealt;
-          this.registerKill(caster.unit, e.unit, res.lethal);
-          this.onDamage(e, e.unit.pos, res.dealt, color, res.lethal, {
-            fromPos: caster.unit.pos,
-            ability: true,
-            ult: slot === 'R',
-            attacker: caster.unit,
-          });
-          if (effect.stunDuration > 0) {
-            e.stunned = effect.stunDuration;
-            this.stunSpin(e, color);
-          }
-          if (!effect.area) break;
-        }
+      else if (!effect.dashes) {
+        this.drawProjectile(origin, center, color, Math.max(1, (dueAt - this.elapsed) * 1000));
       }
+
+      this.pendingImpacts.push({
+        dueAt,
+        source: { ...caster.unit, pos: { ...origin } },
+        point: { ...center },
+        radius: hitRadius,
+        rawDamage: damage,
+        color,
+        stunDuration: effect.stunDuration,
+        ability: true,
+        ultimate: slot === 'R',
+        singleTarget: !effect.area,
+      });
     }
+  }
+
+  private audioOptionsFor(source: Vec2): { pan: number; distance: number } {
+    const listener = this.player?.unit.pos ?? source;
+    const sourceScreen = project(source);
+    const listenerScreen = project(listener);
+    return {
+      pan: Phaser.Math.Clamp((sourceScreen.x - listenerScreen.x) / 320, -1, 1),
+      // Audio distance is intentionally abstract/small; the engine applies
+      // inverse attenuation, so raw world pixels would make every remote cue mute.
+      distance: Phaser.Math.Clamp(distance(source, listener) / (500 * SCALE), 0, 4),
+    };
   }
 
   private clampAim(origin: Vec2, aim: Vec2, range: number): Vec2 {
@@ -1488,60 +2046,319 @@ export default class BattleScene extends Phaser.Scene {
     const travel = Math.min(d, u.moveSpeed * dt);
     u.pos.x = this.clampX(u.pos.x + ((goal.x - u.pos.x) / d) * travel);
     u.pos.y = this.clampY(u.pos.y + ((goal.y - u.pos.y) / d) * travel);
+    const champion = this.entityForUnit(u);
+    if (champion?.champion && travel > 0) champion.movedThisFrame = true;
   }
 
-  private respawnIfNeeded(entity: Entity, side: MapSide, _dt: number) {
-    if (!entity.container.getData('respawnAt')) {
-      const level = entity === this.player
-        ? this.playerProgress.level
-        : entity.bot
-          ? entity.bot.progress.level
-          : 1;
-      entity.container.setData('respawnAt', this.elapsed + Math.min(50, 6 + level * 2.5));
-      entity.container.setVisible(false);
-    } else if (this.elapsed >= entity.container.getData('respawnAt')) {
-      entity.container.setData('respawnAt', 0);
-      entity.unit.dead = false;
-      entity.unit.hp = entity.unit.maxHp;
-      entity.unit.pos = { ...toScreen(BASE_POSITIONS[side]) };
-      entity.container.setVisible(true);
-      // Restart the bot's lane march from home so it pushes out again.
-      if (entity.bot) entity.bot.pushIndex = 0;
+  private advanceChampionLives() {
+    for (const entity of this.champions) {
+      const previous = entity.life!;
+      const next = advanceChampionLife(previous, this.elapsed, this.mode);
+      entity.life = next;
+      if (!isChampionPresent(next)) {
+        entity.unit.dead = true;
+        const showingDeathPose =
+          entity.championPose === 'death' && this.elapsed < (entity.deathVisibleUntil ?? 0);
+        entity.container.setVisible(showingDeathPose);
+        entity.shadow?.setVisible(false);
+        continue;
+      }
+      if (!isChampionPresent(previous) && isChampionPresent(next)) {
+        const side: MapSide = entity.bot?.side ?? 'ally';
+        entity.unit.dead = false;
+        entity.unit.hp = entity.unit.maxHp;
+        entity.unit.pos = { ...toScreen(BASE_POSITIONS[side]) };
+        entity.stunned = 0;
+        entity.container.setVisible(true).setAlpha(1);
+        entity.shadow?.setVisible(true).setAlpha(0.32);
+        if (entity.bot) {
+          entity.bot.pushIndex = 0;
+          entity.bot.currentIntent = 'approach';
+          entity.bot.pendingIntent = null;
+          entity.bot.intentReadyAt = this.elapsed;
+          entity.bot.nextDecisionAt = this.elapsed;
+        }
+        entity.poseLockedUntil = 0;
+        entity.posePriority = 0;
+        entity.deathVisibleUntil = undefined;
+        this.setChampionPose(entity, 'idle');
+        this.targetByEntityId.delete(entity.unit.id);
+      }
+    }
+  }
+
+  private reviveInhibitors() {
+    for (const [id, killedAt] of [...this.inhibitorKillTimes]) {
+      if (!isInhibitorAlive(this.elapsed, killedAt, this.mode)) continue;
+      const inhibitor = this.structureById.get(id);
+      if (inhibitor) {
+        inhibitor.unit.dead = false;
+        inhibitor.unit.hp = inhibitor.unit.maxHp;
+        inhibitor.container.setVisible(true).setAlpha(1);
+        inhibitor.shadow?.setVisible(true).setAlpha(0.32);
+      }
+      this.inhibitorKillTimes.delete(id);
+    }
+  }
+
+  private applyTeamChampionStats(side: MapSide) {
+    for (const champion of this.champions) {
+      const championSide: MapSide = champion.bot?.side ?? 'ally';
+      if (championSide === side) this.applyChampionStats(champion, side);
+    }
+  }
+
+  private spawnObjective(id: EpicMonster): Entity {
+    const profile = monsterStats(id);
+    const pit = EPIC_PITS.find((candidate) => candidate.id === id)!;
+    const pos = toScreen(pit.pos);
+    const unit = this.makeUnit(`objective-${id}-${Math.round(this.elapsed * 1000)}`, 'monster', 'neutral', pos, {
+      maxHp: profile.hp,
+      ad: profile.ad,
+      armor: profile.armor,
+      attackRange: OBJECTIVE_ATTACK_RANGE,
+      attackSpeed: 0.7,
+      moveSpeed: 0,
+    });
+    const { key, size } = this.sprites.ensure({ kind: 'marker', variant: id });
+    const body = this.makeBillboard(key, size);
+    const container = this.add.container(pos.x, pos.y, [body]);
+    const shadow = this.makeShadow(size.width * 0.9);
+    const entity: Entity = {
+      unit,
+      container,
+      body,
+      shadow,
+      heightPx: 10,
+      stunned: 0,
+      objectiveId: id,
+    };
+    this.attachHpBar(entity, size.height + 8);
+    this.addEntity(entity);
+    return entity;
+  }
+
+  private updateObjectiveMonsters() {
+    for (const runtime of this.objectives) {
+      const objective = runtime.entity;
+      if (!objective || objective.unit.dead || objective.stunned > 0) continue;
+      const target = this.findTarget(
+        objective.unit,
+        Math.min(OBJECTIVE_ATTACK_RANGE, OBJECTIVE_LEASH_RANGE),
+      );
+      if (target && canBasicAttack(objective.unit)) {
+        const dueAt = this.queueTargetedImpact(
+          objective,
+          target,
+          objective.unit.ad,
+          0xe8b84d,
+          BASIC_PROJECTILE_SPEED,
+        );
+        this.drawProjectile(
+          objective.unit.pos,
+          target.pos,
+          0xe8b84d,
+          Math.max(1, (dueAt - this.elapsed) * 1000),
+        );
+        resetAttackCooldown(objective.unit);
+      }
+    }
+  }
+
+  private queueTargetedImpact(
+    source: Entity,
+    target: Unit,
+    rawDamage: number,
+    color: number,
+    speed: number,
+  ): number {
+    const dueAt = projectileImpactTime(this.elapsed, source.unit.pos, target.pos, speed);
+    this.pendingImpacts.push({
+      dueAt,
+      source: { ...source.unit, pos: { ...source.unit.pos } },
+      targetId: target.id,
+      radius: 0,
+      rawDamage,
+      color,
+      stunDuration: 0,
+      ability: false,
+      ultimate: false,
+      singleTarget: true,
+    });
+    return dueAt;
+  }
+
+  private processPendingImpacts() {
+    const partitioned = partitionImpacts(this.pendingImpacts, this.elapsed);
+    this.pendingImpacts = partitioned.pending;
+    for (const impact of partitioned.due) {
+      const source = impact.source;
+      if (impact.targetId) {
+        const target = this.entityById.get(impact.targetId);
+        if (target && this.canDamageTarget(source, target)) {
+          this.applyTargetedDamage(source, target, impact.rawDamage, impact.color);
+        }
+        continue;
+      }
+      if (!impact.point) continue;
+      const targets = this.allEntities
+        .filter(
+          (target) =>
+            this.canDamageTarget(source, target) &&
+            distance(target.unit.pos, impact.point!) <= impact.radius,
+        )
+        .sort(
+          (a, b) =>
+            distance(a.unit.pos, impact.point!) - distance(b.unit.pos, impact.point!) ||
+            a.unit.id.localeCompare(b.unit.id),
+        );
+      const struck = impact.singleTarget ? targets.slice(0, 1) : targets;
+      for (const target of struck) {
+        this.applyTargetedDamage(source, target, impact.rawDamage, impact.color, {
+          ability: impact.ability,
+          ultimate: impact.ultimate,
+          stunDuration: impact.stunDuration,
+        });
+      }
+    }
+  }
+
+  private canDamageTarget(source: Unit, target: Entity): boolean {
+    if (!areHostile(source.team, target.unit.team) || !this.isEntityDamageable(target)) return false;
+    if (target.unit.kind !== 'turret' && target.unit.kind !== 'nexus') return true;
+    const livingIds = new Set(
+      this.structures.filter((structure) => !structure.unit.dead).map((structure) => structure.unit.id),
+    );
+    return isStructureTargetable(target.unit.id, livingIds, this.mode);
+  }
+
+  private isEntityDamageable(entity: Entity): boolean {
+    if (entity.unit.dead) return false;
+    return entity.life ? isChampionDamageable(entity.life) : true;
+  }
+
+  private applyTargetedDamage(
+    source: Entity | Unit,
+    target: Entity,
+    rawDamage: number,
+    color: number,
+    options: { ability?: boolean; ultimate?: boolean; stunDuration?: number } = {},
+  ) {
+    const sourceUnit = 'unit' in source ? source.unit : source;
+    if (!this.canDamageTarget(sourceUnit, target)) return;
+    const result = applyDamage(target.unit, rawDamage);
+    if (sourceUnit.id === this.player.unit.id) this.stats.damageDealt += result.dealt;
+    this.registerKill(sourceUnit, target.unit, result.lethal);
+    this.onDamage(target, target.unit.pos, result.dealt, color, result.lethal, {
+      fromPos: sourceUnit.pos,
+      ability: options.ability,
+      ult: options.ultimate,
+      attacker: sourceUnit,
+    });
+    if (result.dealt > 0 && (options.stunDuration ?? 0) > 0 && !result.lethal) {
+      target.stunned = options.stunDuration!;
+      this.stunSpin(target, color);
     }
   }
 
   private registerKill(source: Unit, target: Unit, lethal: boolean) {
     if (!lethal) return;
-    // Track inhibitor destruction for super-minion spawning.
-    if (target.kind === 'turret' && target.id.endsWith('-inhibitor')) {
-      this.inhibitorKillTimes.set(target.id, this.elapsed);
-    }
-    // Award gold/XP to the champion that landed the kill (its OWN progress).
-    // The human uses the scene's playerProgress; each bot uses its own. Kills by
-    // structures/minions have no champion progress to award, but still tick the
-    // human's stats when the human is the source.
-    const killer = this.entityForUnit(source);
-    const progress = source.id === 'player'
-      ? this.playerProgress
-      : killer?.bot?.progress ?? null;
-    if (target.kind === 'minion') {
-      const type = (this.entityForUnit(target)?.minionType ?? 'melee') as MinionType;
-      const b = minionBounty(type);
-      if (progress) {
-        addGold(progress, b.gold);
-        addXp(progress, b.xp);
-      }
-      if (source.id === 'player') this.stats.minionKills += 1;
-    } else if (target.kind === 'champion') {
-      if (progress) {
-        addGold(progress, CHAMPION_TAKEDOWN_BOUNTY.gold);
-        addXp(progress, CHAMPION_TAKEDOWN_BOUNTY.xp);
+    const targetEntity = this.entityForUnit(target);
+    const sourceEntity = this.entityForUnit(source);
+    const sourceSide = source.team === 'ally' || source.team === 'enemy' ? source.team : null;
+
+    if (targetEntity?.life) {
+      const level = targetEntity === this.player
+        ? this.playerProgress.level
+        : targetEntity.bot?.progress.level ?? 1;
+      targetEntity.life = killChampion(targetEntity.life, this.elapsed, level, this.mode);
+      if (targetEntity === this.player) this.playerDeaths += 1;
+      if (sourceSide) {
+        this.teamFacts[sourceSide].championKills += 1;
+        this.awardBounty(sourceEntity, CHAMPION_TAKEDOWN_BOUNTY);
       }
       if (source.id === 'player') this.stats.championKills += 1;
+    } else if (target.kind === 'minion') {
+      const type = (targetEntity?.minionType ?? 'melee') as MinionType;
+      this.awardBounty(sourceEntity, minionBounty(type));
+      if (source.id === 'player') this.stats.minionKills += 1;
+    } else if (target.kind === 'turret' || target.kind === 'nexus') {
+      const node = targetEntity?.node;
+      const bountyKind = node?.kind === 'inhibitor'
+        ? 'inhibitor'
+        : node?.kind === 'nexus'
+          ? 'nexus'
+          : 'turret';
+      this.awardBounty(sourceEntity, structureBounty(bountyKind));
+      if (node?.kind === 'inhibitor') this.inhibitorKillTimes.set(target.id, this.elapsed);
+    } else if (target.kind === 'monster' && targetEntity?.objectiveId && sourceSide) {
+      const objectiveId = targetEntity.objectiveId;
+      this.awardBounty(sourceEntity, monsterStats(objectiveId).bounty);
+      this.teamFacts[sourceSide].objectives += 1;
+      const runtime = this.objectives.find((objective) => objective.id === objectiveId);
+      if (runtime) {
+        runtime.entity = null;
+        if (objectiveId === 'herald') runtime.permanentlyGone = true;
+        else runtime.nextSpawnAt = this.elapsed + this.rules.objectives.respawnSeconds;
+      }
+      if (objectiveId === 'dragon') {
+        if (sourceSide === 'ally') this.allyDragonStacks += 1;
+        else this.enemyDragonStacks += 1;
+        this.applyTeamChampionStats(sourceSide);
+      } else if (objectiveId === 'baron') {
+        if (sourceSide === 'ally') this.allyBaron = applyBaronBuff(this.elapsed);
+        else this.enemyBaron = applyBaronBuff(this.elapsed);
+        this.applyTeamChampionStats(sourceSide);
+      } else {
+        this.applyHeraldPush(source, sourceSide);
+      }
     }
-    // Recompute the killer's stats from its updated level/progression.
-    if (source.id === 'player') this.applyChampionStats(this.player, 'ally');
-    else if (killer?.bot) this.applyChampionStats(killer, killer.bot.side);
+
+    if (sourceEntity === this.player) this.applyChampionStats(this.player, 'ally');
+    else if (sourceEntity?.bot) this.applyChampionStats(sourceEntity, sourceEntity.bot.side);
+  }
+
+  private awardBounty(entity: Entity | undefined, bounty: { gold: number; xp: number }) {
+    if (!entity || entity.unit.kind !== 'champion') return;
+    const progress = entity === this.player ? this.playerProgress : entity.bot?.progress;
+    if (!progress) return;
+    addGold(progress, bounty.gold);
+    const xp = addXp(progress, bounty.xp);
+    const side: MapSide = entity.bot?.side ?? 'ally';
+    this.teamFacts[side].totalGoldEarned += bounty.gold;
+    if (entity === this.player) this.playerTotalGoldEarned += bounty.gold;
+    else if (entity.bot) entity.bot.totalGoldEarned += bounty.gold;
+    if (xp.leveled) {
+      this.floatingDamage(entity.unit.pos, xp.newLevel, 0xffd45c, 'LV ');
+      this.pulse(entity.container, 0xffd45c);
+    }
+  }
+
+  private applyHeraldPush(source: Unit, sourceSide: MapSide) {
+    const reward = heraldReward();
+    const livingIds = new Set(
+      this.structures.filter((structure) => !structure.unit.dead).map((structure) => structure.unit.id),
+    );
+    const target = this.structures
+      .filter(
+        (structure) =>
+          structure.unit.team !== sourceSide &&
+          !structure.unit.dead &&
+          isStructureTargetable(structure.unit.id, livingIds, this.mode),
+      )
+      .sort(
+        (a, b) =>
+          distance(a.unit.pos, toScreen(BASE_POSITIONS[sourceSide])) -
+          distance(b.unit.pos, toScreen(BASE_POSITIONS[sourceSide])),
+      )[0];
+    if (!target) return;
+    const result = applyDamage(target.unit, reward.structureDamage);
+    this.registerKill(source, target.unit, result.lethal);
+    this.onDamage(target, target.unit.pos, result.dealt, 0xc18cff, result.lethal, {
+      fromPos: source.pos,
+      ability: true,
+      attacker: source,
+    });
   }
 
   // ---- Targeting -----------------------------------------------------------
@@ -1565,17 +2382,21 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   private findTarget(u: Unit, maxRange: number, preferStructures = false): Unit | undefined {
-    // Structure gating: use the per-frame living set and only allow a structure
-    // to be targeted when the pure rule permits it.
     const living = this.livingSnapshot.ids;
-    const candidates = this.livingSnapshot.units.filter((c) => {
-      if (c.team === u.team) return false;
-      if (c.kind === 'turret' || c.kind === 'nexus') {
-        return isStructureTargetable(c.id, living);
+    const candidates = this.livingSnapshot.units.filter((candidate) => {
+      if (!areHostile(candidate.team, u.team)) return false;
+      const entity = this.entityById.get(candidate.id);
+      if (!entity || !this.isEntityDamageable(entity)) return false;
+      if (candidate.kind === 'turret' || candidate.kind === 'nexus') {
+        return isStructureTargetable(candidate.id, living, this.mode);
       }
       return true;
     });
-    return nearestTargetableEnemy(
+    const currentId = this.targetByEntityId.get(u.id) ?? null;
+    const persistent = persistentEnemy(u, candidates, currentId, maxRange);
+    if (currentId && persistent?.id === currentId) return persistent;
+
+    const acquired = nearestTargetableEnemy(
       u,
       candidates,
       this.structureLines,
@@ -1583,9 +2404,46 @@ export default class BattleScene extends Phaser.Scene {
       maxRange,
       preferStructures,
     );
+    if (acquired) this.targetByEntityId.set(u.id, acquired.id);
+    else this.targetByEntityId.delete(u.id);
+    return acquired;
   }
 
   // ---- Visuals -------------------------------------------------------------
+
+  private canAllocateTransient(damageText = false): boolean {
+    if (this.transientVfx.size >= MAX_TRANSIENT_VFX) return false;
+    if (damageText) return this.damageTexts.size < MAX_DAMAGE_TEXTS;
+    return this.transientVfx.size < MAX_TRANSIENT_VFX - RESERVED_DAMAGE_TEXT_SLOTS;
+  }
+
+  private registerTransient<T extends Phaser.GameObjects.GameObject>(
+    object: T,
+    damageText = false,
+  ): T | null {
+    if (!this.canAllocateTransient(damageText)) {
+      object.destroy();
+      return null;
+    }
+    this.transientVfx.add(object);
+    if (damageText && object instanceof Phaser.GameObjects.Text) {
+      this.damageTexts.add(object);
+    }
+    return object;
+  }
+
+  private destroyTransient(object: Phaser.GameObjects.GameObject): void {
+    this.transientVfx.delete(object);
+    if (object instanceof Phaser.GameObjects.Text) this.damageTexts.delete(object);
+    this.tweens.killTweensOf(object);
+    if (object.active) object.destroy();
+  }
+
+  private clearTransientVfx(): void {
+    for (const object of [...this.transientVfx]) this.destroyTransient(object);
+    this.transientVfx.clear();
+    this.damageTexts.clear();
+  }
 
   private syncVisuals() {
     for (const e of this.allEntities) {
@@ -1608,18 +2466,24 @@ export default class BattleScene extends Phaser.Scene {
         e.hpBar.x = -(full * (1 - pct)) / 2;
         e.hpBar.fillColor = pct > 0.5 ? 0x3ad16a : pct > 0.25 ? 0xf0c000 : 0xd13a3a;
       }
-      if (e.unit.dead && e.unit.kind === 'minion' && e.container.active) {
+      if (
+        e.unit.dead &&
+        (e.unit.kind === 'minion' || e.unit.kind === 'monster') &&
+        e.container.active
+      ) {
         e.shadow?.destroy();
         e.container.destroy();
+        this.entityById.delete(e.unit.id);
+        this.targetByEntityId.delete(e.unit.id);
       }
       if (e.unit.dead && (e.unit.kind === 'turret' || e.unit.kind === 'nexus') && e.container.visible) {
         e.container.setAlpha(0.25);
         e.shadow?.setAlpha(0.12);
       }
     }
-    this.minions = this.minions.filter((m) => !(m.unit.dead && !m.container.active));
+    this.minions = this.minions.filter((minion) => minion.container.active);
     this.allEntities = this.allEntities.filter(
-      (e) => e.container.active || !e.unit.dead || e.unit.kind !== 'minion',
+      (entity) => entity.container.active || !['minion', 'monster'].includes(entity.unit.kind),
     );
   }
 
@@ -1630,14 +2494,14 @@ export default class BattleScene extends Phaser.Scene {
     prefix = '',
     importance: HitImportance = 'normal',
   ) {
-    if (amount <= 0) return;
+    if (amount <= 0 || !this.canAllocateTransient(true)) return;
     const pos = project(rawPos);
     const style = popupStyleForHit(importance);
     // Heavy hits get a hot near-white core so they punch through the accent
     // color and read as clearly bigger than chip damage.
     const shown = style.heavy ? 0xfff3c0 : color;
-    const jitter = (Math.random() * 2 - 1) * style.jitter;
-    const text = this.add.text(pos.x + jitter, pos.y - 18, `${prefix}${amount}`, {
+    const jitter = this.reducedMotion ? 0 : (Math.random() * 2 - 1) * style.jitter;
+    const text = this.registerTransient(this.add.text(pos.x + jitter, pos.y - 18, `${prefix}${amount}`, {
       fontFamily: 'Noto Sans KR, sans-serif',
       fontSize: `${style.fontSize}px`,
       color: `#${shown.toString(16).padStart(6, '0')}`,
@@ -1645,10 +2509,16 @@ export default class BattleScene extends Phaser.Scene {
       stroke: '#101018',
       strokeThickness: style.heavy ? 3 : 2,
       resolution: 2,
-    });
+    }), true);
+    if (!text) return;
     text.setOrigin(0.5);
-    text.setScale(0.4);
     text.setDepth(VFX_DEPTH);
+    if (this.reducedMotion) {
+      text.setScale(1);
+      this.time.delayedCall(450, () => this.destroyTransient(text));
+      return;
+    }
+    text.setScale(0.4);
     // Punchy Back.easeOut pop up to the importance-scaled peak, then settle.
     this.tweens.add({
       targets: text,
@@ -1664,12 +2534,12 @@ export default class BattleScene extends Phaser.Scene {
       duration: style.heavy ? 720 : 620,
       delay: 90,
       ease: 'Cubic.easeOut',
-      onComplete: () => text.destroy(),
+      onComplete: () => this.destroyTransient(text),
     });
   }
 
   private hitFlash(entity: Entity, importance: HitImportance = 'normal') {
-    if (!entity.container.active) return;
+    if (this.reducedMotion || !entity.container.active) return;
     const img = entity.body;
     img.setTintFill(0xffffff);
     // Bigger hits flash a touch longer so the impact reads as heavier.
@@ -1680,7 +2550,7 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   private shake(intensity: number, duration = 160) {
-    if (intensity <= 0 || duration <= 0) return;
+    if (this.reducedMotion || intensity <= 0 || duration <= 0) return;
     // Ceiling lowered well below the old 0.03 so even a legitimate on-screen
     // shake is a gentle bump, never a lurch. Matches juice.MAX_SHAKE_INTENSITY.
     this.cameras.main.shake(duration, Phaser.Math.Clamp(intensity, 0.002, MAX_SHAKE_INTENSITY));
@@ -1700,7 +2570,7 @@ export default class BattleScene extends Phaser.Scene {
    * the camera scrolls over to test on-screen. Purely cosmetic.
    */
   private tryShake(spec: ShakeSpec, worldPos: Vec2, involvesPlayer: boolean) {
-    if (spec.intensity <= 0 || spec.duration <= 0) return;
+    if (this.reducedMotion || spec.intensity <= 0 || spec.duration <= 0) return;
     const cam = this.cameras.main;
     const screen = project(worldPos);
     const onScreen = cam.worldView.contains(screen.x, screen.y);
@@ -1750,15 +2620,24 @@ export default class BattleScene extends Phaser.Scene {
 
     this.floatingDamage(pos, amount, color, '', importance);
     if (target) {
+      if (target.champion) {
+        if (lethal) target.deathVisibleUntil = this.elapsed + CHAMPION_DEATH_POSE_MS / 1000;
+        this.setChampionPose(
+          target,
+          lethal ? 'death' : 'hit',
+          lethal ? Number.POSITIVE_INFINITY : CHAMPION_POSE_HOLD_MS.hit,
+          lethal ? 4 : 3,
+        );
+      }
       this.hitFlash(target, importance);
       this.squashStretch(target, importance);
       this.knockback(target, opts.fromPos ?? pos, importance);
     }
     this.impactSparks(pos, color, importance);
-    audio.play('hit');
+    audio.play('hit', this.audioOptionsFor(pos));
 
     if (lethal) {
-      audio.play('death');
+      audio.play('death', this.audioOptionsFor(pos));
       if (target) this.deathBurst(target, color);
       // Kill slow-mo is a rare, dramatic beat: only the player's own takedowns
       // or the player's death earn it, never the many bot-vs-bot deaths that
@@ -1785,16 +2664,27 @@ export default class BattleScene extends Phaser.Scene {
    */
   private impactSparks(rawPos: Vec2, color: number, importance: HitImportance) {
     const p = project(rawPos);
-    // COUNT stays driven by the pure juice math so this remains cosmetic and
-    // matches sparkCountForHit exactly; only the LOOK is upgraded to baked SVG
-    // shard bursts (cached by color) instead of plain rectangles.
-    const count = sparkCountForHit(importance);
+    if (this.reducedMotion) {
+      const feedback = this.vfxImage('impact', color, p.x, p.y - 6, 11);
+      if (feedback) this.time.delayedCall(160, () => this.destroyTransient(feedback));
+      return;
+    }
+    // COUNT stays driven by the pure juice math, but available budget can
+    // gracefully trim cosmetic shards without touching the damaging impact.
+    const desired = sparkCountForHit(importance);
+    const available = Math.max(
+      0,
+      MAX_TRANSIENT_VFX - RESERVED_DAMAGE_TEXT_SLOTS - this.transientVfx.size,
+    );
+    const count = Math.min(desired, available);
+    if (count <= 0) return;
     const spread = importance === 'big' ? 26 : importance === 'ult' ? 22 : 16;
     const size = importance === 'big' ? 12 : importance === 'chip' ? 6 : 9;
     for (let i = 0; i < count; i += 1) {
       const angle = (Math.PI * 2 * i) / count + Math.random() * 0.6;
       const dist = spread * (0.5 + Math.random() * 0.6);
       const spark = this.vfxImage('impact', i % 3 === 0 ? 0xffffff : color, p.x, p.y - 6, size);
+      if (!spark) break;
       this.tweens.add({
         targets: spark,
         x: p.x + Math.cos(angle) * dist,
@@ -1804,7 +2694,7 @@ export default class BattleScene extends Phaser.Scene {
         scaleY: spark.scaleY * 0.2,
         duration: 220 + Math.random() * 160,
         ease: 'Cubic.easeOut',
-        onComplete: () => spark.destroy(),
+        onComplete: () => this.destroyTransient(spark),
       });
     }
   }
@@ -1817,7 +2707,7 @@ export default class BattleScene extends Phaser.Scene {
    * simulation's `unit.pos` is untouched.
    */
   private knockback(target: Entity, rawFrom: Vec2, importance: HitImportance) {
-    if (!target.container.active) return;
+    if (this.reducedMotion || !target.container.active) return;
     const img = target.body;
     const dir = knockbackDir(project(rawFrom), project(target.unit.pos));
     const dist = knockbackForHit(importance);
@@ -1842,7 +2732,7 @@ export default class BattleScene extends Phaser.Scene {
    * returns so it can never leave the sprite deformed.
    */
   private squashStretch(target: Entity, importance: HitImportance) {
-    if (!target.container.active) return;
+    if (this.reducedMotion || !target.container.active) return;
     // Applied to the CONTAINER scale (not the body image) so it never collides
     // with the body-image knockback tween; syncVisuals only sets container
     // position/depth, never scale, so this is safe to own here.
@@ -1871,7 +2761,7 @@ export default class BattleScene extends Phaser.Scene {
    * multiple kills in a row cannot stack or strand the scene slowed.
    */
   private killSlowMo() {
-    if (this.slowMoActive) return;
+    if (this.reducedMotion || this.slowMoActive) return;
     this.slowMoActive = true;
     this.tweens.timeScale = 0.35;
     this.cameras.main.flash(120, 255, 255, 255, false);
@@ -1897,9 +2787,11 @@ export default class BattleScene extends Phaser.Scene {
     y: number,
     displayW: number,
     displayH?: number,
-  ): Phaser.GameObjects.Image {
+  ): Phaser.GameObjects.Image | null {
+    if (!this.canAllocateTransient()) return null;
     const { key, size } = this.sprites.ensureVfx(kind, color);
-    const img = this.add.image(x, y, key);
+    const img = this.registerTransient(this.add.image(x, y, key));
+    if (!img) return null;
     img.setOrigin(0.5, 0.5);
     img.setDisplaySize(displayW, displayH ?? displayW * (size.height / size.width));
     img.setDepth(VFX_DEPTH);
@@ -1909,39 +2801,49 @@ export default class BattleScene extends Phaser.Scene {
   private deathBurst(entity: Entity, color: number) {
     const p = project(entity.unit.pos);
     const burst = this.vfxImage('death', color, p.x, p.y, 26);
+    if (!burst) return;
+    if (this.reducedMotion) {
+      this.time.delayedCall(260, () => this.destroyTransient(burst));
+      return;
+    }
     this.tweens.add({
       targets: burst,
       scale: burst.scale * 2.2,
       alpha: 0,
       duration: 400,
       ease: 'Cubic.easeOut',
-      onComplete: () => burst.destroy(),
+      onComplete: () => this.destroyTransient(burst),
     });
   }
 
   private entityForUnit(unit: Unit): Entity | undefined {
-    return this.allEntities.find((e) => e.unit === unit);
+    return this.entityById.get(unit.id);
   }
 
-  private drawProjectile(rawFrom: Vec2, rawTo: Vec2, color: number) {
+  private drawProjectile(rawFrom: Vec2, rawTo: Vec2, color: number, durationMs = 180) {
     const from = project(rawFrom);
     const to = project(rawTo);
     const fy = from.y - CHAMPION_HEIGHT_PX * 0.5;
     const ty = to.y - CHAMPION_HEIGHT_PX * 0.5;
     // A glowing SVG orb-with-trail Image, rotated to face its travel direction
     // (the art points +x), tweened from->to over the same 180ms.
-    const bolt = this.vfxImage('projectile', color, from.x, fy, 22);
+    const bolt = this.vfxImage('projectile', color, this.reducedMotion ? to.x : from.x, this.reducedMotion ? ty : fy, 22);
+    if (!bolt) return;
     bolt.setRotation(Math.atan2(ty - fy, to.x - from.x));
+    if (this.reducedMotion) {
+      this.time.delayedCall(140, () => this.destroyTransient(bolt));
+      return;
+    }
     this.tweens.add({
       targets: bolt,
       x: to.x,
       y: ty,
-      duration: 180,
-      onComplete: () => bolt.destroy(),
+      duration: durationMs,
+      onComplete: () => this.destroyTransient(bolt),
     });
   }
 
-  private drawBeam(rawFrom: Vec2, rawTo: Vec2, color: number) {
+  private drawBeam(rawFrom: Vec2, rawTo: Vec2, color: number, durationMs = 200) {
     const from = project(rawFrom);
     const to = project(rawTo);
     const fx = from.x;
@@ -1951,13 +2853,20 @@ export default class BattleScene extends Phaser.Scene {
     // A tapered SVG streak stretched to span from->to, anchored at the source
     // and rotated toward the target, fading over the same ~200ms.
     const len = Math.max(6, Math.hypot(tx - fx, ty - fy));
-    const { key } = this.sprites.ensureVfx('beam', color);
-    const beam = this.add.image(fx, fy, key);
+    const beam = this.vfxImage('beam', color, fx, fy, len, 8);
+    if (!beam) return;
     beam.setOrigin(0, 0.5);
-    beam.setDisplaySize(len, 8);
     beam.setRotation(Math.atan2(ty - fy, tx - fx));
-    beam.setDepth(VFX_DEPTH);
-    this.tweens.add({ targets: beam, alpha: 0, duration: 200, onComplete: () => beam.destroy() });
+    if (this.reducedMotion) {
+      this.time.delayedCall(Math.min(180, durationMs), () => this.destroyTransient(beam));
+      return;
+    }
+    this.tweens.add({
+      targets: beam,
+      alpha: 0,
+      duration: durationMs,
+      onComplete: () => this.destroyTransient(beam),
+    });
   }
 
   /**
@@ -1977,18 +2886,26 @@ export default class BattleScene extends Phaser.Scene {
     // Overlay a baked SVG telegraph-ring texture squashed to the SAME rx/ry so
     // the ability reach still reads correctly in the dimetric view. The ring
     // texture is a square viewBox, so display width = 2*rx, height = 2*ry.
-    const { key } = this.sprites.ensureVfx('aoeRing', color);
-    const ring = this.add.image(center.x, center.y, key);
-    ring.setOrigin(0.5, 0.5);
-    ring.setDisplaySize(Math.max(6, rx * 2), Math.max(4, ry * 2));
-    ring.setDepth(VFX_DEPTH);
+    const ring = this.vfxImage(
+      'aoeRing',
+      color,
+      center.x,
+      center.y,
+      Math.max(6, rx * 2),
+      Math.max(4, ry * 2),
+    );
+    if (!ring) return;
+    if (this.reducedMotion) {
+      this.time.delayedCall(300, () => this.destroyTransient(ring));
+      return;
+    }
     this.tweens.add({
       targets: ring,
       alpha: 0,
       scaleX: ring.scaleX * 1.12,
       scaleY: ring.scaleY * 1.12,
       duration: 400,
-      onComplete: () => ring.destroy(),
+      onComplete: () => this.destroyTransient(ring),
     });
   }
 
@@ -2001,27 +2918,39 @@ export default class BattleScene extends Phaser.Scene {
     const ty = to.y - CHAMPION_HEIGHT_PX * 0.5;
     // A thick SVG streak spanning the dash path, fading over the same ~280ms.
     const len = Math.max(6, Math.hypot(tx - fx, ty - fy));
-    const { key } = this.sprites.ensureVfx('beam', color);
-    const streak = this.add.image(fx, fy, key);
+    const streak = this.vfxImage('beam', color, fx, fy, len, 14);
+    if (!streak) return;
     streak.setOrigin(0, 0.5);
-    streak.setDisplaySize(len, 14);
     streak.setRotation(Math.atan2(ty - fy, tx - fx));
     streak.setAlpha(0.8);
-    streak.setDepth(VFX_DEPTH);
-    this.tweens.add({ targets: streak, alpha: 0, duration: 280, onComplete: () => streak.destroy() });
+    if (this.reducedMotion) {
+      this.time.delayedCall(180, () => this.destroyTransient(streak));
+      return;
+    }
+    this.tweens.add({
+      targets: streak,
+      alpha: 0,
+      duration: 280,
+      onComplete: () => this.destroyTransient(streak),
+    });
   }
 
   private pulse(container: Phaser.GameObjects.Container, color: number) {
     // A soft SVG heal sparkle expanding and fading over the same ~380ms.
     const ring = this.vfxImage('heal', color, container.x, container.y, 36);
+    if (!ring) return;
     ring.setAlpha(0.9);
+    if (this.reducedMotion) {
+      this.time.delayedCall(220, () => this.destroyTransient(ring));
+      return;
+    }
     this.tweens.add({
       targets: ring,
       scaleX: ring.scaleX * 1.6,
       scaleY: ring.scaleY * 1.6,
       alpha: 0,
       duration: 380,
-      onComplete: () => ring.destroy(),
+      onComplete: () => this.destroyTransient(ring),
     });
   }
 
@@ -2030,7 +2959,12 @@ export default class BattleScene extends Phaser.Scene {
     const y = p.y - caster.heightPx * 0.5;
     // A radiant SVG burst; ultimates flare larger and add the camera shake.
     const flare = this.vfxImage('castFlare', color, p.x, y, ultimate ? 30 : 22);
+    if (!flare) return;
     flare.setAlpha(0.95);
+    if (this.reducedMotion) {
+      this.time.delayedCall(ultimate ? 280 : 180, () => this.destroyTransient(flare));
+      return;
+    }
     this.tweens.add({
       targets: flare,
       scaleX: flare.scaleX * (ultimate ? 2.6 : 1.8),
@@ -2038,7 +2972,7 @@ export default class BattleScene extends Phaser.Scene {
       alpha: 0,
       duration: ultimate ? 500 : 300,
       ease: 'Cubic.easeOut',
-      onComplete: () => flare.destroy(),
+      onComplete: () => this.destroyTransient(flare),
     });
     // Ult cast bump: gated/throttled like every other shake so the ten bots
     // ulting around the map cannot rattle the player's camera. Only the
@@ -2056,12 +2990,17 @@ export default class BattleScene extends Phaser.Scene {
     const p = project(entity.unit.pos);
     // SVG orbiting-stars sprite spinning above the entity over the same ~600ms.
     const stars = this.vfxImage('stun', color, p.x, p.y - entity.heightPx - 8, 24);
+    if (!stars) return;
+    if (this.reducedMotion) {
+      this.time.delayedCall(360, () => this.destroyTransient(stars));
+      return;
+    }
     this.tweens.add({
       targets: stars,
       angle: 360,
       alpha: 0,
       duration: 600,
-      onComplete: () => stars.destroy(),
+      onComplete: () => this.destroyTransient(stars),
     });
   }
 
@@ -2140,11 +3079,28 @@ export default class BattleScene extends Phaser.Scene {
       ],
       objectives: this.buildObjectives(),
       dragonStacks: this.allyDragonStacks,
+      playerLife: {
+        phase: this.player.life!.phase,
+        deaths: this.playerDeaths,
+        respawnSeconds:
+          this.player.life!.phase === 'dead' || this.player.life!.phase === 'respawning'
+            ? Math.ceil(championLifeTimerRemaining(this.player.life!, this.elapsed))
+            : 0,
+        invulnerableSeconds:
+          this.player.life!.phase === 'invulnerable'
+            ? Math.ceil(championLifeTimerRemaining(this.player.life!, this.elapsed))
+            : 0,
+      },
+      matchStatus: {
+        phase: matchPhaseAt(this.elapsed, this.mode),
+        suddenDeath: matchPhaseAt(this.elapsed, this.mode) !== 'regulation',
+        hardCapSecondsRemaining: Math.max(0, Math.ceil(this.rules.hardCapSeconds - this.elapsed)),
+      },
       allyStructures: this.structureStatus('ally'),
       enemyStructures: this.structureStatus('enemy'),
       minimap: this.buildMinimap(),
       abilities: slots.map((slot) => {
-        const total = this.cooldownFor(this.playerChampion, slot, 'ally');
+        const total = this.cooldownFor(this.player, this.playerChampion, slot);
         const remaining = this.playerCds[slot];
         return {
           slot,
@@ -2157,24 +3113,15 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   private buildObjectives() {
-    const dragonAlive = this.elapsed >= this.dragonNextSpawn;
-    return [
-      {
-        id: 'dragon' as const,
-        alive: dragonAlive,
-        spawnsIn: dragonAlive ? 0 : Math.ceil(this.dragonNextSpawn - this.elapsed),
-      },
-      {
-        id: 'herald' as const,
-        alive: isHeraldWindowOpen(this.elapsed) && !this.heraldTaken,
-        spawnsIn: this.elapsed < 480 ? Math.ceil(480 - this.elapsed) : 0,
-      },
-      {
-        id: 'baron' as const,
-        alive: this.baronAlive,
-        spawnsIn: this.elapsed < BARON_SPAWN ? Math.ceil(BARON_SPAWN - this.elapsed) : 0,
-      },
-    ];
+    if (!this.rules.objectives.enabled) return [];
+    return this.objectives.map((runtime) => ({
+      id: runtime.id,
+      alive: runtime.entity != null && !runtime.entity.unit.dead,
+      spawnsIn:
+        runtime.entity != null || runtime.permanentlyGone
+          ? 0
+          : Math.max(0, Math.ceil(runtime.nextSpawnAt - this.elapsed)),
+    }));
   }
 
   private xpProgressPct(): number {
@@ -2188,19 +3135,53 @@ export default class BattleScene extends Phaser.Scene {
 
   private checkWinLose() {
     if (this.ended) return;
-    if (this.enemyNexus && this.enemyNexus.unit.dead) this.endGame(true);
-    else if (this.allyNexus && this.allyNexus.unit.dead) this.endGame(false);
+    const resolution = resolveMatch(
+      {
+        elapsedSeconds: this.elapsed,
+        ally: this.matchTeamSnapshot('ally'),
+        enemy: this.matchTeamSnapshot('enemy'),
+      },
+      this.mode,
+    );
+    if (resolution.winner) this.endGame(resolution);
   }
 
-  private endGame(win: boolean) {
+  private matchTeamSnapshot(side: MapSide) {
+    const structures = this.structures.filter((structure) => structure.unit.team === side);
+    const nexus = side === 'ally' ? this.allyNexus : this.enemyNexus;
+    const facts = this.teamFacts[side];
+    return {
+      nexusHp: nexus?.unit.hp ?? 0,
+      nexusMaxHp: nexus?.unit.maxHp ?? NEXUS_HP,
+      structuresStanding: structures.filter((structure) => !structure.unit.dead).length,
+      structuresTotal: structures.length,
+      championKills: facts.championKills,
+      objectivePoints: facts.objectives,
+      gold: facts.totalGoldEarned,
+    };
+  }
+
+  private endGame(resolution: MatchResolution) {
+    const win = resolution.winner === 'ally';
     this.ended = true;
+    this.pushHud();
     audio.play(win ? 'victory' : 'defeat');
-    this.cameras.main.flash(300, win ? 10 : 80, win ? 200 : 20, win ? 185 : 30);
+    if (!this.reducedMotion) {
+      this.cameras.main.flash(300, win ? 10 : 80, win ? 200 : 20, win ? 185 : 30);
+    }
     const outcome: BattleOutcome = {
+      matchId: this.matchId,
       win,
       mode: this.mode,
+      matchKind: this.matchKind,
+      difficulty: this.difficulty,
       playerChampionId: this.playerChampion.id,
       enemyChampionId: this.enemyChampion.id,
+      deaths: this.playerDeaths,
+      totalGoldEarned: Math.floor(this.playerTotalGoldEarned),
+      objectives: this.teamFacts.ally.objectives,
+      ownedItems: [...this.ownedItems],
+      endReason: resolution.reason!,
       stats: {
         durationSeconds: Math.round(this.elapsed),
         championKills: this.stats.championKills,

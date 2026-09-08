@@ -50,7 +50,7 @@ describe('ShopPanel', () => {
       screen.getByRole('heading', { name: i18n.t('shop.title') }),
     ).toBeInTheDocument();
     for (const item of ITEMS) {
-      expect(screen.getByText(i18n.t(item.nameKey))).toBeInTheDocument();
+      expect(screen.getAllByText(i18n.t(item.nameKey)).length).toBeGreaterThan(0);
     }
   });
 
@@ -68,6 +68,15 @@ describe('ShopPanel', () => {
     // A cheap item should be affordable and thus buyable.
     expect(cheapest.cost).toBeLessThanOrEqual(9999);
     spy.mockRestore();
+  });
+
+  it('shows a strategic build target, next component guidance, and remaining cost', () => {
+    setStore({ gold: 9999, shopAvailable: true });
+    render(<ShopPanel open onClose={() => {}} />);
+    const plan = screen.getByRole('region', { name: i18n.t('shop.buildPlan') });
+    expect(plan).toHaveTextContent(i18n.t('shop.target'));
+    expect(plan).toHaveTextContent(i18n.t('shop.nextComponent'));
+    expect(plan).toHaveTextContent(i18n.t('shop.remainingCost'));
   });
 
   it('disables items the player cannot afford', () => {

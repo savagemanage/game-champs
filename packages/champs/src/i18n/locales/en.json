@@ -14,6 +14,10 @@
     "start": "Start Battle",
     "tagline": "Your champion. Your call. Your arena.",
     "play": "Enter Arena",
+    "continue": "Continue Last Setup",
+    "standard": "Standard Match",
+    "practice": "Practice",
+    "tutorial": "Learning Match",
     "featuresLabel": "Game highlights",
     "featureStrategy": "Tactical combat",
     "featureChampions": "5 original champions",
@@ -32,17 +36,20 @@
     "randomize": "Randomize",
     "randomOpponent": "Random opponent",
     "pickHint": "Pick your champion, then choose or randomize an opponent.",
-    "findMatch": "Find Match",
+    "findMatch": "Start Local Match",
     "you": "You",
     "spells": "Spells",
-    "yourPick": "Your pick"
+    "yourPick": "Your pick",
+    "locked": "Locked",
+    "unlock": "Unlock · {{cost}}",
+    "unlockAria": "Unlock {{champion}} for {{cost}} currency"
   },
   "client": {
     "home": "Home",
-    "tft": "Tactics",
-    "clash": "Gauntlet",
+    "tactics": "Tactics",
+    "gauntlet": "Gauntlet",
     "essence": "Essence",
-    "riotPoints": "Credits",
+    "credits": "Credits",
     "profile": "Profile",
     "level": "Level {{value}}",
     "social": {
@@ -56,12 +63,29 @@
       "friend4": "TopDiff"
     }
   },
+  "profile": {
+    "summary": "Profile progress",
+    "accountLevel": "Account level {{value}}",
+    "currency": "{{value}} currency",
+    "currencyLabel": "Currency",
+    "tutorialComplete": "Learning Match complete",
+    "tutorialIncomplete": "Learning Match not complete",
+    "practice": "Practice",
+    "tutorial": "Learning Match",
+    "complete": "Complete",
+    "incomplete": "Not complete",
+    "mastery": "Selected mastery",
+    "masteryLevel": "Mastery level {{value}}",
+    "matches": "Matches",
+    "matchesValue": "{{value}} matches"
+  },
   "battle": {
     "title": "Arena Battle",
     "yourNexus": "Your Core",
     "enemyNexus": "Enemy Core",
     "resource": "Resource",
-    "controlsHint": "Left/right-click to move · Q/W/E/R to cast at cursor · attacks auto-fire in range",
+    "controlsHint": "Left/right-click to move · A then click to attack-move · S to stop · Q/W/E/R to cast",
+    "loadError": "The battle renderer could not start. Return to champion select and try again.",
     "surrender": "Surrender"
   },
   "result": {
@@ -78,7 +102,19 @@
     "rematch": "Rematch",
     "toMenu": "Main Menu",
     "level": "Final Level",
-    "gold": "Gold Earned"
+    "gold": "Gold Earned",
+    "deaths": "Deaths",
+    "objectives": "Objectives Secured",
+    "totalGoldEarned": "Total Gold Earned",
+    "endReason": "Match End",
+    "rewards": "Rewards Earned",
+    "accountXp": "Account XP",
+    "masteryXp": "Mastery XP",
+    "masteryProgress": "{{champion}} mastery progress",
+    "endReasons": {
+      "nexus-destroyed": "Core destroyed",
+      "hard-cap-score": "Hard-cap score"
+    }
   },
   "mode": {
     "eyebrow": "BATTLE PROTOCOL",
@@ -86,10 +122,21 @@
     "hint": "Each arena rewards a different rhythm. Pick one to continue to champion selection.",
     "select": "Deploy",
     "recommended": "Recommended",
-    "rift": "Three-Lane Conquest",
-    "riftDesc": "A full tactical campaign across three lanes, with structures, minion waves, jungle threats, and major objectives.",
-    "aram": "Midline Clash",
-    "aramDesc": "A focused single-lane skirmish with a random roster, rapid encounters, and constant team fights."
+    "conquest": "Three-Lane Conquest",
+    "conquestDesc": "A full tactical campaign across three lanes, with structures, minion waves, jungle threats, and major objectives.",
+    "midline": "Midline Skirmish",
+    "midlineDesc": "A focused single-lane skirmish with a random roster, rapid encounters, and constant team fights."
+  },
+  "matchKind": {
+    "standard": "Standard match",
+    "practice": "Practice",
+    "tutorial": "Learning Match"
+  },
+  "difficulty": {
+    "heading": "Difficulty",
+    "easy": "Easy",
+    "normal": "Normal",
+    "hard": "Hard"
   },
   "shop": {
     "open": "Shop",
@@ -100,7 +147,13 @@
     "recommended": "Recommended",
     "close": "Close",
     "gold": "Gold",
-    "purchaseQueued": "{{item}} purchase queued"
+    "purchaseQueued": "{{item}} purchase queued",
+    "buildPlan": "Strategic build plan",
+    "target": "Build target",
+    "nextComponent": "Next component",
+    "remainingCost": "Remaining build cost",
+    "saveForComponent": "Save for the next component",
+    "checkoutNote": "Build cost credits owned components for planning; each purchase still uses its listed shop price."
   },
   "items": {
     "huntersRelic": {
@@ -174,7 +227,18 @@
     "inhibitors": "Inhibitors",
     "minimap": "Minimap",
     "xp": "XP",
-    "alive": "Up"
+    "alive": "Up",
+    "minimapSummary": "Minimap with {{count}} tracked units",
+    "defeated": "Defeated",
+    "respawnIn": "Respawn in {{seconds}}s",
+    "suddenDeath": "Sudden death",
+    "hardCap": "Hard cap reached",
+    "hardCapIn": "Forced result in {{seconds}}s",
+    "statusDefeated": "You were defeated. Respawn in {{seconds}} seconds.",
+    "statusRespawning": "Respawn countdown started.",
+    "statusRespawned": "You have respawned with brief protection.",
+    "statusSuddenDeath": "Sudden death has begun.",
+    "statusHardCap": "The hard cap has been reached; the match will resolve by score."
   },
   "settings": {
     "open": "Settings",
@@ -188,12 +252,26 @@
     "volume": "Master volume",
     "ambient": "Ambient sound",
     "language": "Language",
+    "diagnostics": {
+      "title": "Privacy & Diagnostics",
+      "description": "Optional, coarse performance and crash signals stay on this device. Nothing is uploaded; data leaves only when you export it.",
+      "consentLabel": "Local diagnostics consent",
+      "allow": "Allow local diagnostics",
+      "deny": "Don't allow",
+      "enabled": "Enabled. Collection is local and privacy-safe.",
+      "disabled": "Off by default. No diagnostics are being collected.",
+      "blocked": "Blocked by your browser's Global Privacy Control or Do Not Track setting.",
+      "export": "Export diagnostics",
+      "clear": "Clear diagnostics"
+    },
     "keybinds": {
       "move": "Move to the clicked point",
       "q": "Cast Q ability at cursor",
       "w": "Cast W ability at cursor",
       "e": "Cast E ability at cursor",
       "r": "Cast R (ultimate) at cursor",
+      "attackMove": "Arm attack-move for the next battlefield click",
+      "stop": "Stop and clear the current target",
       "shop": "Open the item shop (in base)",
       "click": "Move to point",
       "clickKey": "Left / right click"

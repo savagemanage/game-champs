@@ -10,18 +10,18 @@ interface ClientNavProps {
   controls?: ReactNode;
 }
 
-/** Decorative top tabs. Only HOME is active; the rest evoke the client shell. */
+/** Decorative top tabs. Only HOME is active; the rest evoke the arena shell. */
 const TABS: { key: string; active?: boolean }[] = [
   { key: 'client.home', active: true },
-  { key: 'client.tft' },
-  { key: 'client.clash' },
+  { key: 'client.tactics' },
+  { key: 'client.gauntlet' },
 ];
 
 /**
- * Hextech-style client top navigation bar. Left: a small inline-SVG hextech
- * wordmark using the localized app title. Center: decorative HOME / TFT / CLASH
- * tabs (HOME active). Right: decorative essence + RP currency chips, a profile
- * pill, and the injected settings/language controls.
+ * Original arena-client navigation. Left: a small inline-SVG diamond wordmark
+ * using the localized app title. Center: decorative HOME / TACTICS / GAUNTLET
+ * tabs (HOME active). Right: decorative essence + credit chips, a profile pill,
+ * and the injected settings/language controls.
  *
  * Everything except the injected controls is cosmetic; the labels are all
  * localized so ko/en parity holds. The bar is a real <nav> landmark for
@@ -34,7 +34,7 @@ export default function ClientNav({ controls }: ClientNavProps) {
     <nav className="client-nav" aria-label={t('client.home')}>
       <div className="client-nav__brand">
         <span className="client-nav__mark" aria-hidden="true">
-          {/* Inline hextech diamond mark - no external asset. */}
+          {/* Inline arena diamond mark - no external asset. */}
           <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
             <path
               d="M12 1.5l10.5 10.5L12 22.5 1.5 12z"
@@ -73,8 +73,8 @@ export default function ClientNav({ controls }: ClientNavProps) {
             <span className="client-nav__chip-value">7,420</span>
           </span>
           <span className="client-nav__chip">
-            <span className="client-nav__chip-dot client-nav__chip-dot--rp" />
-            <span className="client-nav__chip-label">{t('client.riotPoints')}</span>
+            <span className="client-nav__chip-dot client-nav__chip-dot--credits" />
+            <span className="client-nav__chip-label">{t('client.credits')}</span>
             <span className="client-nav__chip-value">1,350</span>
           </span>
         </div>

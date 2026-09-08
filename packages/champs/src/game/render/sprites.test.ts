@@ -2,7 +2,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type Phaser from 'phaser';
 import { championArt, vfxArt } from './svgArt';
 import { derivePalette, hexToInt } from './palette';
-import { SpriteFactory, type SpriteSpec } from './sprites';
+import {
+  CHAMPION_PREWARM_POSES,
+  SpriteFactory,
+  type ChampionSpriteSpec,
+} from './sprites';
 
 /**
  * These tests exercise the SpriteFactory texture-baking path (key derivation,
@@ -42,10 +46,11 @@ function makeFakeScene() {
   return { scene, registered };
 }
 
-const CHAMP_SPEC: SpriteSpec = {
+const CHAMP_SPEC: ChampionSpriteSpec = {
   kind: 'champion',
+  championId: 'embermage',
   role: 'mage',
-  accent: '#4fa3ff',
+  accent: '#2fa8e0',
   team: 'ally',
 };
 
@@ -58,7 +63,7 @@ describe('SpriteFactory.ensure', () => {
     const { scene } = makeFakeScene();
     const factory = new SpriteFactory(scene);
     const { key } = factory.ensure(CHAMP_SPEC);
-    expect(key).toBe('spr-champ-mage-4fa3ff-ally');
+    expect(key).toBe('spr-champ-embermage-mage-idle-2fa8e0-ally');
   });
 
   it('reports the intrinsic viewBox size and footY = round(footYFrac*height)', () => {
@@ -66,7 +71,8 @@ describe('SpriteFactory.ensure', () => {
     const factory = new SpriteFactory(scene);
     const art = championArt(
       'mage',
-      derivePalette(hexToInt('#4fa3ff'), 0x8fd7ff),
+      derivePalette(hexToInt('#2fa8e0'), 0x8fd7ff),
+      { championId: 'embermage', pose: 'idle' },
     );
     const { size } = factory.ensure(CHAMP_SPEC);
     expect(size.width).toBe(art.viewW);
@@ -94,17 +100,68 @@ describe('SpriteFactory.ensure', () => {
     const before = registered.size;
     const again = factory.ensure(CHAMP_SPEC);
     expect(registered.size).toBe(before);
-    expect(again.key).toBe('spr-champ-mage-4fa3ff-ally');
+    expect(again.key).toBe('spr-champ-embermage-mage-idle-2fa8e0-ally');
   });
 
-  it('registers a blank base64 placeholder (no canvas) in a headless env', () => {
+  it('infers canonical identity and idle pose for legacy callers', () => {
+    const { scene } = makeFakeScene();
+    const factory = new SpriteFactory(scene);
+    const legacy = factory.ensure({
+      kind: 'champion',
+      role: 'mage',
+      accent: '#2FA8E0',
+      team: 'ally',
+    });
+    expect(legacy.key).toBe('spr-champ-embermage-mage-idle-2fa8e0-ally');
+  });
+
+  it('includes champion identity and every bounded pose in texture keys', () => {
+    const { scene } = makeFakeScene();
+    const factory = new SpriteFactory(scene);
+    const idle = factory.ensure(CHAMP_SPEC);
+    const cast = factory.ensure({ ...CHAMP_SPEC, pose: 'castQ' });
+    const unsafe = factory.ensure({
+      ...CHAMP_SPEC,
+      pose: 'dance' as ChampionSpriteSpec['pose'],
+    });
+    expect(idle.key).toContain('embermage-mage-idle');
+    expect(cast.key).toContain('embermage-mage-castQ');
+    expect(cast.key).not.toBe(idle.key);
+    expect(unsafe.key).toBe(idle.key);
+  });
+
+  it('prewarms four authored variants and accounts for cache cardinality', () => {
+    const { scene } = makeFakeScene();
+    const factory = new SpriteFactory(scene);
+    const handles = factory.prewarmChampion(CHAMP_SPEC);
+    expect(handles).toHaveLength(CHAMPION_PREWARM_POSES.length);
+    expect(new Set(handles.map(({ key }) => key)).size).toBe(4);
+    expect(factory.getCacheCardinality()).toMatchObject({
+      total: 4,
+      champion: 4,
+      vfx: 0,
+    });
+  });
+
+  it('shares size/readiness metadata across factories for one texture manager', () => {
+    const { scene, registered } = makeFakeScene();
+    const first = new SpriteFactory(scene).ensure(CHAMP_SPEC);
+    const second = new SpriteFactory(scene).ensure(CHAMP_SPEC);
+    expect(second.key).toBe(first.key);
+    expect(second.size).toEqual(first.size);
+    expect(registered.size).toBe(1);
+  });
+
+  it('registers a blank base64 placeholder (no canvas) in a headless env', async () => {
     // Simulate the jsdom/no-decode branch by removing the Image global.
     vi.stubGlobal('Image', undefined);
     const { scene, registered } = makeFakeScene();
     const factory = new SpriteFactory(scene);
-    expect(() => factory.ensure(CHAMP_SPEC)).not.toThrow();
-    const tex = registered.get('spr-champ-mage-4fa3ff-ally')!;
+    const handle = factory.ensure(CHAMP_SPEC);
+    const tex = registered.get('spr-champ-embermage-mage-idle-2fa8e0-ally')!;
     expect(tex.kind).toBe('base64');
+    await expect(handle.ready).resolves.toBe('placeholder');
+    expect(factory.getCacheCardinality().placeholder).toBe(1);
   });
 });
 

@@ -21,10 +21,9 @@ interface BattleScreenProps {
 }
 
 /**
- * Hosts the Phaser battle canvas plus the React HUD overlay and item shop. When
- * the scene reports a win/lose via `onGameEnd`, control routes back to React
- * (App decides to show the results screen). The shop opens with the `B` key or
- * the HUD shop button. A quit button lets the player bail to select.
+ * Hosts the Phaser battle canvas plus the React HUD overlay and item shop. The
+ * loading layer remains authoritative until Phaser reports fonts, critical
+ * textures, scale refresh, and a first render have all settled or fallen back.
  */
 export default function BattleScreen({
   match,
@@ -34,17 +33,32 @@ export default function BattleScreen({
 }: BattleScreenProps) {
   const { t } = useTranslation();
   const [shopOpen, setShopOpen] = useState(false);
+  const [readyKey, setReadyKey] = useState<string | null>(null);
+  const [failedKey, setFailedKey] = useState<string | null>(null);
+  const battleKey = [
+    matchNonce,
+    match.playerChampionId,
+    match.enemyChampionId,
+    match.mode,
+    match.matchKind,
+    match.difficulty,
+  ].join(':');
+  const sceneReady = readyKey === battleKey;
+  const sceneFailed = failedKey === battleKey;
 
   // Browsers only allow audio after a user gesture; the battle is always
   // reached via a click ("Lock In"/"Rematch"), so unlock the context on mount.
   useEffect(() => {
     audio.resume();
-  }, [matchNonce]);
+    setShopOpen(false);
+    setFailedKey(null);
+  }, [battleKey]);
 
-  // `B` toggles the shop. Global shortcuts stay dormant while any modal is
-  // open or while the player is interacting with a form control.
+  // `B` toggles the shop. Global shortcuts stay dormant while loading, while
+  // any modal is open, or while the player is interacting with a form control.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      if (!sceneReady) return;
       const shopDialogOpen = document.querySelector('.shop-panel[aria-modal="true"]');
       if ((event.key === 'b' || event.key === 'B') && shopDialogOpen) {
         event.preventDefault();
@@ -70,7 +84,7 @@ export default function BattleScreen({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [sceneReady]);
 
   const handleGameEnd = useCallback(
     (outcome: BattleOutcome) => {
@@ -79,21 +93,51 @@ export default function BattleScreen({
     [onGameEnd],
   );
 
+  const handleReady = useCallback(() => {
+    setReadyKey(battleKey);
+    setFailedKey(null);
+  }, [battleKey]);
+
+  const handleError = useCallback((_error: unknown) => {
+    setFailedKey(battleKey);
+  }, [battleKey]);
+
   return (
     <section className="battle-screen" aria-label={t('battle.title')}>
       <div className="battle-stage-slot">
-        <div className="battle-stage">
-          <Suspense fallback={<div className="battle-stage__loading">{t('common.loading')}</div>}>
+        <div className="battle-stage" aria-busy={!sceneReady && !sceneFailed}>
+          <Suspense fallback={null}>
             <PhaserGame
               playerChampionId={match.playerChampionId}
               enemyChampionId={match.enemyChampionId}
               mode={match.mode}
+              matchKind={match.matchKind}
+              difficulty={match.difficulty}
               matchNonce={matchNonce}
               onGameEnd={handleGameEnd}
+              onReady={handleReady}
+              onError={handleError}
             />
           </Suspense>
-          <BattleHud onOpenShop={() => setShopOpen(true)} />
-          <ShopPanel open={shopOpen} onClose={() => setShopOpen(false)} />
+          {!sceneReady && !sceneFailed && (
+            <div
+              className="battle-stage__loading"
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+            >
+              {t('common.loading')}
+            </div>
+          )}
+          {sceneFailed && (
+            <div className="battle-stage__loading battle-stage__loading--error" role="alert">
+              {t('battle.loadError')}
+            </div>
+          )}
+          {sceneReady && <BattleHud onOpenShop={() => setShopOpen(true)} />}
+          {sceneReady && shopOpen && (
+            <ShopPanel open onClose={() => setShopOpen(false)} />
+          )}
         </div>
       </div>
       <button type="button" className="btn battle-screen__quit" onClick={onQuit}>

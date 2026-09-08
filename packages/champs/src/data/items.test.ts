@@ -1,7 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import {
   ITEMS,
+  ITEM_BUILD_GRAPH,
   getItemById,
+  missingRecipeComponents,
+  remainingBuildCost,
   totalModifiers,
   addItemModifiers,
   zeroItemModifiers,
@@ -79,6 +82,22 @@ describe('item catalog', () => {
     }
   });
 
+  it('defines valid acyclic recipes whose values equal the finished item cost', () => {
+    for (const item of ITEMS) {
+      expect(ITEM_BUILD_GRAPH[item.id]).toEqual(item.recipe?.components ?? []);
+      if (!item.recipe) continue;
+
+      const componentCost = item.recipe.components.reduce((total, componentId) => {
+        const component = getItemById(componentId);
+        expect(component, `${item.id}:${componentId}`).toBeDefined();
+        expect(componentId).not.toBe(item.id);
+        expect(component?.recipe).toBeUndefined();
+        return total + (component?.cost ?? 0);
+      }, 0);
+      expect(componentCost + item.recipe.combineCost, item.id).toBe(item.cost);
+    }
+  });
+
   it('resolves every item name/desc key in both ko and en', () => {
     for (const item of ITEMS) {
       expect(keyResolves(item.nameKey), item.nameKey).toBe(true);
@@ -127,6 +146,18 @@ describe('item helpers', () => {
     for (const key of MODIFIER_KEYS) {
       expect(total[key]).toBeCloseTo(a.modifiers[key] + b.modifiers[key]);
     }
+  });
+
+  it('credits owned recipe components toward remaining build cost', () => {
+    const target = ITEMS.find((item) => item.recipe)!;
+    const components = target.recipe!.components.map((id) => getItemById(id)!);
+
+    expect(missingRecipeComponents(target, [])).toEqual(components);
+    expect(remainingBuildCost(target, [])).toBe(target.cost);
+    expect(remainingBuildCost(target, [components[0].id])).toBe(
+      target.cost - components[0].cost,
+    );
+    expect(remainingBuildCost(target, [target.id])).toBe(0);
   });
 
   it('totalModifiers ignores unknown ids', () => {

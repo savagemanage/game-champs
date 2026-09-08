@@ -1,28 +1,31 @@
 import { useTranslation } from 'react-i18next';
 import { audio } from '../game/audio';
 import type { GameMode } from '../App';
+import { DIFFICULTIES, type Difficulty, type MatchKind } from '../game/tutorial/config';
 
 interface ModeSelectProps {
-  /** The currently highlighted mode (defaults from App). */
   selected: GameMode;
-  /** Called with the chosen mode when the player confirms. */
+  matchKind: MatchKind;
+  difficulty: Difficulty;
+  onDifficultyChange: (difficulty: Difficulty) => void;
   onSelect: (mode: GameMode) => void;
   onBack?: () => void;
 }
 
-/** The two playable modes, in display order (primary first). */
 const MODES: { id: GameMode; nameKey: string; descKey: string }[] = [
-  { id: 'rift', nameKey: 'mode.rift', descKey: 'mode.riftDesc' },
-  { id: 'aram', nameKey: 'mode.aram', descKey: 'mode.aramDesc' },
+  { id: 'conquest', nameKey: 'mode.conquest', descKey: 'mode.conquestDesc' },
+  { id: 'midline', nameKey: 'mode.midline', descKey: 'mode.midlineDesc' },
 ];
 
-/**
- * Mode picker that sits between the main menu and champion select. The player
- * chooses Summoner's Rift (the full 3-lane 5v5 experience) or ARAM (a lighter
- * single-mid-lane skirmish). The selection is threaded through MatchSetup so
- * the Phaser scene configures its lane count. Keeps App's state-machine style.
- */
-export default function ModeSelect({ selected, onSelect, onBack }: ModeSelectProps) {
+/** Chooses battlefield and difficulty for the menu-selected match kind. */
+export default function ModeSelect({
+  selected,
+  matchKind,
+  difficulty,
+  onDifficultyChange,
+  onSelect,
+  onBack,
+}: ModeSelectProps) {
   const { t } = useTranslation();
 
   const choose = (mode: GameMode) => {
@@ -36,31 +39,45 @@ export default function ModeSelect({ selected, onSelect, onBack }: ModeSelectPro
       <header className="mode-select__header">
         <p className="mode-select__eyebrow">{t('mode.eyebrow')}</p>
         <h1 className="screen__heading mode-select__heading">{t('mode.heading')}</h1>
+        <p className="mode-select__kind">{t(`matchKind.${matchKind}`)}</p>
         <p className="screen__description mode-select__hint">{t('mode.hint')}</p>
       </header>
 
+      <fieldset className="mode-select__difficulty">
+        <legend>{t('difficulty.heading')}</legend>
+        <div className="mode-select__difficulty-options">
+          {DIFFICULTIES.map((value) => (
+            <button
+              key={value}
+              type="button"
+              className={`btn${difficulty === value ? ' is-selected' : ''}`}
+              aria-pressed={difficulty === value}
+              onClick={() => onDifficultyChange(value)}
+            >
+              {t(`difficulty.${value}`)}
+            </button>
+          ))}
+        </div>
+      </fieldset>
+
       <div className="mode-select__cards">
-        {MODES.map((m, index) => (
+        {MODES.map((item, index) => (
           <button
-            key={m.id}
+            key={item.id}
             type="button"
-            className={`mode-card mode-card--${m.id}${m.id === selected ? ' is-selected' : ''}${m.id === 'rift' ? ' mode-card--primary' : ''}`}
-            aria-pressed={m.id === selected}
-            onClick={() => choose(m.id)}
+            className={`mode-card mode-card--${item.id}${item.id === selected ? ' is-selected' : ''}${item.id === 'conquest' ? ' mode-card--primary' : ''}`}
+            aria-pressed={item.id === selected}
+            onClick={() => choose(item.id)}
           >
             <span className="mode-card__art" aria-hidden="true">
               <span className="mode-card__number">0{index + 1}</span>
               <span className="mode-card__glyph" />
             </span>
             <span className="mode-card__copy">
-              {m.id === 'rift' && (
-                <span className="mode-card__recommended">{t('mode.recommended')}</span>
-              )}
-              <span className="mode-card__name">{t(m.nameKey)}</span>
-              <span className="mode-card__desc">{t(m.descKey)}</span>
-              <span className="mode-card__cta">
-                {t('mode.select')} <span aria-hidden="true">→</span>
-              </span>
+              {item.id === 'conquest' && <span className="mode-card__recommended">{t('mode.recommended')}</span>}
+              <span className="mode-card__name">{t(item.nameKey)}</span>
+              <span className="mode-card__desc">{t(item.descKey)}</span>
+              <span className="mode-card__cta">{t('mode.select')} <span aria-hidden="true">→</span></span>
             </span>
           </button>
         ))}

@@ -1,5 +1,5 @@
 /**
- * Item shop catalog for the Summoner's Rift game.
+ * Item shop catalog for the three-lane arena game.
  *
  * Every item is pure data: an id, i18n keys for its name/description, a gold
  * cost, and a flat stat-modifier block that other systems (see
@@ -45,6 +45,14 @@ export type ItemArchetype =
   | 'lifesteal'
   | 'mana';
 
+/** A recipe for upgrading owned components into a stronger item. */
+export interface ItemRecipe {
+  /** Direct component ids. Recipes form an acyclic build graph. */
+  components: readonly string[];
+  /** Gold paid after every direct component is owned. */
+  combineCost: number;
+}
+
 /** A purchasable shop item. */
 export interface Item {
   id: string;
@@ -52,12 +60,14 @@ export interface Item {
   nameKey: string;
   /** i18n key resolving to the item's tooltip description. */
   descKey: string;
-  /** Gold cost. Always strictly positive. */
+  /** Total gold value, including recipe components. Always positive. */
   cost: number;
   /** The archetype this item serves (drives AI recommendations). */
   archetype: ItemArchetype;
   /** True for a build-defining legendary (top-end purchase for its archetype). */
   legendary: boolean;
+  /** Optional direct components and final combine cost. */
+  recipe?: ItemRecipe;
   /** The flat stat bonuses this item grants. */
   modifiers: ItemModifiers;
 }
@@ -83,8 +93,8 @@ function mods(partial: Partial<ItemModifiers>): ItemModifiers {
 
 /**
  * The shop catalog: a starter item, boots, and a basic + legendary option for
- * each of the AD / AP / tank / lifesteal / mana archetypes. Costs rise from
- * basic components to legendaries, echoing LoL's shop tiers.
+ * each of the AD / AP / tank / lifesteal / mana archetypes. Strong items
+ * declare recipes made from existing basics, following familiar shop tiers.
  */
 export const ITEMS: readonly Item[] = [
   {
@@ -121,6 +131,7 @@ export const ITEMS: readonly Item[] = [
     cost: 3100,
     archetype: 'attackDamage',
     legendary: true,
+    recipe: { components: ['shortsword', 'vampiricEdge'], combineCost: 1850 },
     modifiers: mods({ attackDamage: 65, attackSpeed: 0.25, cooldownReduction: 0.1 }),
   },
   {
@@ -139,6 +150,7 @@ export const ITEMS: readonly Item[] = [
     cost: 3200,
     archetype: 'abilityPower',
     legendary: true,
+    recipe: { components: ['emberRod', 'manaCrystal'], combineCost: 1700 },
     modifiers: mods({ abilityPower: 110, resource: 300, cooldownReduction: 0.15 }),
   },
   {
@@ -157,6 +169,7 @@ export const ITEMS: readonly Item[] = [
     cost: 2900,
     archetype: 'tank',
     legendary: true,
+    recipe: { components: ['ironVest', 'manaCrystal'], combineCost: 1450 },
     modifiers: mods({ hp: 450, armor: 60, cooldownReduction: 0.1 }),
   },
   {
@@ -175,6 +188,7 @@ export const ITEMS: readonly Item[] = [
     cost: 3400,
     archetype: 'lifesteal',
     legendary: true,
+    recipe: { components: ['vampiricEdge', 'shortsword'], combineCost: 2150 },
     modifiers: mods({ attackDamage: 55, attackSpeed: 0.35, hp: 150 }),
   },
   {
@@ -193,13 +207,52 @@ export const ITEMS: readonly Item[] = [
     cost: 2600,
     archetype: 'mana',
     legendary: true,
+    recipe: { components: ['manaCrystal', 'emberRod'], combineCost: 1100 },
     modifiers: mods({ resource: 600, abilityPower: 60, cooldownReduction: 0.2 }),
   },
 ];
 
+/** Direct recipe edges keyed by item id. Leaf items map to an empty list. */
+export const ITEM_BUILD_GRAPH: Readonly<Record<string, readonly string[]>> =
+  Object.freeze(
+    ITEMS.reduce<Record<string, readonly string[]>>((graph, item) => {
+      graph[item.id] = item.recipe?.components ?? [];
+      return graph;
+    }, {}),
+  );
+
 /** Look up an item by id. Returns undefined when the id is unknown. */
 export function getItemById(id: string): Item | undefined {
   return ITEMS.find((item) => item.id === id);
+}
+
+/** Direct recipe components not represented in the owned item ids. */
+export function missingRecipeComponents(
+  item: Item,
+  ownedItemIds: readonly string[],
+): Item[] {
+  if (!item.recipe) return [];
+  const owned = new Set(ownedItemIds);
+  return item.recipe.components
+    .filter((componentId) => !owned.has(componentId))
+    .map(getItemById)
+    .filter((component): component is Item => component !== undefined);
+}
+
+/** Gold still needed to complete an item after crediting owned components. */
+export function remainingBuildCost(
+  item: Item,
+  ownedItemIds: readonly string[],
+): number {
+  if (ownedItemIds.includes(item.id)) return 0;
+  if (!item.recipe) return item.cost;
+  return (
+    item.recipe.combineCost +
+    missingRecipeComponents(item, ownedItemIds).reduce(
+      (total, component) => total + component.cost,
+      0,
+    )
+  );
 }
 
 /** Add two modifier records component-wise, returning a new record. */
