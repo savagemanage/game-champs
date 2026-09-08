@@ -91,9 +91,10 @@ The three previously-listed non-blocking follow-ups are now done. All invariants
   `vfxArt(kind, color)` signature and cache key are unchanged.
 
 Verification (from the repository root): `npm run typecheck` clean across all workspaces;
-`npm run test` green (champs: 35 files / 422 tests, up from 398; new tests cover the seeded
+`npm run test` green (champs: 35 files / 423 tests, up from 398; new tests cover the seeded
 RNG, seeded composition determinism/variety/invariants, and per-champion silhouette/VFX
-determinism and differentiation); `npm run build` succeeds and champs emits a distinct
+determinism and differentiation, including a cast-flare test that isolates the color-seeded
+point-count flourish from the accent tint); `npm run build` succeeds and champs emits a distinct
 `phaser` vendor chunk (~1.48MB) with the entry chunk down to ~144kB and no size advisory;
 `npm run docs:check` reports the generated README tables up to date; `git diff --check` clean.
 
@@ -106,6 +107,13 @@ determinism and differentiation); `npm run build` succeeds and champs emits a di
 - Champion battle visuals changed materially, so the landing-page thumbnail may be stale. A
   maintainer should re-run `npm run thumbs` (needs Playwright) to refresh `champs/thumb.png`;
   thumbnail churn is intentionally not committed as part of this change.
+
+Resolved from the v1 semantic review: the cast-flare signature flourish is now
+regression-protected by a test that isolates the color-seeded star point-count from the
+accent tint (counting the star `L` commands and pinning exact counts per fixed color), and the
+dawnsong motif's sun rays were nudged so all authored coordinates stay within the 54x78 box
+(`y >= 0`), removing the top-edge clipping risk. Neither change touched the `vfxArt(kind, color)`
+signature/cache key or other champions' motifs.
 
 ## Delivery
 

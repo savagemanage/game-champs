@@ -547,8 +547,12 @@ function motifDawnsong(id: string, pal: SpritePalette): string {
   const ray = toHex(lighten(pal.rim, 0.5));
   return (
     `<g data-motif="dawnsong">` +
-    // sun rays radiating from the halo
-    `<path d="M27 2 L27 -2 M18 4 L15 0 M36 4 L39 0 M12 8 L8 6 M42 8 L46 6" ` +
+    // Sun rays radiating from the halo. Nudged down so every authored tip stays
+    // at y >= 0: the whole 54x78 figure is uniformly scaled under a fixed outer
+    // viewBox, so any point above y = 0 would scale to a negative coordinate and
+    // get clipped by the viewport. The topmost ray tip now lands exactly on the
+    // box's top edge (y = 0), preserving the upward sunburst silhouette.
+    `<path d="M27 4 L27 0 M18 6 L15 2 M36 6 L39 2 M12 10 L8 8 M42 10 L46 8" ` +
     `stroke="${ray}" stroke-width="1.3" stroke-linecap="round"/>` +
     // a warm blessing orb lifted in the hand
     `<circle cx="40" cy="40" r="3.4" fill="${coreFill(id)}" stroke="${outline}" stroke-width="0.7"/>` +

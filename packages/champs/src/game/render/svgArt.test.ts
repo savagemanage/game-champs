@@ -392,4 +392,39 @@ describe('vfxArt', () => {
     const b = vfxArt('castFlare', 0x0000ff).svg;
     expect(a).not.toBe(b);
   });
+
+  // The two tests above (and the per-champion family test) pass on the accent
+  // TINT alone — the fills are all derived from `color`, so two DIFFERENT
+  // colors already produced different markup before the signature flourish
+  // existed. To actually regression-protect the flourish we must ISOLATE the
+  // color-seeded star point-count from the tint. The cast flare draws exactly
+  // two `starPath` stars (nothing else in that texture emits `L` commands), so
+  // the number of line segments is a direct, tint-independent read-out of the
+  // point count: each star has `points * 2` vertices = one `M` + (points*2 - 1)
+  // `L` commands, and there are two stars, giving `L = 4 * points - 2`.
+  const castFlareStarPoints = (color: number): number => {
+    const svg = vfxArt('castFlare', color).svg;
+    const lCommands = (svg.match(/L/g) ?? []).length;
+    // Invert `L = 4 * points - 2`; must be a whole number for a valid read.
+    const points = (lCommands + 2) / 4;
+    expect(Number.isInteger(points)).toBe(true);
+    return points;
+  };
+
+  it('cast-flare star point-count is a color-seeded flourish, not a constant', () => {
+    // Pin the EXACT point count for fixed colors. These would all collapse to a
+    // single value if `colorSignature`/the `6 + sig % 4` point logic were
+    // reverted to a constant, so this fails on that revert.
+    expect(castFlareStarPoints(0x000000)).toBe(6); // signature 0 -> 6 points
+    expect(castFlareStarPoints(0x0000ff)).toBe(7); // 255*7 % 4 == 1 -> 7 points
+    expect(castFlareStarPoints(0x00ff00)).toBe(9); // 255*5 % 4 == 3 -> 9 points
+    // The flourish spans more than one bucket, so the count genuinely varies.
+    expect(
+      new Set([
+        castFlareStarPoints(0x000000),
+        castFlareStarPoints(0x0000ff),
+        castFlareStarPoints(0x00ff00),
+      ]).size,
+    ).toBeGreaterThan(1);
+  });
 });
