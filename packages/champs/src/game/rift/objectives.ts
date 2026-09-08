@@ -1,7 +1,7 @@
 /**
- * Epic monster objectives for Summoner's Rift: Dragon (permanent stacking team
- * boost), Rift Herald (a one-time pushing advantage), and Baron Nashor (a
- * timed team buff). All effects are expressed as a numeric {@link TeamModifiers}
+ * Epic monster objectives for the three-lane arena: Ember Dragon (permanent
+ * stacking team boost), Stone Warden (a one-time pushing advantage), and Void
+ * Tyrant (a timed team buff). All effects are expressed as numeric {@link TeamModifiers}
  * record that other systems add into champion / minion stats.
  *
  * This module deliberately contains NO Phaser (or any DOM) imports so it can be
@@ -9,29 +9,30 @@
  * from {@link ./economy}.
  */
 
+import { CONQUEST_OBJECTIVE_RULES } from '../../config/matchRules';
 import { type Bounty, type EpicMonster, epicMonsterBounty } from './economy';
 
 // ---------------------------------------------------------------------------
 // Spawn timings (seconds of game time)
 // ---------------------------------------------------------------------------
 
-/** First dragon spawns at 5:00. */
-export const DRAGON_FIRST_SPAWN = 300;
+/** First dragon spawn in the compressed three-lane match. */
+export const DRAGON_FIRST_SPAWN = CONQUEST_OBJECTIVE_RULES.firstSpawnSeconds;
 
-/** Dragons respawn 5:00 after the previous one is slain. */
-export const DRAGON_RESPAWN = 300;
+/** Dragon respawn cadence in the compressed three-lane match. */
+export const DRAGON_RESPAWN = CONQUEST_OBJECTIVE_RULES.respawnSeconds;
 
-/** Rift Herald is available from 8:00 until it despawns at 19:45. */
+/** Herald availability window in the compressed three-lane match. */
 export const HERALD_SPAWN_WINDOW: { start: number; end: number } = {
-  start: 480,
-  end: 1185,
+  start: CONQUEST_OBJECTIVE_RULES.heraldStartSeconds,
+  end: CONQUEST_OBJECTIVE_RULES.heraldEndSeconds,
 };
 
-/** Baron Nashor spawns at 20:00, replacing the Herald. */
-export const BARON_SPAWN = 1200;
+/** Major objective spawn time in the compressed three-lane match. */
+export const BARON_SPAWN = CONQUEST_OBJECTIVE_RULES.majorSpawnSeconds;
 
-/** Baron buff lasts 3:00 after the slaying team picks it up. */
-export const BARON_BUFF_DURATION = 180;
+/** Major-objective team buff duration. */
+export const BARON_BUFF_DURATION = CONQUEST_OBJECTIVE_RULES.majorBuffSeconds;
 
 // ---------------------------------------------------------------------------
 // Monster stats
@@ -46,7 +47,7 @@ export interface MonsterStats {
   bounty: Bounty;
 }
 
-/** Base stats per epic monster. Baron is the toughest, then dragon, then herald. */
+/** Base stats per epic monster. The tyrant is toughest, then dragon, then warden. */
 export const MONSTER_STATS: Record<EpicMonster, MonsterStats> = {
   dragon: { id: 'dragon', hp: 3500, ad: 120, armor: 21, bounty: epicMonsterBounty('dragon') },
   herald: { id: 'herald', hp: 6800, ad: 140, armor: 40, bounty: epicMonsterBounty('herald') },
@@ -121,19 +122,19 @@ export function dragonStackBonus(stacks: number): TeamModifiers {
 }
 
 // ---------------------------------------------------------------------------
-// Rift Herald: a one-time pushing advantage
+// Stone Warden: a one-time pushing advantage
 // ---------------------------------------------------------------------------
 
 /**
- * The reward for slaying the Rift Herald: a deployable "Eye of the Herald" that
- * charges a lane and damages structures. Modeled as a single-use battering
- * deployable with a large one-shot structure damage value plus a small combat
+ * The reward for slaying the Stone Warden: a deployable guardian that charges
+ * a lane and damages structures. Modeled as a single-use battering deployable
+ * with a large one-shot structure damage value plus a small combat
  * buff while it lives.
  */
 export interface HeraldReward {
   /** True: the reward is a deployable that pushes a lane. */
   deployable: true;
-  /** Damage the charging Herald deals to a struck structure. */
+  /** Damage the charging Warden deals to a struck structure. */
   structureDamage: number;
   /** Seconds the deployable persists before expiring. */
   durationSeconds: number;
@@ -141,7 +142,7 @@ export interface HeraldReward {
   modifiers: TeamModifiers;
 }
 
-/** The Rift Herald reward payload. */
+/** The Stone Warden reward payload. */
 export function heraldReward(): HeraldReward {
   return {
     deployable: true,
@@ -151,16 +152,16 @@ export function heraldReward(): HeraldReward {
   };
 }
 
-/** Whether the Herald can currently be present at `nowSeconds`. */
+/** Whether the Warden can currently be present at `nowSeconds`. */
 export function isHeraldWindowOpen(nowSeconds: number): boolean {
   return nowSeconds >= HERALD_SPAWN_WINDOW.start && nowSeconds <= HERALD_SPAWN_WINDOW.end;
 }
 
 // ---------------------------------------------------------------------------
-// Baron Nashor: a timed team buff
+// Void Tyrant: a timed team buff
 // ---------------------------------------------------------------------------
 
-/** The team combat buff granted by slaying Baron Nashor. */
+/** The team combat buff granted by slaying the Void Tyrant. */
 export const BARON_BUFF: TeamModifiers = {
   attackDamage: 24,
   ability: 40,
@@ -169,7 +170,7 @@ export const BARON_BUFF: TeamModifiers = {
 };
 
 /**
- * A team's active Baron buff: the modifiers it applies and when it expires.
+ * A team's active tyrant buff: the modifiers it applies and when it expires.
  */
 export interface BaronBuffState {
   active: boolean;
@@ -177,13 +178,13 @@ export interface BaronBuffState {
   expiresAt: number;
 }
 
-/** A team with no Baron buff. */
+/** A team with no tyrant buff. */
 export function noBaronBuff(): BaronBuffState {
   return { active: false, modifiers: zeroModifiers(), expiresAt: 0 };
 }
 
 /**
- * Grant the Baron buff to a team at `nowSeconds`, expiring after
+ * Grant the tyrant buff to a team at `nowSeconds`, expiring after
  * {@link BARON_BUFF_DURATION}. Returns a fresh buff-state record.
  */
 export function applyBaronBuff(nowSeconds: number): BaronBuffState {
@@ -195,7 +196,7 @@ export function applyBaronBuff(nowSeconds: number): BaronBuffState {
 }
 
 /**
- * Expire the Baron buff if its timer has elapsed by `nowSeconds`, returning the
+ * Expire the tyrant buff if its timer has elapsed by `nowSeconds`, returning the
  * (possibly reset) buff state. Pure: returns a new record.
  */
 export function expireBaronBuff(state: BaronBuffState, nowSeconds: number): BaronBuffState {

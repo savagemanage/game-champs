@@ -7,9 +7,16 @@
  */
 
 import type { CooldownKey } from './combat';
+import type { ChampionLifePhase } from './championLifeState';
+import type { MatchPhase, MatchResolutionReason } from './matchResolution';
+import type { Difficulty, MatchKind } from './tutorial/config';
 
 /** Which game mode the battle is running. */
-export type GameMode = 'rift' | 'aram';
+export type GameMode = 'conquest' | 'midline';
+
+/** Defaults used when a local match setup omits progression metadata. */
+export const DEFAULT_MATCH_KIND: MatchKind = 'standard';
+export const DEFAULT_DIFFICULTY: Difficulty = 'normal';
 
 /** Per-ability HUD state: cooldown fill 0..1 and remaining seconds. */
 export interface AbilityHudState {
@@ -63,7 +70,22 @@ export interface MinimapBlip {
   team: 'ally' | 'enemy' | 'neutral';
 }
 
-/** The complete snapshot the HUD renders each frame. */
+/** Player life-cycle facts needed for death and return-to-play HUDs. */
+export interface PlayerLifeHudState {
+  phase: ChampionLifePhase;
+  deaths: number;
+  respawnSeconds: number;
+  invulnerableSeconds: number;
+}
+
+/** Authoritative current match clock phase and forced-resolution deadline. */
+export interface MatchStatusHudState {
+  phase: MatchPhase;
+  suddenDeath: boolean;
+  hardCapSecondsRemaining: number;
+}
+
+/** The complete snapshot the HUD renders at most ten times per second. */
 export interface BattleHudState {
   mode: GameMode;
   playerChampionId: string;
@@ -102,6 +124,10 @@ export interface BattleHudState {
   objectives: ObjectiveHudState[];
   /** Dragon stacks the ally team has secured. */
   dragonStacks: number;
+  /** Player death, respawn and post-respawn protection state. */
+  playerLife: PlayerLifeHudState;
+  /** Regulation, sudden-death and hard-cap timing facts. */
+  matchStatus: MatchStatusHudState;
 
   // --- Structures + minimap --------------------------------------------
   allyStructures: StructureStatus;
@@ -109,12 +135,20 @@ export interface BattleHudState {
   minimap: MinimapBlip[];
 }
 
-/** The outcome handed to React when the match ends. */
+/** The authoritative outcome handed to React when the match ends. */
 export interface BattleOutcome {
+  matchId: string;
   win: boolean;
   mode: GameMode;
+  matchKind: MatchKind;
+  difficulty: Difficulty;
   playerChampionId: string;
   enemyChampionId: string;
+  deaths: number;
+  totalGoldEarned: number;
+  objectives: number;
+  ownedItems: string[];
+  endReason: MatchResolutionReason;
   /** Match stats surfaced on the results screen. */
   stats: {
     durationSeconds: number;
@@ -139,7 +173,7 @@ function emptyStructures(turrets = 0, inhibitors = 0): StructureStatus {
 function emptyState(
   playerChampionId = '',
   enemyChampionId = '',
-  mode: GameMode = 'rift',
+  mode: GameMode = 'conquest',
 ): BattleHudState {
   return {
     mode,
@@ -163,6 +197,17 @@ function emptyState(
     buffs: [],
     objectives: [],
     dragonStacks: 0,
+    playerLife: {
+      phase: 'alive',
+      deaths: 0,
+      respawnSeconds: 0,
+      invulnerableSeconds: 0,
+    },
+    matchStatus: {
+      phase: 'regulation',
+      suddenDeath: false,
+      hardCapSecondsRemaining: 0,
+    },
     allyStructures: emptyStructures(),
     enemyStructures: emptyStructures(),
     minimap: [],
@@ -199,7 +244,7 @@ export class BattleStore {
   reset(
     playerChampionId: string,
     enemyChampionId: string,
-    mode: GameMode = 'rift',
+    mode: GameMode = 'conquest',
   ): void {
     this.purchaseQueue = [];
     this.set(emptyState(playerChampionId, enemyChampionId, mode));

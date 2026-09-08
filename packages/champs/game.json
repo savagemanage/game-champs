@@ -3,8 +3,8 @@
   "title": "Arena Champions",
   "titleKo": "아레나 챔피언스",
   "genre": "MOBA",
-  "summary": "A three-lane 5v5 MOBA with champion select, turrets and inhibitors, minion waves, jungle camps, and a 2.5D vector battle view.",
-  "summaryKo": "3라인 5v5 MOBA. 챔피언 선택, 포탑과 억제기, 미니언 웨이브, 정글 캠프, 2.5D 벡터 전투 화면을 갖췄습니다.",
+  "summary": "A three-lane 5v5 MOBA with champion select, turrets and inhibitors, minion waves, major neutral objectives, and a 2.5D vector battle view.",
+  "summaryKo": "3라인 5v5 MOBA. 챔피언 선택, 포탑과 억제기, 미니언 웨이브, 주요 중립 목표물, 2.5D 벡터 전투 화면을 갖췄습니다.",
   "stack": [
     "react",
     "typescript",

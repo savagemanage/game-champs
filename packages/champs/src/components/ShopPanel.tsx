@@ -3,37 +3,25 @@ import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { battleStore } from '../game/battleStore';
 import { ITEMS } from '../data/items';
-import { recommendPurchase } from '../game/rift/loadout';
+import { recommendBuild } from '../game/rift/loadout';
 import { getChampionById } from '../data/champions';
 import { useDialogFocusTrap } from '../hooks/useDialogFocusTrap';
 
 interface ShopPanelProps {
-  /** Whether the shop overlay is currently open. */
   open: boolean;
-  /** Close the shop (also called after the player leaves base). */
   onClose: () => void;
 }
 
-/**
- * In-battle item shop. Purchases are queued through the battle store so Phaser
- * remains authoritative, while React owns the accessible modal presentation.
- */
+/** Accessible in-battle shop with a role-aware strategic build target. */
 export default function ShopPanel({ open, onClose }: ShopPanelProps) {
-  const { t } = useTranslation();
-  const state = useSyncExternalStore(
-    battleStore.subscribe,
-    battleStore.getSnapshot,
-  );
+  const { t, i18n } = useTranslation();
+  const state = useSyncExternalStore(battleStore.subscribe, battleStore.getSnapshot);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const [purchaseStatus, setPurchaseStatus] = useState('');
   const visible = open && state.shopAvailable;
-  const panelRef = useDialogFocusTrap<HTMLDivElement>(
-    visible,
-    onClose,
-    closeButtonRef,
-  );
+  const panelRef = useDialogFocusTrap<HTMLDivElement>(visible, onClose, closeButtonRef);
+  const formatNumber = new Intl.NumberFormat(i18n.resolvedLanguage ?? i18n.language);
 
-  // Close automatically when the player leaves the base shop zone.
   useEffect(() => {
     if (open && !state.shopAvailable) onClose();
   }, [open, state.shopAvailable, onClose]);
@@ -46,91 +34,68 @@ export default function ShopPanel({ open, onClose }: ShopPanelProps) {
 
   const player = getChampionById(state.playerChampionId);
   const owned = new Set(state.ownedItems);
-  const recommended = player
-    ? recommendPurchase(player.role, state.gold, state.ownedItems)
-    : undefined;
+  const build = player ? recommendBuild(player.role, state.ownedItems, state.gold) : undefined;
 
-  const dialog = (
-    <div
-      className="shop-overlay"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
-    >
-      <div
-        ref={panelRef}
-        className="shop-panel"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="shop-title"
-        tabIndex={-1}
-      >
+  return createPortal(
+    <div className="shop-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <div ref={panelRef} className="shop-panel" role="dialog" aria-modal="true" aria-labelledby="shop-title" tabIndex={-1}>
         <div className="shop-panel__head">
           <div className="shop-panel__heading-group">
-            <span className="shop-panel__eyebrow">{t('shop.recommended')}</span>
+            <span className="shop-panel__eyebrow">{t('shop.buildPlan')}</span>
             <h2 id="shop-title" className="shop-panel__title">{t('shop.title')}</h2>
           </div>
-          <span className="shop-panel__gold" aria-live="polite">
+          <span className="shop-panel__gold">
             <span className="shop-panel__gold-icon" aria-hidden="true">◈</span>
-            {state.gold.toLocaleString()} {t('shop.gold')}
+            {formatNumber.format(state.gold)} {t('shop.gold')}
           </span>
-          <button
-            ref={closeButtonRef}
-            type="button"
-            className="shop-panel__close"
-            aria-label={t('shop.close')}
-            onClick={onClose}
-          >
-            {'\u2715'}
-          </button>
+          <button ref={closeButtonRef} type="button" className="shop-panel__close" aria-label={t('shop.close')} onClick={onClose}>{'\u2715'}</button>
         </div>
 
-        <p className="sr-only" role="status" aria-live="polite">
-          {purchaseStatus}
-        </p>
+        {build && (
+          <section className="shop-plan" aria-label={t('shop.buildPlan')}>
+            <div><span>{t('shop.target')}</span><strong>{t(build.targetItem.nameKey)}</strong></div>
+            <div><span>{t('shop.nextComponent')}</span><strong>{build.nextPurchasableComponent ? t(build.nextPurchasableComponent.nameKey) : t('shop.saveForComponent')}</strong></div>
+            <div><span>{t('shop.remainingCost')}</span><strong>◈ {formatNumber.format(build.remainingCost)}</strong></div>
+            <p className="shop-plan__note">{t('shop.checkoutNote')}</p>
+          </section>
+        )}
+
+        <p className="sr-only" role="status" aria-live="polite">{purchaseStatus}</p>
 
         <ul className="shop-panel__list">
           {ITEMS.map((item) => {
             const isOwned = owned.has(item.id);
             const affordable = state.gold >= item.cost;
             const disabled = isOwned || !affordable;
-            const isRecommended = recommended?.id === item.id;
+            const isTarget = build?.targetItem.id === item.id;
+            const isComponent = build?.nextPurchasableComponent?.id === item.id;
             const nameId = `shop-item-${item.id}-name`;
             const descId = `shop-item-${item.id}-desc`;
             return (
               <li
                 key={item.id}
-                className={`shop-item${item.legendary ? ' shop-item--legendary' : ''}${isOwned ? ' is-owned' : ''}${isRecommended ? ' is-recommended' : ''}`}
+                className={`shop-item${item.legendary ? ' shop-item--legendary' : ''}${isOwned ? ' is-owned' : ''}${isTarget ? ' is-recommended' : ''}${isComponent ? ' is-component' : ''}`}
                 aria-labelledby={nameId}
                 aria-describedby={descId}
               >
                 <div className="shop-item__head">
                   <h3 id={nameId} className="shop-item__name">{t(item.nameKey)}</h3>
-                  {isRecommended && !isOwned && (
-                    <span className="shop-item__tag">{t('shop.recommended')}</span>
-                  )}
+                  {isTarget && !isOwned && <span className="shop-item__tag">{t('shop.target')}</span>}
+                  {isComponent && !isOwned && <span className="shop-item__tag">{t('shop.nextComponent')}</span>}
                 </div>
                 <p id={descId} className="shop-item__desc">{t(item.descKey)}</p>
                 <div className="shop-item__foot">
-                  <span className="shop-item__cost">
-                    <span aria-hidden="true">◈</span> {item.cost.toLocaleString()}
-                  </span>
+                  <span className="shop-item__cost"><span aria-hidden="true">◈</span> {formatNumber.format(item.cost)}</span>
                   <button
                     type="button"
                     className="btn btn--primary shop-item__buy"
                     disabled={disabled}
                     onClick={() => {
                       battleStore.requestPurchase(item.id);
-                      setPurchaseStatus(
-                        t('shop.purchaseQueued', { item: t(item.nameKey) }),
-                      );
+                      setPurchaseStatus(t('shop.purchaseQueued', { item: t(item.nameKey) }));
                     }}
                   >
-                    {isOwned
-                      ? t('shop.owned')
-                      : !affordable
-                        ? t('shop.notEnoughGold')
-                        : t('shop.buy')}
+                    {isOwned ? t('shop.owned') : !affordable ? t('shop.notEnoughGold') : t('shop.buy')}
                   </button>
                 </div>
               </li>
@@ -138,8 +103,7 @@ export default function ShopPanel({ open, onClose }: ShopPanelProps) {
           })}
         </ul>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
-
-  return createPortal(dialog, document.body);
 }

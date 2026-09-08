@@ -26,7 +26,7 @@ describe('i18n locale parity', () => {
 describe('i18n default language (mandatory Korean)', () => {
   it('falls back to Korean for a fresh visitor with no saved choice', async () => {
     // Import the configured instance. In the jsdom test env there is no saved
-    // `lol-lang` value and `navigator` detection is disabled, so the resolved
+    // `champs:language` value and `navigator` detection is disabled, so the resolved
     // language must be the Korean fallback.
     const i18n = (await import('./index')).default;
     expect(i18n.options.fallbackLng).toContain('ko');

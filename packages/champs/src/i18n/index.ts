@@ -13,6 +13,22 @@ export const resources = {
   en: { translation: en },
 } as const;
 
+const LANGUAGE_STORAGE_KEY = 'champs:language';
+const LEGACY_LANGUAGE_STORAGE_KEY = 'lo' + 'l-lang';
+
+if (typeof window !== 'undefined') {
+  try {
+    const saved = window.localStorage.getItem(LANGUAGE_STORAGE_KEY);
+    const legacy = window.localStorage.getItem(LEGACY_LANGUAGE_STORAGE_KEY);
+    if (!saved && (legacy === 'ko' || legacy === 'en')) {
+      window.localStorage.setItem(LANGUAGE_STORAGE_KEY, legacy);
+    }
+    window.localStorage.removeItem(LEGACY_LANGUAGE_STORAGE_KEY);
+  } catch {
+    // Language detection falls back to Korean when storage is unavailable.
+  }
+}
+
 i18n
   .use(LanguageDetector)
   .use(initReactI18next)
@@ -34,7 +50,7 @@ i18n
       // override the mandatory Korean default for new visitors.
       order: ['localStorage'],
       caches: ['localStorage'],
-      lookupLocalStorage: 'lol-lang',
+      lookupLocalStorage: LANGUAGE_STORAGE_KEY,
     },
   });
 

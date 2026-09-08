@@ -1,19 +1,18 @@
 /**
- * Gold, experience, and leveling economy for the Summoner's Rift game.
+ * Gold, experience, and leveling economy for the three-lane conquest game.
  *
  * This module deliberately contains NO Phaser (or any DOM) imports so it can be
  * exhaustively unit tested in a plain jsdom/node environment. Every reward and
  * rate is a named, documented constant so balance is auditable in one place.
  */
 
-/** The maximum champion level, matching League of Legends. */
+/** The maximum champion level in this game's progression curve. */
 export const MAX_LEVEL = 18;
 
 /**
  * XP required to advance FROM the given level TO the next one. Level 1 -> 2
  * costs {@link BASE_XP_PER_LEVEL}, and each subsequent level costs
- * {@link XP_STEP_PER_LEVEL} more, producing a strictly increasing curve
- * (like LoL's linearly-growing per-level requirement).
+ * {@link XP_STEP_PER_LEVEL} more, producing a strictly increasing curve.
  *
  * Returns 0 for levels at or beyond {@link MAX_LEVEL} (no further growth).
  */
@@ -52,7 +51,7 @@ export function createProgress(startingGold = STARTING_GOLD): ProgressState {
   return { level: 1, xp: 0, gold: startingGold };
 }
 
-/** Starting gold at the beginning of a game, mirroring LoL. */
+/** Starting gold at the beginning of a game. */
 export const STARTING_GOLD = 500;
 
 /** Result of granting XP: whether a level-up occurred and the resulting level. */
@@ -97,10 +96,7 @@ export function addGold(state: ProgressState, amount: number): number {
 // Passive income
 // ---------------------------------------------------------------------------
 
-/**
- * Passive gold trickle in gold-per-second (LoL grants roughly 20.4 gold per 10
- * seconds after the 1:50 mark). We model a flat rate for simplicity.
- */
+/** Passive gold trickle in gold-per-second. */
 export const PASSIVE_GOLD_PER_SECOND = 2.04;
 
 /** Gold accrued from the passive trickle over `seconds`. */
@@ -118,12 +114,12 @@ export interface Bounty {
   xp: number;
 }
 
-/** The four minion archetypes, matching LoL minion types. */
+/** The four original minion archetypes. */
 export type MinionType = 'melee' | 'caster' | 'siege' | 'super';
 
 /**
  * Gold + XP for killing each minion type. Values are distinct per type and rise
- * from melee -> caster -> siege -> super, echoing LoL's minion economy.
+ * from melee -> caster -> siege -> super for a clear reward hierarchy.
  */
 export const MINION_BOUNTY: Record<MinionType, Bounty> = {
   melee: { gold: 21, xp: 60 },
@@ -149,6 +145,20 @@ export const CHAMPION_TAKEDOWN_BOUNTY: Bounty = {
   xp: CHAMPION_TAKEDOWN_XP,
 };
 
+/** Structure rewards by combat-facing category. */
+export type StructureBountyKind = 'turret' | 'inhibitor' | 'nexus';
+
+export const STRUCTURE_BOUNTY: Readonly<Record<StructureBountyKind, Bounty>> = {
+  turret: { gold: 160, xp: 120 },
+  inhibitor: { gold: 220, xp: 180 },
+  nexus: { gold: 0, xp: 0 },
+};
+
+/** Gold and experience granted to the champion landing a structure kill. */
+export function structureBounty(kind: StructureBountyKind): Bounty {
+  return STRUCTURE_BOUNTY[kind];
+}
+
 /** Jungle camp rewards, keyed by the camp id family used in map.ts. */
 export type JungleCampKind =
   | 'blue'
@@ -160,7 +170,7 @@ export type JungleCampKind =
 
 /**
  * Gold + XP for clearing each jungle camp. Every value is positive and roughly
- * scaled to LoL's monster camps.
+ * scaled by each camp's intended risk and clear time.
  */
 export const JUNGLE_CAMP_BOUNTY: Record<JungleCampKind, Bounty> = {
   blue: { gold: 90, xp: 115 },
@@ -200,8 +210,7 @@ export function epicMonsterBounty(monster: EpicMonster): Bounty {
 
 /**
  * Scale a champion base stat by level. At level 1 the value equals `base`; each
- * level beyond 1 adds `perLevel`, so growth is linear in `level`, matching how
- * LoL champion stats scale per level.
+ * level beyond 1 adds `perLevel`, so growth is linear in `level`.
  *
  * @param base     the stat's value at level 1
  * @param perLevel the flat amount added per level after the first

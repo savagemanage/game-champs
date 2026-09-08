@@ -26,6 +26,13 @@ describe('structure graph', () => {
       expect(nodes.filter((n) => n.kind === 'inhibitor').length).toBe(LANES.length);
     }
   });
+
+  it('builds Midline Skirmish from only the active mid lane', () => {
+    const nodes = buildStructureGraph('enemy', 'midline');
+    expect(nodes).toHaveLength(7);
+    expect(nodes.filter((node) => node.lane != null).every((node) => node.lane === 'mid')).toBe(true);
+    expect(targetableOrder('enemy', ['mid'])).toEqual(nodes.map((node) => node.id));
+  });
 });
 
 describe('gating order', () => {
@@ -69,6 +76,15 @@ describe('gating order', () => {
     expect(isStructureTargetable(nexusTurretB, living)).toBe(true);
   });
 
+  it('uses only the active inhibitor to gate Midline Skirmish base turrets', () => {
+    const living = new Set(targetableOrder(side, 'midline'));
+    const nexusTurret = structureId(side, 'nexusTurret', null) + '-a';
+    expect(isStructureTargetable(nexusTurret, living, 'midline')).toBe(false);
+
+    living.delete(structureId(side, 'inhibitor', 'mid'));
+    expect(isStructureTargetable(nexusTurret, living, 'midline')).toBe(true);
+  });
+
   it('shields the nexus while any nexus turret stands', () => {
     const living = allIds(side);
     const nexus = structureId(side, 'nexus', null);
@@ -99,6 +115,7 @@ describe('gating order', () => {
 describe('inhibitor respawn', () => {
   it('computes the respawn time from kill time', () => {
     expect(inhibitorRespawnAt(600)).toBe(600 + INHIBITOR_RESPAWN_SECONDS);
+    expect(inhibitorRespawnAt(600, 'midline')).toBe(720);
   });
 
   it('is dead until the respawn time then alive again', () => {

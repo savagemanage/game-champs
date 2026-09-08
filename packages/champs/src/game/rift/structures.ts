@@ -1,5 +1,5 @@
 /**
- * Structure gating for Summoner's Rift: the full turret -> inhibitor -> nexus
+ * Structure gating for the original three-lane arena: the full turret -> inhibitor -> nexus
  * turret -> nexus targeting order per side, plus inhibitor respawn timing.
  *
  * This module deliberately contains NO Phaser (or any DOM) imports so it can be
@@ -8,6 +8,8 @@
  * gating graph so the scene and the tests share one source of truth.
  */
 
+import type { GameMode } from '../battleStore';
+import { rulesForMode } from '../../config/matchRules';
 import { type Lane, type MapSide, LANES } from './map';
 
 /** The categories of building on the Rift, in the order they must fall. */
@@ -39,9 +41,20 @@ export function structureId(side: MapSide, kind: StructureKind, lane?: Lane | nu
   return lane ? `${side}-${lane}-${kind}` : `${side}-${kind}`;
 }
 
+/** A mode name or explicit lane set used to scope a structure graph. */
+export type StructureGraphScope = GameMode | readonly Lane[];
+
+function structureLanes(scope: StructureGraphScope = LANES): Lane[] {
+  const configured = typeof scope === 'string'
+    ? rulesForMode(scope).structures.activeLanes
+    : scope;
+  const unique = [...new Set(configured)];
+  return unique.length > 0 ? unique : [...LANES];
+}
+
 /**
  * Build the ordered structure gating graph for one side. Ordering encodes the
- * LoL rule set:
+ * arena rule set:
  *   - a lane's INNER turret is shielded while its OUTER turret stands;
  *   - the INHIBITOR TURRET is shielded while the INNER turret stands;
  *   - the INHIBITOR is shielded while its inhibitor turret stands;
@@ -50,11 +63,15 @@ export function structureId(side: MapSide, kind: StructureKind, lane?: Lane | nu
  *
  * Structures are returned in the order they can generally be destroyed.
  */
-export function buildStructureGraph(side: MapSide): StructureNode[] {
+export function buildStructureGraph(
+  side: MapSide,
+  scope: StructureGraphScope = LANES,
+): StructureNode[] {
+  const activeLanes = structureLanes(scope);
   const nodes: StructureNode[] = [];
 
   // Per-lane chain: outer -> inner -> inhibitor turret -> inhibitor.
-  for (const lane of LANES) {
+  for (const lane of activeLanes) {
     const outer = structureId(side, 'outerTurret', lane);
     const inner = structureId(side, 'innerTurret', lane);
     const inhibTurret = structureId(side, 'inhibitorTurret', lane);
@@ -69,7 +86,7 @@ export function buildStructureGraph(side: MapSide): StructureNode[] {
   // The two nexus turrets are shielded until at least ONE inhibitor is down.
   // Model that as being shielded by ALL inhibitors: while every inhibitor still
   // stands the turrets are shielded; once any falls, the shield lifts.
-  const inhibitorIds = LANES.map((lane) => structureId(side, 'inhibitor', lane));
+  const inhibitorIds = activeLanes.map((lane) => structureId(side, 'inhibitor', lane));
   const nexusTurretA = structureId(side, 'nexusTurret', null) + '-a';
   const nexusTurretB = structureId(side, 'nexusTurret', null) + '-b';
   nodes.push({ id: nexusTurretA, side, kind: 'nexusTurret', lane: null, shieldedBy: [...inhibitorIds] });
@@ -83,8 +100,11 @@ export function buildStructureGraph(side: MapSide): StructureNode[] {
 }
 
 /** The ids of every structure on a side, in destruction order. */
-export function targetableOrder(side: MapSide): string[] {
-  return buildStructureGraph(side).map((n) => n.id);
+export function targetableOrder(
+  side: MapSide,
+  scope: StructureGraphScope = LANES,
+): string[] {
+  return buildStructureGraph(side, scope).map((n) => n.id);
 }
 
 /**
@@ -99,13 +119,14 @@ export function targetableOrder(side: MapSide): string[] {
 export function isStructureTargetable(
   id: string,
   livingIds: ReadonlySet<string>,
+  scope: StructureGraphScope = LANES,
 ): boolean {
   if (!livingIds.has(id)) return false;
 
   // Find the node across both sides so callers do not need to pass the side.
   const node =
-    buildStructureGraph('ally').find((n) => n.id === id) ??
-    buildStructureGraph('enemy').find((n) => n.id === id);
+    buildStructureGraph('ally', scope).find((n) => n.id === id) ??
+    buildStructureGraph('enemy', scope).find((n) => n.id === id);
   if (!node) return true;
   if (node.shieldedBy.length === 0) return true;
 
@@ -124,15 +145,19 @@ export function isStructureTargetable(
 // Inhibitor respawn
 // ---------------------------------------------------------------------------
 
-/** Seconds an inhibitor stays down before it respawns (LoL: 5 minutes). */
-export const INHIBITOR_RESPAWN_SECONDS = 300;
+/** Three-lane inhibitor recovery time, sourced from match rules. */
+export const INHIBITOR_RESPAWN_SECONDS =
+  rulesForMode('conquest').structures.inhibitorRespawnSeconds;
 
 /**
  * The game time (seconds) at which an inhibitor destroyed at `killedAtSeconds`
  * will respawn.
  */
-export function inhibitorRespawnAt(killedAtSeconds: number): number {
-  return killedAtSeconds + INHIBITOR_RESPAWN_SECONDS;
+export function inhibitorRespawnAt(
+  killedAtSeconds: number,
+  mode: GameMode = 'conquest',
+): number {
+  return killedAtSeconds + rulesForMode(mode).structures.inhibitorRespawnSeconds;
 }
 
 /**
@@ -143,7 +168,8 @@ export function inhibitorRespawnAt(killedAtSeconds: number): number {
 export function isInhibitorAlive(
   nowSeconds: number,
   killedAtSeconds: number | null,
+  mode: GameMode = 'conquest',
 ): boolean {
   if (killedAtSeconds == null) return true;
-  return nowSeconds >= inhibitorRespawnAt(killedAtSeconds);
+  return nowSeconds >= inhibitorRespawnAt(killedAtSeconds, mode);
 }

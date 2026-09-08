@@ -1,26 +1,18 @@
 /**
- * Procedural WebAudio SFX engine.
+ * Procedural WebAudio engine with a small, bounded runtime graph.
  *
- * All sound effects are synthesized at runtime from oscillators and noise, so
- * the game ships with ZERO binary audio assets - nothing to download, nothing
- * to bundle. Each effect is a short envelope over one or more oscillators.
- *
- * The whole module is defensively guarded so it is safe in headless / SSR /
- * unit-test environments: if `AudioContext` is unavailable, or the context
- * cannot be created, every method degrades to a no-op instead of throwing.
- * This keeps the Vitest (jsdom) suite and the production build green while a
- * real browser gets full audio.
- *
- * Mute state and master volume are persisted to `localStorage` so a player's
- * preference survives reloads. A lightweight subscription API lets React
- * components (the Settings panel) reflect and mutate the current settings.
+ * There are no binary assets: tones and reusable noise buffers are generated
+ * on demand. Every browser API is guarded so SSR/jsdom remain safe no-ops.
  */
 
-const MUTE_KEY = 'lol-audio-muted';
-const VOLUME_KEY = 'lol-audio-volume';
-const AMBIENT_KEY = 'lol-audio-ambient';
+const MUTE_KEY = 'champs-audio-muted';
+const VOLUME_KEY = 'champs-audio-volume';
+const AMBIENT_KEY = 'champs-audio-ambient';
+const LEGACY_MUTE_KEY = 'lo' + 'l-audio-muted';
+const LEGACY_VOLUME_KEY = 'lo' + 'l-audio-volume';
+const LEGACY_AMBIENT_KEY = 'lo' + 'l-audio-ambient';
+const MAX_ONE_SHOT_VOICES = 24;
 
-/** The named one-shot effects the game can trigger. */
 export type SfxName =
   | 'cast'
   | 'hit'
@@ -30,95 +22,129 @@ export type SfxName =
   | 'defeat'
   | 'ui';
 
-/** Public snapshot of the mutable audio settings. */
+export type AudioBus = 'master' | 'music' | 'ambience' | 'sfx' | 'ui';
+export type ChampionCueSlot = 'P' | 'Q' | 'W' | 'E' | 'R';
+
+export interface AudioPlayOptions {
+  /** Stereo position in [-1, 1], when StereoPannerNode is supported. */
+  pan?: number;
+  /** Abstract non-negative listener distance; farther sounds are quieter. */
+  distance?: number;
+}
+
+/** Public snapshot kept intentionally stable for useSyncExternalStore callers. */
 export interface AudioSettings {
   muted: boolean;
-  /** Master volume, 0..1. */
   volume: number;
-  /** Whether the subtle looped ambient drone is enabled. */
   ambient: boolean;
 }
 
+export interface AudioDiagnostics {
+  buses: readonly AudioBus[];
+  activeVoices: number;
+  maxVoices: number;
+  cachedBuffers: number;
+}
+
 type Listener = (settings: AudioSettings) => void;
-
-/** Minimal shape we rely on so tests can run without lib.dom AudioContext. */
 type AnyAudioContext = AudioContext;
+type MixBus = Exclude<AudioBus, 'master'>;
 
-function readBool(key: string, fallback: boolean): boolean {
+const AUDIO_BUSES: readonly AudioBus[] = [
+  'master',
+  'music',
+  'ambience',
+  'sfx',
+  'ui',
+];
+
+function readStored(primary: string, legacy: string): string | null {
   try {
-    const raw = localStorage.getItem(key);
-    return raw === null ? fallback : raw === 'true';
+    return localStorage.getItem(primary) ?? localStorage.getItem(legacy);
   } catch {
-    return fallback;
+    return null;
   }
 }
 
-function readNumber(key: string, fallback: number): number {
-  try {
-    const raw = localStorage.getItem(key);
-    if (raw === null) return fallback;
-    const n = Number.parseFloat(raw);
-    return Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : fallback;
-  } catch {
-    return fallback;
-  }
+function readBool(primary: string, legacy: string, fallback: boolean): boolean {
+  const raw = readStored(primary, legacy);
+  return raw === null ? fallback : raw === 'true';
+}
+
+function readNumber(primary: string, legacy: string, fallback: number): number {
+  const raw = readStored(primary, legacy);
+  if (raw === null) return fallback;
+  const parsed = Number.parseFloat(raw);
+  return Number.isFinite(parsed) ? Math.min(1, Math.max(0, parsed)) : fallback;
 }
 
 function writeStorage(key: string, value: string): void {
   try {
     localStorage.setItem(key, value);
   } catch {
-    /* storage unavailable (private mode / SSR) - ignore. */
+    // Storage can be unavailable in SSR/private mode.
   }
 }
 
-/** Resolve a usable AudioContext constructor, or null when unsupported. */
 function getAudioContextCtor(): typeof AudioContext | null {
   if (typeof window === 'undefined') return null;
-  const w = window as unknown as {
+  const candidate = window as unknown as {
     AudioContext?: typeof AudioContext;
     webkitAudioContext?: typeof AudioContext;
   };
-  return w.AudioContext ?? w.webkitAudioContext ?? null;
+  return candidate.AudioContext ?? candidate.webkitAudioContext ?? null;
+}
+
+function clampFinite(value: number, min: number, max: number, fallback: number): number {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.min(max, Math.max(min, value));
+}
+
+function prefersReducedAudio(): boolean {
+  try {
+    return typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  } catch {
+    return false;
+  }
 }
 
 class AudioEngine {
   private ctx: AnyAudioContext | null = null;
   private master: GainNode | null = null;
+  private buses: Record<MixBus, GainNode> | null = null;
   private ambientNodes: { osc: OscillatorNode; gain: GainNode }[] = [];
   private ambientRunning = false;
   private listeners = new Set<Listener>();
+  private generatedBuffers = new Map<string, AudioBuffer>();
+  private activeVoices = new Set<AudioScheduledSourceNode>();
 
   private settings: AudioSettings = {
-    muted: readBool(MUTE_KEY, false),
-    volume: readNumber(VOLUME_KEY, 0.6),
-    ambient: readBool(AMBIENT_KEY, false),
+    muted: readBool(MUTE_KEY, LEGACY_MUTE_KEY, false),
+    volume: readNumber(VOLUME_KEY, LEGACY_VOLUME_KEY, 0.6),
+    ambient: readBool(AMBIENT_KEY, LEGACY_AMBIENT_KEY, false),
   };
 
-  /**
-   * Stable snapshot for React's useSyncExternalStore. The function is an arrow
-   * so it keeps its instance binding when passed directly to React, and the
-   * returned object only changes when a setting actually changes.
-   */
   getSettings = (): AudioSettings => this.settings;
 
   subscribe = (listener: Listener): (() => void) => {
     this.listeners.add(listener);
-    return () => {
-      this.listeners.delete(listener);
-    };
+    return () => this.listeners.delete(listener);
   };
 
+  getDiagnostics = (): AudioDiagnostics => ({
+    buses: AUDIO_BUSES,
+    activeVoices: this.activeVoices.size,
+    maxVoices: MAX_ONE_SHOT_VOICES,
+    cachedBuffers: this.generatedBuffers.size,
+  });
+
   private emit(): void {
-    const snap = this.getSettings();
-    for (const l of this.listeners) l(snap);
+    const snapshot = this.settings;
+    for (const listener of this.listeners) listener(snapshot);
   }
 
-  /**
-   * Lazily create the AudioContext. Browsers require this to happen after a
-   * user gesture, so callers invoke it from click / keydown handlers. Returns
-   * null (a no-op signal) whenever audio is unsupported.
-   */
   private ensureContext(): AnyAudioContext | null {
     if (this.ctx) return this.ctx;
     const Ctor = getAudioContextCtor();
@@ -128,6 +154,19 @@ class AudioEngine {
       const master = ctx.createGain();
       master.gain.value = this.settings.muted ? 0 : this.settings.volume;
       master.connect(ctx.destination);
+
+      const makeBus = (level: number): GainNode => {
+        const gain = ctx.createGain();
+        gain.gain.value = level;
+        gain.connect(master);
+        return gain;
+      };
+      this.buses = {
+        music: makeBus(0.5),
+        ambience: makeBus(0.5),
+        sfx: makeBus(1),
+        ui: makeBus(0.8),
+      };
       this.ctx = ctx;
       this.master = master;
       return ctx;
@@ -136,12 +175,9 @@ class AudioEngine {
     }
   }
 
-  /** Call from a user gesture to unlock/resume a suspended context. */
   resume(): void {
     const ctx = this.ensureContext();
-    if (ctx && ctx.state === 'suspended') {
-      void ctx.resume();
-    }
+    if (ctx?.state === 'suspended') void ctx.resume();
     if (this.settings.ambient) this.startAmbient();
   }
 
@@ -170,7 +206,7 @@ class AudioEngine {
   }
 
   setVolume(volume: number): void {
-    const nextVolume = Math.min(1, Math.max(0, volume));
+    const nextVolume = clampFinite(volume, 0, 1, this.settings.volume);
     if (this.settings.volume === nextVolume) return;
     this.settings = { ...this.settings, volume: nextVolume };
     writeStorage(VOLUME_KEY, String(nextVolume));
@@ -191,120 +227,232 @@ class AudioEngine {
     this.setAmbient(!this.settings.ambient);
   }
 
-  /** Schedule a single enveloped oscillator tone. */
-  private tone(opts: {
-    ctx: AnyAudioContext;
-    dest: AudioNode;
-    type: OscillatorType;
-    freq: number;
-    endFreq?: number;
-    start: number;
-    duration: number;
-    peak: number;
-  }): void {
-    const { ctx } = opts;
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = opts.type;
-    osc.frequency.setValueAtTime(opts.freq, opts.start);
-    if (opts.endFreq !== undefined) {
-      osc.frequency.exponentialRampToValueAtTime(
-        Math.max(1, opts.endFreq),
-        opts.start + opts.duration,
-      );
-    }
-    gain.gain.setValueAtTime(0.0001, opts.start);
-    gain.gain.exponentialRampToValueAtTime(opts.peak, opts.start + 0.01);
-    gain.gain.exponentialRampToValueAtTime(0.0001, opts.start + opts.duration);
-    osc.connect(gain);
-    gain.connect(opts.dest);
-    osc.start(opts.start);
-    osc.stop(opts.start + opts.duration + 0.02);
-  }
-
-  /** A short burst of filtered white noise (impacts, deaths). */
-  private noise(opts: {
-    ctx: AnyAudioContext;
-    dest: AudioNode;
-    start: number;
-    duration: number;
-    peak: number;
-  }): void {
-    const { ctx } = opts;
-    const frames = Math.max(1, Math.floor(ctx.sampleRate * opts.duration));
-    const buffer = ctx.createBuffer(1, frames, ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < frames; i++) {
-      // Decaying noise burst.
-      data[i] = (Math.random() * 2 - 1) * (1 - i / frames);
-    }
-    const src = ctx.createBufferSource();
-    src.buffer = buffer;
-    const gain = ctx.createGain();
-    gain.gain.setValueAtTime(opts.peak, opts.start);
-    gain.gain.exponentialRampToValueAtTime(0.0001, opts.start + opts.duration);
-    src.connect(gain);
-    gain.connect(opts.dest);
-    src.start(opts.start);
-    src.stop(opts.start + opts.duration + 0.02);
-  }
-
-  /** Play a named one-shot SFX. No-op when audio is muted/unsupported. */
-  play(name: SfxName): void {
+  /** Existing `play(name)` calls remain valid; positioning is additive. */
+  play(name: SfxName, options: AudioPlayOptions = {}): void {
     if (this.settings.muted) return;
-    const ctx = this.ensureContext();
-    if (!ctx || !this.master) return;
-    const now = ctx.currentTime;
-    const dest = this.master;
+    const prepared = this.prepare(name === 'ui' ? 'ui' : 'sfx', options);
+    if (!prepared) return;
+    const { ctx, dest, now } = prepared;
+    const reduced = prefersReducedAudio();
 
     switch (name) {
       case 'cast':
-        this.tone({ ctx, dest, type: 'sawtooth', freq: 320, endFreq: 620, start: now, duration: 0.18, peak: 0.18 });
-        this.tone({ ctx, dest, type: 'sine', freq: 640, endFreq: 1240, start: now, duration: 0.16, peak: 0.1 });
+        this.tone(ctx, dest, 'sawtooth', 320, 620, now, 0.18, 0.18);
+        if (!reduced) this.tone(ctx, dest, 'sine', 640, 1240, now, 0.16, 0.1);
         break;
       case 'ability':
-        this.tone({ ctx, dest, type: 'square', freq: 180, endFreq: 90, start: now, duration: 0.28, peak: 0.16 });
-        this.tone({ ctx, dest, type: 'sawtooth', freq: 440, endFreq: 220, start: now, duration: 0.26, peak: 0.12 });
+        this.tone(ctx, dest, 'square', 180, 90, now, 0.28, 0.16);
+        if (!reduced) this.tone(ctx, dest, 'sawtooth', 440, 220, now, 0.26, 0.12);
         break;
       case 'hit':
-        this.noise({ ctx, dest, start: now, duration: 0.12, peak: 0.22 });
-        this.tone({ ctx, dest, type: 'triangle', freq: 220, endFreq: 110, start: now, duration: 0.1, peak: 0.14 });
+        this.noise(ctx, dest, now, 0.12, 0.22);
+        if (!reduced) this.tone(ctx, dest, 'triangle', 220, 110, now, 0.1, 0.14);
         break;
       case 'death':
-        this.noise({ ctx, dest, start: now, duration: 0.35, peak: 0.28 });
-        this.tone({ ctx, dest, type: 'sawtooth', freq: 260, endFreq: 60, start: now, duration: 0.4, peak: 0.2 });
+        this.noise(ctx, dest, now, 0.35, 0.28);
+        if (!reduced) this.tone(ctx, dest, 'sawtooth', 260, 60, now, 0.4, 0.2);
         break;
       case 'victory':
-        [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => {
-          this.tone({ ctx, dest, type: 'triangle', freq: f, start: now + i * 0.12, duration: 0.24, peak: 0.2 });
+        (reduced ? [523.25, 783.99] : [523.25, 659.25, 783.99, 1046.5]).forEach((frequency, index) => {
+          this.tone(ctx, dest, 'triangle', frequency, undefined, now + index * 0.12, 0.24, 0.2);
         });
         break;
       case 'defeat':
-        [392, 329.63, 261.63, 196].forEach((f, i) => {
-          this.tone({ ctx, dest, type: 'sine', freq: f, start: now + i * 0.16, duration: 0.32, peak: 0.2 });
+        (reduced ? [329.63, 196] : [392, 329.63, 261.63, 196]).forEach((frequency, index) => {
+          this.tone(ctx, dest, 'sine', frequency, undefined, now + index * 0.16, 0.32, 0.2);
         });
         break;
       case 'ui':
-        this.tone({ ctx, dest, type: 'sine', freq: 660, endFreq: 880, start: now, duration: 0.08, peak: 0.12 });
+        this.tone(ctx, dest, 'sine', 660, 880, now, 0.08, 0.12);
         break;
     }
   }
 
-  private startAmbient(): void {
+  /**
+   * Champion + active-slot cue API. Unknown champions use the stable generic
+   * cast/ability cues; Embermage gets four richer but still bounded recipes.
+   */
+  playChampionCue(
+    championId: string,
+    slot: ChampionCueSlot,
+    options: AudioPlayOptions = {},
+  ): void {
+    if (slot === 'P') {
+      this.play('ui', options);
+      return;
+    }
+    if (championId !== 'embermage') {
+      this.play(slot === 'R' ? 'ability' : 'cast', options);
+      return;
+    }
+    if (this.settings.muted) return;
+    const prepared = this.prepare('sfx', options);
+    if (!prepared) return;
+    const { ctx, dest, now } = prepared;
+    const reduced = prefersReducedAudio();
+
+    switch (slot) {
+      case 'Q':
+        this.tone(ctx, dest, 'triangle', 420, 1120, now, 0.2, 0.16);
+        if (!reduced) {
+          this.tone(ctx, dest, 'sine', 840, 1680, now + 0.035, 0.16, 0.09);
+          this.noise(ctx, dest, now + 0.1, 0.07, 0.08);
+        }
+        break;
+      case 'W':
+        this.noise(ctx, dest, now, 0.24, 0.16);
+        this.tone(ctx, dest, 'sawtooth', 190, 520, now, 0.3, 0.13);
+        if (!reduced) this.tone(ctx, dest, 'sine', 380, 760, now + 0.06, 0.24, 0.08);
+        break;
+      case 'E':
+        [0, 0.055, 0.11].slice(0, reduced ? 1 : 3).forEach((delay, index) => {
+          this.tone(ctx, dest, 'square', 260 + index * 90, 160, now + delay, 0.1, 0.1);
+        });
+        this.tone(ctx, dest, 'sine', 1180, 590, now + 0.1, 0.2, 0.1);
+        break;
+      case 'R':
+        this.noise(ctx, dest, now, 0.55, 0.22);
+        this.tone(ctx, dest, 'sawtooth', 120, 48, now, 0.6, 0.18);
+        if (!reduced) {
+          [360, 540, 720, 1080].forEach((frequency, index) => {
+            this.tone(ctx, dest, 'triangle', frequency, frequency * 1.35, now + index * 0.07, 0.32, 0.11);
+          });
+        }
+        break;
+    }
+  }
+
+  private prepare(
+    bus: MixBus,
+    options: AudioPlayOptions,
+  ): { ctx: AnyAudioContext; dest: AudioNode; now: number } | null {
     const ctx = this.ensureContext();
-    if (!ctx || !this.master || this.ambientRunning) return;
+    const target = this.buses?.[bus];
+    if (!ctx || !target) return null;
+
+    const attenuation = 1 / (1 + clampFinite(options.distance ?? 0, 0, 1000, 0));
+    const pan = clampFinite(options.pan ?? 0, -1, 1, 0);
+    if (attenuation === 1 && pan === 0) {
+      return { ctx, dest: target, now: ctx.currentTime };
+    }
+
+    const gain = ctx.createGain();
+    gain.gain.value = attenuation;
+    let panner: StereoPannerNode | null = null;
+    if (typeof ctx.createStereoPanner === 'function') {
+      panner = ctx.createStereoPanner();
+      panner.pan.value = pan;
+      gain.connect(panner);
+      panner.connect(target);
+    } else {
+      gain.connect(target);
+    }
+    // One-shot spatial chains are short lived; disconnect their downstream
+    // nodes after the longest cue to keep repeated positioned sounds bounded.
+    globalThis.setTimeout(() => {
+      try {
+        gain.disconnect();
+        panner?.disconnect();
+      } catch {
+        // Already disconnected.
+      }
+    }, 1500);
+    return { ctx, dest: gain, now: ctx.currentTime };
+  }
+
+  private claimVoice(source: AudioScheduledSourceNode, gain: GainNode): boolean {
+    if (this.activeVoices.size >= MAX_ONE_SHOT_VOICES) return false;
+    this.activeVoices.add(source);
+    source.onended = () => {
+      this.activeVoices.delete(source);
+      try {
+        source.disconnect();
+        gain.disconnect();
+      } catch {
+        // Already disconnected by the browser.
+      }
+    };
+    return true;
+  }
+
+  private tone(
+    ctx: AnyAudioContext,
+    dest: AudioNode,
+    type: OscillatorType,
+    frequency: number,
+    endFrequency: number | undefined,
+    start: number,
+    duration: number,
+    peak: number,
+  ): void {
+    const oscillator = ctx.createOscillator();
+    const gain = ctx.createGain();
+    if (!this.claimVoice(oscillator, gain)) return;
+    oscillator.type = type;
+    oscillator.frequency.setValueAtTime(frequency, start);
+    if (endFrequency !== undefined) {
+      oscillator.frequency.exponentialRampToValueAtTime(Math.max(1, endFrequency), start + duration);
+    }
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(peak, start + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+    oscillator.connect(gain);
+    gain.connect(dest);
+    oscillator.start(start);
+    oscillator.stop(start + duration + 0.02);
+  }
+
+  /** Reuse generated white-noise buffers by duration bucket. */
+  private noiseBuffer(ctx: AnyAudioContext, duration: number): AudioBuffer {
+    const frames = Math.max(1, Math.floor(ctx.sampleRate * duration));
+    const key = `${ctx.sampleRate}:${frames}`;
+    const cached = this.generatedBuffers.get(key);
+    if (cached) return cached;
+
+    const buffer = ctx.createBuffer(1, frames, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let index = 0; index < frames; index += 1) {
+      data[index] = Math.random() * 2 - 1;
+    }
+    this.generatedBuffers.set(key, buffer);
+    return buffer;
+  }
+
+  private noise(
+    ctx: AnyAudioContext,
+    dest: AudioNode,
+    start: number,
+    duration: number,
+    peak: number,
+  ): void {
+    const source = ctx.createBufferSource();
+    const gain = ctx.createGain();
+    if (!this.claimVoice(source, gain)) return;
+    source.buffer = this.noiseBuffer(ctx, duration);
+    gain.gain.setValueAtTime(peak, start);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+    source.connect(gain);
+    gain.connect(dest);
+    source.start(start);
+    source.stop(start + duration + 0.02);
+  }
+
+  private startAmbient(): void {
+    if (prefersReducedAudio()) return;
+    const ctx = this.ensureContext();
+    const destination = this.buses?.ambience;
+    if (!ctx || !destination || this.ambientRunning) return;
     this.ambientRunning = true;
-    // Two detuned low drones for a subtle arena hum.
-    for (const freq of [55, 82.5]) {
-      const osc = ctx.createOscillator();
+    for (const frequency of [55, 82.5]) {
+      const oscillator = ctx.createOscillator();
       const gain = ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.value = freq;
+      oscillator.type = 'sine';
+      oscillator.frequency.value = frequency;
       gain.gain.value = 0.04;
-      osc.connect(gain);
-      gain.connect(this.master);
-      osc.start();
-      this.ambientNodes.push({ osc, gain });
+      oscillator.connect(gain);
+      gain.connect(destination);
+      oscillator.start();
+      this.ambientNodes.push({ osc: oscillator, gain });
     }
   }
 
@@ -318,12 +466,11 @@ class AudioEngine {
         osc.disconnect();
         gain.disconnect();
       } catch {
-        /* already stopped */
+        // Already stopped.
       }
     }
     this.ambientNodes = [];
   }
 }
 
-/** Single shared audio engine for the whole app. */
 export const audio = new AudioEngine();

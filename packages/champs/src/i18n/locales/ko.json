@@ -14,6 +14,10 @@
     "start": "전투 시작",
     "tagline": "나의 챔피언. 나의 선택. 나의 아레나.",
     "play": "아레나 입장",
+    "continue": "최근 설정으로 계속",
+    "standard": "일반 경기",
+    "practice": "연습",
+    "tutorial": "입문전",
     "featuresLabel": "게임 특징",
     "featureStrategy": "전략적 전투",
     "featureChampions": "오리지널 챔피언 10명",
@@ -32,17 +36,20 @@
     "randomize": "무작위 선택",
     "randomOpponent": "무작위 상대",
     "pickHint": "챔피언을 고른 뒤 상대를 직접 선택하거나 무작위로 지정하세요.",
-    "findMatch": "게임 찾기",
+    "findMatch": "로컬 경기 시작",
     "you": "나",
     "spells": "스펠",
-    "yourPick": "내 선택"
+    "yourPick": "내 선택",
+    "locked": "잠김",
+    "unlock": "잠금 해제 · {{cost}}",
+    "unlockAria": "{{cost}} 재화로 {{champion}} 잠금 해제"
   },
   "client": {
     "home": "홈",
-    "tft": "전략전",
-    "clash": "도전전",
+    "tactics": "전략전",
+    "gauntlet": "도전전",
     "essence": "정수",
-    "riotPoints": "크레딧",
+    "credits": "크레딧",
     "profile": "프로필",
     "level": "레벨 {{value}}",
     "social": {
@@ -56,12 +63,29 @@
       "friend4": "탑차이"
     }
   },
+  "profile": {
+    "summary": "프로필 진행 상황",
+    "accountLevel": "계정 레벨 {{value}}",
+    "currency": "재화 {{value}}",
+    "currencyLabel": "재화",
+    "tutorialComplete": "입문전 완료",
+    "tutorialIncomplete": "입문전 미완료",
+    "practice": "연습",
+    "tutorial": "입문전",
+    "complete": "완료",
+    "incomplete": "미완료",
+    "mastery": "선택 챔피언 숙련도",
+    "masteryLevel": "숙련도 레벨 {{value}}",
+    "matches": "경기 수",
+    "matchesValue": "{{value}}경기"
+  },
   "battle": {
     "title": "아레나 전투",
     "yourNexus": "아군 코어",
     "enemyNexus": "적 코어",
     "resource": "자원",
-    "controlsHint": "좌/우클릭으로 이동 · Q/W/E/R로 커서 방향에 스킬 사용 · 사거리 내 적을 자동 공격",
+    "controlsHint": "좌/우클릭 이동 · A 후 클릭으로 공격 이동 · S로 정지 · Q/W/E/R로 스킬 사용",
+    "loadError": "전투 렌더러를 시작하지 못했습니다. 챔피언 선택으로 돌아가 다시 시도하세요.",
     "surrender": "항복"
   },
   "result": {
@@ -78,7 +102,19 @@
     "rematch": "재대결",
     "toMenu": "메인 메뉴",
     "level": "최종 레벨",
-    "gold": "획득 골드"
+    "gold": "획득 골드",
+    "deaths": "사망",
+    "objectives": "확보한 목표물",
+    "totalGoldEarned": "총 획득 골드",
+    "endReason": "경기 종료 사유",
+    "rewards": "획득 보상",
+    "accountXp": "계정 경험치",
+    "masteryXp": "숙련도 경험치",
+    "masteryProgress": "{{champion}} 숙련도 진행",
+    "endReasons": {
+      "nexus-destroyed": "코어 파괴",
+      "hard-cap-score": "제한 시간 점수"
+    }
   },
   "mode": {
     "eyebrow": "전투 프로토콜",
@@ -86,10 +122,21 @@
     "hint": "아레나마다 전투의 흐름이 다릅니다. 전장을 고르면 챔피언 선택으로 이동합니다.",
     "select": "출전",
     "recommended": "추천",
-    "rift": "삼로 정복전",
-    "riftDesc": "세 개의 공격로에서 구조물, 미니언 부대, 정글의 위협과 주요 목표물을 공략하는 완전한 전략전입니다.",
-    "aram": "중앙로 격돌",
-    "aramDesc": "무작위 챔피언으로 하나의 공격로에 집중해 빠른 교전과 끊임없는 한타를 펼칩니다."
+    "conquest": "삼로 정복전",
+    "conquestDesc": "세 개의 공격로에서 구조물, 미니언 부대, 정글의 위협과 주요 목표물을 공략하는 완전한 전략전입니다.",
+    "midline": "중앙로 난전",
+    "midlineDesc": "무작위 챔피언으로 하나의 공격로에 집중해 빠른 교전과 끊임없는 한타를 펼칩니다."
+  },
+  "matchKind": {
+    "standard": "일반 경기",
+    "practice": "연습",
+    "tutorial": "입문전"
+  },
+  "difficulty": {
+    "heading": "난이도",
+    "easy": "쉬움",
+    "normal": "보통",
+    "hard": "어려움"
   },
   "shop": {
     "open": "상점",
@@ -100,7 +147,13 @@
     "recommended": "추천",
     "close": "닫기",
     "gold": "골드",
-    "purchaseQueued": "{{item}} 구매를 요청했습니다"
+    "purchaseQueued": "{{item}} 구매를 요청했습니다",
+    "buildPlan": "전략 빌드 계획",
+    "target": "목표 아이템",
+    "nextComponent": "다음 하위 아이템",
+    "remainingCost": "남은 빌드 비용",
+    "saveForComponent": "다음 하위 아이템을 위해 골드를 모으세요",
+    "checkoutNote": "빌드 비용은 계획을 위해 보유한 하위 아이템 가치를 반영하며, 실제 구매에는 상점에 표시된 가격이 적용됩니다."
   },
   "items": {
     "huntersRelic": {
@@ -174,7 +227,18 @@
     "inhibitors": "억제기",
     "minimap": "미니맵",
     "xp": "경험치",
-    "alive": "생존"
+    "alive": "생존",
+    "minimapSummary": "추적 대상 {{count}}개가 표시된 미니맵",
+    "defeated": "쓰러짐",
+    "respawnIn": "{{seconds}}초 후 부활",
+    "suddenDeath": "서든 데스",
+    "hardCap": "최종 제한 도달",
+    "hardCapIn": "{{seconds}}초 후 강제 판정",
+    "statusDefeated": "쓰러졌습니다. {{seconds}}초 후 부활합니다.",
+    "statusRespawning": "부활 대기 시간이 시작되었습니다.",
+    "statusRespawned": "부활했으며 잠시 보호받습니다.",
+    "statusSuddenDeath": "서든 데스가 시작되었습니다.",
+    "statusHardCap": "최종 제한에 도달해 점수로 승패를 결정합니다."
   },
   "settings": {
     "open": "설정",
@@ -188,12 +252,26 @@
     "volume": "전체 음량",
     "ambient": "환경음",
     "language": "언어",
+    "diagnostics": {
+      "title": "개인정보 및 진단",
+      "description": "선택한 경우 대략적인 성능 및 오류 신호만 이 기기에 보관합니다. 자동 전송은 없으며 직접 내보낼 때만 기기 밖으로 나갑니다.",
+      "consentLabel": "로컬 진단 동의",
+      "allow": "로컬 진단 허용",
+      "deny": "허용하지 않음",
+      "enabled": "활성화됨. 개인정보를 보호하며 이 기기에만 수집합니다.",
+      "disabled": "기본값은 꺼짐입니다. 진단 정보를 수집하지 않습니다.",
+      "blocked": "브라우저의 전역 개인정보 보호 또는 추적 거부 설정으로 차단되었습니다.",
+      "export": "진단 정보 내보내기",
+      "clear": "진단 정보 삭제"
+    },
     "keybinds": {
       "move": "클릭한 지점으로 이동",
       "q": "커서 방향으로 Q 스킬 사용",
       "w": "커서 방향으로 W 스킬 사용",
       "e": "커서 방향으로 E 스킬 사용",
       "r": "커서 방향으로 R(궁극기) 사용",
+      "attackMove": "다음 전장 클릭을 공격 이동으로 지정",
+      "stop": "정지하고 현재 대상을 해제",
       "shop": "아이템 상점 열기 (기지 내)",
       "click": "지정 위치로 이동",
       "clickKey": "좌 / 우클릭"

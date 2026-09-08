@@ -1,5 +1,5 @@
 /**
- * Minion wave simulation for Summoner's Rift: wave composition and cadence,
+ * Minion wave simulation for the original three-lane arena: wave composition and cadence,
  * super minions after an inhibitor falls, per-type base stats, and pure lane
  * navigation.
  *
@@ -8,6 +8,8 @@
  * pure geometry in {@link ./map} and the reward tables in {@link ./economy}.
  */
 
+import type { GameMode } from '../battleStore';
+import { rulesForMode } from '../../config/matchRules';
 import {
   type Lane,
   type MapSide,
@@ -30,15 +32,18 @@ export type { MinionType } from './economy';
 // Wave scheduling
 // ---------------------------------------------------------------------------
 
-/** Seconds before the very first wave spawns (LoL spawns the first wave at ~1:05). */
-export const FIRST_WAVE_DELAY = 65;
+/** Seconds before the first three-lane wave; sourced from the match rules. */
+export const FIRST_WAVE_DELAY = rulesForMode('conquest').waves.firstWaveSeconds;
 
-/** Seconds between successive waves once the first has spawned (LoL: 30s). */
-export const WAVE_INTERVAL_SECONDS = 30;
+/** Seconds between three-lane waves; sourced from the match rules. */
+export const WAVE_INTERVAL_SECONDS = rulesForMode('conquest').waves.intervalSeconds;
+
+/** Milliseconds between units in a three-lane wave. */
+export const WAVE_UNIT_STAGGER_MS = rulesForMode('conquest').waves.unitStaggerMilliseconds;
 
 /**
  * How many waves in a super-cycle before a siege (cannon) minion joins. Early
- * game a siege minion arrives every third wave, matching LoL's opening cadence.
+ * game a siege minion arrives every third wave for a readable opening cadence.
  */
 export const SIEGE_EVERY_N_WAVES = 3;
 
@@ -53,15 +58,25 @@ export const CASTER_PER_WAVE = 3;
  * the first wave. Wave 1 spawns at {@link FIRST_WAVE_DELAY}; each later wave is
  * {@link WAVE_INTERVAL_SECONDS} apart.
  */
-export function nextWaveNumberAt(elapsedSeconds: number): number {
-  if (elapsedSeconds < FIRST_WAVE_DELAY) return 0;
-  return 1 + Math.floor((elapsedSeconds - FIRST_WAVE_DELAY) / WAVE_INTERVAL_SECONDS);
+export function nextWaveNumberAt(
+  elapsedSeconds: number,
+  mode: GameMode = 'conquest',
+): number {
+  const timing = rulesForMode(mode).waves;
+  if (elapsedSeconds < timing.firstWaveSeconds) return 0;
+  return 1 + Math.floor(
+    (elapsedSeconds - timing.firstWaveSeconds) / timing.intervalSeconds,
+  );
 }
 
 /** The exact spawn time (seconds) for a given 1-based wave number. */
-export function waveSpawnTime(waveNumber: number): number {
+export function waveSpawnTime(
+  waveNumber: number,
+  mode: GameMode = 'conquest',
+): number {
   const n = Math.max(1, Math.floor(waveNumber));
-  return FIRST_WAVE_DELAY + (n - 1) * WAVE_INTERVAL_SECONDS;
+  const timing = rulesForMode(mode).waves;
+  return timing.firstWaveSeconds + (n - 1) * timing.intervalSeconds;
 }
 
 /**
@@ -82,9 +97,8 @@ export function waveComposition(waveNumber: number): MinionType[] {
 }
 
 /**
- * The extra super minions added to a wave for a lane. In LoL, destroying an
- * enemy inhibitor causes a super minion to spawn in that lane; if both this
- * lane's inhibitor and others are down the effect compounds, but the canonical
+ * The extra super minions added to a wave for a lane. Destroying an enemy
+ * inhibitor causes a super minion to spawn in that lane; if this lane's inhibitor and others are down the effect compounds, but the canonical
  * rule modeled here is one super minion per destroyed inhibitor in the lane.
  *
  * @param inhibitorsDown number of destroyed enemy inhibitors affecting the lane
@@ -123,7 +137,7 @@ export interface MinionStats {
 
 /**
  * Base stats per minion type. Values rise from melee -> caster (ranged, softer)
- * -> siege (beefy, high range) -> super (strongest), echoing LoL minions. The
+ * -> siege (beefy, high range) -> super (strongest). The
  * bounty is sourced from the shared economy table so rewards stay in one place.
  */
 export const MINION_STATS: Record<MinionType, MinionStats> = {

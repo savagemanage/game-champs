@@ -15,6 +15,10 @@ import {
   distance,
   inRange,
   nearestEnemy,
+  persistentEnemy,
+  abilityDamage,
+  projectileImpactTime,
+  partitionImpacts,
   stepToward,
   type Unit,
 } from './combat';
@@ -260,5 +264,48 @@ describe('spatial helpers', () => {
     stepToward(u, { x: 1000, y: 0 }, 1);
     expect(u.pos.x).toBeCloseTo(100);
     expect(u.pos.y).toBeCloseTo(0);
+  });
+});
+
+
+describe('derived ability damage and delayed impacts', () => {
+  it('adds the effective ability-power ratio and clamps invalid inputs', () => {
+    expect(abilityDamage(100, 50)).toBe(130);
+    expect(abilityDamage(-10, Number.NaN)).toBe(0);
+  });
+
+  it('schedules impact from snapshotted distance and projectile speed', () => {
+    expect(projectileImpactTime(5, { x: 0, y: 0 }, { x: 300, y: 400 }, 250)).toBe(7);
+    expect(projectileImpactTime(5, { x: 0, y: 0 }, { x: 300, y: 400 }, 0)).toBe(5);
+  });
+
+  it('drains due impacts in stable deadline order without mutating the queue', () => {
+    const impacts = [
+      { id: 'late', dueAt: 3 },
+      { id: 'first-tie', dueAt: 1 },
+      { id: 'second-tie', dueAt: 1 },
+    ];
+    const result = partitionImpacts(impacts, 1);
+    expect(result.due.map((impact) => impact.id)).toEqual(['first-tie', 'second-tie']);
+    expect(result.pending.map((impact) => impact.id)).toEqual(['late']);
+    expect(impacts.map((impact) => impact.id)).toEqual(['late', 'first-tie', 'second-tie']);
+  });
+});
+
+describe('persistentEnemy', () => {
+  it('keeps a valid target even when a closer hostile appears', () => {
+    const me = makeUnit({ id: 'me', team: 'ally' });
+    const retained = makeUnit({ id: 'retained', team: 'enemy', pos: { x: 80, y: 0 } });
+    const closer = makeUnit({ id: 'closer', team: 'enemy', pos: { x: 20, y: 0 } });
+    expect(persistentEnemy(me, [closer, retained], retained.id, 100)?.id).toBe('retained');
+  });
+
+  it('reacquires when the retained target fails the gameplay eligibility gate', () => {
+    const me = makeUnit({ id: 'me', team: 'ally' });
+    const shielded = makeUnit({ id: 'shielded', team: 'enemy', pos: { x: 10, y: 0 } });
+    const eligible = makeUnit({ id: 'eligible', team: 'enemy', pos: { x: 40, y: 0 } });
+    expect(
+      persistentEnemy(me, [shielded, eligible], shielded.id, 100, (unit) => unit.id !== 'shielded')?.id,
+    ).toBe('eligible');
   });
 });

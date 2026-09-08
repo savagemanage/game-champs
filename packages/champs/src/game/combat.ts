@@ -15,11 +15,11 @@ export interface Vec2 {
   y: number;
 }
 
-/** Which team a unit belongs to. Determines who it may attack. */
-export type Team = 'ally' | 'enemy';
+/** Which side a unit belongs to. Neutral units are hostile to both teams. */
+export type Team = 'ally' | 'enemy' | 'neutral';
 
 /** Coarse classification of a combat entity, used for AI + targeting rules. */
-export type UnitKind = 'champion' | 'minion' | 'turret' | 'nexus';
+export type UnitKind = 'champion' | 'minion' | 'turret' | 'nexus' | 'monster';
 
 /**
  * A combat entity. Positions are kept here (rather than only on the sprite) so
@@ -52,6 +52,58 @@ export interface Unit {
 /** Euclidean distance between two points. */
 export function distance(a: Vec2, b: Vec2): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+/** True when two units may deal hostile damage to one another. */
+export function areHostile(a: Team, b: Team): boolean {
+  if (a === b) return false;
+  return a === 'neutral' || b === 'neutral' || a !== b;
+}
+
+/**
+ * Resolve ability damage with a modest ability-power ratio. Keeping this pure
+ * ensures item and team objective power changes the authoritative impact.
+ */
+export function abilityDamage(baseDamage: number, abilityPower: number): number {
+  const base = Number.isFinite(baseDamage) ? Math.max(0, baseDamage) : 0;
+  const power = Number.isFinite(abilityPower) ? Math.max(0, abilityPower) : 0;
+  return base + power * 0.6;
+}
+
+/** Absolute simulation time at which a projectile reaches its snapshotted aim. */
+export function projectileImpactTime(
+  nowSeconds: number,
+  from: Vec2,
+  to: Vec2,
+  speed: number,
+): number {
+  const now = Number.isFinite(nowSeconds) ? Math.max(0, nowSeconds) : 0;
+  if (!Number.isFinite(speed) || speed <= 0) return now;
+  return now + distance(from, to) / speed;
+}
+
+/** A value with an absolute impact deadline, suitable for a deterministic queue. */
+export interface TimedImpact {
+  dueAt: number;
+}
+
+/**
+ * Partition an impact queue without mutating it. Due impacts retain insertion
+ * order for equal deadlines; pending impacts are sorted by deadline.
+ */
+export function partitionImpacts<T extends TimedImpact>(
+  impacts: readonly T[],
+  nowSeconds: number,
+): { due: T[]; pending: T[] } {
+  const now = Number.isFinite(nowSeconds) ? Math.max(0, nowSeconds) : 0;
+  const indexed = impacts.map((impact, index) => ({ impact, index }));
+  indexed.sort((a, b) => a.impact.dueAt - b.impact.dueAt || a.index - b.index);
+  const due: T[] = [];
+  const pending: T[] = [];
+  for (const entry of indexed) {
+    (entry.impact.dueAt <= now ? due : pending).push(entry.impact);
+  }
+  return { due, pending };
 }
 
 /** True when `target` is within `range` world units of `source`. */
@@ -268,7 +320,7 @@ export function nearestEnemy(
   let best: Unit | undefined;
   let bestDist = maxRange;
   for (const unit of units) {
-    if (unit.dead || unit.team === from.team) continue;
+    if (unit.dead || !areHostile(unit.team, from.team)) continue;
     const d = distance(from.pos, unit.pos);
     if (best === undefined ? d <= bestDist : d < bestDist) {
       bestDist = d;
@@ -276,6 +328,33 @@ export function nearestEnemy(
     }
   }
   return best;
+}
+
+/**
+ * Keep an existing valid target until it leaves range or becomes invalid,
+ * otherwise acquire the deterministic nearest hostile. This prevents stacked
+ * combatants from changing targets every simulation frame.
+ */
+export function persistentEnemy(
+  from: Unit,
+  units: readonly Unit[],
+  currentTargetId: string | null,
+  maxRange = Infinity,
+  eligible: (unit: Unit) => boolean = () => true,
+): Unit | undefined {
+  if (currentTargetId) {
+    const current = units.find((unit) => unit.id === currentTargetId);
+    if (
+      current &&
+      !current.dead &&
+      eligible(current) &&
+      areHostile(from.team, current.team) &&
+      distance(from.pos, current.pos) <= maxRange
+    ) {
+      return current;
+    }
+  }
+  return nearestEnemy(from, units.filter(eligible), maxRange);
 }
 
 /**
@@ -330,7 +409,7 @@ export function nearestTargetableEnemy(
   const eligible = units.filter(
     (u) =>
       !u.dead &&
-      u.team !== from.team &&
+      areHostile(u.team, from.team) &&
       distance(from.pos, u.pos) <= maxRange &&
       isTargetable(u, lines, livingUnitIds),
   );
@@ -355,11 +434,11 @@ export function nearestTargetableEnemy(
     return (
       nearestOfKinds(['turret']) ??
       nearestOfKinds(['nexus']) ??
-      nearestOfKinds(['champion', 'minion'])
+      nearestOfKinds(['champion', 'minion', 'monster'])
     );
   }
 
-  return nearestOfKinds(['champion', 'minion', 'turret', 'nexus']);
+  return nearestOfKinds(['champion', 'minion', 'monster', 'turret', 'nexus']);
 }
 
 /** Move `unit` toward `target` by up to `unit.moveSpeed * dt`, mutating pos. */

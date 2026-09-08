@@ -17,6 +17,8 @@ import {
   type ItemArchetype,
   ITEMS,
   getItemById,
+  missingRecipeComponents,
+  remainingBuildCost,
   totalModifiers,
 } from '../../data/items';
 
@@ -34,7 +36,7 @@ export interface EffectiveStats {
   attackSpeed: number;
   /** Armor: grows with level and is boosted by items and team modifiers. */
   armor: number;
-  /** Ability power from items and the team Baron/ability modifiers. */
+  /** Ability power from items and team-wide ability modifiers. */
   abilityPower: number;
   /** Bonus resource (mana/energy) pool granted purely by items. */
   resource: number;
@@ -108,6 +110,57 @@ export const ROLE_BUY_ORDER: Record<ChampionRole, readonly ItemArchetype[]> = {
   mage: ['starter', 'abilityPower', 'mana', 'boots'],
   enchanter: ['starter', 'mana', 'abilityPower', 'boots'],
 };
+
+/** Build-defining targets in strategic priority order for each role. */
+export const ROLE_BUILD_TARGETS: Record<ChampionRole, readonly string[]> = {
+  marksman: ['sunfireGreatblade', 'bloodreaver'],
+  assassin: ['bloodreaver', 'sunfireGreatblade'],
+  bruiser: ['aegisColossus', 'sunfireGreatblade'],
+  mage: ['archmageCrown', 'chronoCore'],
+  enchanter: ['chronoCore', 'archmageCrown'],
+};
+
+export interface BuildRecommendation {
+  /** The current complete item the role should build toward. */
+  targetItem: Item;
+  /** Cheapest missing direct component that can be bought now. */
+  nextPurchasableComponent?: Item;
+  /** Total additional gold needed after crediting owned components. */
+  remainingCost: number;
+  /** Other unowned complete items suitable for the same role. */
+  alternatives: readonly Item[];
+}
+
+/**
+ * Plan a role-aware complete item build. Unlike recommendPurchase, this reports
+ * a strategic target even when no component is currently affordable.
+ */
+export function recommendBuild(
+  role: ChampionRole,
+  ownedItemIds: readonly string[],
+  gold: number,
+): BuildRecommendation | undefined {
+  const owned = new Set(ownedItemIds);
+  const candidates = ROLE_BUILD_TARGETS[role]
+    .map(getItemById)
+    .filter((item): item is Item => item !== undefined && !owned.has(item.id));
+  const targetItem = candidates[0];
+  if (!targetItem) return undefined;
+
+  const nextPurchasableComponent = missingRecipeComponents(
+    targetItem,
+    ownedItemIds,
+  )
+    .filter((component) => affordable(gold, component))
+    .sort((a, b) => a.cost - b.cost)[0];
+
+  return {
+    targetItem,
+    ...(nextPurchasableComponent ? { nextPurchasableComponent } : {}),
+    remainingCost: remainingBuildCost(targetItem, ownedItemIds),
+    alternatives: candidates.slice(1),
+  };
+}
 
 /**
  * Pick the next sensible item for `role` to buy given current `gold` and the

@@ -1,5 +1,5 @@
 /**
- * 2.5D projection math for the Summoner's Rift battle view.
+ * 2.5D projection math for the original three-lane battle view.
  *
  * The game LOGIC lives on a flat, top-down square plane (see {@link ./map},
  * WORLD_SIZE x WORLD_SIZE world units, origin top-left, y grows downward). To

@@ -1,5 +1,5 @@
 /**
- * Team composition for the full 5v5 Summoner's Rift match.
+ * Team composition for a full 5v5 three-lane conquest match.
  *
  * This module deliberately contains NO Phaser (or any DOM) imports so the
  * lane-assignment logic is pure and unit testable. Given the champion roster,
@@ -18,7 +18,7 @@
  * champions carry a richer {@link LaneRole} (`top`/`jungle`/`mid`/`bot`/
  * `support`). We keep the champion's LaneRole for flavor/pathing intent and
  * additionally map it to one of the ACTIVE map lanes so a champion always walks
- * a real lane. In ARAM (a single `mid` lane) every champion piles into mid.
+ * a real lane. In Midline Skirmish (a single `mid` lane), every champion piles into mid.
  */
 
 import type { Champion, LaneRole } from '../../data/champions';
@@ -48,7 +48,7 @@ export interface TeamComposition {
  * Map a champion's {@link LaneRole} to one of the active map lanes. `jungle`
  * and `support` do not have dedicated map lanes, so they are folded onto `mid`
  * and `bot` respectively (a jungler roams mid, a support duos bot). When only a
- * subset of lanes is active (ARAM = `['mid']`) the role always resolves to the
+ * subset of lanes is active (Midline Skirmish = `['mid']`), the role always resolves to the
  * first available lane.
  */
 export function laneForRole(role: LaneRole, activeLanes: readonly Lane[]): Lane {
@@ -59,7 +59,7 @@ export function laneForRole(role: LaneRole, activeLanes: readonly Lane[]): Lane 
         ? 'bot'
         : 'mid'; // mid + jungle both march mid
   if (activeLanes.includes(preferred)) return preferred;
-  // Fall back to the first active lane (covers ARAM's single mid lane).
+  // Fall back to the first active lane (covers Midline Skirmish's single lane).
   return activeLanes[0] ?? 'mid';
 }
 
@@ -132,8 +132,8 @@ function pickForRole(
  * @param roster        the champion roster
  * @param humanPickId   id of the human's chosen champion (ally side)
  * @param enemyPickId   id of the enemy's player-facing champion (enemy side)
- * @param activeLanes   lanes active this match (all three for Rift; `['mid']`
- *                      for ARAM)
+ * @param activeLanes   lanes active this match (all three for Conquest;
+ *                      `['mid']` for Midline Skirmish)
  */
 export function composeTeams(
   roster: readonly Champion[],

@@ -3,9 +3,15 @@ import { useTranslation } from 'react-i18next';
 import LanguageToggle from './LanguageToggle';
 import { audio, type AudioSettings } from '../game/audio';
 import { useDialogFocusTrap } from '../hooks/useDialogFocusTrap';
+import type { TelemetryRuntimeStatus } from '../telemetry/runtime';
 
 interface SettingsPanelProps {
   onClose: () => void;
+  telemetryStatus: TelemetryRuntimeStatus;
+  onTelemetryGrant: () => void;
+  onTelemetryDeny: () => void;
+  onTelemetryExport: () => Promise<void>;
+  onTelemetryClear: () => void;
 }
 
 /** The keybinds documented in the help panel, as [key i18n, action i18n] pairs. */
@@ -15,6 +21,8 @@ const KEYBINDS: { keys: string; actionKey: string }[] = [
   { keys: 'W', actionKey: 'settings.keybinds.w' },
   { keys: 'E', actionKey: 'settings.keybinds.e' },
   { keys: 'R', actionKey: 'settings.keybinds.r' },
+  { keys: 'A', actionKey: 'settings.keybinds.attackMove' },
+  { keys: 'S', actionKey: 'settings.keybinds.stop' },
   { keys: 'B', actionKey: 'settings.keybinds.shop' },
 ];
 
@@ -25,7 +33,14 @@ const KEYBINDS: { keys: string; actionKey: string }[] = [
  * persisted audio controls (mute, master volume, ambient drone), and surfaces
  * the language toggle. Every string is localized; nothing is hardcoded.
  */
-export default function SettingsPanel({ onClose }: SettingsPanelProps) {
+export default function SettingsPanel({
+  onClose,
+  telemetryStatus,
+  onTelemetryGrant,
+  onTelemetryDeny,
+  onTelemetryExport,
+  onTelemetryClear,
+}: SettingsPanelProps) {
   const { t } = useTranslation();
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const panelRef = useDialogFocusTrap<HTMLDivElement>(
@@ -127,6 +142,54 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
               }}
             />
           </label>
+        </section>
+
+        {/* Privacy-safe local diagnostics ------------------------------ */}
+        <section className="settings-section">
+          <h3 className="settings-section__title">{t('settings.diagnostics.title')}</h3>
+          <p className="settings-diagnostics__copy">{t('settings.diagnostics.description')}</p>
+          <div
+            className="settings-diagnostics__choices"
+            role="group"
+            aria-label={t('settings.diagnostics.consentLabel')}
+          >
+            <button
+              type="button"
+              className="btn btn--secondary settings-diagnostics__choice"
+              aria-pressed={telemetryStatus.consentState === 'granted'}
+              onClick={onTelemetryGrant}
+            >
+              {t('settings.diagnostics.allow')}
+            </button>
+            <button
+              type="button"
+              className="btn btn--secondary settings-diagnostics__choice"
+              aria-pressed={telemetryStatus.consentState === 'denied'}
+              onClick={onTelemetryDeny}
+            >
+              {t('settings.diagnostics.deny')}
+            </button>
+          </div>
+          <p className="settings-diagnostics__status" role="status">
+            {telemetryStatus.privacyBlocked
+              ? t('settings.diagnostics.blocked')
+              : telemetryStatus.enabled
+                ? t('settings.diagnostics.enabled')
+                : t('settings.diagnostics.disabled')}
+          </p>
+          <div className="settings-diagnostics__actions">
+            <button
+              type="button"
+              className="btn btn--secondary"
+              disabled={!telemetryStatus.enabled}
+              onClick={() => void onTelemetryExport()}
+            >
+              {t('settings.diagnostics.export')}
+            </button>
+            <button type="button" className="btn btn--secondary" onClick={onTelemetryClear}>
+              {t('settings.diagnostics.clear')}
+            </button>
+          </div>
         </section>
 
         {/* Language ------------------------------------------------------ */}

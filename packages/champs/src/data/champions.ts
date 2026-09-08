@@ -36,7 +36,7 @@ export type ChampionRole =
   | 'enchanter';
 
 /**
- * The Summoner's Rift position a champion is expected to play. Drives champion
+ * The three-lane position a champion is expected to play. Drives champion
  * select flavor, AI lane assignment, and (indirectly) which lane a champion is
  * dropped into for the full 3-lane mode.
  */
@@ -92,7 +92,7 @@ export interface Champion {
   /** i18n key resolving to the champion's title / epithet. */
   titleKey: string;
   role: ChampionRole;
-  /** The lane/position this champion plays on Summoner's Rift. */
+  /** The lane/position this champion plays in Three-Lane Conquest. */
   laneRole: LaneRole;
   /** Accent color used for CSS art / theming in the UI. */
   accentColor: string;

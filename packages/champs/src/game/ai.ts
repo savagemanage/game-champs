@@ -9,7 +9,10 @@
  */
 
 import type { CooldownState, CooldownKey } from './combat';
-import type { AbilityBehavior } from '../data/champions';
+import type {
+  AbilityBehavior,
+  ChampionRole,
+} from '../data/champions';
 
 /**
  * Behaviors that do not need an enemy in range to be worth casting: they act on
@@ -36,6 +39,23 @@ export type AiIntent =
   | 'castR'
   | 'retreat';
 
+/** Optional strategic signals used by the scored decision path. */
+export interface AiContext {
+  role?: ChampionRole;
+  /** 0..1 exposure to hostile structure fire. */
+  turretDanger?: number;
+  /** -1..1: negative means a hostile wave is winning, positive means allied push. */
+  wavePressure?: number;
+  /** 0..1 urgency to contest or protect a neutral objective. */
+  objectivePressure?: number;
+  nearbyAllies?: number;
+  nearbyEnemies?: number;
+  gold?: number;
+  nextPurchaseCost?: number;
+  /** True while the unit can buy immediately at its shop. */
+  shopAvailable?: boolean;
+}
+
 /** Everything the bot needs to reason about its next move. */
 export interface AiSnapshot {
   /** Bot's current hp as a fraction of max (0..1). */
@@ -60,6 +80,8 @@ export interface AiSnapshot {
   maxResource: number;
   /** True when the target's hp fraction is low enough to try to finish it. */
   targetLowHp: boolean;
+  /** Optional strategic context. Omit it to retain the original priority policy. */
+  context?: AiContext;
 }
 
 /** Below this hp fraction the bot prioritizes disengaging. */
@@ -84,6 +106,10 @@ export const SELF_SUSTAIN_HP_THRESHOLD = 0.85;
  *  5. Otherwise -> approach to close the gap.
  */
 export function decideAction(snapshot: AiSnapshot): AiIntent {
+  if (snapshot.context) {
+    return decideScoredAction(snapshot);
+  }
+
   const castOrder: { slot: CooldownKey; intent: AiIntent }[] = [
     { slot: 'R', intent: 'castR' },
     { slot: 'W', intent: 'castW' },
@@ -126,6 +152,151 @@ export function decideAction(snapshot: AiSnapshot): AiIntent {
   }
 
   return 'approach';
+}
+
+const SCORED_INTENT_ORDER: readonly AiIntent[] = [
+  'castR',
+  'castW',
+  'castQ',
+  'castE',
+  'attack',
+  'retreat',
+  'approach',
+];
+
+const CAST_SLOTS: Readonly<Partial<Record<AiIntent, CooldownKey>>> = {
+  castQ: 'Q',
+  castW: 'W',
+  castE: 'E',
+  castR: 'R',
+};
+
+const ROLE_RETREAT_BIAS: Record<ChampionRole, number> = {
+  marksman: 10,
+  assassin: -8,
+  bruiser: -10,
+  mage: 7,
+  enchanter: 13,
+};
+
+const ROLE_ENGAGE_BIAS: Record<ChampionRole, number> = {
+  marksman: 2,
+  assassin: 12,
+  bruiser: 10,
+  mage: 5,
+  enchanter: -6,
+};
+
+/** Score every intent from tactical context; invalid actions stay at -Infinity. */
+export function scoreAiIntents(snapshot: AiSnapshot): Record<AiIntent, number> {
+  const context = snapshot.context ?? {};
+  const canExecute =
+    snapshot.hasTarget &&
+    snapshot.targetLowHp &&
+    snapshot.distanceToTarget <= snapshot.attackRange * 1.5;
+  const scores: Record<AiIntent, number> = {
+    approach: snapshot.hasTarget ? 12 : 40,
+    attack:
+      snapshot.hasTarget && snapshot.distanceToTarget <= snapshot.attackRange
+        ? 52
+        : Number.NEGATIVE_INFINITY,
+    castQ: castScore(snapshot, 'Q', 72),
+    castW: castScore(snapshot, 'W', 82),
+    castE: castScore(snapshot, 'E', 62),
+    castR: castScore(snapshot, 'R', 92),
+    retreat:
+      snapshot.selfHpPct <= RETREAT_HP_THRESHOLD && !canExecute ? 105 : 5,
+  };
+
+  const turretDanger = clamp(context.turretDanger ?? 0, 0, 1);
+  const wavePressure = clamp(context.wavePressure ?? 0, -1, 1);
+  const objectivePressure = clamp(context.objectivePressure ?? 0, 0, 1);
+  const nearbyAllies = positive(context.nearbyAllies ?? 0);
+  const nearbyEnemies = positive(context.nearbyEnemies ?? 0);
+  const numberAdvantage = clamp((nearbyAllies - nearbyEnemies) / 3, -1, 1);
+  const purchaseReady =
+    positive(context.nextPurchaseCost ?? 0) > 0 &&
+    positive(context.gold ?? 0) >= positive(context.nextPurchaseCost ?? 0);
+  const hasDisengageSignal =
+    snapshot.selfHpPct <= RETREAT_HP_THRESHOLD ||
+    turretDanger > 0 ||
+    wavePressure < 0 ||
+    numberAdvantage < 0 ||
+    (purchaseReady && !context.shopAvailable);
+  const roleRetreat =
+    context.role && hasDisengageSignal ? ROLE_RETREAT_BIAS[context.role] : 0;
+  const roleEngage = context.role ? ROLE_ENGAGE_BIAS[context.role] : 0;
+
+  scores.retreat +=
+    turretDanger * 70 +
+    Math.max(0, -wavePressure) * 24 +
+    Math.max(0, -numberAdvantage) * 22 +
+    roleRetreat;
+  if (purchaseReady && !context.shopAvailable) {
+    scores.retreat += 18 * (1 - objectivePressure * 0.75);
+  }
+
+  const engageModifier =
+    Math.max(0, wavePressure) * 20 +
+    objectivePressure * 24 +
+    Math.max(0, numberAdvantage) * 18 -
+    turretDanger * 65 +
+    roleEngage;
+
+  for (const intent of SCORED_INTENT_ORDER) {
+    if (isEngageIntent(snapshot, intent) && Number.isFinite(scores[intent])) {
+      scores[intent] += engageModifier;
+      if (
+        snapshot.targetLowHp &&
+        (context.role === 'assassin' || context.role === 'bruiser')
+      ) {
+        scores[intent] += context.role === 'assassin' ? 18 : 10;
+      }
+    }
+  }
+
+  return scores;
+}
+
+/** Score one intent without changing the deterministic tie order. */
+export function scoreAiIntent(snapshot: AiSnapshot, intent: AiIntent): number {
+  return scoreAiIntents(snapshot)[intent];
+}
+
+/** Choose the highest-scoring action, with a stable order for exact ties. */
+export function decideScoredAction(snapshot: AiSnapshot): AiIntent {
+  const scores = scoreAiIntents(snapshot);
+  let best = SCORED_INTENT_ORDER[0];
+  for (const intent of SCORED_INTENT_ORDER.slice(1)) {
+    if (scores[intent] > scores[best]) best = intent;
+  }
+  return best;
+}
+
+function castScore(
+  snapshot: AiSnapshot,
+  slot: CooldownKey,
+  offensiveScore: number,
+): number {
+  if (!canCast(snapshot, slot)) return Number.NEGATIVE_INFINITY;
+  return isNonOffensive(snapshot.abilityBehaviors[slot])
+    ? 115
+    : offensiveScore;
+}
+
+function isEngageIntent(snapshot: AiSnapshot, intent: AiIntent): boolean {
+  if (intent === 'approach' || intent === 'attack') return true;
+  const slot = CAST_SLOTS[intent];
+  return slot != null && !isNonOffensive(snapshot.abilityBehaviors[slot]);
+}
+
+function positive(value: number): number {
+  return Number.isFinite(value) ? Math.max(0, value) : 0;
+}
+
+function clamp(value: number, minimum: number, maximum: number): number {
+  if (!Number.isFinite(value)) return minimum;
+  return Math.min(maximum, Math.max(minimum, value));
 }
 
 /**
