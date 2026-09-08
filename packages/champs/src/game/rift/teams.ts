@@ -14,6 +14,15 @@
  * matchup. The human keeps their chosen champion on the ally side and the
  * enemy's player-facing pick stays on the enemy side.
  *
+ * An optional caller-provided `seed` rotates WHICH eligible champion fills a
+ * non-forced role slot: different matchups (different seeds) can pick the
+ * SECOND roster candidate for a role instead of always the first, adding
+ * variety while staying deterministic. The seed only reorders the candidate
+ * scan; the fill order, ally-first structure, disjointness, no-mirror and
+ * forced-pick contracts are all unchanged. The RNG is a pure seeded generator
+ * (see {@link makeRng}), so there is still no `Math.random`/`Date.now` on any
+ * path.
+ *
  * Coordinate/lane note: the game has three map lanes (`top`/`mid`/`bot`) but
  * champions carry a richer {@link LaneRole} (`top`/`jungle`/`mid`/`bot`/
  * `support`). We keep the champion's LaneRole for flavor/pathing intent and
@@ -23,6 +32,7 @@
 
 import type { Champion, LaneRole } from '../../data/champions';
 import type { Lane, MapSide } from './map';
+import { makeRng } from './rng';
 
 /** One champion's placement within its team. */
 export interface TeamSlot {
@@ -88,6 +98,12 @@ const ROLE_ORDER: readonly LaneRole[] = [
  * force would break the disjoint-teams guarantee the force is dropped and the
  * pool scan chooses a distinct alternative instead, so the same-pick case
  * (human and enemy pick the same id) never mirrors a lane.
+ *
+ * When a seeded `rng` is supplied the eligible pool is scanned in a
+ * seed-derived deterministic order instead of plain roster order, so different
+ * matchups can select a different (e.g. the second) candidate for a role. The
+ * fallback chain (not-taken & not-avoided -> not-taken -> pool[0] -> roster[0])
+ * is preserved so sparse rosters still always fill the slot.
  */
 function pickForRole(
   roster: readonly Champion[],
@@ -95,18 +111,36 @@ function pickForRole(
   forcedId: string | undefined,
   taken: Set<string>,
   avoid: Set<string>,
+  rng?: () => number,
 ): Champion {
   if (forcedId && !avoid.has(forcedId)) {
     const forced = roster.find((c) => c.id === forcedId);
     if (forced && forced.laneRole === role) return forced;
   }
-  const pool = roster.filter((c) => c.laneRole === role);
+  const basePool = roster.filter((c) => c.laneRole === role);
+  const pool = rng ? shuffle(basePool, rng) : basePool;
   return (
     pool.find((c) => !taken.has(c.id) && !avoid.has(c.id)) ??
     pool.find((c) => !taken.has(c.id)) ??
     pool[0] ??
     roster[0]
   );
+}
+
+/**
+ * A pure, deterministic Fisher-Yates shuffle driven by the supplied `[0, 1)`
+ * generator. Does not mutate the input array. Given the same `rng` stream the
+ * output ordering is identical, keeping composition reproducible.
+ */
+function shuffle<T>(items: readonly T[], rng: () => number): T[] {
+  const out = items.slice();
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    const tmp = out[i];
+    out[i] = out[j];
+    out[j] = tmp;
+  }
+  return out;
 }
 
 /**
@@ -126,22 +160,31 @@ function pickForRole(
  * champion of that role, so the teams stay disjoint.
  *
  * The result is fully deterministic for the same
- * `(roster, humanPickId, enemyPickId, activeLanes)` inputs: roles are filled in
- * a fixed order and each pick scans the roster in order. No randomness is used.
+ * `(roster, humanPickId, enemyPickId, activeLanes, seed)` inputs: roles are
+ * filled in a fixed order and each pick scans the roster in a fixed
+ * seed-derived order. Only a pure seeded RNG is used (no `Math.random`).
+ *
+ * When `seed` is omitted the non-forced role slots are filled in plain roster
+ * order, preserving the historical (pre-seed) behavior. When a `seed` is
+ * provided each role scans its eligible pool in a seed-derived order, so a
+ * different matchup can pick the second candidate of a role for added variety.
  *
  * @param roster        the champion roster
  * @param humanPickId   id of the human's chosen champion (ally side)
  * @param enemyPickId   id of the enemy's player-facing champion (enemy side)
  * @param activeLanes   lanes active this match (all three for Conquest;
  *                      `['mid']` for Midline Skirmish)
+ * @param seed          optional matchup-derived seed rotating non-forced picks
  */
 export function composeTeams(
   roster: readonly Champion[],
   humanPickId: string,
   enemyPickId: string,
   activeLanes: readonly Lane[],
+  seed?: string | number,
 ): TeamComposition {
   const lanes = activeLanes.length > 0 ? activeLanes : (['mid'] as Lane[]);
+  const seeded = seed !== undefined;
 
   const humanPick = roster.find((c) => c.id === humanPickId);
   const enemyPick = roster.find((c) => c.id === enemyPickId);
@@ -157,6 +200,12 @@ export function composeTeams(
     // ally keeps its own forced pick even when it collides with the enemy pick
     // (same-pick case): the ally avoids the enemy pick only in the non-forced
     // case, and the enemy is the side that yields a distinct champion.
+    // Derive an independent per-role/per-side generator so each role's scan
+    // order varies with the seed without one role leaking into another. Omit
+    // the generator entirely (roster order) when no seed was provided.
+    const allyRng = seeded ? makeRng(`${seed}:ally:${role}`) : undefined;
+    const enemyRng = seeded ? makeRng(`${seed}:enemy:${role}`) : undefined;
+
     const allyForced = humanPick?.laneRole === role ? humanPickId : undefined;
     const allyAvoid =
       enemyPick?.laneRole === role && enemyPick && enemyPick.id !== allyForced
@@ -168,6 +217,7 @@ export function composeTeams(
       allyForced,
       allyTaken,
       allyAvoid,
+      allyRng,
     );
     allyTaken.add(allyChampion.id);
     ally.push({
@@ -185,6 +235,7 @@ export function composeTeams(
       enemyForced,
       enemyTaken,
       new Set([allyChampion.id]),
+      enemyRng,
     );
     enemyTaken.add(enemyChampion.id);
     enemy.push({
