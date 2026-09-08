@@ -95,9 +95,12 @@ class AudioEngine {
     ambient: readBool(AMBIENT_KEY, false),
   };
 
-  getSettings(): AudioSettings {
-    return { ...this.settings };
-  }
+  /**
+   * Stable snapshot for React's useSyncExternalStore. The function is an arrow
+   * so it keeps its instance binding when passed directly to React, and the
+   * returned object only changes when a setting actually changes.
+   */
+  getSettings = (): AudioSettings => this.settings;
 
   subscribe = (listener: Listener): (() => void) => {
     this.listeners.add(listener);
@@ -153,7 +156,8 @@ class AudioEngine {
   }
 
   setMuted(muted: boolean): void {
-    this.settings.muted = muted;
+    if (this.settings.muted === muted) return;
+    this.settings = { ...this.settings, muted };
     writeStorage(MUTE_KEY, String(muted));
     this.applyMasterGain();
     if (muted) this.stopAmbient();
@@ -166,14 +170,17 @@ class AudioEngine {
   }
 
   setVolume(volume: number): void {
-    this.settings.volume = Math.min(1, Math.max(0, volume));
-    writeStorage(VOLUME_KEY, String(this.settings.volume));
+    const nextVolume = Math.min(1, Math.max(0, volume));
+    if (this.settings.volume === nextVolume) return;
+    this.settings = { ...this.settings, volume: nextVolume };
+    writeStorage(VOLUME_KEY, String(nextVolume));
     this.applyMasterGain();
     this.emit();
   }
 
   setAmbient(enabled: boolean): void {
-    this.settings.ambient = enabled;
+    if (this.settings.ambient === enabled) return;
+    this.settings = { ...this.settings, ambient: enabled };
     writeStorage(AMBIENT_KEY, String(enabled));
     if (enabled && !this.settings.muted) this.startAmbient();
     else this.stopAmbient();

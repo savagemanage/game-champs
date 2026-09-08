@@ -144,7 +144,7 @@ const OFF_Y = (VIEW_H - WORLD_SIZE * SCALE) / 2;
  *   - CAMERA_BOUNDS_PADDING: screen px added around the projected diamond so the
  *     camera can keep the champion centred near the map edges.
  */
-const CAMERA_ZOOM = 2.4;
+const CAMERA_ZOOM = 2;
 const CAMERA_LERP = 0.1;
 const CAMERA_BOUNDS_PADDING = 220;
 
@@ -333,6 +333,7 @@ export default class BattleScene extends Phaser.Scene {
 
   private moveTarget: Vec2 | null = null;
   private abilityKeys!: Record<CooldownKey, Phaser.Input.Keyboard.Key>;
+  private touchCastHandler?: EventListener;
 
   /** Procedural sprite/texture factory (baked once, cached, reused). */
   private sprites!: SpriteFactory;
@@ -790,11 +791,19 @@ export default class BattleScene extends Phaser.Scene {
     });
     const heightPx = CHAMPION_HEIGHT_PX;
     const body = this.makeBillboard(key, size);
-    const label = this.add.text(0, -size.height - 6, champion.id.slice(0, 2).toUpperCase(), {
-      fontFamily: 'sans-serif',
-      fontSize: '11px',
-      color: '#f0e6d2',
+    // Only the player-facing picks carry nameplates. Labeling all ten units at
+    // the compact camera scale created a noisy wall of initials at each spawn.
+    const shortLabel = id === 'player' || id === 'enemy'
+      ? champion.id.slice(0, 2).toUpperCase()
+      : '';
+    const label = this.add.text(0, -size.height - 6, shortLabel, {
+      fontFamily: 'Noto Sans KR, sans-serif',
+      fontSize: '12px',
+      color: '#fff1c9',
       fontStyle: 'bold',
+      stroke: '#02070c',
+      strokeThickness: 2,
+      resolution: 2,
     });
     label.setOrigin(0.5);
     const container = this.add.container(pos.x, pos.y, [body, label]);
@@ -931,6 +940,23 @@ export default class BattleScene extends Phaser.Scene {
     };
     (['Q', 'W', 'E', 'R'] as CooldownKey[]).forEach((slot) => {
       this.abilityKeys[slot].on('down', () => this.tryPlayerCast(slot));
+    });
+
+    // Touch HUD buttons dispatch this lightweight event. It enters the exact
+    // same cast path as the physical keys and uses the last battlefield pointer
+    // as the aim point, so mobile players can tap to aim/move, then cast.
+    this.touchCastHandler = ((event: CustomEvent<{ slot?: string }>) => {
+      const slot = event.detail?.slot;
+      if (slot === 'Q' || slot === 'W' || slot === 'E' || slot === 'R') {
+        this.tryPlayerCast(slot);
+      }
+    }) as EventListener;
+    window.addEventListener('champs:cast-ability', this.touchCastHandler);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      if (this.touchCastHandler) {
+        window.removeEventListener('champs:cast-ability', this.touchCastHandler);
+        this.touchCastHandler = undefined;
+      }
     });
 
     // Suppress the browser context menu over the canvas so right-click can be
@@ -1612,12 +1638,13 @@ export default class BattleScene extends Phaser.Scene {
     const shown = style.heavy ? 0xfff3c0 : color;
     const jitter = (Math.random() * 2 - 1) * style.jitter;
     const text = this.add.text(pos.x + jitter, pos.y - 18, `${prefix}${amount}`, {
-      fontFamily: 'sans-serif',
+      fontFamily: 'Noto Sans KR, sans-serif',
       fontSize: `${style.fontSize}px`,
       color: `#${shown.toString(16).padStart(6, '0')}`,
       fontStyle: 'bold',
       stroke: '#101018',
       strokeThickness: style.heavy ? 3 : 2,
+      resolution: 2,
     });
     text.setOrigin(0.5);
     text.setScale(0.4);

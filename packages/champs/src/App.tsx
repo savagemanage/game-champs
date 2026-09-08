@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import LanguageToggle from './components/LanguageToggle';
 import SettingsPanel from './components/SettingsPanel';
@@ -29,6 +29,8 @@ export default function App() {
   const [match, setMatch] = useState<MatchSetup | null>(null);
   const [outcome, setOutcome] = useState<BattleOutcome | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const openSettings = useCallback(() => setSettingsOpen(true), []);
+  const closeSettings = useCallback(() => setSettingsOpen(false), []);
   // Bumped on every (re)entry into battle. Passed to the battle canvas so an
   // identical-champion rematch still forces a fresh Phaser scene restart -
   // without this, the scene would not recreate when the champion ids are the
@@ -80,7 +82,7 @@ export default function App() {
         className="app-controls__settings"
         aria-label={t('settings.openAria')}
         title={t('settings.open')}
-        onClick={() => setSettingsOpen(true)}
+        onClick={openSettings}
       >
         {/* Inline gear icon so the control renders identically regardless of
            which webfonts load. Uses currentColor to inherit the button's
@@ -156,7 +158,7 @@ export default function App() {
         )}
       </main>
 
-      {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
+      {settingsOpen && <SettingsPanel onClose={closeSettings} />}
     </div>
   );
 }
