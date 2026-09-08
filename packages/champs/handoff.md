@@ -98,15 +98,63 @@ point-count flourish from the accent tint); `npm run build` succeeds and champs 
 `phaser` vendor chunk (~1.48MB) with the entry chunk down to ~144kB and no size advisory;
 `npm run docs:check` reports the generated README tables up to date; `git diff --check` clean.
 
+## Thumbnail refresh (resolved)
+
+The landing-page thumbnail `packages/champs/thumb.png` has been regenerated so it reflects the
+current battle art (per-champion silhouettes + signature VFX). Procedure, run from the repo root:
+
+```bash
+npm run build                 # build every game + landing page
+# assemble the game dists into _site as the deploy workflow does:
+for d in packages/*/dist; do p=$(basename "$(dirname "$d")"); case "$p" in _*) continue;; esac; rm -rf "_site/$p"; cp -r "$d" "_site/$p"; done
+CHROMIUM_PATH=/usr/local/bin/chrome npm run thumbs -- --only champs
+```
+
+Notes for the next maintainer:
+
+- `npm run thumbs` needs Playwright and a Chromium binary. In this environment the browser lived
+  at `/usr/local/bin/chrome` (a Playwright-managed build under `/opt/playwright`), so the capture
+  script was pointed at it via `CHROMIUM_PATH`; its default is `/opt/pw-browsers/chromium`.
+  Playwright itself was installed transiently (`npm i -D playwright`) to drive that browser and
+  then reverted so no `package.json` / `package-lock.json` churn is committed.
+- The capture serves the assembled `_site` and shoots the game's `<canvas>` cropped to 16:9
+  (1280x720). Arena Champions letterboxes its title screen, and the tool captures that title view
+  (ko-KR locale), so the new card shows the refreshed title-screen composition. The commit
+  contains only `packages/champs/thumb.png`; other games' thumbnails were left untouched.
+
+## Live browser QA (performed)
+
+A headless-Chromium QA pass was run against the production build (`_site/champs/`) covering the
+handoff's "Verification expectations". Result: **0 console errors and 0 page errors** across all
+flows. What was exercised:
+
+- **Korean (ko-KR):** title screen renders ("아레나 챔피언스"), Standard Match → Three-Lane
+  Conquest → champion select → battle. The Conquest battle boots and renders correctly: two
+  distinct champion silhouettes (애쉬본 vs 쏜와든), turret/inhibitor counts (포탑 11/11, 억제기
+  3/3), neutral-objective timers (드래곤 / 바위 파수꾼 / 공허의 폭군), minimap, Q/W/E/R ability
+  bar, HP/resource/XP bars, shop (상점 B), and surrender (항복).
+- **English (en-US):** language toggle switches `document.documentElement.lang` to `en`;
+  Learning Match → Midline Skirmish → champion select → battle boots (canvas present).
+- **Team composition / de-mirror:** the opponent picker excludes the player's own pick by
+  construction and Randomize reselects a valid non-self opponent; same-pick de-mirror and the
+  disjoint/no-mirror invariants remain covered by the seeded-composition unit tests.
+- **Unlocks:** a fresh profile shows 7 locked champions with enabled unlock buttons (default
+  500 currency vs 250 unlock cost).
+- **Continue:** starting a match persists `lastSetup` to `localStorage["champs:profile"]`; after
+  a reload the "Continue Last Setup" button appears and re-enters battle.
+- **Settings/diagnostics:** the settings panel opens from the gear control.
+- **Responsive:** mobile portrait (390x844) and mobile landscape (844x390) both render the
+  title screen without layout breakage; desktop (1280x800) verified throughout.
+
+The QA driver and its screenshots live under the (gitignored) task workspace at
+`.agents/tasks/task-champs-followups/` (`qa-champs.mjs`, `qa-shots/`) and are not committed.
+
 ## Remaining non-blocking follow-ups
 
 - VFX signature depth is intentionally scoped to accent tint plus the cast-flare flourish to
   keep the `vfxArt(kind, color)` cache key and asset budget stable; deeper per-champion VFX
   shapes (bespoke projectile/beam/impact silhouettes) remain an option if the texture budget
   allows.
-- Champion battle visuals changed materially, so the landing-page thumbnail may be stale. A
-  maintainer should re-run `npm run thumbs` (needs Playwright) to refresh `champs/thumb.png`;
-  thumbnail churn is intentionally not committed as part of this change.
 
 Resolved from the v1 semantic review: the cast-flare signature flourish is now
 regression-protected by a test that isolates the color-seeded star point-count from the
