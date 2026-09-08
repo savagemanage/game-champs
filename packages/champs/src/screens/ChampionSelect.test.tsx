@@ -9,7 +9,7 @@ describe('ChampionSelect', () => {
     await i18n.changeLanguage('en');
   });
 
-  it('renders all five champion cards as selectable options', () => {
+  it('renders every champion card as a selectable option', () => {
     render(<ChampionSelect onLockIn={() => {}} />);
     // Scope to the roster listbox: the opponent <select> also exposes `option`
     // roles, so query within the lobby card grid specifically.
@@ -18,7 +18,7 @@ describe('ChampionSelect', () => {
     });
     const cards = within(roster).getAllByRole('option');
     expect(cards).toHaveLength(CHAMPIONS.length);
-    expect(CHAMPIONS).toHaveLength(5);
+    expect(CHAMPIONS.length).toBeGreaterThanOrEqual(10);
     for (const champion of CHAMPIONS) {
       const name = i18n.t(champion.nameKey);
       // Names appear on the lobby cards (and in the opponent picker), so use getAllByText.

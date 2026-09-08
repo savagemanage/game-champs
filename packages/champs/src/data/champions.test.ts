@@ -47,6 +47,14 @@ describe('champion roster', () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
+  it('offers at least two champions per lane role for non-mirror 5v5', () => {
+    const roles = ['top', 'jungle', 'mid', 'bot', 'support'] as const;
+    for (const role of roles) {
+      const count = CHAMPIONS.filter((c) => c.laneRole === role).length;
+      expect(count, `lane role ${role}`).toBeGreaterThanOrEqual(2);
+    }
+  });
+
   it.each(CHAMPIONS.map((c) => [c.id, c] as const))(
     '%s has exactly 4 abilities + 1 passive in the right slots',
     (_id, champion: Champion) => {

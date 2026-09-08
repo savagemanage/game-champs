@@ -99,7 +99,9 @@ src/
     rift/                     # PURE, Phaser-free, unit-tested gameplay/render-math modules:
       map.ts (lanes/structures/jungle/epics), minions.ts, structures.ts, jungle.ts,
       objectives.ts, economy.ts, loadout.ts, teams.ts (5v5 composition), iso.ts (dimetric projection)
-  data/champions.ts           # 5 champions: ashborne, nightveil, ironhold, embermage, dawnsong
+  data/champions.ts           # 10 champions (2 per lane role): ashborne, nightveil, ironhold,
+                              #   embermage, dawnsong, thornwarden, grimtrail, frostquill,
+                              #   duskarrow, wardlight
   data/items.ts               # shop items
   i18n/                       # react-i18next setup + ko/en locales (parity-tested)
   styles/global.css           # Hextech theme, fullscreen no-scroll shell, HUD/lobby styles
@@ -136,10 +138,27 @@ src/
 
 ---
 
+## Recently shipped
+
+- **Roster expansion + de-mirrored 5v5 (FEAT-002).** The roster grew from 5 to 10 original
+  champions with at least two per lane role (top/jungle/mid/bot/support): added Thornwarden
+  (top bruiser), Grimtrail (jungle assassin), Frostquill (mid mage), Duskarrow (bot marksman)
+  and Wardlight (support enchanter). `src/game/rift/teams.ts` `composeTeams` now SELECTS five
+  champions per team (one per lane role, filled in a fixed `top→jungle→mid→bot→support`
+  order) instead of fielding the whole roster, so ally and enemy field DIFFERENT champions in
+  every role — mirror matchups are gone. The human's pick stays on ally and the enemy
+  player-facing pick stays on enemy; selection is deterministic (no `Math.random` on the
+  tested path) and the module stays Phaser-free. Exported signatures (`composeTeams`,
+  `laneForRole`, `enemyFacingSlot`) and the `TeamSlot`/`TeamComposition` shapes are unchanged;
+  ARAM still piles five per side into mid. All new content is data + i18n + procedural icons —
+  zero binary assets. Flavored ability glyphs for the five new champions were added to
+  `src/game/render/abilityIcons.ts` (per-behavior fallback still covers anything unmapped).
+  Champs suite is now 330 tests / 26 files.
+
+---
+
 ## Known follow-ups / polish ideas (not blocking)
 
-- With only 5 champion definitions, both teams reuse the same 5 archetypes (distinguished by
-  ally/enemy color rim). Adding more champions would remove mirror matchups.
 - At the zoomed camera framing, the enemy base's stacked towers can still look dense; the
   zoom/bounds framing (zoom 2.4, bounds padding 220) is coupled and sensitive to retuning.
 - Champion SVG art is stylized/simple; could be illustrated in more detail.

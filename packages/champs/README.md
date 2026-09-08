@@ -143,15 +143,22 @@ resolve to the correct world point under the zoomed, following camera.
 
 ## Champion roster
 
-Five original champions, one per archetype, each with a default lane role:
+Ten original champions, at least two per archetype, each with a default lane role. Two
+champions per lane role means a 5v5 fields **different** champions on each team (no mirror
+matchups):
 
 | Champion | Title | Role | Lane |
 | --- | --- | --- | --- |
 | **Ashborne** | the Ember Archer | Marksman | Bot |
+| **Duskarrow** | the Twilight Ranger | Marksman | Bot |
 | **Nightveil** | the Silent Blade | Assassin | Mid |
+| **Grimtrail** | the Feral Stalker | Assassin | Jungle |
 | **Ironhold** | the Bulwark | Bruiser | Top |
+| **Thornwarden** | the Bramble Sentinel | Bruiser | Top |
 | **Embermage** | the Cinderweaver | Mage | Jungle |
+| **Frostquill** | the Rime Scribe | Mage | Mid |
 | **Dawnsong** | the Radiant Muse | Enchanter | Support |
+| **Wardlight** | the Lantern Keeper | Enchanter | Support |
 
 Each champion has a passive plus four abilities (Q/W/E/R) with tuned cooldowns, costs, ranges,
 and damage, plus per-level **growth** used by the leveling math. Full definitions live in

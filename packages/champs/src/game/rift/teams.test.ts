@@ -59,13 +59,32 @@ describe('composeTeams (Rift)', () => {
     expect(c.enemy.every((s) => !s.isHuman)).toBe(true);
   });
 
-  it('both teams reuse the same five archetypes', () => {
+  it('fields five distinct champions per team (no in-team duplicates)', () => {
     const c = composeTeams(CHAMPIONS, 'embermage', 'dawnsong', RIFT_LANES);
-    const allyIds = c.ally.map((s) => s.champion.id).sort();
-    const enemyIds = c.enemy.map((s) => s.champion.id).sort();
-    const rosterIds = CHAMPIONS.map((ch) => ch.id).sort();
-    expect(allyIds).toEqual(rosterIds);
-    expect(enemyIds).toEqual(rosterIds);
+    const allyIds = c.ally.map((s) => s.champion.id);
+    const enemyIds = c.enemy.map((s) => s.champion.id);
+    expect(new Set(allyIds).size).toBe(5);
+    expect(new Set(enemyIds).size).toBe(5);
+  });
+
+  it('covers exactly one champion per lane role on each team', () => {
+    const c = composeTeams(CHAMPIONS, 'nightveil', 'ironhold', RIFT_LANES);
+    const roles = ['top', 'jungle', 'mid', 'bot', 'support'] as const;
+    for (const team of [c.ally, c.enemy]) {
+      const teamRoles = team.map((s) => s.laneRole).sort();
+      expect(teamRoles).toEqual([...roles].sort());
+    }
+  });
+
+  it('does not mirror: ally and enemy field disjoint champion sets', () => {
+    // The roster has at least two champions per lane role, so a de-mirrored
+    // 5v5 (different champion in every role) is possible.
+    const c = composeTeams(CHAMPIONS, 'embermage', 'dawnsong', RIFT_LANES);
+    const allyIds = new Set(c.ally.map((s) => s.champion.id));
+    const enemyIds = c.enemy.map((s) => s.champion.id);
+    for (const id of enemyIds) {
+      expect(allyIds.has(id)).toBe(false);
+    }
   });
 
   it('is deterministic for the same inputs', () => {
@@ -82,7 +101,7 @@ describe('composeTeams (Rift)', () => {
 });
 
 describe('composeTeams (ARAM)', () => {
-  it('piles all ten champions into mid', () => {
+  it('piles all five per side into mid', () => {
     const c = composeTeams(CHAMPIONS, 'nightveil', 'ironhold', ARAM_LANES);
     expect(c.ally).toHaveLength(5);
     expect(c.enemy).toHaveLength(5);
