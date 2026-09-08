@@ -56,13 +56,56 @@ git diff --check
 
 Browser QA should cover Korean and English; Learning Match, practice, and standard flows; Conquest and Midline modes; Continue; unlocks; same-pick and de-mirrored team composition; shop recommendations; settings/diagnostics; reduced motion; desktop; mobile portrait; and mobile landscape. Inspect the browser console and screenshots, not only assertions.
 
-## Known non-blocking follow-ups
+## Recently implemented
 
-- Resolved: Phaser is now split into its own vendor chunk and the chunk-size advisory is tuned so the app chunks no longer trip it.
-- Resolved: role selection now uses a deterministic seeded rotation of eligible champions, preserving the disjoint/no-mirror contract.
-- Resolved: every roster champion now has a distinct silhouette. Each of the ten champions layers a deterministic, palette-driven signature motif (headpiece / weapon detail / emblem) over its role body in `src/game/render/svgArt.ts`, so same-role siblings are no longer recolors of each other; embermage keeps its bespoke pose-aware art, and unknown / `generic-<role>` ids still render the plain role body. Combat VFX stay tinted by each caster's unique accent (per-champion texture family via the `(kind, color)` cache) and the cast flare carries a small color-seeded signature flourish.
-- VFX signature depth is intentionally scoped to accent tint plus the cast-flare flourish to keep the `vfxArt(kind, color)` cache key and asset budget stable; deeper per-champion VFX shapes remain an option if the texture budget allows.
-- If champion battle visuals need to be reflected in the landing-page thumbnails, a maintainer should re-run `npm run thumbs` (needs Playwright); thumbnail churn is intentionally not committed here.
+The three previously-listed non-blocking follow-ups are now done. All invariants in
+"Architectural boundaries" above were preserved.
+
+- **Bundle chunking / Vite size advisory (resolved).** `vite.config.ts` now defines
+  `build.rollupOptions.output.manualChunks`, splitting Phaser into its own long-cacheable
+  `phaser` vendor chunk (with `react-vendor` and `i18n-vendor` for the other big deps), and
+  raises `build.chunkSizeWarningLimit` to `1700` (just above Phaser's ~1.48MB minified size).
+  Phaser stays lazy-loaded behind the existing dynamic import of the battle view, so the title
+  screen never eagerly pulls the engine. The production build no longer prints the
+  "Some chunks are larger than 500 kB" advisory. Build-config-only change: no gameplay,
+  rendering, or Vitest-config behavior changed; the `base` production/dev branch is unchanged.
+
+- **Seeded role-selection rotation (resolved).** `src/game/rift/teams.ts` `composeTeams` now
+  takes an optional `seed` (string or number). A new pure, Phaser-free RNG in
+  `src/game/rift/rng.ts` (`xmur3` seed hash + `mulberry32`) drives a deterministic
+  Fisher-Yates ordering of each role's eligible pool, so different matchups can field the
+  second candidate in a role instead of always the first. Fill order, the
+  ally-first-then-enemy-avoids-ally structure, the fallback chain, and forced-pick drop on
+  collision are unchanged, so composition stays deterministic, disjoint, and free of mirror
+  matchups (same-pick still de-mirrors). `BattleScene.spawnTeams()` passes a deterministic
+  matchup seed `${player.id}:${enemy.id}:${mode}` (no `Math.random`/`Date.now`).
+
+- **Champion silhouette + signature VFX differentiation (resolved).** `src/game/render/svgArt.ts`
+  now layers a deterministic, palette-driven signature motif (headpiece / weapon detail /
+  emblem) over each role body for all ten roster champions, so same-role siblings are no longer
+  recolors of one another. `embermage` keeps its bespoke pose-aware art, and unknown /
+  `generic-<role>` ids still render the plain role body (the sprite factory's fallback is
+  intact). The same art path feeds both the battle renderer and the DOM `ChampionFigure`.
+  Combat VFX stay tinted by each caster's unique accent (a per-champion `(kind, color)` texture
+  family) and the cast flare carries a small color-seeded signature flourish; the
+  `vfxArt(kind, color)` signature and cache key are unchanged.
+
+Verification (from the repository root): `npm run typecheck` clean across all workspaces;
+`npm run test` green (champs: 35 files / 422 tests, up from 398; new tests cover the seeded
+RNG, seeded composition determinism/variety/invariants, and per-champion silhouette/VFX
+determinism and differentiation); `npm run build` succeeds and champs emits a distinct
+`phaser` vendor chunk (~1.48MB) with the entry chunk down to ~144kB and no size advisory;
+`npm run docs:check` reports the generated README tables up to date; `git diff --check` clean.
+
+## Remaining non-blocking follow-ups
+
+- VFX signature depth is intentionally scoped to accent tint plus the cast-flare flourish to
+  keep the `vfxArt(kind, color)` cache key and asset budget stable; deeper per-champion VFX
+  shapes (bespoke projectile/beam/impact silhouettes) remain an option if the texture budget
+  allows.
+- Champion battle visuals changed materially, so the landing-page thumbnail may be stale. A
+  maintainer should re-run `npm run thumbs` (needs Playwright) to refresh `champs/thumb.png`;
+  thumbnail churn is intentionally not committed as part of this change.
 
 ## Delivery
 
