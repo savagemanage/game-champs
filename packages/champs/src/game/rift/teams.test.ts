@@ -87,6 +87,38 @@ describe('composeTeams (Rift)', () => {
     }
   });
 
+  it('does not mirror when the human and enemy pick the same champion', () => {
+    // Same-pick edge case: the ally keeps the champion as the human and the
+    // enemy falls back to a distinct champion, so the teams stay disjoint.
+    const x = 'embermage';
+    const c = composeTeams(CHAMPIONS, x, x, RIFT_LANES);
+
+    // Ally still fields x, flagged as the (single) human.
+    const humans = [...c.ally, ...c.enemy].filter((s) => s.isHuman);
+    expect(humans).toHaveLength(1);
+    expect(humans[0].side).toBe('ally');
+    expect(humans[0].champion.id).toBe(x);
+
+    // Five per team, one per role, on both sides.
+    expect(c.ally).toHaveLength(5);
+    expect(c.enemy).toHaveLength(5);
+    const roles = ['top', 'jungle', 'mid', 'bot', 'support'] as const;
+    for (const team of [c.ally, c.enemy]) {
+      const teamRoles = team.map((s) => s.laneRole).sort();
+      expect(teamRoles).toEqual([...roles].sort());
+    }
+
+    // The teams' champion-id sets stay disjoint (no mirrored lane).
+    const allyIds = new Set(c.ally.map((s) => s.champion.id));
+    for (const id of c.enemy.map((s) => s.champion.id)) {
+      expect(allyIds.has(id)).toBe(false);
+    }
+
+    // Determinism still holds for the same-pick inputs.
+    const again = composeTeams(CHAMPIONS, x, x, RIFT_LANES);
+    expect(JSON.stringify(again)).toEqual(JSON.stringify(c));
+  });
+
   it('is deterministic for the same inputs', () => {
     const a = composeTeams(CHAMPIONS, 'nightveil', 'ironhold', RIFT_LANES);
     const b = composeTeams(CHAMPIONS, 'nightveil', 'ironhold', RIFT_LANES);

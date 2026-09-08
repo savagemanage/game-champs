@@ -242,7 +242,12 @@ export default function ChampionSelect({
                 className="champion-select__opponent-picker"
                 aria-label={t('select.opponentHeading')}
                 value={enemyId}
-                onChange={(event) => setEnemyId(event.target.value)}
+                onChange={(event) => {
+                  const id = event.target.value;
+                  // Keep player and opponent distinct: if the chosen opponent
+                  // collides with the player's pick, re-roll to a different one.
+                  setEnemyId(id === selectedId ? randomChampionId(id) : id);
+                }}
               >
                 {CHAMPIONS.map((champion) => (
                   <option key={champion.id} value={champion.id}>

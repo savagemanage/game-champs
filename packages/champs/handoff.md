@@ -128,7 +128,7 @@ src/
 ## Verification (last known-good)
 
 - `npm run typecheck`: clean
-- `npm run test -- --run`: **330 tests / 26 files** pass
+- `npm run test -- --run`: **331 tests / 26 files** pass
 - `npm run build`: succeeds; `dist/index.html` references assets under `/open-games/champs/`
 - i18n: `ko.json` / `en.json` at **297 identical keys** (ko/en at identical key parity)
 - `npm run docs:check`: clean (game.json unchanged, so generated README tables are unaffected)
@@ -154,7 +154,18 @@ src/
   ARAM still piles five per side into mid. All new content is data + i18n + procedural icons,
   zero binary assets. Flavored ability glyphs for the five new champions were added to
   `src/game/render/abilityIcons.ts` (per-behavior fallback still covers anything unmapped).
-  Champs suite is now 330 tests / 26 files.
+  Champs suite is now 331 tests / 26 files.
+- **Same-pick de-mirror fix (follow-up polish).** When the human and the enemy pick the SAME
+  champion id, `composeTeams` no longer mirrors that lane: the enemy's forced pick is honored
+  only when it does not collide with the ally champion in the same role. If it collides, the
+  ally keeps the champion (as the human) and the enemy falls back to a distinct champion of
+  that role, so the two teams' champion-id sets stay disjoint. The fix lives in `teams.ts`
+  (`pickForRole` drops a forced pick that is in its `avoid` set; the ally keeps its own forced
+  pick), so the disjoint-teams invariant now holds regardless of caller. `ChampionSelect`'s
+  opponent `<select>` also re-rolls to a distinct champion when the chosen opponent equals the
+  player's pick (matching `handleSelect`/randomize) for good UX. A `teams.test.ts` case pins
+  the same-pick behavior (ally keeps x as the human, teams disjoint, five per team / one per
+  role, determinism holds). All other `composeTeams` guarantees are unchanged.
 
 ---
 

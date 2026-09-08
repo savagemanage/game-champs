@@ -82,6 +82,12 @@ const ROLE_ORDER: readonly LaneRole[] = [
  * that is not already taken and (when possible) not used by the opposing team.
  * Falls back to the first roster champion of that role, then to the first
  * roster champion overall, so a slot is always filled even for sparse rosters.
+ *
+ * A forced pick is honored only when it does NOT collide with a champion in the
+ * `avoid` set (e.g. the ally champion already placed in this role). When the
+ * force would break the disjoint-teams guarantee the force is dropped and the
+ * pool scan chooses a distinct alternative instead, so the same-pick case
+ * (human and enemy pick the same id) never mirrors a lane.
  */
 function pickForRole(
   roster: readonly Champion[],
@@ -90,7 +96,7 @@ function pickForRole(
   taken: Set<string>,
   avoid: Set<string>,
 ): Champion {
-  if (forcedId) {
+  if (forcedId && !avoid.has(forcedId)) {
     const forced = roster.find((c) => c.id === forcedId);
     if (forced && forced.laneRole === role) return forced;
   }
@@ -113,6 +119,11 @@ function pickForRole(
  * roster holds at least two champions of a role, the ally and enemy champions
  * for that role are DIFFERENT (no mirror matchup). Only the ally side ever
  * carries the single {@link TeamSlot.isHuman} flag.
+ *
+ * The enemy's player-facing pick is honored only when it does not collide with
+ * the ally champion in the same role: if the human and enemy pick the same id,
+ * the ally keeps it (as the human) and the enemy falls back to a distinct
+ * champion of that role, so the teams stay disjoint.
  *
  * The result is fully deterministic for the same
  * `(roster, humanPickId, enemyPickId, activeLanes)` inputs: roles are filled in
@@ -142,16 +153,21 @@ export function composeTeams(
 
   for (const role of ROLE_ORDER) {
     // Ally first, so the enemy can actively avoid the ally's champion for this
-    // role (de-mirroring) while still honoring the enemy's forced pick.
+    // role (de-mirroring) while still honoring the enemy's forced pick. The
+    // ally keeps its own forced pick even when it collides with the enemy pick
+    // (same-pick case): the ally avoids the enemy pick only in the non-forced
+    // case, and the enemy is the side that yields a distinct champion.
     const allyForced = humanPick?.laneRole === role ? humanPickId : undefined;
+    const allyAvoid =
+      enemyPick?.laneRole === role && enemyPick && enemyPick.id !== allyForced
+        ? new Set([enemyPick.id])
+        : new Set<string>();
     const allyChampion = pickForRole(
       roster,
       role,
       allyForced,
       allyTaken,
-      enemyPick?.laneRole === role && enemyPick
-        ? new Set([enemyPick.id])
-        : new Set(),
+      allyAvoid,
     );
     allyTaken.add(allyChampion.id);
     ally.push({
