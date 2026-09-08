@@ -36,7 +36,7 @@ describe('ability icon resolver', () => {
     }
   });
 
-  it('gives the five champions distinct Q icons', () => {
+  it('gives every champion a distinct Q icon', () => {
     const qIcons = CHAMPIONS.map((champion) =>
       resolveAbilityIconId(champion.id, 'Q', champion.abilities[0].behavior),
     );

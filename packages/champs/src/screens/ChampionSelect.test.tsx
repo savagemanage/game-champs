@@ -6,7 +6,10 @@ import ChampionSelect, { CHAMPION_UNLOCK_COST } from './ChampionSelect';
 import { CHAMPIONS } from '../data/champions';
 import { createDefaultProfile, type ChampsProfile } from '../profile';
 
-const renderSelect = (props: Partial<ComponentProps<typeof ChampionSelect>> = {}, profile: ChampsProfile = createDefaultProfile()) =>
+const renderSelect = (
+  props: Partial<ComponentProps<typeof ChampionSelect>> = {},
+  profile: ChampsProfile = createDefaultProfile(),
+) =>
   render(
     <ChampionSelect
       profile={profile}
@@ -20,12 +23,19 @@ const renderSelect = (props: Partial<ComponentProps<typeof ChampionSelect>> = {}
 describe('ChampionSelect', () => {
   beforeEach(async () => { await i18n.changeLanguage('en'); });
 
-  it('renders all five champion cards and marks locked champions', () => {
-    renderSelect();
+  it('renders every champion card and marks non-starter champions locked', () => {
+    const profile = createDefaultProfile();
+    renderSelect({}, profile);
     const roster = screen.getByRole('listbox', { name: i18n.t('select.rosterLabel') });
     const cards = within(roster).getAllByRole('option');
     expect(cards).toHaveLength(CHAMPIONS.length);
-    expect(cards.filter((card) => card.getAttribute('aria-disabled') === 'true')).toHaveLength(2);
+    expect(CHAMPIONS.length).toBeGreaterThanOrEqual(10);
+    expect(cards.filter((card) => card.getAttribute('aria-disabled') === 'true')).toHaveLength(
+      CHAMPIONS.length - profile.unlockedChampionIds.length,
+    );
+    for (const champion of CHAMPIONS) {
+      expect(screen.getAllByText(i18n.t(champion.nameKey)).length).toBeGreaterThan(0);
+    }
   });
 
   it('marks the first starter champion as the self pick by default', () => {
@@ -36,8 +46,9 @@ describe('ChampionSelect', () => {
 
   it('never silently selects a locked champion and offers an accessible unlock', () => {
     const onUnlock = vi.fn();
-    renderSelect({ onUnlock });
-    const locked = CHAMPIONS[1];
+    const profile = createDefaultProfile();
+    renderSelect({ onUnlock }, profile);
+    const locked = CHAMPIONS.find((champion) => !profile.unlockedChampionIds.includes(champion.id))!;
     const card = within(screen.getByRole('listbox')).getByRole('option', { name: new RegExp(i18n.t(locked.nameKey)) });
     fireEvent.click(card);
     expect(card).toHaveAttribute('aria-selected', 'false');

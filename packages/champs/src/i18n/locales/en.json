@@ -20,7 +20,7 @@
     "tutorial": "Learning Match",
     "featuresLabel": "Game highlights",
     "featureStrategy": "Tactical combat",
-    "featureChampions": "5 original champions",
+    "featureChampions": "10 original champions",
     "featureInstant": "Instant play"
   },
   "select": {
@@ -434,6 +434,126 @@
       "R": {
         "name": "Dawnbreak",
         "desc": "Bathe all nearby allies in dawnlight, healing them greatly and briefly boosting their defenses."
+      }
+    },
+    "thornwarden": {
+      "name": "Thornwarden",
+      "title": "the Bramble Sentinel",
+      "P": {
+        "name": "Barbed Hide",
+        "desc": "Nearby enemies that strike Thornwarden are pricked by thorns, taking a little damage back."
+      },
+      "Q": {
+        "name": "Bramble Sweep",
+        "desc": "Swing a mass of thorned vines around Thornwarden, damaging and briefly slowing nearby enemies."
+      },
+      "W": {
+        "name": "Rooted Stance",
+        "desc": "Plant firmly for a moment, gaining bonus armor and cleansing slows while the stance holds."
+      },
+      "E": {
+        "name": "Creeping Vine",
+        "desc": "Whip a vine in a line that damages the first enemy struck and pulls Thornwarden toward them."
+      },
+      "R": {
+        "name": "Grove Uprising",
+        "desc": "Erupt a ring of grasping roots that stuns and damages every enemy caught around Thornwarden."
+      }
+    },
+    "grimtrail": {
+      "name": "Grimtrail",
+      "title": "the Feral Stalker",
+      "P": {
+        "name": "Blood Scent",
+        "desc": "Grimtrail sees wounded enemies more clearly and deals bonus damage to targets below half health."
+      },
+      "Q": {
+        "name": "Rending Claw",
+        "desc": "Lash out with claws in a short line, dealing physical damage to the first enemy hit."
+      },
+      "W": {
+        "name": "Savage Pounce",
+        "desc": "Leap onto a nearby area, clawing all enemies beneath on landing for burst damage."
+      },
+      "E": {
+        "name": "Thicket Dash",
+        "desc": "Dash a short distance through the brush, gaining brief movement speed after the leap."
+      },
+      "R": {
+        "name": "Hunter's Verdict",
+        "desc": "Blink to a marked enemy and unleash a flurry of strikes, dealing massive damage over a moment."
+      }
+    },
+    "frostquill": {
+      "name": "Frostquill",
+      "title": "the Rime Scribe",
+      "P": {
+        "name": "Chillscript",
+        "desc": "Frostquill's spells etch frost on targets, slowing the next attack the target attempts."
+      },
+      "Q": {
+        "name": "Glacier Bolt",
+        "desc": "Fire a shard of ice in a line, dealing magic damage to the first enemy it strikes."
+      },
+      "W": {
+        "name": "Hailstorm",
+        "desc": "Call falling ice over a target area, dealing magic damage to everyone caught in the fall."
+      },
+      "E": {
+        "name": "Frozen Verse",
+        "desc": "Inscribe a rune beneath an enemy that freezes them in place for a short time."
+      },
+      "R": {
+        "name": "Absolute Winter",
+        "desc": "Send a sweeping wave of rime across a long line, dealing heavy magic damage to all it passes."
+      }
+    },
+    "duskarrow": {
+      "name": "Duskarrow",
+      "title": "the Twilight Ranger",
+      "P": {
+        "name": "Fading Light",
+        "desc": "Every fourth basic attack fires a twilight bolt that deals bonus damage at long range."
+      },
+      "Q": {
+        "name": "Gloom Shot",
+        "desc": "Loose a swift arrow in a line that deals damage to the first enemy it passes through."
+      },
+      "W": {
+        "name": "Nettle Trap",
+        "desc": "Scatter thorned caltrops over an area that damage and slow enemies who step across them."
+      },
+      "E": {
+        "name": "Backstep",
+        "desc": "Vault a short distance away, resetting Duskarrow's spacing and refreshing attack rhythm."
+      },
+      "R": {
+        "name": "Eventide Volley",
+        "desc": "Fire a piercing twilight arrow across the battlefield, dealing massive damage to the first enemy hit."
+      }
+    },
+    "wardlight": {
+      "name": "Wardlight",
+      "title": "the Lantern Keeper",
+      "P": {
+        "name": "Kindled Watch",
+        "desc": "Allies standing near Wardlight slowly recover a trickle of health from the lantern's glow."
+      },
+      "Q": {
+        "name": "Beacon Bolt",
+        "desc": "Send a mote of light in a line, dealing magic damage to the first enemy it reaches."
+      },
+      "W": {
+        "name": "Soothing Glow",
+        "desc": "Bathe a targeted ally in warm light, restoring a chunk of their health."
+      },
+      "E": {
+        "name": "Warding Flare",
+        "desc": "Flash a burst of light at an enemy, briefly blinding and stunning them in place."
+      },
+      "R": {
+        "name": "Lantern Vigil",
+        "desc": "Raise a great lantern that shields and hastens all nearby allies for a short while."
       }
     }
   },

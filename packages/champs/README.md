@@ -51,6 +51,23 @@ Diagnostics are privacy-first:
 - coarse crash and performance categories only;
 - manual local JSON export and clear controls in Settings.
 
+## Champion roster
+
+Ten original champions provide at least two choices per archetype and lane role. Team composition selects one champion per role on each side and keeps the two teams disjoint, including when the player and opponent request the same champion.
+
+| Champion | Title | Role | Lane |
+| --- | --- | --- | --- |
+| **Ashborne** | the Ember Archer | Marksman | Bot |
+| **Duskarrow** | the Twilight Ranger | Marksman | Bot |
+| **Nightveil** | the Silent Blade | Assassin | Mid |
+| **Grimtrail** | the Feral Stalker | Assassin | Jungle |
+| **Ironhold** | the Bulwark | Bruiser | Top |
+| **Thornwarden** | the Bramble Sentinel | Bruiser | Top |
+| **Embermage** | the Cinderweaver | Mage | Jungle |
+| **Frostquill** | the Rime Scribe | Mage | Mid |
+| **Dawnsong** | the Radiant Muse | Enchanter | Support |
+| **Wardlight** | the Lantern Keeper | Enchanter | Support |
+
 ## Architecture
 
 Phaser owns authoritative combat simulation; React owns navigation, dialogs, and the HUD. React does not duplicate combat rules.

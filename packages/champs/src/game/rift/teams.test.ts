@@ -7,7 +7,7 @@ const CONQUEST_LANES: readonly Lane[] = [...LANES];
 const MIDLINE_LANES: readonly Lane[] = ['mid'];
 
 describe('laneForRole', () => {
-  it('maps the primary roles to their own lanes in Rift', () => {
+  it('maps the primary roles to their own lanes in Conquest', () => {
     expect(laneForRole('top', CONQUEST_LANES)).toBe('top');
     expect(laneForRole('mid', CONQUEST_LANES)).toBe('mid');
     expect(laneForRole('bot', CONQUEST_LANES)).toBe('bot');
@@ -18,14 +18,14 @@ describe('laneForRole', () => {
     expect(laneForRole('support', CONQUEST_LANES)).toBe('bot');
   });
 
-  it('sends every role into mid for Midline Skirmish (single-lane)', () => {
+  it('sends every role into mid for Midline Skirmish', () => {
     for (const role of ['top', 'jungle', 'mid', 'bot', 'support'] as const) {
       expect(laneForRole(role, MIDLINE_LANES)).toBe('mid');
     }
   });
 });
 
-describe('composeTeams (Rift)', () => {
+describe('composeTeams (Conquest)', () => {
   it('fields exactly five champions per team', () => {
     const c = composeTeams(CHAMPIONS, 'nightveil', 'ironhold', CONQUEST_LANES);
     expect(c.ally).toHaveLength(5);
@@ -42,8 +42,8 @@ describe('composeTeams (Rift)', () => {
     }
   });
 
-  it('places the human on the ally side in their laneRole lane', () => {
-    const humanId = 'ashborne'; // bot marksman
+  it('places the human on the ally side in their lane-role lane', () => {
+    const humanId = 'ashborne';
     const c = composeTeams(CHAMPIONS, humanId, 'nightveil', CONQUEST_LANES);
     const humans = [...c.ally, ...c.enemy].filter((s) => s.isHuman);
     expect(humans).toHaveLength(1);
@@ -59,13 +59,38 @@ describe('composeTeams (Rift)', () => {
     expect(c.enemy.every((s) => !s.isHuman)).toBe(true);
   });
 
-  it('both teams reuse the same five archetypes', () => {
+  it('fields five distinct champions per team with one per lane role', () => {
     const c = composeTeams(CHAMPIONS, 'embermage', 'dawnsong', CONQUEST_LANES);
-    const allyIds = c.ally.map((s) => s.champion.id).sort();
-    const enemyIds = c.enemy.map((s) => s.champion.id).sort();
-    const rosterIds = CHAMPIONS.map((ch) => ch.id).sort();
-    expect(allyIds).toEqual(rosterIds);
-    expect(enemyIds).toEqual(rosterIds);
+    const roles = ['top', 'jungle', 'mid', 'bot', 'support'] as const;
+    for (const team of [c.ally, c.enemy]) {
+      expect(new Set(team.map((s) => s.champion.id)).size).toBe(5);
+      expect(team.map((s) => s.laneRole).sort()).toEqual([...roles].sort());
+    }
+  });
+
+  it('fields disjoint ally and enemy champion sets', () => {
+    const c = composeTeams(CHAMPIONS, 'embermage', 'dawnsong', CONQUEST_LANES);
+    const allyIds = new Set(c.ally.map((s) => s.champion.id));
+    for (const id of c.enemy.map((s) => s.champion.id)) {
+      expect(allyIds.has(id)).toBe(false);
+    }
+  });
+
+  it('does not mirror when the human and enemy pick the same champion', () => {
+    const championId = 'embermage';
+    const c = composeTeams(CHAMPIONS, championId, championId, CONQUEST_LANES);
+    const humans = [...c.ally, ...c.enemy].filter((s) => s.isHuman);
+    expect(humans).toHaveLength(1);
+    expect(humans[0].side).toBe('ally');
+    expect(humans[0].champion.id).toBe(championId);
+
+    const allyIds = new Set(c.ally.map((s) => s.champion.id));
+    for (const id of c.enemy.map((s) => s.champion.id)) {
+      expect(allyIds.has(id)).toBe(false);
+    }
+
+    const again = composeTeams(CHAMPIONS, championId, championId, CONQUEST_LANES);
+    expect(JSON.stringify(again)).toEqual(JSON.stringify(c));
   });
 
   it('is deterministic for the same inputs', () => {
@@ -82,12 +107,12 @@ describe('composeTeams (Rift)', () => {
 });
 
 describe('composeTeams (Midline Skirmish)', () => {
-  it('piles all ten champions into mid', () => {
+  it('piles all five champions per side into mid', () => {
     const c = composeTeams(CHAMPIONS, 'nightveil', 'ironhold', MIDLINE_LANES);
     expect(c.ally).toHaveLength(5);
     expect(c.enemy).toHaveLength(5);
-    for (const s of [...c.ally, ...c.enemy]) {
-      expect(s.lane).toBe('mid');
+    for (const slot of [...c.ally, ...c.enemy]) {
+      expect(slot.lane).toBe('mid');
     }
   });
 });

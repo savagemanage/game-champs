@@ -7,7 +7,8 @@ Arena Champions is an original React + TypeScript + Phaser 3 three-lane arena ba
 Implemented systems:
 
 - Three-Lane Conquest and Midline Skirmish modes.
-- Five champions per team with contextual local AI.
+- Ten original champions; deterministic team composition selects five distinct champions per side, one per role, without mirror matchups.
+- Contextual local AI with difficulty-specific reaction and decision cadence.
 - Structures, minion waves, jungle terrain markers, neutral objectives, leveling, gold, recipes, purchases, death/respawn, and deterministic hard-cap resolution.
 - Procedural SVG champion/world art, finite combat poses, VFX, procedural music/ambience/SFX, and reduced-motion support.
 - Learning Match, practice, difficulty selection, account progression, currency, champion unlocks, mastery, Continue, and versioned local saves.
@@ -20,6 +21,8 @@ Implemented systems:
 - React owns navigation, HUD, settings, shop, loading, and result presentation.
 - `battleStore` is the one-way scene-to-HUD bridge and publishes at most 10 times per second.
 - Pure rules stay Phaser-free and unit tested.
+- Gameplay math remains on the flat top-down plane; dimetric projection is rendering-only.
+- Team composition remains deterministic and disjoint across ally/enemy champion sets.
 - The 900×640 logical arena preserves its aspect ratio on every viewport.
 - Art and audio remain original procedural content; local fonts include license files.
 - Do not imply online matchmaking until an authenticated authoritative backend exists.
@@ -30,9 +33,10 @@ Implemented systems:
 - `src/config/matchRules.ts` — mode rules and match timing.
 - `src/game/scenes/BattleScene.ts` — simulation/render integration.
 - `src/game/{combat,ai,championLifeState,matchResolution}.ts` — pure game rules.
-- `src/game/rift/` — map, economy, waves, structures, objectives, loadout, projection.
+- `src/game/rift/` — map, economy, waves, structures, objectives, loadout, projection, and team composition.
 - `src/game/render/` — procedural art, sprites, icons, palettes, and impact tuning.
 - `src/game/audio.ts` — procedural audio buses and champion cues.
+- `src/data/champions.ts` — ten original champions with at least two candidates per role.
 - `src/profile/` — local save, migration, unlocks, rewards, and mastery.
 - `src/game/tutorial/` — match kind and difficulty configuration.
 - `src/online/` — local-only network-readiness foundation.
@@ -50,7 +54,13 @@ npm run docs:check
 git diff --check
 ```
 
-Browser QA should cover Korean and English; Learning Match, practice, and standard flows; Conquest and Midline modes; Continue; unlocks; shop recommendations; settings/diagnostics; reduced motion; desktop; mobile portrait; and mobile landscape. Inspect the browser console and screenshots, not only assertions.
+Browser QA should cover Korean and English; Learning Match, practice, and standard flows; Conquest and Midline modes; Continue; unlocks; same-pick and de-mirrored team composition; shop recommendations; settings/diagnostics; reduced motion; desktop; mobile portrait; and mobile landscape. Inspect the browser console and screenshots, not only assertions.
+
+## Known non-blocking follow-ups
+
+- The Phaser bundle remains a large dynamic-import chunk and triggers Vite's size advisory.
+- Deterministic role selection always chooses the first eligible champion; seeded rotation could add variety without breaking the no-mirror contract.
+- Champion silhouettes and signature VFX can be differentiated further.
 
 ## Delivery
 
