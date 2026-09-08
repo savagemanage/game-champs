@@ -127,13 +127,14 @@ src/
 
 ## Verification (last known-good)
 
-- `npm run typecheck` — clean
-- `npm run test -- --run` — **305 tests / 26 files** pass
-- `npm run build` — succeeds; `dist/index.html` references assets under `/open-games/champs/`
-- i18n: `ko.json` / `en.json` at **229 identical keys**
+- `npm run typecheck`: clean
+- `npm run test -- --run`: **330 tests / 26 files** pass
+- `npm run build`: succeeds; `dist/index.html` references assets under `/open-games/champs/`
+- i18n: `ko.json` / `en.json` at **297 identical keys** (ko/en at identical key parity)
+- `npm run docs:check`: clean (game.json unchanged, so generated README tables are unaffected)
 - Deploy workflow green on `main`.
 - Visual checks are done with the demo-recorder skill (headless Chromium): build, run the
-  scenario, then open the battle/select screenshots and confirm the look/behaviour by eye —
+  scenario, then open the battle/select screenshots and confirm the look/behaviour by eye;
   automated assertions alone have missed visual/UX regressions before, so always look.
 
 ---
@@ -146,11 +147,11 @@ src/
   and Wardlight (support enchanter). `src/game/rift/teams.ts` `composeTeams` now SELECTS five
   champions per team (one per lane role, filled in a fixed `top→jungle→mid→bot→support`
   order) instead of fielding the whole roster, so ally and enemy field DIFFERENT champions in
-  every role — mirror matchups are gone. The human's pick stays on ally and the enemy
+  every role, so mirror matchups are gone. The human's pick stays on ally and the enemy
   player-facing pick stays on enemy; selection is deterministic (no `Math.random` on the
   tested path) and the module stays Phaser-free. Exported signatures (`composeTeams`,
   `laneForRole`, `enemyFacingSlot`) and the `TeamSlot`/`TeamComposition` shapes are unchanged;
-  ARAM still piles five per side into mid. All new content is data + i18n + procedural icons —
+  ARAM still piles five per side into mid. All new content is data + i18n + procedural icons,
   zero binary assets. Flavored ability glyphs for the five new champions were added to
   `src/game/render/abilityIcons.ts` (per-behavior fallback still covers anything unmapped).
   Champs suite is now 330 tests / 26 files.
@@ -163,8 +164,15 @@ src/
   zoom/bounds framing (zoom 2.4, bounds padding 220) is coupled and sensitive to retuning.
 - Champion SVG art is stylized/simple; could be illustrated in more detail.
 - A couple of decorative i18n keys are currently unused (parity still holds).
-- The Phaser bundle is a large dynamic-import chunk (gzip ~350KB) — trips Vite's 500KB
+- The Phaser bundle is a large dynamic-import chunk (gzip ~350KB) and trips Vite's 500KB
   chunk-size advisory; expected and non-fatal.
+- `composeTeams` selects lanes in a fixed `top->jungle->mid->bot->support` order and always
+  pulls the first eligible champion per role; with only two champions per role the ally/enemy
+  split is deterministic but not varied match-to-match. A weighted or seeded rotation (and
+  more champions per role) would add composition variety without breaking the non-mirror
+  contract.
+- The new champions reuse the shared procedural art/icon pipeline; bespoke silhouettes or
+  signature ability VFX per champion would sharpen their visual identity.
 
 ---
 
