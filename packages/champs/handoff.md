@@ -58,9 +58,11 @@ Browser QA should cover Korean and English; Learning Match, practice, and standa
 
 ## Known non-blocking follow-ups
 
-- The Phaser bundle remains a large dynamic-import chunk and triggers Vite's size advisory.
-- Deterministic role selection always chooses the first eligible champion; seeded rotation could add variety without breaking the no-mirror contract.
-- Champion silhouettes and signature VFX can be differentiated further.
+- Resolved: Phaser is now split into its own vendor chunk and the chunk-size advisory is tuned so the app chunks no longer trip it.
+- Resolved: role selection now uses a deterministic seeded rotation of eligible champions, preserving the disjoint/no-mirror contract.
+- Resolved: every roster champion now has a distinct silhouette. Each of the ten champions layers a deterministic, palette-driven signature motif (headpiece / weapon detail / emblem) over its role body in `src/game/render/svgArt.ts`, so same-role siblings are no longer recolors of each other; embermage keeps its bespoke pose-aware art, and unknown / `generic-<role>` ids still render the plain role body. Combat VFX stay tinted by each caster's unique accent (per-champion texture family via the `(kind, color)` cache) and the cast flare carries a small color-seeded signature flourish.
+- VFX signature depth is intentionally scoped to accent tint plus the cast-flare flourish to keep the `vfxArt(kind, color)` cache key and asset budget stable; deeper per-champion VFX shapes remain an option if the texture budget allows.
+- If champion battle visuals need to be reflected in the landing-page thumbnails, a maintainer should re-run `npm run thumbs` (needs Playwright); thumbnail churn is intentionally not committed here.
 
 ## Delivery
 
