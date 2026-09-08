@@ -118,6 +118,95 @@ describe('championArt', () => {
   });
 });
 
+/**
+ * Per-champion silhouette differentiation (FEAT-004): every roster champion,
+ * not just embermage, must read as its own character rather than a recolor of
+ * its same-role sibling, while unknown ids keep the role-generic art.
+ */
+describe('championArt per-champion motifs', () => {
+  // The two roster champions that share each lane role.
+  const SAME_ROLE_PAIRS: ReadonlyArray<readonly [string, string]> = [
+    ['ashborne', 'duskarrow'], // marksman
+    ['nightveil', 'grimtrail'], // assassin
+    ['ironhold', 'thornwarden'], // bruiser
+    ['embermage', 'frostquill'], // mage
+    ['dawnsong', 'wardlight'], // enchanter
+  ];
+
+  /** Build a champion's idle art from its own role + accent, like the battle path. */
+  function artFor(id: string): string {
+    const champ = getChampionById(id)!;
+    return championArt(champ.role, derivePalette(hexToInt(champ.accentColor), RIM), {
+      championId: champ.id,
+    }).svg;
+  }
+
+  it('renders every roster champion as a valid, sized SVG', () => {
+    for (const champ of CHAMPIONS) {
+      const art = championArt(champ.role, pal, { championId: champ.id });
+      expectValidSvg(art.svg, art.viewW, art.viewH, art.footYFrac);
+    }
+  });
+
+  it('gives the two champions of every role DIFFERENT silhouette markup', () => {
+    for (const [a, b] of SAME_ROLE_PAIRS) {
+      expect(artFor(a)).not.toBe(artFor(b));
+    }
+  });
+
+  it('differs even when two same-role siblings share an identical palette', () => {
+    // Isolate the SILHOUETTE from the accent: force the same palette on both.
+    for (const [a, b] of SAME_ROLE_PAIRS) {
+      const roleA = getChampionById(a)!.role;
+      const svgA = championArt(roleA, pal, { championId: a }).svg;
+      const svgB = championArt(roleA, pal, { championId: b }).svg;
+      expect(svgA).not.toBe(svgB);
+    }
+  });
+
+  it('tags each non-benchmark roster champion with its own motif overlay', () => {
+    for (const champ of CHAMPIONS) {
+      if (champ.id === 'embermage') continue; // bespoke path, not a motif overlay
+      const svg = championArt(champ.role, pal, { championId: champ.id }).svg;
+      expect(svg).toContain(`data-motif="${champ.id}"`);
+    }
+  });
+
+  it('is deterministic: identical (champion, palette, pose) inputs are byte-identical', () => {
+    for (const champ of CHAMPIONS) {
+      const once = championArt(champ.role, pal, { championId: champ.id, pose: 'attack' }).svg;
+      const twice = championArt(champ.role, pal, { championId: champ.id, pose: 'attack' }).svg;
+      expect(once).toBe(twice);
+    }
+  });
+
+  it('keeps role-generic fallback for unknown and generic-<role> ids', () => {
+    for (const role of ROLES) {
+      const plain = championArt(role, pal).svg;
+      // The sentinel the sprite factory passes for unresolved identities.
+      expect(championArt(role, pal, { championId: `generic-${role}` }).svg).toBe(plain);
+      // A wholly unknown id also falls back with no motif overlay.
+      const unknown = championArt(role, pal, { championId: 'no-such-champion' }).svg;
+      expect(unknown).toBe(plain);
+      expect(unknown).not.toContain('data-motif');
+    }
+  });
+
+  it('does not regress embermage bespoke pose-aware art', () => {
+    const poses = ['idle', 'move', 'attack', 'castR'] as const;
+    const variants = poses.map(
+      (pose) => championArt('mage', pal, { championId: 'embermage', pose }).svg,
+    );
+    // Still four distinct authored silhouettes, all tagged as embermage, and
+    // NOT carrying the generic motif-overlay marker.
+    for (const svg of variants) {
+      expect(svg).toContain('data-champion="embermage"');
+      expect(svg).not.toContain('data-motif="embermage"');
+    }
+    expect(new Set(variants).size).toBe(4);
+  });
+});
+
 describe('championArtSvg', () => {
   it('returns a non-empty inline SVG string for a champion', () => {
     const svg = championArtSvg(CHAMPIONS[0]);
@@ -132,6 +221,7 @@ describe('championArtSvg', () => {
     const expected = championArt(
       champ.role,
       derivePalette(hexToInt(champ.accentColor), TEAM_RIM.ally),
+      { championId: champ.id }, // championArtSvg threads the id through for the motif
     ).svg;
     expect(championArtSvg(champ, 'ally')).toBe(expected);
     expect(championArtSvg(champ)).toBe(expected); // default team is 'ally'
@@ -272,5 +362,69 @@ describe('vfxArt', () => {
   it('produces distinct markup per vfx kind', () => {
     const markups = VFX_KINDS.map((kind) => vfxArt(kind, COLOR).svg);
     expect(new Set(markups).size).toBe(VFX_KINDS.length);
+  });
+
+  // FEAT-004: a champion's abilities should read as "theirs". The battle scene
+  // tints every VFX with the caster's unique accentColor, so the (kind + color)
+  // texture cache already yields a per-champion family. On top of that the cast
+  // flare carries a small color-seeded signature flourish.
+  it('tints every champion accent distinctly (per-champion VFX family)', () => {
+    // Each of the ten roster accents is unique, so per-champion VFX differ.
+    const accents = CHAMPIONS.map((c) => hexToInt(c.accentColor));
+    expect(new Set(accents).size).toBe(CHAMPIONS.length);
+    const flares = accents.map((accent) => vfxArt('castFlare', accent).svg);
+    // No two champions share the same cast-flare markup.
+    expect(new Set(flares).size).toBe(CHAMPIONS.length);
+  });
+
+  it('cast-flare signature is deterministic and a pure function of color', () => {
+    for (const champ of CHAMPIONS) {
+      const accent = hexToInt(champ.accentColor);
+      expect(vfxArt('castFlare', accent).svg).toBe(vfxArt('castFlare', accent).svg);
+    }
+  });
+
+  it('cast-flare signature flourish varies with the accent color where intended', () => {
+    // Two deliberately different accents seed a different star point-count, so
+    // the flourish is more than a recolor. (Colors chosen to fall in different
+    // signature buckets.)
+    const a = vfxArt('castFlare', 0x000000).svg;
+    const b = vfxArt('castFlare', 0x0000ff).svg;
+    expect(a).not.toBe(b);
+  });
+
+  // The two tests above (and the per-champion family test) pass on the accent
+  // TINT alone — the fills are all derived from `color`, so two DIFFERENT
+  // colors already produced different markup before the signature flourish
+  // existed. To actually regression-protect the flourish we must ISOLATE the
+  // color-seeded star point-count from the tint. The cast flare draws exactly
+  // two `starPath` stars (nothing else in that texture emits `L` commands), so
+  // the number of line segments is a direct, tint-independent read-out of the
+  // point count: each star has `points * 2` vertices = one `M` + (points*2 - 1)
+  // `L` commands, and there are two stars, giving `L = 4 * points - 2`.
+  const castFlareStarPoints = (color: number): number => {
+    const svg = vfxArt('castFlare', color).svg;
+    const lCommands = (svg.match(/L/g) ?? []).length;
+    // Invert `L = 4 * points - 2`; must be a whole number for a valid read.
+    const points = (lCommands + 2) / 4;
+    expect(Number.isInteger(points)).toBe(true);
+    return points;
+  };
+
+  it('cast-flare star point-count is a color-seeded flourish, not a constant', () => {
+    // Pin the EXACT point count for fixed colors. These would all collapse to a
+    // single value if `colorSignature`/the `6 + sig % 4` point logic were
+    // reverted to a constant, so this fails on that revert.
+    expect(castFlareStarPoints(0x000000)).toBe(6); // signature 0 -> 6 points
+    expect(castFlareStarPoints(0x0000ff)).toBe(7); // 255*7 % 4 == 1 -> 7 points
+    expect(castFlareStarPoints(0x00ff00)).toBe(9); // 255*5 % 4 == 3 -> 9 points
+    // The flourish spans more than one bucket, so the count genuinely varies.
+    expect(
+      new Set([
+        castFlareStarPoints(0x000000),
+        castFlareStarPoints(0x0000ff),
+        castFlareStarPoints(0x00ff00),
+      ]).size,
+    ).toBeGreaterThan(1);
   });
 });

@@ -401,6 +401,199 @@ const CHAMPION_BUILDERS: Record<ChampionRole, (id: string, pal: SpritePalette) =
   enchanter,
 };
 
+// ---------------------------------------------------------------------------
+// Per-champion signature motifs.
+//
+// The five role builders above give each ROLE a distinct silhouette, but the
+// two roster champions that share a role would otherwise be identical apart
+// from their accent color. To make every one of the ten champions read as its
+// own character, each roster id contributes a small, deterministic, fully
+// palette-driven OVERLAY that is layered on top of the role body (a headpiece,
+// a weapon detail, an emblem, etc.). The overlay never replaces the role body,
+// so an UNKNOWN or `generic-<role>` id simply renders the plain role art with
+// no overlay (the role-generic fallback the sprite factory relies on).
+//
+// embermage is intentionally NOT in this table: it keeps its bespoke,
+// pose-aware treatment authored in {@link embermage} and is dispatched before
+// the motif layer is consulted.
+//
+// Every motif is authored in the same 54x78 CH_ART space as the role bodies,
+// stays procedural (ZERO binary assets, original IP), and draws only from the
+// palette ramp / team rim so the accent and ally/enemy tell keep driving it.
+// ---------------------------------------------------------------------------
+
+/** A signature overlay: pure markup keyed by roster id, drawn over the body. */
+type ChampionMotif = (id: string, pal: SpritePalette) => string;
+
+/** ashborne (marksman): a flaming pauldron ember crest over the drawn bow. */
+function motifAshborne(_id: string, pal: SpritePalette): string {
+  const outline = toHex(pal.outline);
+  const ember = toHex(lighten(pal.rim, 0.45));
+  return (
+    `<g data-motif="ashborne">` +
+    // tri-flame crest rising off the right shoulder
+    `<path d="M34 30 L37 20 L39 27 L42 18 L43 29 Z" fill="${ember}" stroke="${outline}" stroke-width="0.8"/>` +
+    // a hot ember nocked at the arrow tip
+    `<circle cx="40" cy="35" r="2.2" fill="${ember}"/>` +
+    `</g>`
+  );
+}
+
+/** duskarrow (marksman): a twin-fletch quiver + moonlit visor, not a crest. */
+function motifDuskarrow(id: string, pal: SpritePalette): string {
+  const outline = toHex(pal.outline);
+  const feather = toHex(lighten(pal.base, 0.5));
+  const moon = toHex(lighten(pal.rim, 0.4));
+  return (
+    `<g data-motif="duskarrow">` +
+    // back quiver with two fletched arrows over the left shoulder
+    `<path d="M14 30 L10 46 L15 47 L19 31 Z" fill="${bodyFill(id)}" stroke="${outline}" stroke-width="1"/>` +
+    `<path d="M12 30 L9 24 M16 30 L14 23" stroke="${feather}" stroke-width="1.6" stroke-linecap="round"/>` +
+    // crescent visor across the brow
+    `<path d="M22 16 A6 6 0 0 0 32 16" fill="none" stroke="${moon}" stroke-width="1.6" stroke-linecap="round"/>` +
+    `</g>`
+  );
+}
+
+/** nightveil (assassin): a horned veil-mask + a dark shroud tail. */
+function motifNightveil(_id: string, pal: SpritePalette): string {
+  const outline = toHex(pal.outline);
+  const veil = toHex(darken(pal.base, 0.15));
+  const glint = toHex(lighten(pal.rim, 0.45));
+  return (
+    `<g data-motif="nightveil">` +
+    // twin horn tips curling off the cowl
+    `<path d="M19 9 L15 2 L21 8 Z" fill="${veil}" stroke="${outline}" stroke-width="0.8"/>` +
+    `<path d="M35 9 L39 2 L33 8 Z" fill="${veil}" stroke="${outline}" stroke-width="0.8"/>` +
+    // a trailing shroud flowing off the waist
+    `<path d="M33 50 C42 54 40 66 34 72" fill="none" stroke="${veil}" stroke-width="2.2" stroke-linecap="round" opacity="0.85"/>` +
+    // a single bright veil sigil on the chest
+    `<path d="${starPath(27, 44, 3, 1.2, 4)}" fill="${glint}"/>` +
+    `</g>`
+  );
+}
+
+/** grimtrail (assassin): a saw-tooth trophy collar + low-slung war paint. */
+function motifGrimtrail(_id: string, pal: SpritePalette): string {
+  const outline = toHex(pal.outline);
+  const bone = toHex(lighten(pal.base, 0.55));
+  const warpaint = toHex(pal.rim);
+  return (
+    `<g data-motif="grimtrail">` +
+    // jagged bone/claw collar around the neck
+    `<path d="M20 27 L22 31 L24 27 L26 31 L28 27 L30 31 L32 27 L34 31 L34 33 L20 33 Z" ` +
+    `fill="${bone}" stroke="${outline}" stroke-width="0.8"/>` +
+    // twin war-paint slashes down the cheeks
+    `<path d="M23 18 L22 23 M31 18 L32 23" stroke="${warpaint}" stroke-width="1.4" stroke-linecap="round" opacity="0.9"/>` +
+    // a trophy fang hanging at the hip
+    `<path d="M18 52 L16 58 L20 54 Z" fill="${bone}" stroke="${outline}" stroke-width="0.7"/>` +
+    `</g>`
+  );
+}
+
+/** ironhold (bruiser): a horned great-helm + a spiked shield boss. */
+function motifIronhold(_id: string, pal: SpritePalette): string {
+  const outline = toHex(pal.outline);
+  const iron = toHex(lighten(pal.base, 0.4));
+  const spark = toHex(lighten(pal.rim, 0.35));
+  return (
+    `<g data-motif="ironhold">` +
+    // heavy bull horns sweeping off the helm
+    `<path d="M20 12 C13 9 12 15 16 17 C15 13 18 13 21 14 Z" fill="${iron}" stroke="${outline}" stroke-width="0.9"/>` +
+    `<path d="M34 12 C41 9 42 15 38 17 C39 13 36 13 33 14 Z" fill="${iron}" stroke="${outline}" stroke-width="0.9"/>` +
+    // a radiating spike ring around the shield boss
+    `<path d="M12 36 L12 33 M12 52 L12 55 M4 44 L1 44 M20 44 L23 44" stroke="${spark}" stroke-width="1.6" stroke-linecap="round"/>` +
+    `</g>`
+  );
+}
+
+/** thornwarden (bruiser): a leafy laurel crown + bramble climbing the shield. */
+function motifThornwarden(_id: string, pal: SpritePalette): string {
+  const outline = toHex(pal.outline);
+  const leaf = toHex(lighten(pal.base, 0.45));
+  const vine = toHex(pal.rim);
+  return (
+    `<g data-motif="thornwarden">` +
+    // laurel leaves arcing over the brow
+    `<path d="M20 11 Q17 6 21 4 Q22 8 24 9 Z" fill="${leaf}" stroke="${outline}" stroke-width="0.7"/>` +
+    `<path d="M34 11 Q37 6 33 4 Q32 8 30 9 Z" fill="${leaf}" stroke="${outline}" stroke-width="0.7"/>` +
+    // a bramble vine winding up the shield with thorn ticks
+    `<path d="M8 56 C16 50 8 40 14 32" fill="none" stroke="${vine}" stroke-width="1.6" opacity="0.9"/>` +
+    `<path d="M11 50 L8 48 M12 42 L15 41 M11 36 L8 35" stroke="${vine}" stroke-width="1.2" stroke-linecap="round"/>` +
+    `</g>`
+  );
+}
+
+/** frostquill (mage): a rimed crystalline staff head + drifting ice motes. */
+function motifFrostquill(_id: string, pal: SpritePalette): string {
+  const outline = toHex(pal.outline);
+  const ice = toHex(lighten(pal.rim, 0.5));
+  return (
+    `<g data-motif="frostquill">` +
+    // a six-point frost crystal crowning the staff orb
+    `<path d="${starPath(42, 12, 6, 2.4, 6)}" fill="${ice}" stroke="${outline}" stroke-width="0.7"/>` +
+    // drifting ice motes trailing off the free hand
+    `<path d="${starPath(15, 40, 2.4, 1, 4)}" fill="${ice}"/>` +
+    `<path d="${starPath(11, 48, 1.8, 0.7, 4)}" fill="${ice}" opacity="0.8"/>` +
+    // a frosted hood brim
+    `<path d="M19 12 A9 6 0 0 1 36 12" fill="none" stroke="${ice}" stroke-width="1.3" opacity="0.8"/>` +
+    `</g>`
+  );
+}
+
+/** dawnsong (enchanter): a rayed sunburst halo + an uplifted blessing sigil. */
+function motifDawnsong(id: string, pal: SpritePalette): string {
+  const outline = toHex(pal.outline);
+  const ray = toHex(lighten(pal.rim, 0.5));
+  return (
+    `<g data-motif="dawnsong">` +
+    // Sun rays radiating from the halo. Nudged down so every authored tip stays
+    // at y >= 0: the whole 54x78 figure is uniformly scaled under a fixed outer
+    // viewBox, so any point above y = 0 would scale to a negative coordinate and
+    // get clipped by the viewport. The topmost ray tip now lands exactly on the
+    // box's top edge (y = 0), preserving the upward sunburst silhouette.
+    `<path d="M27 4 L27 0 M18 6 L15 2 M36 6 L39 2 M12 10 L8 8 M42 10 L46 8" ` +
+    `stroke="${ray}" stroke-width="1.3" stroke-linecap="round"/>` +
+    // a warm blessing orb lifted in the hand
+    `<circle cx="40" cy="40" r="3.4" fill="${coreFill(id)}" stroke="${outline}" stroke-width="0.7"/>` +
+    `<circle cx="40" cy="40" r="6" fill="none" stroke="${ray}" stroke-width="0.9" opacity="0.7"/>` +
+    `</g>`
+  );
+}
+
+/** wardlight (enchanter): a lantern staff + a protective hex-ward emblem. */
+function motifWardlight(id: string, pal: SpritePalette): string {
+  const outline = toHex(pal.outline);
+  const lamp = toHex(lighten(pal.rim, 0.45));
+  return (
+    `<g data-motif="wardlight">` +
+    // a hanging ward lantern on the right
+    `<path d="M40 20 L40 30" stroke="${outline}" stroke-width="1"/>` +
+    `<rect x="36" y="30" width="8" height="10" rx="1.6" fill="${coreFill(id)}" stroke="${outline}" stroke-width="1"/>` +
+    `<circle cx="40" cy="35" r="2" fill="${lamp}"/>` +
+    // a protective hex ward hovering over the head instead of an open halo
+    `<path d="${starPath(27, 6, 5, 3, 6)}" fill="none" stroke="${lamp}" stroke-width="1.3" opacity="0.9"/>` +
+    `</g>`
+  );
+}
+
+/**
+ * Roster id -> signature overlay. Any id absent here (including unknown ids and
+ * the `generic-<role>` sentinel the sprite factory passes) renders the plain
+ * role body. embermage is deliberately absent (it owns a bespoke path).
+ */
+const CHAMPION_MOTIFS: Record<string, ChampionMotif> = {
+  ashborne: motifAshborne,
+  duskarrow: motifDuskarrow,
+  nightveil: motifNightveil,
+  grimtrail: motifGrimtrail,
+  ironhold: motifIronhold,
+  thornwarden: motifThornwarden,
+  frostquill: motifFrostquill,
+  dawnsong: motifDawnsong,
+  wardlight: motifWardlight,
+};
+
 /**
  * Intrinsic coordinate space the champion body markup is authored in. The
  * builders below draw with hard-coded coordinates in this 54x78 box; the whole
@@ -423,10 +616,22 @@ export function championArt(
   const pose = options.pose ?? 'idle';
   const benchmark = role === 'mage' && options.championId === 'embermage';
   const variant = championArtVariant(pose);
-  const id = benchmark ? `ch-embermage-${variant}` : `ch-${role}`;
+  // A known roster champion (other than the bespoke embermage) selects a
+  // signature overlay. Unknown / `generic-<role>` ids resolve to `undefined`
+  // here and fall through to the plain role body, preserving the role-generic
+  // fallback the sprite factory depends on.
+  const motif = options.championId ? CHAMPION_MOTIFS[options.championId] : undefined;
+  // Seed the gradient defs id with the champion id when a motif is present so
+  // same-role siblings never share texture-local gradient ids on one page and
+  // read as distinct characters (embermage keeps its own variant-seeded id).
+  const id = benchmark
+    ? `ch-embermage-${variant}`
+    : motif
+      ? `ch-${options.championId}`
+      : `ch-${role}`;
   const inner = benchmark
     ? embermage(id, pal, variant)
-    : CHAMPION_BUILDERS[role](id, pal);
+    : CHAMPION_BUILDERS[role](id, pal) + (motif ? motif(id, pal) : '');
   // Uniformly scale the 54x78-authored figure up into the larger baked box.
   const sx = (CH_W / CH_ART_W).toFixed(4);
   const sy = (CH_H / CH_ART_H).toFixed(4);
@@ -705,6 +910,20 @@ function vfxDoc(
   );
 }
 
+/**
+ * Fold a packed 0xRRGGBB color into a small non-negative integer used to seed
+ * per-champion VFX signature flourishes. Pure and deterministic: the same color
+ * always yields the same value, so it never perturbs the (kind + color) cache
+ * key. The channels are mixed so accents that differ only slightly still tend
+ * to land on different buckets.
+ */
+function colorSignature(color: number): number {
+  const r = (color >> 16) & 0xff;
+  const g = (color >> 8) & 0xff;
+  const b = color & 0xff;
+  return (r * 3 + g * 5 + b * 7) & 0xffff;
+}
+
 /** N-pointed star path centered at (cx, cy) with outer/inner radii. */
 function starPath(cx: number, cy: number, outer: number, inner: number, points: number): string {
   let d = '';
@@ -782,14 +1001,21 @@ export function vfxArt(kind: VfxKind, color: number): SvgArt {
       return { svg: vfxDoc(id, s, s, color, body), viewW: s, viewH: s, footYFrac: 1 };
     }
     case 'castFlare': {
-      // A radiant burst: a central glow behind a spiky star.
+      // A radiant burst: a central glow behind a spiky star. The cast flare is
+      // the VFX most tied to a champion's IDENTITY (it fires on every ability),
+      // so on top of the accent tint it carries a small SIGNATURE flourish: the
+      // burst's point count is seeded DETERMINISTICALLY from the ability color,
+      // so each champion's accent yields a subtly different star. This is a pure
+      // function of `color`, so the (kind + color) cache key stays intact.
       const s = 48;
       const c = s / 2;
       const white = toHex(lighten(color, 0.9));
+      // 6..9 points selected from the color so distinct accents read distinctly.
+      const points = 6 + (colorSignature(color) % 4);
       const body =
         `<circle cx="${c}" cy="${c}" r="${c - 2}" fill="${glow}"/>` +
-        `<path d="${starPath(c, c, c - 3, (c - 3) * 0.36, 8)}" fill="${core}" opacity="0.95"/>` +
-        `<path d="${starPath(c, c, (c - 3) * 0.6, (c - 3) * 0.24, 8)}" fill="${white}" opacity="0.9"/>` +
+        `<path d="${starPath(c, c, c - 3, (c - 3) * 0.36, points)}" fill="${core}" opacity="0.95"/>` +
+        `<path d="${starPath(c, c, (c - 3) * 0.6, (c - 3) * 0.24, points)}" fill="${white}" opacity="0.9"/>` +
         `<circle cx="${c}" cy="${c}" r="4" fill="${white}"/>`;
       return { svg: vfxDoc(id, s, s, color, body), viewW: s, viewH: s, footYFrac: 1 };
     }

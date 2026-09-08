@@ -699,11 +699,16 @@ export default class BattleScene extends Phaser.Scene {
    * gets its own {@link BotState} and is driven each tick by the pure AI.
    */
   private spawnTeams() {
+    // Deterministic, matchup-derived seed: the same picks + mode always
+    // reproduce the same teams (reproducible replays/QA) while different
+    // matchups get varied non-picked champions. No Date.now/Math.random here.
+    const teamSeed = `${this.playerChampion.id}:${this.enemyChampion.id}:${this.mode}`;
     const composition = composeTeams(
       CHAMPIONS,
       this.playerChampion.id,
       this.enemyChampion.id,
       this.lanes,
+      teamSeed,
     );
     const facing = enemyFacingSlot(composition, this.enemyChampion.id);
 
