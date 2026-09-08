@@ -163,6 +163,29 @@ dawnsong motif's sun rays were nudged so all authored coordinates stay within th
 (`y >= 0`), removing the top-edge clipping risk. Neither change touched the `vfxArt(kind, color)`
 signature/cache key or other champions' motifs.
 
+## Integration workflow (this handoff)
+
+The three follow-ups above were integrated with the repository's local-first workflow:
+
+- The completed, verified follow-up work was merged into local `main` with a `--no-ff` merge
+  commit (so the integration is recorded as an explicit merge rather than a fast-forward).
+- The local working branch `champs-handoff-followups` was deleted after the merge.
+- Nothing was pushed to the remote from this pass; publishing to `origin` and any pull request
+  are handled separately by the release/orchestration step.
+- `.github/workflows/*` was not modified. CI/CD config changes must always go through a
+  reviewed PR, and this work needed no workflow edit.
+
+Final verification pass on `main` after the merge (run from the repository root):
+
+- `npm run typecheck` clean across all six workspaces.
+- `npm run test` green: 1302 tests passing across the six workspaces (champs 423, plus
+  kingshot/lastwar/whiteout/wirework/shared), 0 failures.
+- `npm run build` succeeds; champs emits the distinct `phaser` vendor chunk (~1.48MB) with no
+  chunk-size advisory.
+- `npm run docs:check` reports the generated README tables up to date (no regeneration needed;
+  `game.json`/README/workflows were untouched).
+- `git diff --check` clean (no whitespace errors or conflict markers).
+
 ## Delivery
 
 The package is served from `/open-games/champs/`. Merges to `main` trigger the repository Pages workflow. Workflow changes must always go through review; this feature does not require a workflow edit.
