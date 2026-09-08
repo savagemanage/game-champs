@@ -2396,13 +2396,13 @@ select {
 
 .champion-select__cards {
   display: grid;
-  grid-template-columns: repeat(5, minmax(108px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(108px, 1fr));
   align-items: center;
   width: min(100%, 1040px);
   margin-inline: auto;
   gap: clamp(0.55rem, 1.2vw, 1rem);
   padding: 1.2rem 0 0.8rem;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
 }
 
 .lobby-card {

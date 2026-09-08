@@ -7,9 +7,12 @@
  * match, it produces a DETERMINISTIC assignment of five champions per team to
  * lanes (there is no `Math.random` on the tested path).
  *
- * With only five champion definitions in the roster BOTH teams reuse the same
- * five archetypes; they are distinguished at render time by the ally/enemy
- * sprite rim and team accent, not by the pure composition here.
+ * Each team fields exactly five champions, one per lane role (top, jungle,
+ * mid, bot, support), so both teams always cover the three map lanes. When the
+ * roster carries at least two champions per lane role the two teams draw
+ * DIFFERENT champions in every role, so ally and enemy are no longer a mirror
+ * matchup. The human keeps their chosen champion on the ally side and the
+ * enemy's player-facing pick stays on the enemy side.
  *
  * Coordinate/lane note: the game has three map lanes (`top`/`mid`/`bot`) but
  * champions carry a richer {@link LaneRole} (`top`/`jungle`/`mid`/`bot`/
@@ -61,18 +64,61 @@ export function laneForRole(role: LaneRole, activeLanes: readonly Lane[]): Lane 
 }
 
 /**
+ * The canonical order lane roles are filled in. Every team gets exactly one
+ * champion per role, guaranteeing top/mid/bot coverage (jungle folds to mid,
+ * support folds to bot via {@link laneForRole}).
+ */
+const ROLE_ORDER: readonly LaneRole[] = [
+  'top',
+  'jungle',
+  'mid',
+  'bot',
+  'support',
+];
+
+/**
+ * Deterministically pick one champion of a given lane role, preferring a forced
+ * pick when it matches the role, then the first roster champion of that role
+ * that is not already taken and (when possible) not used by the opposing team.
+ * Falls back to the first roster champion of that role, then to the first
+ * roster champion overall, so a slot is always filled even for sparse rosters.
+ */
+function pickForRole(
+  roster: readonly Champion[],
+  role: LaneRole,
+  forcedId: string | undefined,
+  taken: Set<string>,
+  avoid: Set<string>,
+): Champion {
+  if (forcedId) {
+    const forced = roster.find((c) => c.id === forcedId);
+    if (forced && forced.laneRole === role) return forced;
+  }
+  const pool = roster.filter((c) => c.laneRole === role);
+  return (
+    pool.find((c) => !taken.has(c.id) && !avoid.has(c.id)) ??
+    pool.find((c) => !taken.has(c.id)) ??
+    pool[0] ??
+    roster[0]
+  );
+}
+
+/**
  * Build the full 5v5 composition.
  *
- * Both teams field the SAME five archetypes (the entire roster), so every lane
- * role is covered exactly once per team. The human keeps their chosen champion
- * on the ally side; the enemy's player-facing champion (the one picked in
- * select) is flagged so the caller can wire the HUD's enemy bar to it. All
- * other slots are AI.
+ * Each team fields exactly five champions, one per lane role, so both teams
+ * always cover the three map lanes. The human's chosen champion is placed on
+ * the ally side in its role slot; the enemy's player-facing pick is placed on
+ * the enemy side. Remaining slots draw from the roster so that, whenever the
+ * roster holds at least two champions of a role, the ally and enemy champions
+ * for that role are DIFFERENT (no mirror matchup). Only the ally side ever
+ * carries the single {@link TeamSlot.isHuman} flag.
  *
- * The result is deterministic: slots follow the roster order, and each team is
- * a straight archetype-per-slot mapping. No randomness is used.
+ * The result is fully deterministic for the same
+ * `(roster, humanPickId, enemyPickId, activeLanes)` inputs: roles are filled in
+ * a fixed order and each pick scans the roster in order. No randomness is used.
  *
- * @param roster        the champion roster (all five archetypes)
+ * @param roster        the champion roster
  * @param humanPickId   id of the human's chosen champion (ally side)
  * @param enemyPickId   id of the enemy's player-facing champion (enemy side)
  * @param activeLanes   lanes active this match (all three for Rift; `['mid']`
@@ -86,31 +132,59 @@ export function composeTeams(
 ): TeamComposition {
   const lanes = activeLanes.length > 0 ? activeLanes : (['mid'] as Lane[]);
 
-  const ally: TeamSlot[] = roster.map((champion) => ({
-    champion,
-    side: 'ally' as MapSide,
-    laneRole: champion.laneRole,
-    lane: laneForRole(champion.laneRole, lanes),
-    isHuman: champion.id === humanPickId,
-  }));
+  const humanPick = roster.find((c) => c.id === humanPickId);
+  const enemyPick = roster.find((c) => c.id === enemyPickId);
 
-  // If the human's pick is not in the roster (should not happen), fall back to
-  // marking the first ally slot as human so exactly one human exists.
+  const ally: TeamSlot[] = [];
+  const enemy: TeamSlot[] = [];
+  const allyTaken = new Set<string>();
+  const enemyTaken = new Set<string>();
+
+  for (const role of ROLE_ORDER) {
+    // Ally first, so the enemy can actively avoid the ally's champion for this
+    // role (de-mirroring) while still honoring the enemy's forced pick.
+    const allyForced = humanPick?.laneRole === role ? humanPickId : undefined;
+    const allyChampion = pickForRole(
+      roster,
+      role,
+      allyForced,
+      allyTaken,
+      enemyPick?.laneRole === role && enemyPick
+        ? new Set([enemyPick.id])
+        : new Set(),
+    );
+    allyTaken.add(allyChampion.id);
+    ally.push({
+      champion: allyChampion,
+      side: 'ally',
+      laneRole: allyChampion.laneRole,
+      lane: laneForRole(allyChampion.laneRole, lanes),
+      isHuman: allyChampion.id === humanPickId,
+    });
+
+    const enemyForced = enemyPick?.laneRole === role ? enemyPickId : undefined;
+    const enemyChampion = pickForRole(
+      roster,
+      role,
+      enemyForced,
+      enemyTaken,
+      new Set([allyChampion.id]),
+    );
+    enemyTaken.add(enemyChampion.id);
+    enemy.push({
+      champion: enemyChampion,
+      side: 'enemy',
+      laneRole: enemyChampion.laneRole,
+      lane: laneForRole(enemyChampion.laneRole, lanes),
+      isHuman: false,
+    });
+  }
+
+  // Guarantee exactly one human on the ally side even if the human's pick did
+  // not resolve into a role slot (e.g. an unknown id).
   if (!ally.some((s) => s.isHuman) && ally.length > 0) {
     ally[0] = { ...ally[0], isHuman: true };
   }
-
-  const enemy: TeamSlot[] = roster.map((champion) => ({
-    champion,
-    side: 'enemy' as MapSide,
-    laneRole: champion.laneRole,
-    lane: laneForRole(champion.laneRole, lanes),
-    isHuman: false,
-  }));
-
-  // Mark the enemy's player-facing pick so the caller can point the HUD's enemy
-  // bar at it. It stays AI-driven (isHuman is only ever true on the ally side).
-  void enemyPickId; // enemy pick is surfaced via findEnemyFacingSlot below.
 
   return { ally, enemy };
 }
