@@ -6,10 +6,10 @@ import {
   dashDirection,
   facingDashDirection,
   isFrontalHit,
-  isNapeHook,
+  isNodeHook,
   isTraversing,
-  napeFlingAccel,
-  napeOffset,
+  nodeFlingAccel,
+  coolingNodeOffset,
   nearestTargetIndex,
   radialPoint,
   reelStep,
@@ -27,8 +27,8 @@ import { GRAPPLE } from '../config/PlayerConfig';
  *  - radial spawn lands OUTSIDE the outer ring at the requested angle
  *  - nearest-target selection honours the outer-then-inner breach order
  *  - dash direction points TOWARD the aim, never inverted (bug 3)
- *  - the 2D nape sits behind the heading and the frontal-armor cone only
- *    catches hits from the front (bug: 2D facing must drive nape/armor)
+ *  - the 2D cooling node sits behind the heading and the frontal-armor cone only
+ *    catches hits from the front (bug: 2D facing must drive cooling node/armor)
  */
 
 describe('radial spawn placement', () => {
@@ -42,7 +42,7 @@ describe('radial spawn placement', () => {
     expect(south.y).toBeCloseTo(ARENA.CENTER_Y + 100, 6);
   });
 
-  it('always spawns giants strictly OUTSIDE the outer ring for any jitter', () => {
+  it('always spawns machines strictly OUTSIDE the outer ring for any jitter', () => {
     for (let i = 0; i <= 20; i++) {
       const jitter01 = i / 20; // sweep the whole [0,1] jitter range
       const r = spawnRadius(WALL.OUTER_RADIUS, jitter01);
@@ -89,7 +89,7 @@ describe('nearest-target selection (outer ring first, then inner)', () => {
   it('targets the nearest standing OUTER segment while the outer ring holds', () => {
     const outer = makeRing(360);
     const inner = makeRing(200);
-    // A giant to the far east should target the east (index 0) outer segment.
+    // A machine to the far east should target the east (index 0) outer segment.
     const t = nearestTargetIndex(1000, 0, outer, inner);
     expect(t.ring).toBe(0);
     expect(t.index).toBe(0);
@@ -103,12 +103,12 @@ describe('nearest-target selection (outer ring first, then inner)', () => {
     expect(t.index).toBe(0); // nearest inner segment is still the east one
   });
 
-  it('skips breached segments and picks the next nearest standing one', () => {
+  it('advances through the matching breached outer sector to the INNER sector', () => {
     const outer = makeRing(360).map((s, i) => (i === 0 ? { ...s, breached: true } : s));
     const inner = makeRing(200);
     const t = nearestTargetIndex(1000, 0, outer, inner);
-    expect(t.ring).toBe(0);
-    expect(t.index).not.toBe(0);
+    expect(t.ring).toBe(1);
+    expect(t.index).toBe(0);
   });
 
   it('reports index -1 when the active ring has no standing segments', () => {
@@ -180,20 +180,20 @@ describe('facing dash direction (dash goes where the CHARACTER faces, not the cu
   });
 });
 
-describe('2D nape offset (weak point sits behind the giant heading)', () => {
-  it('offsets opposite the facing heading so the nape is on the BACK', () => {
-    // Facing east -> nape offset points west (negative x).
-    const east = napeOffset(1, 0, 100, -6, 1);
+describe('2D cooling node offset (weak point sits behind the machine heading)', () => {
+  it('offsets opposite the facing heading so the cooling node is on the BACK', () => {
+    // Facing east -> cooling node offset points west (negative x).
+    const east = coolingNodeOffset(1, 0, 18);
     expect(east.x).toBeLessThan(0);
-    // Facing west -> nape offset points east (positive x). Nape swings with heading.
-    const west = napeOffset(-1, 0, 100, -6, 1);
+    // Facing west -> cooling node offset points east (positive x). cooling node tracks the heading.
+    const west = coolingNodeOffset(-1, 0, 18);
     expect(west.x).toBeGreaterThan(0);
     // The horizontal component mirrors when the heading flips.
     expect(east.x).toBeCloseTo(-west.x, 6);
   });
 
-  it('keeps the nape high on the body (above the origin)', () => {
-    const off = napeOffset(0, 1, 100, -6, 1);
+  it('keeps the cooling node high on the body (above the origin)', () => {
+    const off = coolingNodeOffset(0, 1, 18);
     expect(off.y).toBeLessThan(0);
   });
 });
@@ -224,39 +224,39 @@ describe('2D frontal-armor cone (fix: armor uses full facing vector)', () => {
   });
 });
 
-describe('weak-point (nape) grapple hook decision (FEAT-003)', () => {
-  const snap = GRAPPLE.NAPE_ANCHOR_SNAP_DIST;
+describe('weak-point (cooling node) grapple hook decision (FEAT-003)', () => {
+  const snap = GRAPPLE.NODE_ANCHOR_SNAP_DIST;
 
-  it('counts a hit landing ON the nape as a weak-point hook', () => {
-    expect(isNapeHook(100, 100, 100, 100, snap)).toBe(true);
+  it('counts a hit landing ON the cooling node as a weak-point hook', () => {
+    expect(isNodeHook(100, 100, 100, 100, snap)).toBe(true);
   });
 
-  it('counts a hit within the snap distance of the nape as a weak-point hook', () => {
-    // Just inside the snap radius (0.9x) -> still hooks the nape.
-    expect(isNapeHook(100 + snap * 0.9, 100, 100, 100, snap)).toBe(true);
+  it('counts a hit within the snap distance of the cooling node as a weak-point hook', () => {
+    // Just inside the snap radius (0.9x) -> still hooks the cooling node.
+    expect(isNodeHook(100 + snap * 0.9, 100, 100, 100, snap)).toBe(true);
   });
 
   it('treats a hit on the body edge (beyond the snap distance) as an ordinary grapple', () => {
-    // Well outside the snap radius (2x) -> body grapple, not a nape hook.
-    expect(isNapeHook(100 + snap * 2, 100, 100, 100, snap)).toBe(false);
+    // Well outside the snap radius (2x) -> body grapple, not a cooling node hook.
+    expect(isNodeHook(100 + snap * 2, 100, 100, 100, snap)).toBe(false);
   });
 
   it('is inclusive exactly at the snap distance boundary', () => {
-    expect(isNapeHook(100 + snap, 100, 100, 100, snap)).toBe(true);
-    expect(isNapeHook(100 + snap + 0.001, 100, 100, 100, snap)).toBe(false);
+    expect(isNodeHook(100 + snap, 100, 100, 100, snap)).toBe(true);
+    expect(isNodeHook(100 + snap + 0.001, 100, 100, 100, snap)).toBe(false);
   });
 
-  it('returns the boosted fling accel ONLY when the wire is nape-hooked', () => {
+  it('returns the boosted fling accel ONLY when the wire is cooling node-hooked', () => {
     const base = GRAPPLE.PULL_ACCEL;
-    const boosted = GRAPPLE.NAPE_PULL_ACCEL;
-    expect(napeFlingAccel(base, boosted, true)).toBe(boosted);
-    expect(napeFlingAccel(base, boosted, false)).toBe(base);
+    const boosted = GRAPPLE.NODE_PULL_ACCEL;
+    expect(nodeFlingAccel(base, boosted, true)).toBe(boosted);
+    expect(nodeFlingAccel(base, boosted, false)).toBe(base);
     // The boosted pull is genuinely stronger so the hero is flung, not reeled.
     expect(boosted).toBeGreaterThan(base);
   });
 });
 
-describe('ODM wall traversal predicate (FEAT-004: hero crosses walls while using ODM)', () => {
+describe('Charge-tether wall traversal predicate (FEAT-004: guardian crosses walls while traversing)', () => {
   it('traverses (collider disabled) while DASHING', () => {
     expect(isTraversing(true, false)).toBe(true);
   });
@@ -327,6 +327,6 @@ describe('grapple reach is effectively infinite (사거리 무한)', () => {
     const diagonal = Math.hypot(ARENA.WIDTH, ARENA.HEIGHT);
     expect(GRAPPLE.RANGE).toBeGreaterThan(diagonal);
     expect(GRAPPLE.MAX_LENGTH).toBeGreaterThan(diagonal);
-    expect(GRAPPLE.INFINITE_REACH).toBeGreaterThan(diagonal);
+    expect(GRAPPLE.RANGE).toBe(GRAPPLE.MAX_LENGTH);
   });
 });

@@ -1,145 +1,72 @@
-/**
- * AssetKeys - centralized, typed registry of every runtime asset.
- *
- * The rest of the codebase references these keys (and their frame configs)
- * instead of raw strings, so a rename is a single edit here and TypeScript
- * catches typos. All art/audio is ORIGINAL to this project (see
- * assets/CREDITS.md); files live under public/assets/ and are served under the
- * Vite base path.
- *
- * NOTE on paths: files in public/ are served at the site root, which is
- * import.meta.env.BASE_URL ('/wirework/' in production, '/' in dev). Always
- * build load URLs with assetPath() so they resolve under the base path.
- */
-
-/** Prefix a public/ asset path with the Vite base URL. */
-export function assetPath(rel: string): string {
+export function assetPath(relative: string): string {
   const base = import.meta.env.BASE_URL || '/';
-  const trimmed = rel.replace(/^\/+/, '');
-  return `${base}${base.endsWith('/') ? '' : '/'}${trimmed}`;
+  return `${base}${base.endsWith('/') ? '' : '/'}${relative.replace(/^\/+/, '')}`;
 }
-
-/** Spritesheet frame configuration (Phaser.Types.Loader.FileTypes.ImageFrameConfig). */
-export interface FrameConfig {
-  frameWidth: number;
-  frameHeight: number;
-}
-
-/** Texture (image / spritesheet) keys. */
+export interface FrameConfig { frameWidth: number; frameHeight: number }
 export const TextureKeys = {
-  Hero: 'hero',
-  GiantWanderer: 'giant_wanderer',
-  GiantSprinter: 'giant_sprinter',
-  GiantBreaker: 'giant_breaker',
-  GiantAberrant: 'giant_aberrant',
-  GiantArmored: 'giant_armored',
-  GiantThrower: 'giant_thrower',
-  Citizen: 'citizen',
-  Tiles: 'tiles',
-  Hook: 'hook',
-  BgSky: 'bg_sky',
-  BgGround: 'bg_ground',
-  BgHills: 'bg_hills',
-  BgWall: 'bg_wall',
-  FxSlash: 'fx_slash',
-  FxSpark: 'fx_spark',
-  FxDust: 'fx_dust',
-  FxSteam: 'fx_steam',
-  UiPanel: 'ui_panel',
-  UiButton: 'ui_button',
-  UiBarFrame: 'ui_bar_frame',
-  UiIcons: 'ui_icons',
+  Hero: 'arc_guardian',
+  MachineSurveyor: 'machine_surveyor', MachineSkitter: 'machine_skitter', MachineRammer: 'machine_rammer',
+  MachineFluxborn: 'machine_fluxborn', MachineBastion: 'machine_bastion', MachineBombard: 'machine_bombard',
+  Citizen: 'citizen', Tiles: 'tiles', Hook: 'tether_probe',
+  BgSky: 'bg_sky', BgGround: 'bg_ground', BgHills: 'bg_hills', BgWall: 'bg_wall',
+  FxSlash: 'fx_arc_cut', FxSpark: 'fx_spark', FxDust: 'fx_dust', FxCoolant: 'fx_coolant',
+  UiPanel: 'ui_panel', UiButton: 'ui_button', UiBarFrame: 'ui_bar_frame', UiIcons: 'ui_icons',
 } as const;
-
 export type TextureKey = (typeof TextureKeys)[keyof typeof TextureKeys];
 
-/** Audio keys. */
 export const AudioKeys = {
-  GrappleFire: 'sfx_grapple_fire',
-  WireAttach: 'sfx_wire_attach',
-  SwingWhoosh: 'sfx_swing_whoosh',
-  Slash: 'sfx_slash',
-  Hit: 'sfx_hit',
-  EnemyDeath: 'sfx_enemy_death',
-  CitizenScream: 'sfx_citizen_scream',
-  UiClick: 'sfx_ui_click',
-  MusicLoop: 'music_loop',
+  TetherFire: 'sfx_tether_fire', WireAttach: 'sfx_wire_attach', SwingWhoosh: 'sfx_swing_whoosh',
+  Slash: 'sfx_arc_cut', Hit: 'sfx_machine_hit', MachineShutdown: 'sfx_machine_shutdown',
+  AttackSurveyor: 'sfx_attack_surveyor', AttackSkitter: 'sfx_attack_skitter', AttackRammer: 'sfx_attack_rammer',
+  AttackFluxborn: 'sfx_attack_fluxborn', AttackBastion: 'sfx_attack_bastion', AttackBombard: 'sfx_attack_bombard',
+  CitizenAlarm: 'sfx_citizen_alarm', UiClick: 'sfx_ui_click', MusicLoop: 'music_loop',
 } as const;
-
 export type AudioKey = (typeof AudioKeys)[keyof typeof AudioKeys];
+export interface ImageAsset { key: TextureKey; url: string }
+export interface SheetAsset extends ImageAsset { frame: FrameConfig }
+export interface AudioAsset { key: AudioKey; urls: string[] }
 
-/** Single-image asset descriptor. */
-export interface ImageAsset {
-  key: TextureKey;
-  url: string;
-}
-
-/** Spritesheet asset descriptor with frame config. */
-export interface SheetAsset extends ImageAsset {
-  frame: FrameConfig;
-}
-
-/** Audio asset descriptor (may list multiple formats for browser fallback). */
-export interface AudioAsset {
-  key: AudioKey;
-  urls: string[];
-}
-
-/**
- * Spritesheets and their frame sizes. Frame sizes match the output of
- * tools/gen_sprites.py exactly.
- */
 export const SHEETS: readonly SheetAsset[] = [
-  { key: TextureKeys.Hero, url: 'assets/sprites/hero.png', frame: { frameWidth: 32, frameHeight: 32 } },
-  { key: TextureKeys.GiantWanderer, url: 'assets/sprites/giant_wanderer.png', frame: { frameWidth: 40, frameHeight: 48 } },
-  { key: TextureKeys.GiantSprinter, url: 'assets/sprites/giant_sprinter.png', frame: { frameWidth: 40, frameHeight: 32 } },
-  { key: TextureKeys.GiantBreaker, url: 'assets/sprites/giant_breaker.png', frame: { frameWidth: 56, frameHeight: 72 } },
-  { key: TextureKeys.GiantAberrant, url: 'assets/sprites/giant_aberrant.png', frame: { frameWidth: 40, frameHeight: 44 } },
-  { key: TextureKeys.GiantArmored, url: 'assets/sprites/giant_armored.png', frame: { frameWidth: 44, frameHeight: 52 } },
-  { key: TextureKeys.GiantThrower, url: 'assets/sprites/giant_thrower.png', frame: { frameWidth: 46, frameHeight: 54 } },
+  { key: TextureKeys.Hero, url: 'assets/sprites/arc_guardian.png', frame: { frameWidth: 32, frameHeight: 32 } },
+  { key: TextureKeys.MachineSurveyor, url: 'assets/sprites/machine_surveyor.png', frame: { frameWidth: 40, frameHeight: 48 } },
+  { key: TextureKeys.MachineSkitter, url: 'assets/sprites/machine_skitter.png', frame: { frameWidth: 40, frameHeight: 32 } },
+  { key: TextureKeys.MachineRammer, url: 'assets/sprites/machine_rammer.png', frame: { frameWidth: 56, frameHeight: 72 } },
+  { key: TextureKeys.MachineFluxborn, url: 'assets/sprites/machine_fluxborn.png', frame: { frameWidth: 40, frameHeight: 44 } },
+  { key: TextureKeys.MachineBastion, url: 'assets/sprites/machine_bastion.png', frame: { frameWidth: 44, frameHeight: 52 } },
+  { key: TextureKeys.MachineBombard, url: 'assets/sprites/machine_bombard.png', frame: { frameWidth: 46, frameHeight: 54 } },
   { key: TextureKeys.Citizen, url: 'assets/sprites/citizen.png', frame: { frameWidth: 16, frameHeight: 20 } },
   { key: TextureKeys.Tiles, url: 'assets/sprites/tiles.png', frame: { frameWidth: 16, frameHeight: 16 } },
-  { key: TextureKeys.FxSlash, url: 'assets/fx/slash.png', frame: { frameWidth: 24, frameHeight: 24 } },
+  { key: TextureKeys.FxSlash, url: 'assets/fx/arc_cut.png', frame: { frameWidth: 24, frameHeight: 24 } },
   { key: TextureKeys.FxSpark, url: 'assets/fx/spark.png', frame: { frameWidth: 16, frameHeight: 16 } },
   { key: TextureKeys.FxDust, url: 'assets/fx/dust.png', frame: { frameWidth: 16, frameHeight: 16 } },
-  { key: TextureKeys.FxSteam, url: 'assets/fx/steam.png', frame: { frameWidth: 24, frameHeight: 24 } },
+  { key: TextureKeys.FxCoolant, url: 'assets/fx/coolant.png', frame: { frameWidth: 24, frameHeight: 24 } },
   { key: TextureKeys.UiIcons, url: 'assets/ui/icons.png', frame: { frameWidth: 16, frameHeight: 16 } },
-] as const;
-
-/** Plain single-frame images (backgrounds, hook, 9-slice UI). */
+];
 export const IMAGES: readonly ImageAsset[] = [
-  { key: TextureKeys.Hook, url: 'assets/sprites/hook.png' },
-  { key: TextureKeys.BgSky, url: 'assets/backgrounds/sky.png' },
-  { key: TextureKeys.BgGround, url: 'assets/backgrounds/ground.png' },
-  { key: TextureKeys.BgHills, url: 'assets/backgrounds/hills.png' },
-  { key: TextureKeys.BgWall, url: 'assets/backgrounds/wall.png' },
-  { key: TextureKeys.UiPanel, url: 'assets/ui/panel.png' },
-  { key: TextureKeys.UiButton, url: 'assets/ui/button.png' },
+  { key: TextureKeys.Hook, url: 'assets/sprites/tether_probe.png' },
+  { key: TextureKeys.BgSky, url: 'assets/backgrounds/sky.png' }, { key: TextureKeys.BgGround, url: 'assets/backgrounds/ground.png' },
+  { key: TextureKeys.BgHills, url: 'assets/backgrounds/hills.png' }, { key: TextureKeys.BgWall, url: 'assets/backgrounds/wall.png' },
+  { key: TextureKeys.UiPanel, url: 'assets/ui/panel.png' }, { key: TextureKeys.UiButton, url: 'assets/ui/button.png' },
   { key: TextureKeys.UiBarFrame, url: 'assets/ui/bar_frame.png' },
-] as const;
-
-/** Audio assets (WAV plays natively in all evergreen browsers + Phaser WebAudio). */
+];
 export const AUDIO: readonly AudioAsset[] = [
-  { key: AudioKeys.GrappleFire, urls: ['assets/audio/grapple_fire.wav'] },
+  { key: AudioKeys.TetherFire, urls: ['assets/audio/tether_fire.wav'] },
   { key: AudioKeys.WireAttach, urls: ['assets/audio/wire_attach.wav'] },
   { key: AudioKeys.SwingWhoosh, urls: ['assets/audio/swing_whoosh.wav'] },
-  { key: AudioKeys.Slash, urls: ['assets/audio/slash.wav'] },
-  { key: AudioKeys.Hit, urls: ['assets/audio/hit.wav'] },
-  { key: AudioKeys.EnemyDeath, urls: ['assets/audio/enemy_death.wav'] },
-  { key: AudioKeys.CitizenScream, urls: ['assets/audio/citizen_scream.wav'] },
+  { key: AudioKeys.Slash, urls: ['assets/audio/arc_cut.wav'] },
+  { key: AudioKeys.Hit, urls: ['assets/audio/machine_hit.wav'] },
+  { key: AudioKeys.MachineShutdown, urls: ['assets/audio/machine_shutdown.wav'] },
+  { key: AudioKeys.AttackSurveyor, urls: ['assets/audio/attack_surveyor.wav'] },
+  { key: AudioKeys.AttackSkitter, urls: ['assets/audio/attack_skitter.wav'] },
+  { key: AudioKeys.AttackRammer, urls: ['assets/audio/attack_rammer.wav'] },
+  { key: AudioKeys.AttackFluxborn, urls: ['assets/audio/attack_fluxborn.wav'] },
+  { key: AudioKeys.AttackBastion, urls: ['assets/audio/attack_bastion.wav'] },
+  { key: AudioKeys.AttackBombard, urls: ['assets/audio/attack_bombard.wav'] },
+  { key: AudioKeys.CitizenAlarm, urls: ['assets/audio/citizen_alarm.wav'] },
   { key: AudioKeys.UiClick, urls: ['assets/audio/ui_click.wav'] },
   { key: AudioKeys.MusicLoop, urls: ['assets/audio/music_loop.wav'] },
-] as const;
-
-/**
- * Maps an EnemyRole value to its spritesheet texture key. FEAT-004 (enemy AI)
- * consumes these so the six role designs stay in sync with the config.
- */
+];
 export const ENEMY_TEXTURE_BY_ROLE: Record<string, TextureKey> = {
-  wanderer: TextureKeys.GiantWanderer,
-  sprinter: TextureKeys.GiantSprinter,
-  breaker: TextureKeys.GiantBreaker,
-  aberrant: TextureKeys.GiantAberrant,
-  armored: TextureKeys.GiantArmored,
-  thrower: TextureKeys.GiantThrower,
+  surveyor: TextureKeys.MachineSurveyor, skitter: TextureKeys.MachineSkitter, rammer: TextureKeys.MachineRammer,
+  fluxborn: TextureKeys.MachineFluxborn, bastion: TextureKeys.MachineBastion, bombard: TextureKeys.MachineBombard,
 };

@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { CANVAS, PHYSICS, PALETTE } from './config/GameConfig';
 import { setLanguage } from './i18n/i18n';
 import { loadSettings } from './systems/SettingsStore';
+import { GameState } from './systems/GameState';
 import { BootScene } from './scenes/BootScene';
 import { PreloadScene } from './scenes/PreloadScene';
 import { TitleScene } from './scenes/TitleScene';
@@ -68,8 +69,11 @@ function measureDisplay(): { cssWidth: number; cssHeight: number; dpr: number } 
   }
   const parent = typeof document !== 'undefined' ? document.getElementById('game') : null;
   const rect = parent?.getBoundingClientRect();
-  const cssWidth = rect && rect.width > 0 ? rect.width : window.innerWidth || CANVAS.WIDTH;
-  const cssHeight = rect && rect.height > 0 ? rect.height : window.innerHeight || CANVAS.HEIGHT;
+  const style = parent ? window.getComputedStyle(parent) : null;
+  const horizontalPadding = style ? parseFloat(style.paddingLeft || '0') + parseFloat(style.paddingRight || '0') : 0;
+  const verticalPadding = style ? parseFloat(style.paddingTop || '0') + parseFloat(style.paddingBottom || '0') : 0;
+  const cssWidth = rect && rect.width > 0 ? Math.max(1, rect.width - horizontalPadding) : window.innerWidth || CANVAS.WIDTH;
+  const cssHeight = rect && rect.height > 0 ? Math.max(1, rect.height - verticalPadding) : window.innerHeight || CANVAS.HEIGHT;
   // clampDpr bounds the backbuffer so a hi-DPR phone can't OOM the tab.
   return { cssWidth, cssHeight, dpr: clampDpr(window.devicePixelRatio || 1) };
 }
@@ -258,6 +262,28 @@ function registerRenderScale(game: Phaser.Game): void {
     for (const scene of game.scene.scenes) {
       attach(scene);
     }
+
+    // One app-wide clock advances the same simulation in Town, command,
+    // battle, result, and settings scenes. Scene changes cannot pause or double it.
+    let lastTickAt = Date.now();
+    game.events.on(Phaser.Core.Events.STEP, () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      const now = Date.now();
+      GameState.get().tick(now, Math.max(0, now - lastTickAt));
+      lastTickAt = now;
+    });
+    const onVisibility = (): void => {
+      const now = Date.now();
+      if (document.visibilityState === 'hidden') GameState.get().save(now);
+      else GameState.get().reconcileAbsence(now);
+      lastTickAt = now;
+    };
+    const onPageHide = (): void => GameState.get().save(Date.now());
+    const onGameBlur = (): void => GameState.get().save(Date.now());
+    game.events.on(Phaser.Core.Events.BLUR, onGameBlur);
+    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisibility);
+    if (typeof window !== 'undefined') window.addEventListener('pagehide', onPageHide);
+
     // Re-measure once now that the canvas is in the DOM (the boot-time measure
     // may have run before layout settled), then track subsequent resizes.
     recompute();

@@ -77,15 +77,14 @@ describe('TutorialFlow advancement rules', () => {
     expect(flow.step?.id).toBe('upgrade_town_center');
   });
 
-  it('the upgrade step advances when an upgrade STARTS (or TC already Lv.2)', () => {
+  it('the upgrade step advances only when Town Center Lv.2 is complete', () => {
     const flow = new TutorialFlow();
     flow.advance('next');
     flow.advance({ ...nothingDone(), townCenterPanelOpen: true });
     expect(flow.step?.id).toBe('upgrade_town_center');
-    // Not satisfied while idle at Lv.1 with the panel open.
     expect(flow.isStepSatisfied({ ...nothingDone(), townCenterPanelOpen: true })).toBe(false);
-    // Satisfied the moment a build is in progress.
-    expect(flow.advance({ ...nothingDone(), townCenterUpgrading: true })).toBe(true);
+    expect(flow.advance({ ...nothingDone(), townCenterUpgrading: true })).toBe(false);
+    expect(flow.advance({ ...nothingDone(), townCenterLevel: 2 })).toBe(true);
     expect(flow.step?.id).toBe('resources_warmth');
   });
 
@@ -93,7 +92,7 @@ describe('TutorialFlow advancement rules', () => {
     const flow = new TutorialFlow();
     flow.advance('next'); // welcome -> select
     flow.advance({ ...nothingDone(), townCenterPanelOpen: true }); // -> upgrade
-    flow.advance({ ...nothingDone(), townCenterUpgrading: true }); // -> resources_warmth
+    flow.advance({ ...nothingDone(), townCenterLevel: 2 }); // -> resources_warmth
     flow.advance('next'); // -> build_lumber_mill
     expect(flow.step?.id).toBe('build_lumber_mill');
     // It is a gameplay step: Next does nothing.
@@ -113,7 +112,7 @@ describe('TutorialFlow advancement rules', () => {
     const flow = new TutorialFlow();
     flow.advance('next'); // welcome -> select
     flow.advance({ ...nothingDone(), townCenterPanelOpen: true }); // -> upgrade
-    flow.advance({ ...nothingDone(), townCenterUpgrading: true }); // -> resources_warmth
+    flow.advance({ ...nothingDone(), townCenterLevel: 2 }); // -> resources_warmth
     flow.advance('next'); // -> build_lumber_mill
     flow.advance({ ...nothingDone(), lumberMillBuilt: true }); // -> build_and_train
     expect(flow.step?.id).toBe('build_and_train');
@@ -126,13 +125,13 @@ describe('TutorialFlow advancement rules', () => {
     const flow = new TutorialFlow();
     flow.advance('next'); // welcome
     flow.advance({ ...nothingDone(), townCenterPanelOpen: true }); // select
-    flow.advance({ ...nothingDone(), townCenterUpgrading: true }); // upgrade
+    flow.advance({ ...nothingDone(), townCenterLevel: 2 }); // upgrade
     flow.advance('next'); // resources_warmth
     flow.advance({ ...nothingDone(), lumberMillBuilt: true }); // build_lumber_mill
     flow.advance({ ...nothingDone(), troopsTrained: 3 }); // build_and_train
     expect(flow.step?.id).toBe('battle_quests');
     expect(flow.isComplete).toBe(false);
-    flow.advance('next'); // battle_quests -> complete
+    expect(flow.advance({ ...nothingDone(), questPanelOpen: true })).toBe(true); // battle/quest action -> complete
     expect(flow.isComplete).toBe(true);
     expect(flow.step).toBeNull();
   });
@@ -164,7 +163,7 @@ describe('TutorialFlow overlay-occlusion invariants', () => {
   it('single-click / informational steps do NOT request free interaction', () => {
     // Steps satisfied by a single click on their anchored control (or by Next)
     // keep the focusing dim frame; only panel-operating steps opt out.
-    for (const id of ['welcome', 'select_town_center', 'upgrade_town_center', 'resources_warmth', 'battle_quests']) {
+    for (const id of ['welcome', 'select_town_center', 'upgrade_town_center', 'resources_warmth']) {
       expect(byId(id).freeInteraction ?? false).toBe(false);
     }
   });

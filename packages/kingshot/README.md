@@ -8,7 +8,7 @@
 정착지를 키워 나가세요. 자원 건물이 시간이 지날수록 **식량·목재·석재·금화**를
 자동으로 생산하고, 중앙의 **중앙 청사(Town Center)** 레벨이 다른 모든 건물의
 업그레이드 한계를 결정합니다. 병력은 병영에서 시간이 걸리는 **훈련 대기열**로
-양성하며, 주기적으로 몰려오는 **침략자 웨이브**를 애니메이션으로 연출되는
+양성하며, 플레이어가 준비되었을 때 직접 시작하는 **20회의 침략자 방어전**을 애니메이션으로 연출되는
 결정론적 전투로 막아내야 합니다. 다섯 병종(**창병·궁병·기사·기병·공성 병기**)이
 가위바위보식 상성 고리를 이루고, **연구소(연구·기술 트리)**로 경제와 군대를
 영구 강화하며, **영웅**을 영입해 출전시키면 전투력이나 생산량 보너스를 얻고,
@@ -106,13 +106,14 @@ Vite가 출력하는 개발 서버 주소(기본값 <http://localhost:5173>)를 
    한 명을 출전시키면 역할(전쟁/경제)에 따라 전투력 또는 생산량 보너스를 받습니다.
    **성벽·감시탑**을 지으면 마을 방어력이 올라 침략에 더 잘 버티고 패배 피해도
    줄어듭니다. **임무** 패널의 진행 체인을 완료하면 자원과 영웅 조각을 받습니다.
-5. **전투.** 병력을 전투로 보내 점점 강해지는 침략자 웨이브(**침략자·광전사·공성
-   망치·기습병**)를 막아냅니다. 결과는 전투 시스템이 연구·영웅·마을 방어력 보너스를
-   합산해 결정론적으로 계산한 뒤 애니메이션으로 연출됩니다. 승리하면 자원 보상을
-   얻고 웨이브 진행이 올라가며, 패배하면 병력은 잃지만 마을은 건재합니다. 전투
-   HUD의 **건너뛰기**와 **속도**로 진행 속도를 조절할 수 있습니다.
-6. **더 어렵게, 반복.** 웨이브를 하나 격파할 때마다 다음 웨이브의 난이도가
-   올라갑니다. 마지막으로 설정된 웨이브를 격파하면 전체 캠페인 승리입니다.
+5. **전투.** 병력을 전투로 보내 점점 강해지는 20회의 침략자 웨이브(**침략자·광전사·공성
+   망치·기습병**)를 원하는 시점에 막아냅니다. 출정 전 E/W·상성·방어 기여를 확인하고,
+   결과는 연구·영웅·마을 방어력 보너스로 한 번 결정되어 **연출 전에 원자 저장**됩니다.
+   저장에 실패하면 전체 상태를 롤백하고 재시도를 안내합니다. 승리하면 첫 클리어 보상을
+   얻고, 패배하면 생존자와 방어로 줄어든 약탈이 적용됩니다. **건너뛰기**와 **속도**는
+   저장된 결과의 연출만 바꿉니다.
+6. **20웨이브 완료와 리플레이.** 웨이브 20 이후 웨이브 21은 없습니다. 마을 운영은
+   계속되며, 완료한 1~20 웨이브를 선택해 현재 편성을 무상태·무보상으로 재현할 수 있습니다.
 
 **설정**에서는 전체 / 효과음 / 음악 볼륨 슬라이더와 언어 토글(한국어 / English)을
 제공하며 모두 `localStorage`에 저장됩니다. 또한 두 번 눌러 확인하는 **진행
@@ -127,10 +128,12 @@ Vite가 출력하는 개발 서버 주소(기본값 <http://localhost:5173>)를 
 
 ## 저장 / 지속성
 
-게임은 15초 주기와 주요 행동(업그레이드, 전투, 탭 이탈) 시점에 `localStorage`로
-자동 저장됩니다. 저장 데이터에는 **버전**이 있어, 손상·부재·구버전 저장은
-충돌하지 않고 새 게임으로 안전하게 되돌아갑니다. 자리를 비운 동안 쌓인 방치
-생산량은 로드 시 정산됩니다(최대 오프라인 시간 상한과 오프라인 효율 배율 적용).
+게임은 15초 주기와 주요 행동 시점에 `localStorage`로 자동 저장됩니다. v7 저장은
+v1~v6 상태를 보존해 이관하고, 내부 수치를 정규화하며, 임시 쓰기·readback 검증과 이전
+저장 백업을 사용합니다. 로드 정산은 즉시 다시 저장되어 중복 지급을 막습니다. 손상되거나
+미래 버전인 원본은 격리해 내보내기/새 왕국 선택을 제공하며, quota/private mode 실패는
+현재 세션을 유지한 채 재시도할 수 있습니다. 생산·화롯불 정산은 최대 8시간이고,
+건설·연구·훈련 deadline은 전체 부재 시간을 반영합니다.
 
 ## 프로젝트 구조
 
@@ -204,8 +207,8 @@ Apache-2.0. 저장소 루트의 [LICENSE](../../LICENSE)를 참고하세요.
 An original-world 2D pixel-art **medieval strategy / idle** browser game. Grow a
 small settlement: resource buildings passively generate **food, wood, stone, and
 gold**; a central **Town Center** gates how far every other building can be
-upgraded; troops are trained in time-based **queues** at the Barracks; and
-periodic **waves of raiders** must be repelled in an animated, deterministic
+upgraded; troops are trained in time-based **queues** at the Barracks; and the
+player manually starts each of **20 raider defenses** when ready, resolved as an animated, deterministic
 battle. Five troop types (**Spearman, Archer, Knight, Cavalry, Siege Engine**)
 form a rock-paper-scissors counter cycle; a **Scholars' Hall (research / tech
 tree)** permanently strengthens your economy and army; recruitable **Heroes**
@@ -316,15 +319,14 @@ on-screen buttons.
    and Watchtowers** to raise town defense, which helps you hold raids and
    softens losses. Complete the **Quests** chain for resource and hero-shard
    rewards.
-5. **Battle.** Send your army To Battle to repel escalating waves of raiders
-   (**Raider, Brute, Battering Ram, Rider**). The outcome is resolved
-   deterministically by the combat system — composing your research, active
-   hero, and town-defense bonuses — and then animated; on a win you earn
-   resource rewards and advance your wave progress, on a loss your army is lost
-   but the town stands. Use **Skip** and **Speed** in the battle HUD to control
-   pacing.
-6. **Repeat, harder.** Each cleared wave raises the difficulty of the next.
-   Clearing the final configured wave is a full-campaign victory.
+5. **Battle.** Manually send the full standing army into one of 20 escalating
+   defenses (**Raider, Brute, Battering Ram, Rider**) when you are ready. The
+   preflight explains E/W, matchup, and town defense. A campaign result is
+   resolved and atomically saved **before** animation; failure rolls the whole
+   transaction back. **Skip** and **Speed** change presentation only.
+6. **Completion and replay.** Wave 20 seals campaign progress—wave 21 does not
+   exist. Town management continues, and any cleared wave 1–20 can be selected
+   for a stateless, no-reward replay using the current army and bonuses.
 
 **Settings** offers master / SFX / music volume sliders and a language toggle
 (한국어 / English), all persisted to `localStorage`, plus a two-press
@@ -333,10 +335,13 @@ on-screen buttons.
 ## Persistence
 
 The game auto-saves to `localStorage` on a 15-second cadence and on meaningful
-actions (upgrades, battles, leaving the tab). The save is **versioned**: a
-corrupt, absent, or old-version save falls back to a fresh game rather than
-crashing. Idle production accrued while you were away is reconciled on load
-(capped at a maximum offline window and scaled by an offline-efficiency factor).
+actions. Saves use schema v7 with additive v1–v6 migration, nested normalization,
+temporary-write/readback verification, previous-save backup, and immediate durable
+offline reconciliation. Corrupt or future saves are quarantined and offered for
+export instead of being silently overwritten; quota/private-mode failures remain
+retryable in the current session. Passive production and Hearth settlement are
+capped at eight hours, while construction, research, and training deadlines advance
+for the full wall-clock absence.
 
 ## Project structure
 

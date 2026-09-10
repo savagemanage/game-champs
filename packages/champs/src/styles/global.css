@@ -4402,3 +4402,188 @@ select {
   font-size: 0.68rem;
   line-height: 1.45;
 }
+
+
+/* SPEC-complete battle lifecycle, safe-area and touch affordances. */
+.app-controls__settings,
+.battle-touch-controls button,
+.battle-hud__learning button {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.phaser-game,
+.phaser-game canvas,
+.battle-stage {
+  touch-action: none;
+  overscroll-behavior: none;
+}
+
+.battle-screen {
+  padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);
+}
+
+.battle-touch-controls {
+  position: absolute;
+  right: max(0.5rem, var(--safe-right));
+  bottom: max(0.5rem, var(--safe-bottom));
+  z-index: 32;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.35rem;
+  max-width: min(95vw, 34rem);
+}
+
+.battle-touch-controls button,
+.battle-hud__learning button {
+  border: 1px solid var(--color-gold-muted);
+  background: rgba(3, 10, 20, 0.9);
+  color: var(--color-gold-bright);
+  font: 700 0.75rem var(--font-body);
+}
+
+.pause-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  background: rgba(1, 7, 13, 0.88);
+}
+
+.pause-overlay__actions,
+.battle-error__actions,
+.random-roster__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.75rem;
+}
+
+.btn--danger {
+  border-color: var(--color-danger);
+  color: #fff;
+}
+
+.battle-hud__learning {
+  position: absolute;
+  z-index: 31;
+  top: 5.5rem;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: min(92vw, 36rem);
+  padding: 0.6rem;
+  transform: translateX(-50%);
+  border: 1px solid var(--color-gold);
+  background: rgba(3, 10, 20, 0.94);
+  color: var(--color-text-strong);
+}
+
+.storage-warning {
+  position: fixed;
+  z-index: 80;
+  left: max(0.5rem, var(--safe-left));
+  bottom: max(0.5rem, var(--safe-bottom));
+  max-width: min(90vw, 34rem);
+  margin: 0;
+  padding: 0.55rem 0.8rem;
+  border: 1px solid #e5b454;
+  background: #241b08;
+  color: #fff2c7;
+}
+
+.random-roster {
+  display: grid;
+  place-content: center;
+  flex: 1;
+  width: min(94vw, 48rem);
+  margin: auto;
+  padding: 2rem;
+  text-align: center;
+}
+
+.random-roster__slots {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(44px, 72px));
+  justify-content: center;
+  gap: 0.6rem;
+  margin: 1.5rem 0;
+}
+
+.random-roster__slot {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  border: 1px solid var(--color-gold-muted);
+  background: var(--color-panel);
+  color: var(--color-gold);
+  font: 700 1.4rem var(--font-display);
+}
+
+.result-screen__end-reason {
+  color: var(--color-text-strong);
+}
+
+@media (max-width: 420px), (max-height: 620px) {
+  .battle-touch-controls { max-width: 100%; }
+  .battle-touch-controls button { padding: 0.25rem 0.45rem; font-size: 0.68rem; }
+  .battle-hud__learning { top: 3.5rem; font-size: 0.75rem; }
+  .random-roster__slots { grid-template-columns: repeat(5, 44px); }
+}
+
+
+.battle-hud__recall,
+.battle-hud__recall-cancel {
+  position: absolute;
+  z-index: 33;
+  left: 50%;
+  bottom: 9rem;
+  display: flex;
+  gap: 0.6rem;
+  margin: 0;
+  padding: 0.55rem 0.8rem;
+  transform: translateX(-50%);
+  border: 1px solid var(--color-blue-bright);
+  background: rgba(3, 10, 20, 0.94);
+  color: var(--color-text-strong);
+}
+
+
+/* Authoritative aim state and compact full jungle timer strip. */
+.battle-ability.is-aiming {
+  outline: 3px solid currentColor;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.2), 0 0 22px currentColor;
+  transform: translateY(-4px);
+}
+
+.battle-hud__camps {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.25rem 0.45rem;
+  max-width: min(96vw, 68rem);
+  margin: 0.2rem auto 0;
+  padding: 0.25rem 0.45rem;
+  border: 1px solid rgba(217, 184, 108, 0.28);
+  background: rgba(2, 9, 15, 0.84);
+  color: var(--color-text-muted);
+  font: 700 0.62rem/1.2 var(--font-body);
+  pointer-events: none;
+}
+
+.battle-hud__camp.is-alive {
+  color: var(--color-text-strong);
+}
+
+@media (max-width: 700px), (max-height: 620px) {
+  .battle-hud__camps {
+    max-height: 2.5rem;
+    overflow: hidden;
+    font-size: 0.55rem;
+  }
+}

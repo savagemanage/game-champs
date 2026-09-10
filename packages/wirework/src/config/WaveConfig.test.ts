@@ -12,29 +12,29 @@ import {
 const SAMPLE: WaveDef = {
   wave: 1,
   groups: [
-    { role: EnemyRole.Wanderer, count: 2 },
-    { role: EnemyRole.Sprinter, count: 1 },
+    { role: EnemyRole.Surveyor, count: 2 },
+    { role: EnemyRole.Skitter, count: 1 },
   ],
   spawnIntervalMs: 1000,
   startDelayMs: 3000,
 };
 
 describe('expandWave', () => {
-  it('produces exactly the wave size, one entry per giant', () => {
+  it('produces exactly the wave size, one entry per machine', () => {
     const order = expandWave(SAMPLE);
     expect(order).toHaveLength(waveSize(SAMPLE));
-    const wanderers = order.filter((r) => r === EnemyRole.Wanderer).length;
-    const sprinters = order.filter((r) => r === EnemyRole.Sprinter).length;
+    const wanderers = order.filter((r) => r === EnemyRole.Surveyor).length;
+    const sprinters = order.filter((r) => r === EnemyRole.Skitter).length;
     expect(wanderers).toBe(2);
     expect(sprinters).toBe(1);
   });
 
   it('interleaves groups round-robin so composition arrives mixed', () => {
     // Round-robin: Wanderer, Sprinter, then the leftover Wanderer.
-    expect(expandWave(SAMPLE)).toEqual([EnemyRole.Wanderer, EnemyRole.Sprinter, EnemyRole.Wanderer]);
+    expect(expandWave(SAMPLE)).toEqual([EnemyRole.Surveyor, EnemyRole.Skitter, EnemyRole.Surveyor]);
   });
 
-  it('appends difficulty filler as MORE baseline giants, not tougher ones', () => {
+  it('appends difficulty filler as MORE baseline machines, not tougher ones', () => {
     const brutal = DIFFICULTY_TUNING.brutal;
     const order = expandWave(SAMPLE, brutal);
     expect(order).toHaveLength(waveSize(SAMPLE) + brutal.extraFillerPerWave);

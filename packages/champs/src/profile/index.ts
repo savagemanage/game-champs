@@ -11,6 +11,7 @@ export { loadProfile, resetProfile, saveProfile } from './storage';
 export {
   accountLevelForXp,
   applyMatchOutcome,
+  applyMatchOutcomeTransaction,
   markSeen,
   masteryLevelForXp,
   rewardsForMatch,
@@ -27,5 +28,6 @@ export type {
   Profile,
   ProfileGameMode,
   ProfileMatchOutcomeFacts,
+  ProfileMatchResult,
   ProfileStorage,
 } from './types';

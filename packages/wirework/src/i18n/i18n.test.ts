@@ -33,14 +33,16 @@ describe('i18n tr()', () => {
 
   it('substitutes multiple params in the stats block', () => {
     setLanguage('en');
-    expect(tr('gameover.stats', { score: 100, waves: 3, saved: 7 })).toBe(
-      'SCORE   100\nWAVES SURVIVED   3\nCITIZENS SAVED   7',
+    expect(tr('gameover.stats', {
+      difficulty: 'STANDARD', score: 100, best: 120, waves: 3, saved: 7, time: '42.0', seed: 123,
+    })).toBe(
+      'DIFFICULTY   STANDARD\nSCORE   100  /  BEST   120\nWAVES COMPLETED   3\nCITIZENS REMAINING   7\nACTIVE TIME   42.0s\nSEED   123',
     );
   });
 
-  it('leaves unknown placeholders untouched', () => {
+  it('fails when required placeholders are omitted', () => {
     setLanguage('en');
-    expect(tr('preload.loading')).toBe('Loading {pct}%');
+    expect(() => tr('preload.loading')).toThrow('Missing translation placeholder {pct}');
   });
 
   it('falls back to English when the Korean value is missing', () => {

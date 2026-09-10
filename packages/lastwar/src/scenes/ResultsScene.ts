@@ -1,18 +1,22 @@
 import Phaser from 'phaser';
 import { SceneKeys, PALETTE, CANVAS, RESOURCE_ORDER } from '../config/GameConfig';
 import type { ResourceKind, RunResult } from '../types';
-import { GameStore } from '../systems/GameStore';
 import type { RewardBundle } from '../config/Progression';
 import { tr } from '../i18n/i18n';
 import type { TrKey } from '../i18n/strings';
 import { Menu } from '../ui/Menu';
 import { textStyle } from '../ui/UiText';
+import { setAccessibleScreen } from '../systems/Accessibility';
 
 /** Data handed to ResultsScene from a finished run. */
 export interface ResultsData {
+  runId: string;
   result: RunResult;
   newBestDistance: boolean;
   newBestScore: boolean;
+  reward: RewardBundle;
+  grantedMainGame: boolean;
+  remainingToday: number;
 }
 
 /**
@@ -30,22 +34,14 @@ export class ResultsScene extends Phaser.Scene {
 
   create(data: ResultsData): void {
     const result = data.result;
+    setAccessibleScreen(tr(result.win ? 'result.victory' : 'result.defeat'), `${tr('result.distance', { meters: result.distance })}, ${tr('result.score', { score: result.score })}, ${tr('result.squadFinal', { count: result.squadFinal })}`);
     const cx = CANVAS.WIDTH / 2;
 
     this.cameras.main.resetFX();
     this.cameras.main.setBackgroundColor(PALETTE.BG_SKY_CSS);
     Menu.fadeIn(this);
 
-    // Feed the completed Falcon Rescue run into the army economy EXACTLY ONCE
-    // per finished run. This scene is (re)created fresh for every run that ends
-    // (Redeploy starts a brand-new run -> a brand-new ResultsScene), so doing it
-    // in create() runs once per run and never on a redeploy of the same result.
-    const granted = GameStore.get().recordGateRunnerResult(
-      result.squadFinal,
-      result.distance,
-      result.win,
-      Date.now(),
-    );
+    const granted = data.reward;
 
     const win = result.win;
     const headColor = win ? PALETTE.SUCCESS_CSS : PALETTE.DANGER_CSS;
@@ -60,7 +56,9 @@ export class ResultsScene extends Phaser.Scene {
       { text: tr('result.distance', { meters: result.distance }) },
       { text: tr('result.score', { score: result.score }) },
       { text: tr('result.squadPeak', { count: result.squadPeak }) },
+      { text: tr('result.squadFinal', { count: result.squadFinal }) },
       { text: tr('result.coinsEarned', { coins: result.coinsEarned }), color: PALETTE.COIN_CSS },
+      { text: tr('result.rewardsRemaining', { count: data.remainingToday }), color: data.grantedMainGame ? PALETTE.SUCCESS_CSS : PALETTE.MUTED_CSS },
     ];
     let ly = panelY - 72;
     for (const line of lines) {

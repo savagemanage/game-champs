@@ -13,6 +13,7 @@ import { GameState } from '../systems/GameState';
 import { tr } from '../i18n/i18n';
 import { Menu, type MenuButton } from './Menu';
 import { textStyle } from './UiText';
+import { closeAccessibleModal, openAccessibleModal, refreshAccessibleModalContext } from './Accessibility';
 
 /** Per-quest row widgets that need live updates. */
 interface QuestRow {
@@ -61,7 +62,12 @@ export class QuestPanel {
   setVisible(visible: boolean): void {
     this._visible = visible;
     this.root.setVisible(visible);
-    if (visible) this.refresh();
+    if (visible) {
+      this.refresh();
+      openAccessibleModal(this.root, () => this.setVisible(false));
+    } else {
+      closeAccessibleModal(this.root);
+    }
   }
 
   toggle(): void {
@@ -218,6 +224,7 @@ export class QuestPanel {
         row.claimButton.setText(tr('quest.inProgress'));
       }
     }
+    refreshAccessibleModalContext(this.root);
   }
 
   update(): void {

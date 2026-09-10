@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { battleStore } from '../game/battleStore';
-import { ITEMS } from '../data/items';
+import { ITEMS, remainingBuildCost } from '../data/items';
+import { attemptPurchase } from '../game/inventory';
 import { recommendBuild } from '../game/rift/loadout';
 import { getChampionById } from '../data/champions';
 import { useDialogFocusTrap } from '../hooks/useDialogFocusTrap';
@@ -29,6 +30,18 @@ export default function ShopPanel({ open, onClose }: ShopPanelProps) {
   useEffect(() => {
     if (!visible) setPurchaseStatus('');
   }, [visible]);
+
+  useEffect(() => {
+    const feedback = state.purchaseFeedback;
+    if (!feedback) return;
+    const item = ITEMS.find((candidate) => candidate.id === feedback.itemId);
+    const name = item ? t(item.nameKey) : feedback.itemId;
+    setPurchaseStatus(
+      feedback.accepted
+        ? t('shop.purchaseSuccess', { item: name })
+        : t(`shop.rejections.${feedback.reason ?? 'unknown-item'}`, { item: name }),
+    );
+  }, [state.purchaseFeedback, t]);
 
   if (!visible) return null;
 
@@ -64,9 +77,15 @@ export default function ShopPanel({ open, onClose }: ShopPanelProps) {
 
         <ul className="shop-panel__list">
           {ITEMS.map((item) => {
-            const isOwned = owned.has(item.id);
-            const affordable = state.gold >= item.cost;
-            const disabled = isOwned || !affordable;
+            const isOwned = item.legendary && owned.has(item.id);
+            const displayedCost = remainingBuildCost(item, state.ownedItems);
+            const preview = attemptPurchase({
+              gold: state.gold,
+              items: state.ownedItems,
+              inShop: state.shopAvailable,
+            }, item.id);
+            const affordable = state.gold >= displayedCost;
+            const disabled = !preview.accepted;
             const isTarget = build?.targetItem.id === item.id;
             const isComponent = build?.nextPurchasableComponent?.id === item.id;
             const nameId = `shop-item-${item.id}-name`;
@@ -85,7 +104,7 @@ export default function ShopPanel({ open, onClose }: ShopPanelProps) {
                 </div>
                 <p id={descId} className="shop-item__desc">{t(item.descKey)}</p>
                 <div className="shop-item__foot">
-                  <span className="shop-item__cost"><span aria-hidden="true">◈</span> {formatNumber.format(item.cost)}</span>
+                  <span className="shop-item__cost"><span aria-hidden="true">◈</span> {formatNumber.format(displayedCost)}</span>
                   <button
                     type="button"
                     className="btn btn--primary shop-item__buy"

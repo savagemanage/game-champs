@@ -157,7 +157,13 @@ export class ResearchScene extends HubScene {
   private doStart(): void {
     if (!this.selected) return;
     const now = Date.now();
-    const res = this.state.research.start(this.selected, this.state.resources, this.labLevel(), now);
+    const res = this.state.research.start(
+      this.selected,
+      this.state.resources,
+      this.labLevel(),
+      now,
+      this.state.modifiers().buildSpeed,
+    );
     if (res.ok) {
       this.audio.playSfx(AudioKeys.UiClick, 0.7);
       this.state.save(now);

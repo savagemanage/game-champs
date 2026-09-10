@@ -1,14 +1,14 @@
 import Phaser from 'phaser';
 import { CANVAS, PALETTE, TRAINING } from '../config/GameConfig';
-import { AudioKeys, TROOP_TEXTURE_BY_KIND } from '../config/AssetKeys';
+import { TROOP_TEXTURE_BY_KIND } from '../config/AssetKeys';
 import { TROOP_ORDER, troopDef } from '../config/TroopConfig';
 import type { ResourceKind, TroopKind } from '../types';
 import { RESOURCE_ORDER } from '../config/GameConfig';
-import { AudioManager } from '../systems/AudioManager';
 import { GameState } from '../systems/GameState';
 import { tr } from '../i18n/i18n';
 import { Menu, type MenuButton } from './Menu';
 import { textStyle } from './UiText';
+import { closeAccessibleModal, openAccessibleModal, refreshAccessibleModalContext } from './Accessibility';
 
 /** Per-troop row widgets that need live updates. */
 interface TroopRow {
@@ -58,7 +58,12 @@ export class TrainingPanel {
   setVisible(visible: boolean): void {
     this._visible = visible;
     this.root.setVisible(visible);
-    if (visible) this.refresh();
+    if (visible) {
+      this.refresh();
+      openAccessibleModal(this.root, () => this.setVisible(false));
+    } else {
+      closeAccessibleModal(this.root);
+    }
   }
 
   toggle(): void {
@@ -141,8 +146,9 @@ export class TrainingPanel {
     const name = this.scene.add.text(x + 40, y, tr(`troop.${troop}`), textStyle(18, { fontStyle: 'bold' })).setOrigin(0, 0);
     this.root.add(name);
 
+    const actualTrainSeconds = Math.round(def.trainTimeMs * this.state.research.trainSpeedMultiplier() / 1000);
     const costLine = this.scene.add
-      .text(x + 40, y + 22, `${tr('training.cost', { cost: this.costString(troop) })}   ${tr('training.time', { seconds: Math.round(def.trainTimeMs / 1000) })}`, textStyle(13, { color: PALETTE.MUTED_CSS }))
+      .text(x + 40, y + 22, `${tr('training.cost', { cost: this.costString(troop) })}   ${tr('training.time', { seconds: actualTrainSeconds })}`, textStyle(13, { color: PALETTE.MUTED_CSS }))
       .setOrigin(0, 0);
     this.root.add(costLine);
 
@@ -206,17 +212,21 @@ export class TrainingPanel {
 
   private train(row: TroopRow): void {
     const now = Date.now();
-    const result = this.state.training.enqueue(
-      row.troop,
-      row.count,
-      this.state.resources,
-      now,
-      this.state.buildings.hasBarracks,
-      this.state.research.trainSpeedMultiplier(),
-    );
-    if (result.ok) {
-      AudioManager.get(this.scene).playSfx(AudioKeys.TrainComplete, 0.5);
-      this.state.save(now);
+    let result: ReturnType<GameState['training']['enqueue']> = { ok: false, reason: 'cost' };
+    const committed = this.state.commitDurableAction(() => {
+      result = this.state.training.enqueue(
+        row.troop,
+        row.count,
+        this.state.resources,
+        now,
+        this.state.buildings.hasBarracks,
+        this.state.research.trainSpeedMultiplier(),
+      );
+      return result.ok;
+    }, now);
+    if (committed) {
+      // Enqueue feedback is the ordinary click; TrainComplete is emitted only
+      // when the canonical runtime actually completes the batch.
     }
     this.refresh();
   }
@@ -279,6 +289,7 @@ export class TrainingPanel {
       });
       this.queueText.setText(`${tr('training.queue')}:\n${lines.join('\n')}`);
     }
+    refreshAccessibleModalContext(this.root);
   }
 
   /** Whether the player can currently afford a batch (without enqueuing). */

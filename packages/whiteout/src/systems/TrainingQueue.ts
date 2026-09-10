@@ -6,7 +6,7 @@ import { ResourceStore } from './ResourceStore';
 /** Outcome of attempting to enqueue a training batch. */
 export interface EnqueueCheck {
   ok: boolean;
-  reason?: 'no_war_camp' | 'queue_full' | 'bad_count' | 'batch_too_large' | 'cost';
+  reason?: 'no_war_camp' | 'no_yard' | 'tier_locked' | 'queue_full' | 'bad_count' | 'batch_too_large' | 'cost';
 }
 
 /**
@@ -33,7 +33,15 @@ export class TrainingQueue {
   private readonly _tiers: Map<TroopKind, Map<number, number>> = new Map();
 
   constructor(queue?: TrainingOrder[], army?: Partial<Army>, tiers?: ArmyTiers) {
-    this._queue = queue ? queue.map((o) => ({ ...o })) : [];
+    this._queue = (queue ?? [])
+      .filter((order) => ['trapper', 'marksman', 'vanguard'].includes(order.troop))
+      .slice(0, TRAINING.MAX_QUEUE)
+      .map((order) => ({
+        troop: order.troop,
+        count: Math.min(TRAINING.MAX_BATCH, Math.max(1, Math.floor(Number.isFinite(order.count) ? order.count : 1))),
+        tier: clampTier(order.tier ?? 1),
+        completesAt: Number.isFinite(order.completesAt) ? Math.max(0, order.completesAt) : 0,
+      }));
     this._army = { trapper: 0, marksman: 0, vanguard: 0 };
     if (army) {
       for (const kind of Object.keys(this._army) as TroopKind[]) {
@@ -187,14 +195,18 @@ export class TrainingQueue {
     now: number,
     hasWarCamp: boolean,
     tier: number = 1,
+    maxUnlockedTier: number = TROOP_TIERS.MAX_TIER,
+    hasYard = true,
   ): EnqueueCheck {
     if (!hasWarCamp) return { ok: false, reason: 'no_war_camp' };
+    if (!hasYard) return { ok: false, reason: 'no_yard' };
     if (!Number.isFinite(count) || count <= 0) return { ok: false, reason: 'bad_count' };
     count = Math.floor(count);
     if (count > TRAINING.MAX_BATCH) return { ok: false, reason: 'batch_too_large' };
     if (this._queue.length >= TRAINING.MAX_QUEUE) return { ok: false, reason: 'queue_full' };
 
     const t = clampTier(tier);
+    if (t > Math.max(1, Math.floor(maxUnlockedTier))) return { ok: false, reason: 'tier_locked' };
     // Tier-scaled per-unit cost + train time (T1 is the TroopConfig baseline).
     const totalCost = TrainingQueue.scaleCost(troopTierCost(troop, t), count);
     if (!store.canAfford(totalCost)) return { ok: false, reason: 'cost' };

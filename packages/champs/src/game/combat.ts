@@ -139,9 +139,10 @@ export function applyDamage(target: Unit, rawDamage: number): DamageResult {
   if (target.dead || target.hp <= 0) {
     return { dealt: 0, lethal: false };
   }
-  const dealt = effectiveDamage(rawDamage, target.armor);
+  const mitigated = effectiveDamage(rawDamage, target.armor);
   const hpBefore = target.hp;
-  target.hp = Math.max(0, target.hp - dealt);
+  const dealt = Math.min(hpBefore, mitigated);
+  target.hp = Math.max(0, target.hp - mitigated);
   const lethal = hpBefore > 0 && target.hp === 0;
   if (lethal) {
     target.dead = true;

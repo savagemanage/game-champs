@@ -11,9 +11,10 @@
  * names main.ts's boot wiring already consumes and simply forwards to shared.
  */
 
-import { resolveRenderZoom as sharedResolveRenderZoom, DEFAULT_MAX_RENDER_SCALE } from '@open-games/shared';
+import { resolveRenderZoom as sharedResolveRenderZoom } from '@open-games/shared';
 
-export { DEFAULT_MAX_RENDER_SCALE } from '@open-games/shared';
+/** LAST SQUAD caps backing zoom at 3x for mobile memory safety. */
+export const DEFAULT_MAX_RENDER_SCALE = 3;
 
 /** Inputs for {@link computeRenderScale}. All in the caller's native units. */
 export interface RenderScaleInput {

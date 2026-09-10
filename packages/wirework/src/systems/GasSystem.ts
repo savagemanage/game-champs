@@ -1,11 +1,9 @@
 import { GAS } from '../config/PlayerConfig';
 
 /**
- * GasSystem - the ODM gas / stamina resource.
- *
- * Gas is consumed by firing the grapple, reeling the wire, swinging, and
- * dashing. It regenerates when the player is grounded/idle (and, more slowly,
- * while airborne but not spending). Actions must first check {@link canAfford}
+ * Charge is consumed by firing the tether, reeling the wire, maintaining an
+ * attachment, and dashing. It regenerates fastest while stable and more slowly
+ * during release momentum. Actions must first check {@link canAfford}
  * and then {@link spend}; when the meter is empty those actions are blocked.
  *
  * The system is pure logic (no Phaser dependency) so it is trivially unit

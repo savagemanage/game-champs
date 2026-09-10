@@ -429,9 +429,11 @@ describe('SaveManager', () => {
     expect(loaded.snapshot.buildings.level('farm')).toBe(3);
 
     const eff = ECONOMY.OFFLINE_EFFICIENCY;
+    // The completion batch is applied first at the authoritative 600s tick,
+    // then that tick's production uses L3 (SPEC timer→production ordering).
     const expectedSplit =
-      outputPerSec('farm', 2) * boundaryOffset * eff +
-      outputPerSec('farm', 3) * (windowSec - boundaryOffset) * eff;
+      outputPerSec('farm', 2) * (boundaryOffset - 1) * eff +
+      outputPerSec('farm', 3) * (windowSec - boundaryOffset + 1) * eff;
     const naiveWhole = outputPerSec('farm', 3) * windowSec * eff;
 
     expect(loaded.offlineGains.food).toBeCloseTo(expectedSplit, 4);

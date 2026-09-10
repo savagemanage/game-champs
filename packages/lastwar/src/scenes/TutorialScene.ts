@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { SceneKeys, PALETTE, CANVAS } from '../config/GameConfig';
 import { GameStore } from '../systems/GameStore';
+import { AudioManager } from '../systems/AudioManager';
 import {
   firstStep,
   isLastStep,
@@ -132,13 +133,15 @@ export class TutorialScene extends Phaser.Scene {
     this.coach.lineStyle(2, PALETTE.SQUAD, 0.8);
     this.coach.strokeCircle(anchor.x, anchor.y, 40);
     // A gentle pulse to draw the eye to the highlighted tab.
-    this.tweens.add({
-      targets: this.coach,
-      alpha: { from: 1, to: 0.35 },
-      duration: 700,
-      yoyo: true,
-      repeat: -1,
-    });
+    if (!AudioManager.get(this).getSettings().reducedMotion) {
+      this.tweens.add({
+        targets: this.coach,
+        alpha: { from: 1, to: 0.35 },
+        duration: 700,
+        yoyo: true,
+        repeat: -1,
+      });
+    }
   }
 
   /** Advance to the next step, or finish when on the last step. */

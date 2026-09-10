@@ -120,14 +120,17 @@ export class TutorialOverlay {
         .setStrokeStyle(3, PALETTE.ACCENT)
         .setFillStyle(PALETTE.ACCENT, 0)
         .setDepth(TutorialOverlay.CARD_DEPTH);
-      // A gentle pulse to draw the eye to the target.
-      this.scene.tweens.add({
-        targets: border,
-        alpha: { from: 1, to: 0.4 },
-        duration: 700,
-        yoyo: true,
-        repeat: -1,
-      });
+      // A gentle pulse to draw the eye to the target unless reduced motion is requested.
+      const reduced = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+      if (!reduced) {
+        this.scene.tweens.add({
+          targets: border,
+          alpha: { from: 1, to: 0.4 },
+          duration: 700,
+          yoyo: true,
+          repeat: -1,
+        });
+      }
       container.add(border);
       this.dimObjects.push(border);
     }

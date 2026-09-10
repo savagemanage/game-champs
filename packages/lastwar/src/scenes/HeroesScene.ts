@@ -17,11 +17,11 @@ import {
   starUpCost,
   skillUpCost,
 } from '../systems/Heroes';
-import type { RecruitResult } from '../systems/Recruit';
 import { tr } from '../i18n/i18n';
 import type { TrKey } from '../i18n/strings';
 import { Menu, type MenuButton } from '../ui/Menu';
 import { textStyle } from '../ui/UiText';
+import { buildTopNav } from '../ui/TopNav';
 
 /** Data passed when launching the Heroes scene from the HomeScene bottom-nav. */
 export interface HeroesSceneData {
@@ -86,7 +86,7 @@ export class HeroesScene extends Phaser.Scene {
 
     this.content = this.add.container(0, 0);
 
-    Menu.button(this, cx, CANVAS.HEIGHT * 0.955, tr('common.back'), () => this.close(), { width: 200 });
+    buildTopNav(this, SceneKeys.Heroes);
     this.input.keyboard?.on('keydown-ESC', () => (this.detail ? this.closeDetail() : this.close()));
     this.input.keyboard?.on('keydown-R', () => this.setTab('recruit'));
     this.input.keyboard?.on('keydown-F', () => this.openFormation());
@@ -297,14 +297,19 @@ export class HeroesScene extends Phaser.Scene {
       .setOrigin(0.5);
     this.content.add(pityLine);
 
-    const remaining = Math.max(0, RECRUIT.PITY_THRESHOLD - pity.sinceHighGrade);
+    const remaining = Math.max(1, RECRUIT.PITY_THRESHOLD + 1 - pity.sinceHighGrade);
     const pityHint = this.add
       .text(cx, CANVAS.HEIGHT * 0.35, tr('recruit.pity', { count: remaining }), textStyle(11, { align: 'center', color: PALETTE.MUTED_CSS, allowSmall: true }))
       .setOrigin(0.5);
     this.content.add(pityHint);
 
+    const rateLine = this.add
+      .text(cx, CANVAS.HEIGHT * 0.365, tr('recruit.rates'), textStyle(11, { align: 'center', color: PALETTE.MUTED_CSS, allowSmall: true }))
+      .setOrigin(0.5);
+    this.content.add(rateLine);
+
     // A pity progress bar.
-    const bar = Menu.progressBar(this, cx - 130, CANVAS.HEIGHT * 0.385, 260, 10, PALETTE.BOSS);
+    const bar = Menu.progressBar(this, cx - 130, CANVAS.HEIGHT * 0.4, 260, 10, PALETTE.BOSS);
     bar.setProgress(pity.sinceHighGrade / RECRUIT.PITY_THRESHOLD);
     this.content.add(bar.container);
 
@@ -312,8 +317,10 @@ export class HeroesScene extends Phaser.Scene {
     const reveal = this.add.container(cx, CANVAS.HEIGHT * 0.48);
     this.content.add(reveal);
 
-    const single = Menu.button(this, cx - 90, CANVAS.HEIGHT * 0.6, tr('recruit.pull1'), () => this.pull(1, reveal), { width: 150, accent: PALETTE.SQUAD });
-    const multi = Menu.button(this, cx + 90, CANVAS.HEIGHT * 0.6, tr('recruit.pull10'), () => this.pull(10, reveal), { width: 150, accent: PALETTE.ACCENT });
+    const single = Menu.button(this, cx - 90, CANVAS.HEIGHT * 0.6, tr('recruit.pullCost', { count: 1, cost: 20 }), () => this.pull(1, reveal), { width: 160, accent: PALETTE.SQUAD, fontSize: 13, allowSmall: true });
+    const multi = Menu.button(this, cx + 90, CANVAS.HEIGHT * 0.6, tr('recruit.pullCost', { count: 10, cost: 180 }), () => this.pull(10, reveal), { width: 160, accent: PALETTE.ACCENT, fontSize: 13, allowSmall: true });
+    single.setEnabled(store.shards() >= 20);
+    multi.setEnabled(store.shards() >= 180);
     this.content.add([single.container, multi.container]);
   }
 
@@ -323,17 +330,8 @@ export class HeroesScene extends Phaser.Scene {
     reveal.removeAll(true);
     AudioManager.get(this).playSfx(AudioKeys.Recruit, 0.8);
 
-    const results: (RecruitResult & { duplicate: boolean; shardsGained: number })[] = [];
-    for (let i = 0; i < count; i += 1) {
-      // Seed each pull by mixing the persisted per-account recruit-entropy seed
-      // with the running total-pulls counter so the roll is stable + deterministic
-      // WITHIN an account yet differs across fresh accounts (not trivially
-      // re-rollable). recruitOne stays deterministic given this final seed; the
-      // store advances pity/roster/shards on each call.
-      const recruitSeed = store.state.heroes.recruitSeed >>> 0;
-      const seed = (((store.state.heroes.pity.totalPulls * 2654435761) >>> 0) ^ recruitSeed ^ (i * 40503)) >>> 0;
-      results.push(store.recruitOne(seed));
-    }
+    const results = store.recruitMany(count as 1 | 10);
+    if (!results) return;
 
     const cols = Math.min(5, count);
     const cellW = 62;

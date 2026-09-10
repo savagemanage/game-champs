@@ -24,7 +24,7 @@ the deploy workflow are all generated from it.
 | [`packages/whiteout`](./packages/whiteout) | **Frosthold: Last Ember** (서리성채: 마지막 불씨) | Survival City-Builder | Vite + TypeScript + Phaser 3.80 | A frozen-survival city-builder: keep the central furnace burning, run idle resource buildings, and repel escalating cold-season sieges. |
 | [`packages/kingshot`](./packages/kingshot) | **Kingdom Rise** (킹덤 라이즈) | Strategy / Idle | Vite + TypeScript + Phaser 3.80 | A medieval kingdom builder with idle resource output, a town-center-gated building tree, troop training queues, and wave-based combat. |
 | [`packages/lastwar`](./packages/lastwar) | **LAST SQUAD** (라스트 스쿼드) | Squad Auto-Battler | Vite + TypeScript + Phaser 3.80 | A survival base-builder and squad auto-battler with a story campaign, endless horde defense, and a lane gate-runner mini-game. |
-| [`packages/wirework`](./packages/wirework) | **Wirework** | Wall-Defense Action | Vite + TypeScript + Phaser 3.80 | A top-down wall-defense action game: grapple across a besieged arena, hold the double ring, and strike each giant's exposed nape. |
+| [`packages/wirework`](./packages/wirework) | **Wirework** (Wirework) | Top-down Ring Defense Action | Vite + TypeScript + Phaser 3.80 | Tether through a capacitor city and cut rear cooling nodes to stop autonomous siege machines. |
 
 <!-- games:end -->
 

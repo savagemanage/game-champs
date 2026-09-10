@@ -36,6 +36,10 @@ export interface TutorialProgress {
   barracksBuilt: boolean;
   /** Cumulative troops trained over the game's lifetime. */
   troopsTrained: number;
+  /** Whether the player opened the quest log for the final guided action. */
+  questPanelOpen?: boolean;
+  /** Campaign victories, for a returning/replayed tutorial. */
+  battlesWon?: number;
 }
 
 /**
@@ -123,9 +127,8 @@ export const TUTORIAL_STEPS: readonly TutorialStep[] = [
     id: 'upgrade_town_center',
     bodyKey: 'tutorial.upgradeTownCenter',
     anchor: 'upgrade_button',
-    // Advance the moment an upgrade STARTS (build in progress) or once the Town
-    // Center has already reached Lv.2 (covers a fast tick completing it).
-    advance: (p) => p.townCenterUpgrading || p.townCenterLevel >= 2,
+    // The requirement is completion, not merely paying and starting a timer.
+    advance: (p) => p.townCenterLevel >= 2,
   },
   {
     id: 'resources_warmth',
@@ -158,8 +161,9 @@ export const TUTORIAL_STEPS: readonly TutorialStep[] = [
   {
     id: 'battle_quests',
     bodyKey: 'tutorial.battleQuests',
-    anchor: 'battle',
-    advance: 'next',
+    anchor: 'quests',
+    advance: (p) => p.questPanelOpen === true || (p.battlesWon ?? 0) > 0,
+    freeInteraction: true,
   },
 ] as const;
 

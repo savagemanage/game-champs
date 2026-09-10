@@ -5,11 +5,13 @@ import { TextureKeys, AudioKeys } from '../config/AssetKeys';
 import { AudioManager } from '../systems/AudioManager';
 import { GameStore } from '../systems/GameStore';
 import { SEASON, type RewardBundle } from '../config/Progression';
-import { resistanceCost } from '../systems/Season';
+import { cumulativeXpForTier, resistanceCost, tierXpCost } from '../systems/Season';
+import { currentSeasonEnd } from '../systems/Calendar';
 import { tr } from '../i18n/i18n';
 import type { TrKey } from '../i18n/strings';
 import { Menu } from '../ui/Menu';
 import { textStyle } from '../ui/UiText';
+import { buildTopNav } from '../ui/TopNav';
 
 /** Data passed when launching the Season scene from the Home bottom-nav. */
 export interface SeasonSceneData {
@@ -58,7 +60,7 @@ export class SeasonScene extends Phaser.Scene {
 
     this.content = this.add.container(0, 0);
 
-    Menu.button(this, cx, CANVAS.HEIGHT * 0.955, tr('common.back'), () => this.close(), { width: 160 });
+    buildTopNav(this, SceneKeys.Season);
     this.input.keyboard?.on('keydown-ESC', () => this.close());
 
     this.render();
@@ -81,7 +83,7 @@ export class SeasonScene extends Phaser.Scene {
       .text(
         cx,
         y,
-        `${tr('season.current', { season: store.state.season.current })}   ${tr('season.tier', { tier: store.seasonTier() })}   ${tr('season.xp', { xp: store.state.season.xp })}`,
+        `${tr('season.current', { season: store.state.season.current })}   ${tr('season.tier', { tier: store.seasonTier() })}   ${tr('season.xpSplit', { earned: store.state.season.earnedXp, available: store.state.season.availableXp })}`,
         textStyle(14, { align: 'center', allowSmall: true }),
       )
       .setOrigin(0.5);
@@ -98,41 +100,34 @@ export class SeasonScene extends Phaser.Scene {
       )
       .setOrigin(0.5);
     this.content.add(premiumLine);
+    const tier = store.seasonTier();
+    const nextCost = tier >= SEASON.MAX_TIER ? 0 : cumulativeXpForTier(tier) + tierXpCost(tier) - store.state.season.earnedXp;
+    const end = new Date(currentSeasonEnd(Date.now())).toLocaleString();
+    this.content.add(this.add.text(cx, y + 40, tr('season.deadline', { xp: Math.max(0, nextCost), end }), textStyle(9, { align: 'center', color: PALETTE.MUTED_CSS, allowSmall: true })).setOrigin(0.5));
   }
 
-  /** The free/premium reward track from SEASON.TIER_REWARDS as tier rows. */
+  /** The complete 30-tier free/premium reward track in two columns. */
   private buildTierTrack(store: GameStore): void {
-    const cx = CANVAS.WIDTH / 2;
     const startY = CANVAS.HEIGHT * 0.18;
-    const rowH = 48;
-    const rowW = CANVAS.WIDTH - 40;
+    const rowH = 38;
+    const colW = CANVAS.WIDTH / 2 - 14;
     const currentTier = store.seasonTier();
     const premiumUnlocked = store.premiumUnlocked();
 
     SEASON.TIER_REWARDS.forEach((pair, i) => {
       const tier = i + 1;
-      const y = startY + i * rowH;
+      const col = i < 15 ? 0 : 1;
+      const row = i % 15;
+      const x = 7 + colW / 2 + col * (colW + 2);
+      const y = startY + row * rowH;
       const reached = currentTier >= tier;
-
-      const panel = Menu.panel(this, cx, y, rowW, rowH - 8, reached ? 0.92 : 0.55);
-      panel.setStrokeStyle(2, reached ? PALETTE.SUCCESS : PALETTE.LANE_LINE);
+      const panel = Menu.panel(this, x, y, colW - 4, rowH - 4, reached ? 0.92 : 0.55);
+      panel.setStrokeStyle(1, reached ? PALETTE.SUCCESS : PALETTE.LANE_LINE);
       this.content.add(panel);
-
-      const tierLabel = this.add
-        .text(cx - rowW / 2 + 12, y, tr('season.tier', { tier }), textStyle(12, { fontStyle: 'bold', color: reached ? PALETTE.SUCCESS_CSS : PALETTE.TEXT_CSS, allowSmall: true }))
-        .setOrigin(0, 0.5);
-      this.content.add(tierLabel);
-
-      const freeText = this.add
-        .text(cx - rowW / 2 + 74, y, `${tr('season.free')}: ${this.rewardSummary(pair.free)}`, textStyle(10, { allowSmall: true }))
-        .setOrigin(0, 0.5);
-      this.content.add(freeText);
-
-      const premColor = premiumUnlocked ? PALETTE.COIN_CSS : PALETTE.MUTED_CSS;
-      const premText = this.add
-        .text(cx + rowW / 2 - 12, y, `${tr('season.premium')}: ${this.rewardSummary(pair.premium)}`, textStyle(10, { align: 'right', color: premColor, allowSmall: true }))
-        .setOrigin(1, 0.5);
-      this.content.add(premText);
+      const summary = `${this.rewardSummary(pair.free)} / ${premiumUnlocked ? this.rewardSummary(pair.premium) : '🔒'}`;
+      this.content.add(
+        this.add.text(x - colW / 2 + 8, y, `${tier}. ${summary}`, textStyle(8, { color: reached ? PALETTE.SUCCESS_CSS : PALETTE.TEXT_CSS, allowSmall: true })).setOrigin(0, 0.5),
+      );
     });
   }
 
@@ -170,7 +165,7 @@ export class SeasonScene extends Phaser.Scene {
       allowSmall: true,
     });
     // Disable when capped or the player cannot afford the next level.
-    btn.setEnabled(!capped && store.state.season.xp >= cost);
+    btn.setEnabled(!capped && store.state.season.availableXp >= cost);
     this.content.add(btn.container);
   }
 

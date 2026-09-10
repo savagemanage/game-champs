@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import i18n from '../i18n';
-import type { MatchSetup } from '../App';
+import type { MatchRequest } from '../game/matchRequest';
 import BattleScreen from './BattleScreen';
 
 vi.mock('../game/PhaserGame', () => ({
@@ -16,7 +16,9 @@ vi.mock('../game/BattleHud', () => ({
   default: () => <div data-testid="battle-hud">Battle HUD</div>,
 }));
 
-const MATCH: MatchSetup = {
+const MATCH: MatchRequest = {
+  matchId: 'local-1-test',
+  matchSeed: 'test',
   mode: 'conquest',
   matchKind: 'practice',
   difficulty: 'easy',

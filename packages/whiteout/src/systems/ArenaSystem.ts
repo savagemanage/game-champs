@@ -124,7 +124,7 @@ export class ArenaSystem {
     // Bounded +/- variance from the seed (deterministic).
     const rng = mulberry32((seed >>> 0) ^ (r * 2654435761));
     const jitter = (rng() * 2 - 1) * ARENA.POWER_VARIANCE; // in [-VARIANCE, +VARIANCE]
-    return Math.max(1, base * (1 + jitter));
+    return Math.max(1, Math.round(base * (1 + jitter)));
   }
 
   /** Ember Sparks a win at a given rank is worth (more the higher the rank). */

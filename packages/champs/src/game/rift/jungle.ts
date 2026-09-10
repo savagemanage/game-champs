@@ -20,7 +20,15 @@ export type CampType =
   | 'krugs'
   | 'scuttle';
 
-/** A neutral jungle camp instance. */
+export interface CampMember {
+  key: string;
+  hp: number;
+  ad: number;
+  armor: number;
+  scale: number;
+}
+
+/** A neutral jungle camp instance and its deterministic pack composition. */
 export interface Camp {
   id: string;
   type: CampType;
@@ -28,6 +36,7 @@ export interface Camp {
   pos: Vec2;
   respawnSeconds: number;
   bounty: Bounty;
+  members: readonly CampMember[];
 }
 
 /** Respawn cooldown per camp type, in seconds. */
@@ -48,6 +57,29 @@ function campBountyFor(type: CampType): Bounty {
   if (type === 'scuttle') return SCUTTLE_BOUNTY;
   return jungleCampBounty(type as JungleCampKind);
 }
+
+/** Stable actor packs. Pack bounty and buff are awarded only after the final member falls. */
+export const CAMP_PACKS: Record<CampType, readonly CampMember[]> = {
+  blue: [{ key: 'blue-sentinel', hp: 2600, ad: 120, armor: 25, scale: 1.45 }],
+  red: [{ key: 'red-bramble', hp: 2600, ad: 120, armor: 25, scale: 1.45 }],
+  gromp: [{ key: 'gromp', hp: 1500, ad: 85, armor: 15, scale: 1.1 }],
+  wolves: [
+    { key: 'greater-wolf', hp: 900, ad: 70, armor: 15, scale: 1 },
+    { key: 'wolf-a', hp: 450, ad: 40, armor: 10, scale: 0.72 },
+    { key: 'wolf-b', hp: 450, ad: 40, armor: 10, scale: 0.72 },
+  ],
+  raptors: [
+    { key: 'crimson-raptor', hp: 850, ad: 65, armor: 15, scale: 1 },
+    { key: 'raptor-a', hp: 300, ad: 32, armor: 8, scale: 0.62 },
+    { key: 'raptor-b', hp: 300, ad: 32, armor: 8, scale: 0.62 },
+    { key: 'raptor-c', hp: 300, ad: 32, armor: 8, scale: 0.62 },
+  ],
+  krugs: [
+    { key: 'ancient-krug', hp: 1200, ad: 80, armor: 20, scale: 1.15 },
+    { key: 'krug', hp: 650, ad: 50, armor: 15, scale: 0.82 },
+  ],
+  scuttle: [{ key: 'river-scuttle', hp: 1100, ad: 40, armor: 10, scale: 0.8 }],
+};
 
 /** Derive the camp type from a map anchor id like `ally-blue`. */
 function typeFromAnchorId(id: string): CampType {
@@ -70,6 +102,7 @@ export const CAMPS: readonly Camp[] = [
       pos: { x: anchor.pos.x, y: anchor.pos.y },
       respawnSeconds: CAMP_RESPAWN_SECONDS[type],
       bounty: campBountyFor(type),
+      members: CAMP_PACKS[type],
     } satisfies Camp;
   }),
   {
@@ -79,6 +112,7 @@ export const CAMPS: readonly Camp[] = [
     pos: { x: 1980, y: 1980 },
     respawnSeconds: CAMP_RESPAWN_SECONDS.scuttle,
     bounty: campBountyFor('scuttle'),
+    members: CAMP_PACKS.scuttle,
   },
   {
     id: 'enemy-scuttle',
@@ -87,6 +121,7 @@ export const CAMPS: readonly Camp[] = [
     pos: { x: 1020, y: 1020 },
     respawnSeconds: CAMP_RESPAWN_SECONDS.scuttle,
     bounty: campBountyFor('scuttle'),
+    members: CAMP_PACKS.scuttle,
   },
 ];
 

@@ -14,6 +14,9 @@ export interface GameSettings {
   musicVolume: number;
   /** Active UI language ('ko' | 'en'); mirrored into the i18n runtime. */
   language: Language;
+  muted: boolean;
+  reducedMotion: boolean;
+  shakeEnabled: boolean;
 }
 
 const STORAGE_KEY = 'last-squad:settings:v1';
@@ -24,6 +27,9 @@ const DEFAULTS: GameSettings = {
   musicVolume: 0.5,
   // LAST SQUAD is Korean-first, matching the i18n runtime default.
   language: 'ko',
+  muted: false,
+  reducedMotion: false,
+  shakeEnabled: true,
 };
 
 /** Clamp a value into [0..1], falling back to a default if not finite. */
@@ -60,6 +66,7 @@ export class AudioManager {
     this.settings = AudioManager.load();
     // Phaser master volume tracks our master slider directly.
     this.sound.volume = this.settings.masterVolume;
+    this.sound.mute = this.settings.muted;
     // Mirror the persisted language into the i18n runtime at startup.
     setLanguage(this.settings.language);
   }
@@ -99,6 +106,9 @@ export class AudioManager {
         sfxVolume: clamp01(parsed.sfxVolume, DEFAULTS.sfxVolume),
         musicVolume: clamp01(parsed.musicVolume, DEFAULTS.musicVolume),
         language,
+        muted: parsed.muted === true,
+        reducedMotion: parsed.reducedMotion === true,
+        shakeEnabled: parsed.shakeEnabled !== false,
       };
     } catch {
       return { ...DEFAULTS };
@@ -126,6 +136,7 @@ export class AudioManager {
     };
     this.persist();
     this.sound.volume = this.settings.masterVolume;
+    this.sound.mute = this.settings.muted;
     this.applyMusicVolume();
     if (patch.language !== undefined) {
       setLanguage(this.settings.language);
@@ -158,7 +169,7 @@ export class AudioManager {
    * already playing it just re-applies the current music volume.
    */
   playMusic(key: AudioKey = AudioKeys.MusicLoop): void {
-    if (!this.hasClip(key)) return;
+    if (this.sound.locked || !this.hasClip(key)) return;
     if (this.music && this.music.key === key && this.music.isPlaying) {
       this.applyMusicVolume();
       return;

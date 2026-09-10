@@ -89,7 +89,7 @@ describe('Season', () => {
 
   it('raising virus resistance to the threshold unlocks the premium track', () => {
     // Bank a large amount of XP so several resistance levels are affordable.
-    let s = { ...freshSeason(), xp: 100000 };
+    let s = { ...freshSeason(), xp: 100000, earnedXp: 100000, availableXp: 100000 };
     expect(s.premiumUnlocked).toBe(false);
     for (let i = 0; i < SEASON.PREMIUM_UNLOCK_RESISTANCE; i += 1) {
       const res = raiseResistance(s);
@@ -103,7 +103,7 @@ describe('Season', () => {
   });
 
   it('resistance is capped at MAX_RESISTANCE', () => {
-    let s = { ...freshSeason(), xp: 1e9, resistance: SEASON.MAX_RESISTANCE };
+    let s = { ...freshSeason(), xp: 1e9, earnedXp: 1e9, availableXp: 1e9, resistance: SEASON.MAX_RESISTANCE };
     const res = raiseResistance(s);
     expect(res.ok).toBe(false);
     expect(res.state.resistance).toBe(SEASON.MAX_RESISTANCE);

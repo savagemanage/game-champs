@@ -13,11 +13,17 @@ import { UI_FONT_FAMILY } from '../ui/UiText';
  * Vite base path ('/open-games/lastwar/' in production, '/' in dev).
  */
 export class PreloadScene extends Phaser.Scene {
+  private failedAssets: string[] = [];
+
   constructor() {
     super({ key: SceneKeys.Preload });
   }
 
   preload(): void {
+    this.failedAssets = [];
+    this.load.on(Phaser.Loader.Events.FILE_LOAD_ERROR, (file: Phaser.Loader.File) => {
+      this.failedAssets.push(file.key);
+    });
     this.buildLoadingBar();
 
     // Spritesheets (frame configs come straight from AssetKeys).
@@ -37,6 +43,26 @@ export class PreloadScene extends Phaser.Scene {
   }
 
   create(): void {
+    if (this.failedAssets.length > 0) {
+      const cx = CANVAS.WIDTH / 2;
+      this.add.text(cx, CANVAS.HEIGHT * 0.44, tr('preload.error', { count: this.failedAssets.length }), {
+        fontFamily: UI_FONT_FAMILY,
+        fontSize: '18px',
+        color: PALETTE.DANGER_CSS,
+        align: 'center',
+        wordWrap: { width: CANVAS.WIDTH - 80 },
+      }).setOrigin(0.5);
+      const retry = this.add.text(cx, CANVAS.HEIGHT * 0.54, tr('preload.retry'), {
+        fontFamily: UI_FONT_FAMILY,
+        fontSize: '22px',
+        color: PALETTE.TEXT_CSS,
+        backgroundColor: PALETTE.PANEL_CSS,
+        padding: { x: 24, y: 14 },
+      }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+      retry.on(Phaser.Input.Events.POINTER_DOWN, () => this.scene.restart());
+      this.input.keyboard?.once('keydown-ENTER', () => this.scene.restart());
+      return;
+    }
     this.applyPixelArtFiltering();
     this.scene.start(SceneKeys.Title);
   }

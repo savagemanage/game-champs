@@ -1,7 +1,7 @@
 # Contributing to Wirework
 
 Thanks for your interest in improving **Wirework** — an original-world 2D
-pixel-art top-down wall-defense ODM action game built with Phaser 3. This guide
+pixel-art top-down Arc Guardian ring-defense action game built with Phaser 3. This guide
 covers how to set up the project, run the checks, and submit changes.
 
 > **Repo-wide rules live in the root [`CONTRIBUTING.md`](../../CONTRIBUTING.md).** That guide
@@ -59,9 +59,8 @@ npm run typecheck # type-check only (tsc --noEmit)
 
 ## 5. IP boundary (firm)
 
-Wirework is **original work**. Do **not** add "Attack on Titan" — or any other
-third-party — names, lore, characters, canonical creature names, factions, story,
-or art. Contributions may only include **original** or CC0-compatible /
+Wirework is **original work**. Do **not** add any third-party names, lore,
+characters, canonical creature names, factions, story, or art. Contributions may only include **original** or CC0-compatible /
 redistribution-permitting assets, and **every asset must be recorded in**
 [`assets/CREDITS.md`](assets/CREDITS.md) with its provenance and license.
 

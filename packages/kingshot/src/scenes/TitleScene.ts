@@ -58,7 +58,8 @@ export class TitleScene extends Phaser.Scene {
 
     // Title + tagline.
     const title = Menu.title(this, cx, CANVAS.HEIGHT * 0.3, tr('brand.name'), 64);
-    this.tweens.add({ targets: title, y: title.y - 4, duration: 1800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    const reducedMotion = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    if (!reducedMotion) this.tweens.add({ targets: title, y: title.y - 4, duration: 1800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     // The tagline lands on the skyline, the busiest part of the backdrop, so it
     // carries its own dark outline on top of the scrim rather than relying on
     // colour contrast alone.
@@ -68,11 +69,29 @@ export class TitleScene extends Phaser.Scene {
       .setShadow(0, 2, '#05080f', 4, true, true);
 
     // Detect an existing save without mutating global state.
-    const hasSave = GameState.get().loaded;
+    const state = GameState.get();
+    const hasSave = state.loaded;
 
-    if (hasSave) {
+    if (state.loadIssue && ['corrupt-json', 'invalid-shape', 'future-version'].includes(state.loadIssue.kind)) {
+      this.add.text(cx, CANVAS.HEIGHT * 0.54, tr('save.recoveryNeeded'), textStyle(15, {
+        color: PALETTE.DANGER_CSS,
+        align: 'center',
+        wordWrap: { width: 600 },
+      })).setOrigin(0.5);
+      Menu.button(this, cx - 145, CANVAS.HEIGHT * 0.7, tr('save.exportBackup'), () => this.exportBackup(), { width: 250 });
+      Menu.button(this, cx + 145, CANVAS.HEIGHT * 0.7, tr('save.startFresh'), () => this.enterTown(true), { width: 250, accent: PALETTE.DANGER });
+      Menu.button(this, cx, CANVAS.HEIGHT * 0.83, tr('title.settings'), () => this.openSettings(), { width: 260 });
+    } else if (hasSave) {
       Menu.button(this, cx, CANVAS.HEIGHT * 0.6, tr('title.continue'), () => this.enterTown(false), { width: 260 });
-      Menu.button(this, cx, CANVAS.HEIGHT * 0.72, tr('title.newGame'), () => this.enterTown(true), { width: 260 });
+      let confirmsReset = false;
+      const newKingdom = Menu.button(this, cx, CANVAS.HEIGHT * 0.72, tr('title.newGame'), () => {
+        if (!confirmsReset) {
+          confirmsReset = true;
+          newKingdom.setText(tr('settings.resetConfirm'));
+          return;
+        }
+        this.enterTown(true);
+      }, { width: 300, accent: PALETTE.DANGER });
       Menu.button(this, cx, CANVAS.HEIGHT * 0.84, tr('title.settings'), () => this.openSettings(), { width: 260 });
     } else {
       Menu.button(this, cx, CANVAS.HEIGHT * 0.64, tr('title.play'), () => this.enterTown(false), { width: 260 });
@@ -87,7 +106,10 @@ export class TitleScene extends Phaser.Scene {
     Menu.label(this, cx, CANVAS.HEIGHT * 0.94, tr('title.hint'), 14, 0.55);
 
     // Keyboard shortcuts mirror the buttons.
-    this.input.keyboard?.on('keydown-SPACE', () => this.enterTown(false));
+    this.input.keyboard?.on('keydown-SPACE', () => {
+      const issue = GameState.get().loadIssue;
+      if (!issue || !['corrupt-json', 'invalid-shape', 'future-version'].includes(issue.kind)) this.enterTown(false);
+    });
     this.input.keyboard?.on('keydown-S', () => this.openSettings());
     // L cycles the language, mirroring the on-screen toggle.
     this.input.keyboard?.on('keydown-L', () => this.stepLanguage(1));
@@ -133,10 +155,32 @@ export class TitleScene extends Phaser.Scene {
     this.bgSky.tilePositionX = this.drift;
   }
 
+  private exportBackup(): void {
+    const raw = GameState.get().loadIssue?.backupRaw;
+    if (!raw || typeof document === 'undefined') return;
+    const blob = new Blob([raw], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = 'kingdom-rise-save-backup.json';
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
   /** Enter the town; when `fresh`, wipe any existing save first. */
   private enterTown(fresh: boolean): void {
-    if (fresh) GameState.get().reset();
-    Menu.fadeTo(this, () => this.scene.start(SceneKeys.Town));
+    const state = GameState.get();
+    if (fresh) {
+      state.reset();
+      Menu.fadeTo(this, () => this.scene.start(SceneKeys.Town));
+      return;
+    }
+    const pending = state.lastBattleReceipt;
+    if (pending && !pending.acknowledged) {
+      Menu.fadeTo(this, () => this.scene.start(SceneKeys.GameOver, { receipt: pending }));
+    } else {
+      Menu.fadeTo(this, () => this.scene.start(SceneKeys.Town));
+    }
   }
 
   private openSettings(): void {

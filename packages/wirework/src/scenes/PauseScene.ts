@@ -3,78 +3,80 @@ import { SceneKeys, CANVAS } from '../config/GameConfig';
 import { Menu } from '../ui/Menu';
 import { tr } from '../i18n/i18n';
 import { onViewportRefit, type VisibleWorldRect } from '@open-games/shared';
+import { GameScene } from './GameScene';
+import { AudioManager } from '../systems/AudioManager';
 
-/**
- * PauseScene is a translucent overlay launched ON TOP of a paused GameScene.
- * It offers Resume, Settings, and Quit-to-Title. While it is up, GameScene's
- * update loop is halted (the GameScene pauses itself before launching this).
- *
- * Resume/P/ESC resume the game; Settings opens the Settings scene (from which
- * "back" returns here); Quit fades out to the Title and stops the run.
- */
+export interface PauseData { confirmAbandon?: boolean }
+
+/** Paused overlay and the only abandon-confirmation path. */
 export class PauseScene extends Phaser.Scene {
   private bgDim!: Phaser.GameObjects.Rectangle;
+  private confirming = false;
+  private gamepadMenuHeld = false;
+  private gamepadArmed = false;
 
-  constructor() {
-    super({ key: SceneKeys.Pause });
-  }
+  constructor() { super({ key: SceneKeys.Pause }); }
 
-  create(): void {
-    const cx = CANVAS.WIDTH / 2;
-
-    // Dim the world behind the overlay. Passive visual only - never made
-    // interactive, so it cannot intercept button presses. Cover the full visible
-    // world rect (taller than 540 on a portrait phone) so the dim reaches the
-    // screen edges rather than leaving an undimmed strip above/below. Re-fits on
-    // resize/orientationchange via the shared provider.
-    this.bgDim = this.add.rectangle(0, 0, CANVAS.WIDTH, CANVAS.HEIGHT, 0x000000, 0.55).setOrigin(0, 0);
+  create(data: PauseData = {}): void {
+    this.confirming = data.confirmAbandon === true;
+    this.bgDim = this.add.rectangle(0, 0, CANVAS.WIDTH, CANVAS.HEIGHT, 0x000000, 0.65).setOrigin(0);
     onViewportRefit(this, { width: CANVAS.WIDTH, height: CANVAS.HEIGHT }, (rect) => this.refitBackdrop(rect));
-
-    Menu.title(this, cx, CANVAS.HEIGHT * 0.24, tr('pause.title'), 44);
-
-    Menu.button(this, cx, CANVAS.HEIGHT * 0.46, tr('pause.resume'), () => this.resume(), { width: 240 });
-    Menu.button(this, cx, CANVAS.HEIGHT * 0.62, tr('pause.settings'), () => this.openSettings(), { width: 240 });
-    Menu.button(this, cx, CANVAS.HEIGHT * 0.78, tr('pause.quit'), () => this.quit(), { width: 240 });
-
-    Menu.label(this, cx, CANVAS.HEIGHT * 0.9, tr('pause.hint'), 14, 0.5);
-
-    this.input.keyboard?.on('keydown-P', () => this.resume());
+    const cx = CANVAS.WIDTH / 2;
+    if (this.confirming) {
+      Menu.title(this, cx, CANVAS.HEIGHT * 0.27, tr('abandon.title'), 38);
+      Menu.label(this, cx, CANVAS.HEIGHT * 0.39, tr('abandon.body'), 18, 0.9);
+      Menu.button(this, cx, CANVAS.HEIGHT * 0.56, tr('abandon.continue'), () => this.resume(), { width: 260 });
+      Menu.button(this, cx, CANVAS.HEIGHT * 0.72, tr('abandon.confirm'), () => this.abandon(), { width: 260 });
+    } else {
+      Menu.title(this, cx, CANVAS.HEIGHT * 0.24, tr('pause.title'), 44);
+      Menu.button(this, cx, CANVAS.HEIGHT * 0.43, tr('pause.resume'), () => this.resume(), { width: 240 });
+      Menu.button(this, cx, CANVAS.HEIGHT * 0.58, tr('pause.settings'), () => this.openSettings(), { width: 240 });
+      Menu.button(this, cx, CANVAS.HEIGHT * 0.73, tr('pause.quit'), () => this.requestAbandon(), { width: 240 });
+      Menu.label(this, cx, CANVAS.HEIGHT * 0.9, tr('pause.hint'), 14, 0.5);
+    }
+    const pauseBinding = AudioManager.get(this).getSettings().bindings.pause;
+    if (!pauseBinding.startsWith('MOUSE_')) this.input.keyboard?.on(`keydown-${pauseBinding}`, () => this.resume());
     this.input.keyboard?.on('keydown-ESC', () => this.resume());
-
-    // If Settings was closed and returned focus here, make the overlay visible
-    // again (see openSettings + SettingsScene's returnTo handling). A slept
-    // scene can come back with its input plugin still parked, which would make
-    // the Resume/Settings/Quit buttons feel dead, so defensively re-arm input
-    // on every wake.
-    this.events.on(Phaser.Scenes.Events.WAKE, () => {
-      this.scene.setVisible(true);
-      this.input.enabled = true;
-    });
+    this.events.on(Phaser.Scenes.Events.WAKE, () => this.scene.restart({ confirmAbandon: this.confirming } satisfies PauseData));
   }
 
-  /** Re-fit the dim overlay to the live visible-world rect (create + resize). */
-  private refitBackdrop(rect: VisibleWorldRect): void {
-    this.bgDim.setPosition(rect.x, rect.y).setSize(rect.width, rect.height);
+  update(): void {
+    const pads = typeof navigator !== 'undefined' ? navigator.getGamepads?.() : null;
+    const pad = Array.from(pads ?? []).find((candidate): candidate is Gamepad => Boolean(candidate?.connected && candidate.mapping === 'standard')) ?? null;
+    const held = Boolean(pad?.buttons[9]?.pressed);
+    if (!pad) {
+      this.gamepadArmed = false;
+      this.gamepadMenuHeld = false;
+      return;
+    }
+    if (!held) this.gamepadArmed = true;
+    if (held && !this.gamepadMenuHeld && this.gamepadArmed) this.resume();
+    this.gamepadMenuHeld = held;
   }
+
+  private refitBackdrop(rect: VisibleWorldRect): void { this.bgDim.setPosition(rect.x, rect.y).setSize(rect.width, rect.height); }
+
+  private gameScene(): GameScene { return this.scene.get(SceneKeys.Game) as GameScene; }
 
   private resume(): void {
+    this.gameScene().resumeFromPause();
     this.scene.stop();
     this.scene.resume(SceneKeys.Game);
   }
 
   private openSettings(): void {
-    // Open Settings as its own overlay on top; keep this Pause scene alive but
-    // asleep + hidden. When Settings closes with returnTo=Pause it wakes us.
     this.scene.launch(SceneKeys.Settings, { returnTo: SceneKeys.Pause });
     this.scene.setVisible(false);
     this.scene.sleep();
   }
 
-  private quit(): void {
-    Menu.fadeTo(this, () => {
-      this.scene.stop(SceneKeys.Game);
-      this.scene.stop();
-      this.scene.start(SceneKeys.Title);
-    });
+  private requestAbandon(): void { this.scene.restart({ confirmAbandon: true } satisfies PauseData); }
+
+  private abandon(): void {
+    const game = this.gameScene();
+    this.scene.resume(SceneKeys.Game);
+    game.resumeFromPause();
+    this.scene.stop();
+    game.abandonRun();
   }
 }

@@ -27,11 +27,15 @@ describe('PhaserGame startup failure', () => {
 
     render(
       <PhaserGame
-        playerChampionId="ashborne"
-        enemyChampionId="nightveil"
-        mode="conquest"
-        matchKind="practice"
-        difficulty="easy"
+        match={{
+          matchId: 'local-1-test',
+          matchSeed: 'test',
+          playerChampionId: 'ashborne',
+          enemyChampionId: 'nightveil',
+          mode: 'conquest',
+          matchKind: 'practice',
+          difficulty: 'easy',
+        }}
         matchNonce={1}
         onGameEnd={vi.fn()}
         onReady={onReady}

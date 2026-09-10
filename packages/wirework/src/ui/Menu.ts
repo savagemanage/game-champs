@@ -2,131 +2,165 @@ import Phaser from 'phaser';
 import { PALETTE } from '../config/GameConfig';
 import { AudioKeys } from '../config/AssetKeys';
 import { AudioManager } from '../systems/AudioManager';
+import { prefersReducedMotion } from '../systems/Persistence';
 import { textStyle } from './UiText';
 
-/** Options for a pixel-styled menu button. */
-export interface ButtonOptions {
-  /** Font size in px (default 20). */
-  fontSize?: number;
-  /** Horizontal padding around the label, px (default 20). */
-  padX?: number;
-  /** Vertical padding around the label, px (default 10). */
-  padY?: number;
-  /** Fixed width; if omitted the button hugs its label + padding. */
-  width?: number;
-}
-
-/** The composite object returned for a button (container + updatable label). */
+export interface ButtonOptions { fontSize?: number; padX?: number; padY?: number; width?: number; accessibleLabel?: string }
 export interface MenuButton {
   container: Phaser.GameObjects.Container;
   label: Phaser.GameObjects.Text;
-  /** Replace the button's text. */
   setText(text: string): void;
+  setAccessibleLabel(text: string): void;
+}
+interface FocusEntry { container: Phaser.GameObjects.Container; bg: Phaser.GameObjects.Rectangle; activate: () => void; mirror: HTMLButtonElement | null }
+interface FocusState { entries: FocusEntry[]; index: number; installed: boolean; root: HTMLElement | null }
+const states = new WeakMap<Phaser.Scene, FocusState>();
+
+function setMirrorActive(root: HTMLElement | null, active: boolean): void {
+  if (!root) return;
+  root.hidden = !active;
+  root.toggleAttribute('inert', !active);
 }
 
-/**
- * Menu - shared pixel-UI helpers so Title/Settings/Pause/GameOver share one
- * cohesive look (palette, fonts, button feel, fade transitions).
- */
+function focusState(scene: Phaser.Scene): FocusState {
+  let state = states.get(scene);
+  if (state) return state;
+  let root: HTMLElement | null = null;
+  if (typeof document !== 'undefined') {
+    const host = document.getElementById('a11y-controls');
+    if (host) {
+      root = document.createElement('section');
+      root.dataset.scene = scene.scene.key;
+      host.append(root);
+    }
+  }
+  state = { entries: [], index: -1, installed: false, root };
+  states.set(scene, state);
+  scene.events.on(Phaser.Scenes.Events.SLEEP, () => setMirrorActive(state?.root ?? null, false));
+  scene.events.on(Phaser.Scenes.Events.WAKE, () => setMirrorActive(state?.root ?? null, true));
+  scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+    state?.root?.remove();
+    states.delete(scene);
+  });
+  return state;
+}
+
+function setFocus(state: FocusState, index: number): void {
+  if (state.entries.length === 0) return;
+  state.index = ((index % state.entries.length) + state.entries.length) % state.entries.length;
+  state.entries.forEach((entry, entryIndex) => {
+    entry.bg.setStrokeStyle(entryIndex === state.index ? 4 : 2, entryIndex === state.index ? PALETTE.TEXT : PALETTE.ACCENT);
+  });
+  state.entries[state.index].mirror?.focus({ preventScroll: true });
+}
+
+function installKeyboardNavigation(scene: Phaser.Scene, state: FocusState): void {
+  if (state.installed) return;
+  state.installed = true;
+  scene.input.keyboard?.on('keydown', (event: KeyboardEvent) => {
+    if (event.key === 'Tab' || event.key === 'ArrowDown' || event.key === 'ArrowRight') {
+      event.preventDefault();
+      setFocus(state, state.index + 1);
+    } else if (event.key === 'ArrowUp' || event.key === 'ArrowLeft') {
+      event.preventDefault();
+      setFocus(state, state.index - 1);
+    } else if ((event.key === 'Enter' || event.key === ' ') && state.index >= 0) {
+      event.preventDefault();
+      state.entries[state.index].activate();
+    }
+  });
+}
+
+function mirrorButton(scene: Phaser.Scene, text: string, activate: () => void): HTMLButtonElement | null {
+  const state = focusState(scene);
+  if (!state.root) return null;
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.textContent = text;
+  button.addEventListener('click', () => { if (scene.scene.isActive()) activate(); });
+  state.root.append(button);
+  return button;
+}
+
+function mirrorText(scene: Phaser.Scene, text: string, heading: boolean): void {
+  const root = focusState(scene).root;
+  if (!root) return;
+  const element = document.createElement(heading ? 'h2' : 'p');
+  element.textContent = text;
+  if (heading) root.setAttribute('aria-label', text);
+  root.append(element);
+}
+
 export const Menu = {
-  /** Standard pixel title text. */
   title(scene: Phaser.Scene, x: number, y: number, text: string, size = 56): Phaser.GameObjects.Text {
+    mirrorText(scene, text, true);
     return scene.add.text(x, y, text, textStyle(size, { fontStyle: 'bold' })).setOrigin(0.5);
   },
 
-  /** Muted body/label text. */
   label(scene: Phaser.Scene, x: number, y: number, text: string, size = 18, alpha = 0.85): Phaser.GameObjects.Text {
+    mirrorText(scene, text, false);
     return scene.add.text(x, y, text, textStyle(size)).setOrigin(0.5).setAlpha(alpha);
   },
 
-  /**
-   * A clickable pixel button: a bordered panel with a centered label that
-   * lights up on hover and plays the UI click SFX on press. Returns a handle so
-   * callers can relabel it (e.g. difficulty cycling).
-   */
-  button(
-    scene: Phaser.Scene,
-    x: number,
-    y: number,
-    text: string,
-    onClick: () => void,
-    opts: ButtonOptions = {},
-  ): MenuButton {
-    const fontSize = opts.fontSize ?? 20;
-    const padX = opts.padX ?? 20;
-    const padY = opts.padY ?? 10;
-
-    const label = scene.add.text(0, 0, text, textStyle(fontSize)).setOrigin(0.5);
-
-    const w = opts.width ?? Math.ceil(label.width) + padX * 2;
-    const h = Math.ceil(label.height) + padY * 2;
-
-    const bg = scene.add.rectangle(0, 0, w, h, PALETTE.BG_NEAR).setOrigin(0.5);
-    bg.setStrokeStyle(2, PALETTE.ACCENT);
-
-    const container = scene.add.container(x, y, [bg, label]);
-    container.setSize(w, h);
-    container.setInteractive(new Phaser.Geom.Rectangle(-w / 2, -h / 2, w, h), Phaser.Geom.Rectangle.Contains);
-
-    // Only the topmost interactive object under the pointer should fire, so a
-    // passive/transparent rect that happens to sit under a button can never
-    // steal its press. Safe to set once per scene from any button.
+  button(scene: Phaser.Scene, x: number, y: number, text: string, onClick: () => void, opts: ButtonOptions = {}): MenuButton {
+    const label = scene.add.text(0, 0, text, textStyle(opts.fontSize ?? 20)).setOrigin(0.5);
+    const width = opts.width ?? Math.ceil(label.width) + (opts.padX ?? 20) * 2;
+    const height = Math.ceil(label.height) + (opts.padY ?? 10) * 2;
+    const bg = scene.add.rectangle(0, 0, width, height, PALETTE.BG_NEAR).setStrokeStyle(2, PALETTE.ACCENT);
+    const container = scene.add.container(x, y, [bg, label]).setSize(width, height)
+      .setInteractive(new Phaser.Geom.Rectangle(-width / 2, -height / 2, width, height), Phaser.Geom.Rectangle.Contains);
     scene.input.setTopOnly(true);
-
-    container.on(Phaser.Input.Events.POINTER_OVER, () => {
-      bg.setFillStyle(PALETTE.BG_FAR);
-      bg.setStrokeStyle(2, PALETTE.TEXT);
-      label.setColor(PALETTE.TEXT_CSS);
-      scene.tweens.add({ targets: container, scale: 1.06, duration: 90 });
-    });
-    container.on(Phaser.Input.Events.POINTER_OUT, () => {
-      bg.setFillStyle(PALETTE.BG_NEAR);
-      bg.setStrokeStyle(2, PALETTE.ACCENT);
-      scene.tweens.add({ targets: container, scale: 1, duration: 90 });
-    });
-    // Fire onClick synchronously ON PRESS. Previously onClick was invoked only
-    // from the squash tween's onComplete; the hover scale tween shares the same
-    // `container` target, so a POINTER_OVER/OUT tween starting a frame later
-    // could override (and drop the onComplete of) the press tween, silently
-    // eating the click ("가끔 버튼이 클릭이 안돼"). The squash is now PURELY
-    // cosmetic feedback and no longer gates the action. A per-press latch guards
-    // against a double-fire if the same press is delivered twice; it is cleared
-    // on POINTER_UP / POINTER_OUT so the button remains reusable.
+    const reduced = prefersReducedMotion(AudioManager.get(scene).getSettings());
     let fired = false;
-    const arm = (): void => {
-      fired = false;
-    };
-    container.on(Phaser.Input.Events.POINTER_DOWN, () => {
+    const activate = (): void => {
       if (fired) return;
       fired = true;
       AudioManager.get(scene).playSfx(AudioKeys.UiClick, 0.7);
-      scene.tweens.add({ targets: container, scale: 0.94, duration: 60, yoyo: true });
+      if (!reduced) scene.tweens.add({ targets: container, scale: 0.94, duration: 60, yoyo: true });
       onClick();
+      scene.time.delayedCall(0, () => { fired = false; });
+    };
+    container.on(Phaser.Input.Events.POINTER_OVER, () => {
+      bg.setFillStyle(PALETTE.BG_FAR);
+      const state = focusState(scene);
+      setFocus(state, state.entries.findIndex((entry) => entry.container === container));
+      if (!reduced) scene.tweens.add({ targets: container, scale: 1.06, duration: 80 });
     });
-    container.on(Phaser.Input.Events.POINTER_UP, arm);
-    container.on(Phaser.Input.Events.POINTER_OUT, arm);
-
+    container.on(Phaser.Input.Events.POINTER_OUT, () => {
+      bg.setFillStyle(PALETTE.BG_NEAR);
+      if (!reduced) scene.tweens.add({ targets: container, scale: 1, duration: 80 });
+    });
+    container.on(Phaser.Input.Events.POINTER_DOWN, activate);
+    const state = focusState(scene);
+    const mirror = mirrorButton(scene, text, activate);
+    if (mirror && opts.accessibleLabel) mirror.setAttribute('aria-label', `${opts.accessibleLabel}: ${text}`);
+    state.entries.push({ container, bg, activate, mirror });
+    mirror?.addEventListener('focus', () => setFocus(state, state.entries.findIndex((entry) => entry.container === container)));
+    installKeyboardNavigation(scene, state);
+    if (state.index < 0) setFocus(state, 0);
     return {
       container,
       label,
-      setText: (t: string) => label.setText(t),
+      setText: (value) => {
+        label.setText(value);
+        if (mirror) {
+          mirror.textContent = value;
+          if (opts.accessibleLabel) mirror.setAttribute('aria-label', `${opts.accessibleLabel}: ${value}`);
+        }
+      },
+      setAccessibleLabel: (value) => mirror?.setAttribute('aria-label', value),
     };
   },
 
-  /**
-   * Fade the camera in from black on scene create. Call at the top of create().
-   */
   fadeIn(scene: Phaser.Scene, durationMs = 350): void {
-    scene.cameras.main.fadeIn(durationMs, 0, 0, 0);
+    const reduced = prefersReducedMotion(AudioManager.get(scene).getSettings());
+    scene.cameras.main.fadeIn(reduced ? Math.min(80, durationMs) : durationMs, 0, 0, 0);
   },
 
-  /**
-   * Fade to black then run `then` (typically a scene.start). Guards against
-   * double-fires so a button can't queue two transitions.
-   */
   fadeTo(scene: Phaser.Scene, then: () => void, durationMs = 300): void {
-    const cam = scene.cameras.main;
-    cam.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, then);
-    cam.fadeOut(durationMs, 0, 0, 0);
+    const camera = scene.cameras.main;
+    const reduced = prefersReducedMotion(AudioManager.get(scene).getSettings());
+    camera.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, then);
+    camera.fadeOut(reduced ? Math.min(80, durationMs) : durationMs, 0, 0, 0);
   },
 } as const;

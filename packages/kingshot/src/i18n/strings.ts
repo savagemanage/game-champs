@@ -53,6 +53,11 @@ export const STRINGS = {
   'resource.stone': { en: 'Stone', ko: '석재' },
   'resource.gold': { en: 'Gold', ko: '금화' },
   'resource.perSecond': { en: '{amount}/s', ko: '{amount}/초' },
+  'resource.rateGrossNet': { en: '+{gross}/s net {net}/s', ko: '+{gross}/초 순 {net}/초' },
+  'a11y.resourceState': {
+    en: '{resource} {amount} of {cap}; gross {gross} per second, net {net} per second.',
+    ko: '{resource} {amount}/{cap}; 초당 총 {gross}, 순 {net}.',
+  },
 
   // Town scene / HUD.
   'town.title': { en: 'YOUR KINGDOM', ko: '나의 왕국' },
@@ -73,6 +78,11 @@ export const STRINGS = {
   'town.defense': { en: 'Town Defense: {value}', ko: '마을 방어력: {value}' },
   // Hearth / Warmth (온기) survival layer.
   'town.warmth': { en: 'Warmth: {pct}%', ko: '온기: {pct}%' },
+  'town.warmthDetails': {
+    en: 'Warmth {current}/{max} ({pct}%) ×{mult} · wood {fuel}/s · {seconds}s left',
+    ko: '온기 {current}/{max} ({pct}%) ×{mult} · 목재 {fuel}/초 · {seconds}초',
+  },
+  'town.defenseWave': { en: 'Defense {value} · Wave {wave}/{total}', ko: '방어 {value} · 웨이브 {wave}/{total}' },
   'town.warmthLow': { en: 'Hearth dying! Stock wood', ko: '화롯불 꺼져감! 목재 확보' },
   'town.warmthLowHint': {
     en: 'The keep is going cold — production is slowing. Keep enough wood to feed the hearth.',
@@ -276,6 +286,13 @@ export const STRINGS = {
   'hero.maxStars': { en: 'Max Stars', ko: '최대 성급' },
   'hero.levelStars': { en: 'Lv.{level}/{max}  {stars}', ko: 'Lv.{level}/{max}  {stars}' },
   'hero.shards': { en: 'Shards: {shards} (need {per})', ko: '조각: {shards} (승급 {per} 필요)' },
+  'hero.walletShortfall': { en: 'Shards {shards} · next star short {shortfall}', ko: '조각 {shards} · 다음 승급 부족 {shortfall}' },
+  'hero.patronage': { en: 'Royal Patronage', ko: '왕실 후원' },
+  'hero.patronageCost': { en: '+1 shard {cost}', ko: '조각 +1 {cost}' },
+  'hero.patronageResource': {
+    en: '{resource} {have}/{need} (short {shortfall})',
+    ko: '{resource} {have}/{need} (부족 {shortfall})',
+  },
   'hero.noneActive': { en: 'No hero active — recruit and set one to gain a bonus', ko: '출전 영웅 없음 — 영입 후 지정하면 보너스를 얻습니다' },
   'hero.activeBonus': { en: 'Active: {name} — {domain} +{pct}%', ko: '출전: {name} — {domain} +{pct}%' },
   'hero.bonus.combat': { en: 'Army Power', ko: '병력 전투력' },
@@ -364,11 +381,24 @@ export const STRINGS = {
   'battle.armyRemaining': { en: 'Army', ko: '병력' },
   'battle.enemyRemaining': { en: 'Raiders', ko: '침략자' },
   'battle.clash': { en: 'The armies clash!', ko: '양군이 충돌합니다!' },
+  'battle.preflightTitle': { en: 'BATTLE PREFLIGHT', ko: '출정 전 확인' },
+  'battle.preflightWave': { en: 'Target: Wave {wave}/{total}', ko: '목표: 웨이브 {wave}/{total}' },
+  'battle.preflightArmy': { en: 'Army: {count} · effective power E={power}', ko: '아군: {count}명 · 유효 전투력 E={power}' },
+  'battle.preflightEnemy': { en: 'Enemy W={power}: {composition}', ko: '적 전투력 W={power}: {composition}' },
+  'battle.preflightDefense': { en: 'Town defense contribution D={defense}', ko: '마을 방어 기여 D={defense}' },
+  'battle.matchupWarning': { en: '⚠ Current matchup is projected to lose.', ko: '⚠ 현재 상성으로는 패배가 예상됩니다.' },
+  'battle.ready': { en: '✓ The army is projected to hold.', ko: '✓ 현재 병력으로 방어가 예상됩니다.' },
+  'battle.replayNotice': { en: 'REPLAY · no rewards · state preserved', ko: '리플레이 · 보상 없음 · 상태 보존' },
+  'battle.confirmDeploy': { en: 'Commit & Deploy', ko: '결과 저장 후 출정' },
+  'battle.noTroopsWithShortcut': { en: 'Train troops first. Close and open Barracks.', ko: '병력을 먼저 훈련하세요. 닫고 병영을 여세요.' },
+  'battle.saveFailed': { en: 'Save failed. Battle rolled back; retry when storage is available.', ko: '저장 실패. 전투가 롤백되었습니다. 저장소 확인 후 재시도하세요.' },
+  'battle.cannotStart': { en: 'Battle cannot start from the current state.', ko: '현재 상태에서는 전투를 시작할 수 없습니다.' },
 
   // Enemy names.
   'enemy.raider': { en: 'Raider', ko: '침략자' },
   'enemy.brute': { en: 'Brute', ko: '광전사' },
   'enemy.ram': { en: 'Battering Ram', ko: '공성 망치' },
+  'enemy.rider': { en: 'Rider', ko: '기습병' },
 
   // Settings scene.
   'settings.title': { en: 'SETTINGS', ko: '설정' },
@@ -398,7 +428,21 @@ export const STRINGS = {
     en: 'While away you gathered {food} food, {wood} wood, {stone} stone, {gold} gold.',
     ko: '자리를 비운 동안 식량 {food}, 목재 {wood}, 석재 {stone}, 금화 {gold}를 모았습니다.',
   },
+  'save.offlineSummary': {
+    en: 'Away {seconds}s · +{food} food, +{wood} wood, +{stone} stone, +{gold} gold · warmth {warmth} · buildings {buildings}, research {research}, troops {trained}',
+    ko: '부재 {seconds}초 · 식량 +{food}, 목재 +{wood}, 석재 +{stone}, 금화 +{gold} · 온기 {warmth} · 건설 {buildings}, 연구 {research}, 훈련 {trained}',
+  },
+  'save.failed': { en: 'Save failed', ko: '저장 실패' },
+  'save.failedRetry': { en: 'Save failed · tap to retry', ko: '저장 실패 · 눌러 재시도' },
+  'save.dirty': { en: 'Saving…', ko: '저장 중…' },
+  'save.recoveryNeeded': { en: 'The saved kingdom is damaged or from a newer version. Export it before starting fresh.', ko: '저장된 왕국이 손상되었거나 더 새 버전입니다. 새로 시작하기 전에 백업을 내보내세요.' },
+  'save.exportBackup': { en: 'Export Backup', ko: '백업 내보내기' },
+  'save.startFresh': { en: 'Start New Kingdom', ko: '새 왕국 시작' },
   'save.reset': { en: 'Progress reset', ko: '진행이 초기화되었습니다' },
+  'status.completions': {
+    en: 'Completed: {buildings} buildings, {research} research, {trained} troops.',
+    ko: '완료: 건설 {buildings}, 연구 {research}, 훈련 {trained}.',
+  },
 
   // Game over / result scene.
   'result.victory': { en: 'VICTORY', ko: '승리' },
@@ -413,6 +457,12 @@ export const STRINGS = {
   'result.rewardLine': { en: '+{food} food  +{wood} wood  +{stone} stone  +{gold} gold', ko: '+{food} 식량  +{wood} 목재  +{stone} 석재  +{gold} 금화' },
   'result.casualties': { en: 'Casualties: {count}', ko: '전사자: {count}' },
   'result.survivors': { en: 'Survivors: {count}', ko: '생존자: {count}' },
+  'result.powerLine': { en: 'Effective power E={army} / enemy W={enemy}', ko: '유효 전투력 E={army} / 적 W={enemy}' },
+  'result.multiplierLine': { en: 'Attack ×{attack} · casualty defense ×{defense} · town D={town}', ko: '공격 ×{attack} · 사상 방어 ×{defense} · 마을 D={town}' },
+  'result.stackLine': { en: '{troop}: deployed {deployed}, lost {lost}, survived {survived}, matchup power {power}', ko: '{troop}: 투입 {deployed}, 전사 {lost}, 생존 {survived}, 상성 기여 {power}' },
+  'result.penaltyLine': { en: 'Looted: -{food} food  -{wood} wood  -{stone} stone  -{gold} gold', ko: '약탈: 식량 -{food}  목재 -{wood}  석재 -{stone}  금화 -{gold}' },
+  'result.replayNotice': { en: 'REPLAY · no reward or loot · all state preserved', ko: '리플레이 · 보상/약탈 없음 · 모든 상태 보존' },
+  'result.replayAgain': { en: 'Replay Again', ko: '다시 리플레이' },
   'result.nextWave': { en: 'Next wave: {wave}', ko: '다음 웨이브: {wave}' },
   'result.defeatDesc': { en: 'Your army fell, but the town still stands. Regroup and try again.', ko: '병력은 쓰러졌지만 마을은 건재합니다. 전열을 재정비하세요.' },
   'result.retry': { en: 'Retry', ko: '재도전' },

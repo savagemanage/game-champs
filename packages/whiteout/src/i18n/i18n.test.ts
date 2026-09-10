@@ -32,8 +32,8 @@ describe('i18n tr()', () => {
 
   it('substitutes multiple params in one template', () => {
     setLanguage('en');
-    expect(tr('save.offlineGains', { food: 10, wood: 20, coal: 30, iron: 40 })).toBe(
-      'While away you gathered 10 rations, 20 timber, 30 coal, 40 iron.',
+    expect(tr('save.offlineGains', { food: 10, wood: 20, coal: 30, iron: 40, steel: 5 })).toBe(
+      'Offline net change: 10 food, 20 wood, 30 coal, 40 iron, 5 steel. Fuel/refining may make values negative.',
     );
   });
 

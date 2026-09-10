@@ -20,11 +20,7 @@ import type { StatModifiers } from '../types';
  */
 export function pointsForTechLevel(level: number): number {
   const lvl = Math.max(0, Math.min(ALLIANCE.MAX_TECH_LEVEL, Math.floor(level)));
-  let total = 0;
-  for (let i = 0; i < lvl; i++) {
-    total += ALLIANCE.TECH_POINTS_PER_LEVEL * Math.pow(ALLIANCE.TECH_LEVEL_GROWTH, i);
-  }
-  return Math.round(total);
+  return lvl === 0 ? 0 : ALLIANCE.TECH_THRESHOLDS[lvl - 1];
 }
 
 /**

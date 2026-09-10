@@ -6,7 +6,7 @@ export type TelemetryPayload =
   | {
       type: 'match-completed';
       mode: 'conquest' | 'midline';
-      result: 'win' | 'loss' | 'abandoned';
+      result: 'win' | 'loss' | 'draw' | 'abandoned';
       durationBucket: 'under-5m' | '5m-15m' | 'over-15m';
     }
   | {
@@ -62,7 +62,7 @@ export function redactTelemetryPayload(value: unknown): TelemetryPayload | null 
     case 'match-completed':
       if (
         !oneOf(input.mode, ['conquest', 'midline']) ||
-        !oneOf(input.result, ['win', 'loss', 'abandoned']) ||
+        !oneOf(input.result, ['win', 'loss', 'draw', 'abandoned']) ||
         !oneOf(input.durationBucket, ['under-5m', '5m-15m', 'over-15m'])
       ) {
         return null;

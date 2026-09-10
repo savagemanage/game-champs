@@ -8,7 +8,7 @@
       subpath deploy.
     -->
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>킹덤 라이즈</title>
     <style>
       /*
@@ -42,6 +42,9 @@
       #game {
         width: 100vw;
         height: 100vh;
+        min-height: 100dvh;
+        padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+        box-sizing: border-box;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -49,10 +52,109 @@
       #game canvas {
         image-rendering: pixelated;
       }
+      #a11y-controls {
+        position: fixed;
+        inset: 0;
+        z-index: 1000;
+        pointer-events: none;
+      }
+      .canvas-control {
+        position: absolute;
+        left: -10000px;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+      }
+      .canvas-control:focus {
+        left: max(12px, env(safe-area-inset-left));
+        top: max(12px, env(safe-area-inset-top));
+        width: auto;
+        height: 44px;
+        padding: 8px 14px;
+        overflow: visible;
+        pointer-events: auto;
+        color: #14100c;
+        background: #f4cf4a;
+        border: 3px solid #ffffff;
+        outline: 3px solid #14100c;
+      }
+      .modal-context {
+        position: absolute;
+        left: -10000px;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        white-space: pre-line;
+      }
+      /* In portrait, an open Canvas modal gains a real safe-area, full-width,
+         scrollable action sheet instead of shrinking every action into the
+         landscape canvas band. The Canvas remains the visual context while
+         this semantic sheet provides comfortably sized equivalent controls. */
+      @media (orientation: portrait) and (max-width: 600px) {
+        #a11y-controls.modal-open {
+          inset: auto 0 0 0;
+          max-height: min(62dvh, calc(100dvh - env(safe-area-inset-top) - 16px));
+          padding: 12px max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+          overflow-y: auto;
+          box-sizing: border-box;
+          display: grid;
+          gap: 8px;
+          background: rgba(39, 29, 21, 0.98);
+          border-top: 3px solid #f4cf4a;
+          pointer-events: auto;
+          overscroll-behavior: contain;
+        }
+        #a11y-controls.modal-open .modal-context {
+          position: static;
+          width: auto;
+          height: auto;
+          max-height: 34dvh;
+          overflow-y: auto;
+          padding: 4px 6px 10px;
+          color: #f8ead0;
+          white-space: pre-line;
+          font: 14px/1.45 'Galmuri11', sans-serif;
+          border-bottom: 1px solid #8f744d;
+          outline-offset: 2px;
+        }
+        #a11y-controls.modal-open .canvas-control:not([hidden]) {
+          position: static;
+          display: block;
+          width: 100%;
+          min-height: 44px;
+          height: auto;
+          padding: 10px 12px;
+          overflow: visible;
+          color: #f8ead0;
+          background: #34261b;
+          border: 2px solid #f4cf4a;
+          font: 16px/1.3 'Galmuri11', sans-serif;
+          text-align: center;
+          pointer-events: auto;
+        }
+        #a11y-controls.modal-open .canvas-control:focus {
+          outline: 3px solid #ffffff;
+          background: #59432f;
+        }
+      }
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        white-space: nowrap;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after { scroll-behavior: auto !important; }
+      }
     </style>
   </head>
   <body>
-    <div id="game"></div>
+    <div id="game" role="application" aria-label="Kingdom Rise strategy game"></div>
+    <nav id="a11y-controls" aria-label="Game controls"></nav>
+    <div id="a11y-state" class="sr-only"></div>
+    <div id="a11y-live" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

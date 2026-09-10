@@ -6,6 +6,8 @@ import { AudioManager } from '../systems/AudioManager';
 import { GameState } from '../systems/GameState';
 import { Menu } from '../ui/Menu';
 import { textStyle } from '../ui/UiText';
+import { announce } from '../ui/AccessibilityBridge';
+import { prefersReducedMotion } from '../ui/Motion';
 import { tr, trDyn } from '../i18n/i18n';
 import { onViewportRefit, type VisibleWorldRect } from '@open-games/shared';
 
@@ -123,7 +125,12 @@ export abstract class HubScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(80);
     const t = this.toastText;
-    this.tweens.add({ targets: t, alpha: 0, delay: 2200, duration: 700, onComplete: () => t.destroy() });
+    announce(message, color === PALETTE.DANGER_CSS);
+    if (prefersReducedMotion()) {
+      this.time.delayedCall(2200, () => t.destroy());
+    } else {
+      this.tweens.add({ targets: t, alpha: 0, delay: 2200, duration: 700, onComplete: () => t.destroy() });
+    }
   }
 
   private goBack(): void {

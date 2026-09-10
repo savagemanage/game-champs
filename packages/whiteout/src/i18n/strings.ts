@@ -100,6 +100,7 @@ export const STRINGS = {
   'town.welcomeStart': { en: 'Begin', ko: '시작하기' },
   // The persistent next-step objective banner.
   'objective.title': { en: 'Next Objective', ko: '다음 목표' },
+  'objective.skip': { en: 'Skip', ko: '건너뛰기' },
   'objective.furnace.label': { en: 'Raise the Furnace', ko: '용광로 올리기' },
   'objective.furnace.instruction': {
     en: 'Tap the Furnace and upgrade it to raise the level cap of every building.',
@@ -241,6 +242,7 @@ export const STRINGS = {
   'battle.armyRemaining': { en: 'Army', ko: '병력' },
   'battle.enemyRemaining': { en: 'Horde', ko: '무리' },
   'battle.clash': { en: 'The Horde strikes!', ko: '서리 무리가 덮쳐옵니다!' },
+  'battle.complete': { en: 'All 20 defense waves are complete.', ko: '방어전 20웨이브를 모두 완료했습니다.' },
 
   // Enemy names (the Frozen Horde).
   'enemy.frost_wolf': { en: 'Frost Wolf', ko: '서리늑대' },
@@ -272,9 +274,23 @@ export const STRINGS = {
   'save.saved': { en: 'Saved', ko: '저장됨' },
   'save.loaded': { en: 'Progress loaded', ko: '진행 불러옴' },
   'save.offlineGains': {
-    en: 'While away you gathered {food} rations, {wood} timber, {coal} coal, {iron} iron.',
-    ko: '자리를 비운 동안 식량 {food}, 목재 {wood}, 석탄 {coal}, 철 {iron}을(를) 모았습니다.',
+    en: 'Offline net change: {food} food, {wood} wood, {coal} coal, {iron} iron, {steel} steel. Fuel/refining may make values negative.',
+    ko: '오프라인 순변화: 식량 {food}, 목재 {wood}, 석탄 {coal}, 철 {iron}, 강철 {steel}. 연료·정련으로 음수가 될 수 있습니다.',
   },
+  'save.persistenceWarning': {
+    en: 'Storage is unavailable. This session may not persist.',
+    ko: '저장소를 사용할 수 없어 이번 세션이 유지되지 않을 수 있습니다.',
+  },
+  'save.recovered': {
+    en: 'The primary save was damaged. Progress was restored from backup.',
+    ko: '기본 저장이 손상되어 백업에서 진행을 복구했습니다.',
+  },
+  'save.blocked': {
+    en: 'This save cannot be loaded. Export it before confirming a New Hold.',
+    ko: '이 저장을 불러올 수 없습니다. 새 성채를 확인하기 전에 내보내세요.',
+  },
+  'save.export': { en: 'Export Save', ko: '저장 내보내기' },
+  'save.exported': { en: 'Save exported', ko: '저장을 내보냈습니다' },
   'save.reset': { en: 'Progress reset', ko: '진행이 초기화되었습니다' },
 
   // Game over / result scene.
@@ -304,6 +320,8 @@ export const STRINGS = {
 
   // Preload scene.
   'preload.loading': { en: 'Loading {pct}%', ko: '불러오는 중 {pct}%' },
+  'preload.error': { en: '{count} assets failed to load. Retry to continue.', ko: '에셋 {count}개를 불러오지 못했습니다. 다시 시도하세요.' },
+  'preload.retry': { en: 'Retry', ko: '다시 시도' },
 
   // --- FEAT-003: heroes, summon (gacha) and story campaign ---
 
@@ -558,11 +576,16 @@ export const STRINGS = {
 
   // --- FEAT-005: alliance (simulated NPC alliance) ---
   'alliance.title': { en: 'FROSTHOLD PACT', ko: '서리성채 협정' },
+  'meta.localDisclosure': {
+    en: 'Local single-player NPC simulation · no purchases or online players',
+    ko: '로컬 싱글플레이 NPC 시뮬레이션 · 결제 및 온라인 플레이어 없음',
+  },
   'alliance.members': { en: '{count} Sworn Members', ko: '맹약 구성원 {count}명' },
   'alliance.help': { en: 'Request Help', ko: '지원 요청' },
   'alliance.helpsAvailable': { en: 'Help charges {count}', ko: '지원 횟수 {count}' },
   'alliance.helpApplied': { en: 'Help shaved {seconds}s off the timer', ko: '지원으로 {seconds}초 단축' },
   'alliance.noTimer': { en: 'No active timer to help with', ko: '지원할 진행 중인 작업이 없습니다' },
+  'alliance.requiresEnvoy': { en: 'Build Envoy Hall to unlock Pact actions and Rally.', ko: '협정 행동과 집결을 해금하려면 사절 회관을 건설하세요.' },
   'alliance.tech': { en: 'Pact Research', ko: '협정 연구' },
   'alliance.techLevel': { en: 'Pact Level {level}', ko: '협정 {level}단계' },
   'alliance.contribute': { en: 'Contribute', ko: '기여' },

@@ -24,8 +24,8 @@ describe('DailyMissions', () => {
   it('derives day and week indices from a timestamp (clock-free)', () => {
     expect(dayIndex(0)).toBe(0);
     expect(dayIndex(DAY * 3 + 5)).toBe(3);
-    expect(weekIndex(DAY * 6)).toBe(0);
-    expect(weekIndex(DAY * 7)).toBe(1);
+    expect(weekIndex(DAY * 3)).toBe(0);
+    expect(weekIndex(DAY * 4)).toBe(1);
   });
 
   it('daily task set is deterministic per day and sized to config', () => {

@@ -20,7 +20,8 @@ import type { HeroId, ResourceCost } from '../types';
  */
 export const QUEST_METRICS = [
   'buildingUpgraded', // any building upgrade completed
-  'waveCleared', // a battle wave cleared
+  'waveCleared', // a normal defense wave cleared (growth only)
+  'battleCompleted', // any valid resolved wave/campaign/rally/arena attempt
   'summonPulled', // a hero summon performed
   'researchCompleted', // a research node completed
   'rallyAttempt', // an attempt made against a world boss
@@ -61,7 +62,7 @@ export const DAILY_QUESTS: QuestDef[] = [
   },
   {
     id: 'daily_battle',
-    metric: 'waveCleared',
+    metric: 'battleCompleted',
     target: 3,
     reward: { resources: { iron: 60 }, sparks: 20 },
   },

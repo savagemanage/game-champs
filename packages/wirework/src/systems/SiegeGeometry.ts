@@ -1,232 +1,121 @@
-/**
- * SiegeGeometry - pure, Phaser-independent math for the top-down radial siege.
- *
- * These helpers hold the geometry that used to be inlined inside the Phaser
- * entities (WaveSystem spawn placement, Wall segment layout / nearest-target
- * selection, Player dash direction, and the giant's 2D nape / frontal-armor
- * cone). Extracting them here lets the shipping logic be unit-tested with plain
- * assertions (see SiegeGeometry.test.ts) without booting a WebGL runtime, while
- * the entities call straight into these functions so the tests exercise the
- * real code paths rather than a copy.
- *
- * Everything here is stateless and side-effect free: inputs are numbers, outputs
- * are numbers / small records. No Phaser, no DOM.
- */
+/** Pure float64 geometry shared by simulation, cues, and tests. */
+export interface Vec2 { readonly x: number; readonly y: number }
+export interface Aabb { readonly left: number; readonly top: number; readonly right: number; readonly bottom: number }
+export interface SegmentLike { readonly x: number; readonly y: number; readonly breached: boolean }
+export interface SlashShape { readonly originX: number; readonly originY: number; readonly forwardX: number; readonly forwardY: number; readonly reach: number; readonly halfWidth: number }
 
-/** A 2D point / vector in world space. */
-export interface Vec2 {
-  readonly x: number;
-  readonly y: number;
-}
-
-/**
- * Radial spawn placement: given an angle (radians) and a radius from the arena
- * center, return the world point on that circle. WaveSystem spawns each giant
- * just OUTSIDE the outer ring, so it passes a radius > OUTER_RADIUS; the giants
- * then besiege the center from all sides.
- */
 export function radialPoint(centerX: number, centerY: number, angle: number, radius: number): Vec2 {
-  return {
-    x: centerX + Math.cos(angle) * radius,
-    y: centerY + Math.sin(angle) * radius,
-  };
+  return { x: centerX + Math.cos(angle) * radius, y: centerY + Math.sin(angle) * radius };
 }
 
-/**
- * The spawn radius WaveSystem uses for a giant: just outside OUTER_RADIUS by a
- * fixed margin plus a jitter fraction in [0, 1). Kept pure so a test can assert
- * every spawn lands strictly outside the outer ring regardless of jitter.
- */
 export function spawnRadius(outerRadius: number, jitter01: number): number {
-  return outerRadius + 90 + jitter01 * 60;
+  return outerRadius + 90 + Math.max(0, Math.min(0.999_999_999, jitter01)) * 60;
 }
 
-/**
- * Even angular layout of a ring's segments: the center angle (radians) of
- * segment `index` of `count` evenly spaced blocks. Used by Wall to place each
- * rampart block and mirrored here so the layout is testable.
- */
 export function segmentAngle(index: number, count: number): number {
   return (index / count) * Math.PI * 2;
 }
 
-/** Euclidean distance between two points. */
 export function distance(ax: number, ay: number, bx: number, by: number): number {
   return Math.hypot(ax - bx, ay - by);
 }
 
-/** A ring segment as far as nearest-target selection is concerned. */
-export interface SegmentLike {
-  readonly x: number;
-  readonly y: number;
-  readonly breached: boolean;
+export function normalizedAngle(x: number, y: number, centerX: number, centerY: number): number {
+  const angle = Math.atan2(y - centerY, x - centerX);
+  return angle < 0 ? angle + Math.PI * 2 : angle;
 }
 
-/**
- * Nearest-un-breached-segment selection. Giants assault the OUTER ring first;
- * once every outer segment is breached they switch to the INNER ring. Returns
- * the index of the nearest standing segment in the active ring, or -1 when the
- * active ring has no standing segments left.
- *
- * @param x,y the giant's world position.
- * @param outer the outer ring's segments.
- * @param inner the inner ring's segments.
- */
+export function sectorIndexForPoint(
+  x: number,
+  y: number,
+  centerX: number,
+  centerY: number,
+  count: number,
+): number {
+  const turns = normalizedAngle(x, y, centerX, centerY) / (Math.PI * 2);
+  return Math.floor(turns * count + 0.5) % count;
+}
+
+/** Outer sector -> same normalized-angle inner sector -> citizens. */
+export function sectorTargetIndex(
+  x: number,
+  y: number,
+  centerX: number,
+  centerY: number,
+  outer: readonly SegmentLike[],
+  inner: readonly SegmentLike[],
+): { ring: 0 | 1; index: number } {
+  const outerIndex = sectorIndexForPoint(x, y, centerX, centerY, outer.length);
+  if (!outer[outerIndex]?.breached) return { ring: 0, index: outerIndex };
+  const innerIndex = sectorIndexForPoint(x, y, centerX, centerY, inner.length);
+  if (!inner[innerIndex]?.breached) return { ring: 1, index: innerIndex };
+  return { ring: 1, index: -1 };
+}
+
+/** Compatibility export now implementing authoritative sector-local progression. */
 export function nearestTargetIndex(
   x: number,
   y: number,
   outer: readonly SegmentLike[],
   inner: readonly SegmentLike[],
 ): { ring: 0 | 1; index: number } {
-  const outerBreached = outer.every((s) => s.breached);
-  const ring: 0 | 1 = outerBreached ? 1 : 0;
-  const list = ring === 0 ? outer : inner;
-  let bestIndex = -1;
-  let bestDist = Infinity;
-  for (let i = 0; i < list.length; i++) {
-    if (list[i].breached) continue;
-    const d = distance(x, y, list[i].x, list[i].y);
-    if (d < bestDist) {
-      bestDist = d;
-      bestIndex = i;
-    }
-  }
-  return { ring, index: bestIndex };
+  return sectorTargetIndex(x, y, 0, 0, outer, inner);
 }
 
-/**
- * Dash direction normalization (fix for the "Shift dashes backward" bug). Given
- * an aim/facing vector, return the UNIT direction pointing toward it - never
- * inverted. A zero vector falls back to a safe default so a dash in place still
- * has a direction.
- */
 export function dashDirection(dirX: number, dirY: number): Vec2 {
   const len = Math.hypot(dirX, dirY);
-  if (len < 1e-6) return { x: 1, y: 0 };
-  return { x: dirX / len, y: dirY / len };
+  return len < 1e-6 ? { x: 0, y: -1 } : { x: dirX / len, y: dirY / len };
 }
 
-/**
- * Compute the hero's FACING direction the dash should use. The dash goes toward
- * where the character is facing (its planar movement direction), not the mouse
- * cursor. Priority:
- *   1. the current move-input direction while the hero is actively moving, else
- *   2. the last non-zero facing the hero held (so a dash while standing still
- *      still goes toward the last faced direction, never backward / nowhere).
- * The result is a UNIT vector via {@link dashDirection}, so it can never invert.
- *
- * @param inputX,inputY raw 8-direction move intent this frame (-1/0/1 each).
- * @param lastX,lastY the last non-zero facing unit vector the hero held.
- */
-export function facingDashDirection(
-  inputX: number,
-  inputY: number,
-  lastX: number,
-  lastY: number,
-): Vec2 {
-  if (Math.hypot(inputX, inputY) > 1e-6) return dashDirection(inputX, inputY);
-  return dashDirection(lastX, lastY);
+export function facingDashDirection(inputX: number, inputY: number, lastX: number, lastY: number): Vec2 {
+  return Math.hypot(inputX, inputY) > 1e-6
+    ? dashDirection(inputX, inputY)
+    : dashDirection(lastX, lastY);
 }
 
-/**
- * Back-of-neck (nape) world offset for a giant, given its 2D facing heading.
- * The nape sits OPPOSITE the facing direction (behind the neck) and high on the
- * body, so it swings around with the giant's heading and the player must strike
- * from behind the approach. Returns the offset to add to the giant's origin.
- *
- * @param facingX,facingY unit facing heading.
- * @param displayHeight rendered height of the giant, world px.
- * @param napeLocalY per-role local vertical nudge (unscaled).
- * @param scale sprite scale.
- */
-export function napeOffset(
+export function coolingNodeOffset(facingX: number, facingY: number, nodeDistance: number): Vec2 {
+  const facing = dashDirection(facingX, facingY);
+  return { x: -facing.x * nodeDistance, y: -facing.y * nodeDistance };
+}
+
+export function isRearNodeHit(
+  playerX: number,
+  playerY: number,
+  enemyX: number,
+  enemyY: number,
   facingX: number,
   facingY: number,
-  displayHeight: number,
-  napeLocalY: number,
-  scale: number,
-): Vec2 {
-  const backOffset = displayHeight * 0.12;
-  return {
-    x: -facingX * backOffset,
-    y: -displayHeight * 0.78 + napeLocalY * scale - facingY * backOffset,
-  };
-}
-
-/**
- * Weak-point (nape) hook decision for the grapple. A grapple ray that strikes a
- * giant "hooks the nape" when the hit point lands within `snapDist` of the
- * giant's live nape/weak-point. When it does, the wire anchors to the nape and
- * the fling is boosted (see {@link napeFlingAccel}); otherwise it is an ordinary
- * body grapple. Kept pure so the decision is unit-tested without a Phaser ray.
- *
- * @param hitX,hitY the world point where the grapple ray struck the giant.
- * @param napeX,napeY the giant's live nape/weak-point world position.
- * @param snapDist how close the hit must be to the nape to count (px, >= 0).
- */
-export function isNapeHook(
-  hitX: number,
-  hitY: number,
-  napeX: number,
-  napeY: number,
-  snapDist: number,
 ): boolean {
-  return distance(hitX, hitY, napeX, napeY) <= snapDist;
+  const dx = playerX - enemyX;
+  const dy = playerY - enemyY;
+  const len = Math.hypot(dx, dy);
+  return len >= 1 && (dx / len) * facingX + (dy / len) * facingY < 0;
 }
 
-/**
- * Select the grapple pull acceleration for this frame: the boosted nape pull
- * when the wire is hooked to a weak-point, otherwise the ordinary body pull.
- * Trivial but centralized so GrappleSystem carries no magic numbers and the
- * gating is directly testable.
- *
- * @param base the ordinary PULL_ACCEL.
- * @param boosted the stronger NAPE_PULL_ACCEL.
- * @param napeHooked whether the wire is anchored to the nape.
- */
-export function napeFlingAccel(base: number, boosted: number, napeHooked: boolean): number {
-  return napeHooked ? boosted : base;
+export function isFrontalHit(
+  facingX: number,
+  facingY: number,
+  hitDX: number,
+  hitDY: number,
+  coneDeg: number,
+): boolean {
+  const hit = dashDirection(hitDX, hitDY);
+  const facing = dashDirection(facingX, facingY);
+  return hit.x * facing.x + hit.y * facing.y >= Math.cos((coneDeg * Math.PI) / 180);
 }
 
-/**
- * ODM wall-traversal predicate (FEAT-004, option B). The hero passes OVER/ACROSS
- * the walls while USING the omni-directional mobility gear - that is, while
- * DASHING or while FLINGING/attached on a wire - and is blocked by standing
- * walls only during plain grounded movement. GameScene toggles the single
- * player<->wall Arcade collider off whenever this returns true.
- *
- * Only the hero traverses: giants share no collider with the walls, so this
- * predicate never touches enemy behaviour.
- *
- * @param dashing whether the hero's dash burst window is active.
- * @param swinging whether a grapple wire is attached / flinging the hero.
- */
-export function isTraversing(dashing: boolean, swinging: boolean): boolean {
-  return dashing || swinging;
+export function isNodeHook(hitX: number, hitY: number, nodeX: number, nodeY: number, snapDist: number): boolean {
+  return distance(hitX, hitY, nodeX, nodeY) <= snapDist;
 }
 
-/**
- * Manual reel step along the wire (Q reel-in / E reel-out). The old model only
- * shrank/grew the enforced rope LENGTH, so holding Q while slack (hero inside
- * the rope circle) lowered a number with NO visible motion until it happened to
- * go taut - which made reeling feel dead. This helper instead HAULS the hero
- * along the rope: it moves the hero toward (reel-in) or away from (reel-out) the
- * anchor by `speed * dt` and sets the enforced rope length to the resulting
- * distance, so Q visibly pulls the hero in and E visibly feeds line out.
- *
- * The travel is clamped to [minLength, maxLength] from the anchor. Reeling in
- * never overshoots past the anchor; reeling out never exceeds the max length.
- * Returns the hero's new world position and the new rope length. Pure so the
- * pull math is unit-tested without a Phaser body.
- *
- * @param heroX,heroY the hero's current world position.
- * @param anchorX,anchorY the wire anchor's world position.
- * @param reelIn true to haul toward the anchor, false to feed line outward.
- * @param speed reel speed for this direction, px/s (REEL_IN_SPEED / REEL_OUT_SPEED).
- * @param dt frame delta, seconds.
- * @param minLength minimum enforced rope length (GRAPPLE.MIN_LENGTH).
- * @param maxLength maximum enforced rope length (GRAPPLE.MAX_LENGTH).
- */
+export function nodeFlingAccel(base: number, boosted: number, nodeHooked: boolean): number {
+  return nodeHooked ? boosted : base;
+}
+
+export function isTraversing(dashing: boolean, wireAttachedOrFlinging: boolean): boolean {
+  return dashing || wireAttachedOrFlinging;
+}
+
 export function reelStep(
   heroX: number,
   heroY: number,
@@ -241,37 +130,103 @@ export function reelStep(
   const rx = heroX - anchorX;
   const ry = heroY - anchorY;
   const dist = Math.hypot(rx, ry) || 1e-6;
-  const step = speed * dt;
-  const target = reelIn ? dist - step : dist + step;
-  const clamped = Math.max(minLength, Math.min(maxLength, target));
-  const nx = rx / dist;
-  const ny = ry / dist;
-  return {
-    x: anchorX + nx * clamped,
-    y: anchorY + ny * clamped,
-    ropeLength: clamped,
-  };
+  const clamped = Math.max(minLength, Math.min(maxLength, dist + (reelIn ? -1 : 1) * speed * dt));
+  return { x: anchorX + (rx / dist) * clamped, y: anchorY + (ry / dist) * clamped, ropeLength: clamped };
 }
 
-/**
- * Frontal-armor test in 2D: is an incoming hit landing within the giant's
- * frontal cone? A hit whose direction (from the giant toward the strike) lies
- * within `coneDeg` of the facing heading is "frontal" and gets reduced by the
- * plate; a hit from behind or the flank (outside the cone) bypasses it.
- *
- * @param facingX,facingY unit facing heading.
- * @param hitDX,hitDY vector from the giant toward the strike point.
- * @param coneDeg half-angle of the frontal cone, degrees.
- */
-export function isFrontalHit(
-  facingX: number,
-  facingY: number,
-  hitDX: number,
-  hitDY: number,
-  coneDeg: number,
+export function makeSlashShape(
+  originX: number,
+  originY: number,
+  aimX: number,
+  aimY: number,
+  fallbackX: number,
+  fallbackY: number,
+  reach: number,
+  halfWidth: number,
+): SlashShape {
+  const dx = aimX - originX;
+  const dy = aimY - originY;
+  const forward = Math.hypot(dx, dy) < 1 ? dashDirection(fallbackX, fallbackY) : dashDirection(dx, dy);
+  return { originX, originY, forwardX: forward.x, forwardY: forward.y, reach, halfWidth };
+}
+
+function projectionRadius(aabb: Aabb, axisX: number, axisY: number): number {
+  return ((aabb.right - aabb.left) * 0.5) * Math.abs(axisX) + ((aabb.bottom - aabb.top) * 0.5) * Math.abs(axisY);
+}
+
+/** Closed oriented slash rectangle versus closed axis-aligned body box. */
+export function slashIntersectsAabb(slash: SlashShape, aabb: Aabb): boolean {
+  const rightX = -slash.forwardY;
+  const rightY = slash.forwardX;
+  const slashCx = slash.originX + slash.forwardX * slash.reach * 0.5;
+  const slashCy = slash.originY + slash.forwardY * slash.reach * 0.5;
+  const boxCx = (aabb.left + aabb.right) * 0.5;
+  const boxCy = (aabb.top + aabb.bottom) * 0.5;
+  const dx = boxCx - slashCx;
+  const dy = boxCy - slashCy;
+  const axes: readonly Vec2[] = [
+    { x: slash.forwardX, y: slash.forwardY },
+    { x: rightX, y: rightY },
+    { x: 1, y: 0 },
+    { x: 0, y: 1 },
+  ];
+  for (const axis of axes) {
+    const centerDistance = Math.abs(dx * axis.x + dy * axis.y);
+    const slashRadius =
+      slash.reach * 0.5 * Math.abs(slash.forwardX * axis.x + slash.forwardY * axis.y) +
+      slash.halfWidth * Math.abs(rightX * axis.x + rightY * axis.y);
+    if (centerDistance > slashRadius + projectionRadius(aabb, axis.x, axis.y)) return false;
+  }
+  return true;
+}
+
+/** Closed oriented slash rectangle versus closed node circle. */
+export function slashIntersectsCircle(
+  slash: SlashShape,
+  circleX: number,
+  circleY: number,
+  radius: number,
 ): boolean {
-  const hlen = Math.hypot(hitDX, hitDY) || 1;
-  const dot = (hitDX / hlen) * facingX + (hitDY / hlen) * facingY;
-  const coneCos = Math.cos((coneDeg * Math.PI) / 180);
-  return dot >= coneCos;
+  const dx = circleX - slash.originX;
+  const dy = circleY - slash.originY;
+  const u = dx * slash.forwardX + dy * slash.forwardY;
+  const v = dx * -slash.forwardY + dy * slash.forwardX;
+  const closestU = Math.max(0, Math.min(slash.reach, u));
+  const closestV = Math.max(-slash.halfWidth, Math.min(slash.halfWidth, v));
+  return (u - closestU) ** 2 + (v - closestV) ** 2 <= radius ** 2;
+}
+
+export function aabbIntersects(a: Aabb, b: Aabb): boolean {
+  return a.left <= b.right && a.right >= b.left && a.top <= b.bottom && a.bottom >= b.top;
+}
+
+/** First closed AABB boundary hit along a finite ray segment. */
+export function rayAabbIntersection(
+  originX: number,
+  originY: number,
+  dirX: number,
+  dirY: number,
+  maxDistance: number,
+  aabb: Aabb,
+): { distance: number; point: Vec2 } | null {
+  let near = Number.NEGATIVE_INFINITY;
+  let far = Number.POSITIVE_INFINITY;
+  const inside = originX > aabb.left && originX < aabb.right && originY > aabb.top && originY < aabb.bottom;
+  for (const [origin, direction, min, max] of [
+    [originX, dirX, aabb.left, aabb.right],
+    [originY, dirY, aabb.top, aabb.bottom],
+  ] as const) {
+    if (Math.abs(direction) < Number.EPSILON) {
+      if (origin < min || origin > max) return null;
+      continue;
+    }
+    const t1 = (min - origin) / direction;
+    const t2 = (max - origin) / direction;
+    near = Math.max(near, Math.min(t1, t2));
+    far = Math.min(far, Math.max(t1, t2));
+    if (near > far) return null;
+  }
+  const distance = inside ? far : Math.max(0, near);
+  if (!Number.isFinite(distance) || distance < 0 || distance > maxDistance) return null;
+  return { distance, point: { x: originX + dirX * distance, y: originY + dirY * distance } };
 }

@@ -3,10 +3,10 @@
  *
  * Each wave is pure DATA: a list of (role, count) spawn groups plus pacing.
  * Difficulty escalates ACROSS waves purely through COMPOSITION - later waves
- * add more giants, introduce tougher roles, and mix disruptive roles together.
- * We NEVER scale a giant's base stats to raise difficulty; the numbers in
- * EnemyConfig.ts are fixed. This keeps balance readable and honest: a Breaker
- * in wave 8 is the exact same Breaker as in wave 3, there are just more/nastier
+ * add more machines, introduce tougher roles, and mix disruptive roles together.
+ * We NEVER scale a machine's base stats to raise difficulty; the numbers in
+ * EnemyConfig.ts are fixed. This keeps balance readable and honest: a Rammer
+ * in wave 8 is the exact same Rammer as in wave 3, there are just more/nastier
  * things around it.
  *
  * WaveSystem reads this table; when all listed waves are cleared the run is a
@@ -14,9 +14,9 @@
  */
 
 import { EnemyRole } from './GameConfig';
-import type { Difficulty } from '../systems/AudioManager';
+import type { Difficulty } from '../systems/Persistence';
 
-/** A group of identical giants spawned within a wave. */
+/** A group of identical machines spawned within a wave. */
 export interface SpawnGroup {
   readonly role: EnemyRole;
   readonly count: number;
@@ -43,20 +43,24 @@ export const WAVE_TUNING = {
    * wave does not arrive in a metronomic line. [0..1] of spawnIntervalMs.
    */
   SPAWN_JITTER: 0.35,
+  /** Retry cadence when no legal non-overlapping spawn point is available. */
+  SPAWN_RETRY_MS: 200,
+  SPAWN_RANDOM_ATTEMPTS: 32,
+  SPAWN_FALLBACK_ANGLES: 64,
 } as const;
 
 /**
  * Per-difficulty PACING/COMPOSITION scaling. The difficulty selector NEVER
- * touches a giant's base stats (those are fixed in EnemyConfig.ts) - it only
+ * touches a machine's base stats (those are fixed in EnemyConfig.ts) - it only
  * changes how fast a wave arrives and, at the top setting, how many extra
- * baseline giants pad each wave. This keeps every individual giant identical
+ * baseline machines pad each wave. This keeps every individual machine identical
  * across difficulties; only the pressure of the encounter changes.
  *
  *  - spawnIntervalScale: multiplies each wave's spawnIntervalMs (< 1 = faster,
  *    tighter pressure; > 1 = slower, more breathing room).
  *  - startDelayScale: multiplies the inter-wave delay the same way.
- *  - extraFillerPerWave: how many additional Wanderer (baseline role) spawns to
- *    append to each wave's composition - MORE giants, not tougher ones.
+ *  - extraFillerPerWave: how many additional Surveyor (baseline role) spawns to
+ *    append to each wave's composition - MORE machines, not tougher ones.
  */
 export interface DifficultyTuning {
   readonly spawnIntervalScale: number;
@@ -67,31 +71,31 @@ export interface DifficultyTuning {
 }
 
 export const DIFFICULTY_TUNING: Record<Difficulty, DifficultyTuning> = {
-  // Relaxed: giants trickle in and waves give a longer breather.
-  relaxed: { spawnIntervalScale: 1.4, startDelayScale: 1.35, extraFillerPerWave: 0, fillerRole: EnemyRole.Wanderer },
+  // Relaxed: machines trickle in and waves give a longer breather.
+  relaxed: { spawnIntervalScale: 1.4, startDelayScale: 1.35, extraFillerPerWave: 0, fillerRole: EnemyRole.Surveyor },
   // Standard: the table as authored.
-  standard: { spawnIntervalScale: 1, startDelayScale: 1, extraFillerPerWave: 0, fillerRole: EnemyRole.Wanderer },
-  // Brutal: relentless pacing plus a couple of extra baseline giants per wave.
-  brutal: { spawnIntervalScale: 0.68, startDelayScale: 0.7, extraFillerPerWave: 2, fillerRole: EnemyRole.Wanderer },
+  standard: { spawnIntervalScale: 1, startDelayScale: 1, extraFillerPerWave: 0, fillerRole: EnemyRole.Surveyor },
+  // Brutal: relentless pacing plus a couple of extra baseline machines per wave.
+  brutal: { spawnIntervalScale: 0.68, startDelayScale: 0.7, extraFillerPerWave: 2, fillerRole: EnemyRole.Surveyor },
 } as const;
 
 /**
- * The wave table. Composition ramps: single easy giant -> small groups ->
- * mixed roles -> tanky/ranged/disruptive combos -> a Breaker-led finale.
+ * The wave table. Composition ramps: single easy machine -> small groups ->
+ * mixed roles -> tanky/ranged/disruptive combos -> a Rammer-led finale.
  * Every escalation is more/tougher-role spawns, not bigger stats.
  */
 export const WAVES: readonly WaveDef[] = [
   {
     wave: 1,
-    groups: [{ role: EnemyRole.Wanderer, count: 3 }],
+    groups: [{ role: EnemyRole.Surveyor, count: 3 }],
     spawnIntervalMs: 2000,
     startDelayMs: WAVE_TUNING.FIRST_WAVE_DELAY_MS,
   },
   {
     wave: 2,
     groups: [
-      { role: EnemyRole.Wanderer, count: 3 },
-      { role: EnemyRole.Sprinter, count: 2 },
+      { role: EnemyRole.Surveyor, count: 3 },
+      { role: EnemyRole.Skitter, count: 2 },
     ],
     spawnIntervalMs: 1700,
     startDelayMs: 3000,
@@ -99,9 +103,9 @@ export const WAVES: readonly WaveDef[] = [
   {
     wave: 3,
     groups: [
-      { role: EnemyRole.Wanderer, count: 3 },
-      { role: EnemyRole.Sprinter, count: 3 },
-      { role: EnemyRole.Thrower, count: 1 },
+      { role: EnemyRole.Surveyor, count: 3 },
+      { role: EnemyRole.Skitter, count: 3 },
+      { role: EnemyRole.Bombard, count: 1 },
     ],
     spawnIntervalMs: 1500,
     startDelayMs: 3000,
@@ -109,9 +113,9 @@ export const WAVES: readonly WaveDef[] = [
   {
     wave: 4,
     groups: [
-      { role: EnemyRole.Wanderer, count: 4 },
-      { role: EnemyRole.Aberrant, count: 2 },
-      { role: EnemyRole.Armored, count: 1 },
+      { role: EnemyRole.Surveyor, count: 4 },
+      { role: EnemyRole.Fluxborn, count: 2 },
+      { role: EnemyRole.Bastion, count: 1 },
     ],
     spawnIntervalMs: 1400,
     startDelayMs: 3200,
@@ -119,9 +123,9 @@ export const WAVES: readonly WaveDef[] = [
   {
     wave: 5,
     groups: [
-      { role: EnemyRole.Sprinter, count: 4 },
-      { role: EnemyRole.Thrower, count: 2 },
-      { role: EnemyRole.Breaker, count: 1 },
+      { role: EnemyRole.Skitter, count: 4 },
+      { role: EnemyRole.Bombard, count: 2 },
+      { role: EnemyRole.Rammer, count: 1 },
     ],
     spawnIntervalMs: 1300,
     startDelayMs: 3200,
@@ -129,10 +133,10 @@ export const WAVES: readonly WaveDef[] = [
   {
     wave: 6,
     groups: [
-      { role: EnemyRole.Wanderer, count: 4 },
-      { role: EnemyRole.Armored, count: 2 },
-      { role: EnemyRole.Aberrant, count: 3 },
-      { role: EnemyRole.Thrower, count: 1 },
+      { role: EnemyRole.Surveyor, count: 4 },
+      { role: EnemyRole.Bastion, count: 2 },
+      { role: EnemyRole.Fluxborn, count: 3 },
+      { role: EnemyRole.Bombard, count: 1 },
     ],
     spawnIntervalMs: 1200,
     startDelayMs: 3400,
@@ -140,10 +144,10 @@ export const WAVES: readonly WaveDef[] = [
   {
     wave: 7,
     groups: [
-      { role: EnemyRole.Sprinter, count: 5 },
-      { role: EnemyRole.Armored, count: 2 },
-      { role: EnemyRole.Thrower, count: 2 },
-      { role: EnemyRole.Breaker, count: 1 },
+      { role: EnemyRole.Skitter, count: 5 },
+      { role: EnemyRole.Bastion, count: 2 },
+      { role: EnemyRole.Bombard, count: 2 },
+      { role: EnemyRole.Rammer, count: 1 },
     ],
     spawnIntervalMs: 1100,
     startDelayMs: 3400,
@@ -151,19 +155,19 @@ export const WAVES: readonly WaveDef[] = [
   {
     wave: 8,
     groups: [
-      { role: EnemyRole.Wanderer, count: 4 },
-      { role: EnemyRole.Sprinter, count: 4 },
-      { role: EnemyRole.Aberrant, count: 4 },
-      { role: EnemyRole.Armored, count: 3 },
-      { role: EnemyRole.Thrower, count: 3 },
-      { role: EnemyRole.Breaker, count: 2 },
+      { role: EnemyRole.Surveyor, count: 4 },
+      { role: EnemyRole.Skitter, count: 4 },
+      { role: EnemyRole.Fluxborn, count: 4 },
+      { role: EnemyRole.Bastion, count: 3 },
+      { role: EnemyRole.Bombard, count: 3 },
+      { role: EnemyRole.Rammer, count: 2 },
     ],
     spawnIntervalMs: 950,
     startDelayMs: 4000,
   },
 ];
 
-/** Total number of giants a wave will spawn (sum of its group counts). */
+/** Total number of machines a wave will spawn (sum of its group counts). */
 export function waveSize(def: WaveDef): number {
   return def.groups.reduce((sum, g) => sum + g.count, 0);
 }
@@ -174,7 +178,7 @@ export function waveSize(def: WaveDef): number {
  * role-by-role, which makes the encounter read as designed variety.
  *
  * When a {@link DifficultyTuning} is supplied, its `extraFillerPerWave` baseline
- * giants are appended to the wave (MORE giants of a fixed low-tier role, never
+ * machines are appended to the wave (MORE machines of a fixed low-tier role, never
  * tougher stats), so a harder difficulty means a bigger crowd, not buffed foes.
  */
 export function expandWave(def: WaveDef, tuning?: DifficultyTuning): EnemyRole[] {

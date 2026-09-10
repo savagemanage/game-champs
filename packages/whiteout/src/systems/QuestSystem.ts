@@ -67,6 +67,7 @@ export class QuestSystem {
   private _dailyDayIndex: number;
   private readonly _daily: Map<string, QuestProgressState> = new Map();
   private readonly _milestones: Map<string, QuestProgressState> = new Map();
+  private readonly _processedEventIds: Set<string> = new Set();
   private _activeEventId: string | null;
   private _eventEndsAt: number;
   /**
@@ -92,6 +93,11 @@ export class QuestSystem {
       for (const id of GROWTH_QUEST_IDS) {
         const p = state.milestones[id];
         if (p) this._milestones.set(id, normalizeProgress(p));
+      }
+    }
+    if (Array.isArray(state?.processedEventIds)) {
+      for (const id of state.processedEventIds.slice(-256)) {
+        if (typeof id === 'string' && id.length > 0 && id.length <= 160) this._processedEventIds.add(id);
       }
     }
     this._activeEventId =
@@ -124,8 +130,11 @@ export class QuestSystem {
    * before any progress is read or written.
    */
   sync(now: number): void {
+    if (!Number.isFinite(now) || now < 0) return;
     const today = dayIndex(now);
-    if (today !== this._dailyDayIndex) {
+    // Local clocks may move backwards. Daily state is monotonic: only a later
+    // UTC day can reset progress; an older day is ignored.
+    if (today > this._dailyDayIndex) {
       this._dailyDayIndex = today;
       this._daily.clear(); // reset the whole daily set on the day boundary.
     }
@@ -140,19 +149,41 @@ export class QuestSystem {
    * growth quest that watches it. Syncs the day boundary first so progress
    * always lands in the correct daily set.
    */
-  record(metric: QuestMetric, amount: number, now: number): void {
-    if (amount <= 0) return;
-    this.sync(now);
-    const inc = Math.floor(amount);
-    for (const q of DAILY_QUESTS) {
-      if (q.metric === metric) this.ensureDaily(q.id).progress += inc;
-    }
-    for (const q of GROWTH_QUESTS) {
-      if (q.metric === metric) {
-        const p = this.ensureMilestone(q.id);
-        if (!p.claimed) p.progress += inc; // freeze one-time milestones once claimed
+  record(metric: QuestMetric, amount: number, now: number, eventId?: string): QuestReward[] {
+    if (amount <= 0) return [];
+    if (eventId) {
+      if (this._processedEventIds.has(eventId)) return [];
+      this._processedEventIds.add(eventId);
+      while (this._processedEventIds.size > 256) {
+        const oldest = this._processedEventIds.values().next().value as string | undefined;
+        if (!oldest) break;
+        this._processedEventIds.delete(oldest);
       }
     }
+    this.sync(now);
+    const rewards: QuestReward[] = [];
+    const inc = Math.floor(amount);
+    for (const q of DAILY_QUESTS) {
+      if (q.metric !== metric) continue;
+      const p = this.ensureDaily(q.id);
+      if (p.claimed) continue;
+      p.progress += inc;
+      if (p.progress >= q.target) {
+        p.claimed = true;
+        rewards.push(q.reward);
+      }
+    }
+    for (const q of GROWTH_QUESTS) {
+      if (q.metric !== metric) continue;
+      const p = this.ensureMilestone(q.id);
+      if (p.claimed) continue;
+      p.progress += inc;
+      if (p.progress >= q.target) {
+        p.claimed = true;
+        rewards.push(q.reward);
+      }
+    }
+    return rewards;
   }
 
   /** A daily quest's current progress (0 if untouched). */
@@ -259,15 +290,13 @@ export class QuestSystem {
    * production bonus applied. Deterministic given `now`.
    */
   dailySync(now: number): boolean {
+    if (!Number.isFinite(now) || now < 0) return false;
     this.sync(now);
     const today = dayIndex(now);
-    // Arm the day's event exactly once per day: the persisted
-    // `_eventArmedDayIndex` guards against re-arming on every tick/load within
-    // the same day (and, together with startEvent replacing any running event,
-    // means a returning player finds today's event live).
-    if (today !== this._eventArmedDayIndex) {
+    if (today > this._eventArmedDayIndex) {
       this._eventArmedDayIndex = today;
-      this.startEvent(QuestSystem.eventForDay(today).id, now);
+      const start = today * QUESTS.DAY_MS;
+      this.startEvent(QuestSystem.eventForDay(today).id, start, QUESTS.DAY_MS);
       return true;
     }
     return false;
@@ -331,6 +360,7 @@ export class QuestSystem {
     for (const [id, p] of this._milestones.entries()) milestones[id] = { ...p };
     return {
       dailyDayIndex: this._dailyDayIndex,
+      processedEventIds: [...this._processedEventIds],
       daily,
       milestones,
       activeEventId: this._activeEventId,

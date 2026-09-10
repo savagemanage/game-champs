@@ -1,7 +1,7 @@
 # Systems
 
-Cross-entity game systems live here: the ODM `GrappleSystem` (grapple/mobility
-physics), `GasSystem` (gas resource), `CombatSystem` (damage resolution),
+Cross-entity game systems live here: `GrappleSystem` (charge-tether mobility
+physics), `GasSystem` (charge resource), `CombatSystem` (damage resolution),
 `WaveSystem` (spawning/composition), `AudioManager` (sound), and the
 `SiegeGeometry` helpers for the concentric-ring layout.
 

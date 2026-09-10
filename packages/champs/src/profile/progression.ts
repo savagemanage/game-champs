@@ -1,8 +1,5 @@
 import { CHAMPIONS } from '../data/champions';
-import {
-  DIFFICULTY_CONFIG,
-  MATCH_KIND_CONFIG,
-} from '../game/tutorial/config';
+import { DIFFICULTY_CONFIG, MATCH_KIND_CONFIG } from '../game/tutorial/config';
 import { MAX_APPLIED_MATCH_IDS, migrateProfile } from './profile';
 import type {
   ChampionMastery,
@@ -17,6 +14,13 @@ export interface MatchRewards {
   masteryXp: number;
 }
 
+export interface AppliedMatchOutcome {
+  profile: ChampsProfile;
+  applied: boolean;
+  rewards: MatchRewards;
+}
+
+const NO_REWARDS: MatchRewards = { accountXp: 0, currency: 0, masteryXp: 0 };
 const BASE_REWARDS = {
   win: { accountXp: 120, currency: 90, masteryXp: 75 },
   loss: { accountXp: 70, currency: 40, masteryXp: 45 },
@@ -29,7 +33,8 @@ function scaled(value: number, multiplier: number): number {
 }
 
 export function rewardsForMatch(facts: ProfileMatchOutcomeFacts): MatchRewards {
-  const base = facts.win ? BASE_REWARDS.win : BASE_REWARDS.loss;
+  if (facts.result === 'abandoned') return NO_REWARDS;
+  const base = facts.result === 'win' ? BASE_REWARDS.win : BASE_REWARDS.loss;
   const kind = MATCH_KIND_CONFIG[facts.matchKind];
   const multiplier =
     kind.progressionMultiplier *
@@ -52,10 +57,7 @@ export function masteryLevelForXp(xp: number): number {
   return Math.min(10, Math.floor(safeXp / 200) + 1);
 }
 
-export function setLastSetup(
-  profile: ChampsProfile,
-  setup: LastMatchSetup,
-): ChampsProfile {
+export function setLastSetup(profile: ChampsProfile, setup: LastMatchSetup): ChampsProfile {
   return { ...migrateProfile(profile), lastSetup: { ...setup } };
 }
 
@@ -76,9 +78,7 @@ export function unlockChampion(
     !CHAMPION_IDS.has(championId) ||
     current.unlockedChampionIds.includes(championId) ||
     current.currency < safeCost
-  ) {
-    return current;
-  }
+  ) return current;
 
   return {
     ...current,
@@ -87,14 +87,18 @@ export function unlockChampion(
   };
 }
 
-/** Apply one match exactly once without importing mutable battle state. */
-export function applyMatchOutcome(
+/** Apply one normal match exactly once and expose the actually applied delta. */
+export function applyMatchOutcomeTransaction(
   profile: ChampsProfile,
   facts: ProfileMatchOutcomeFacts,
-): ChampsProfile {
+): AppliedMatchOutcome {
   const current = migrateProfile(profile);
-  if (facts.matchId.length === 0 || current.appliedMatchIds.includes(facts.matchId)) {
-    return current;
+  if (
+    facts.result === 'abandoned' ||
+    facts.matchId.trim().length === 0 ||
+    current.appliedMatchIds.includes(facts.matchId)
+  ) {
+    return { profile: current, applied: false, rewards: NO_REWARDS };
   }
 
   const rewards = rewardsForMatch(facts);
@@ -109,15 +113,12 @@ export function applyMatchOutcome(
         [facts.playerChampionId]: {
           xp: priorMastery.xp + rewards.masteryXp,
           matches: priorMastery.matches + 1,
-          wins: priorMastery.wins + (facts.win ? 1 : 0),
+          wins: priorMastery.wins + (facts.result === 'win' ? 1 : 0),
         },
       }
     : current.mastery;
 
-  // Midline randomizes the actual roster inside BattleScene. Continue must
-  // preserve the player's requested (and unlocked) setup rather than replacing
-  // it with a random champion that may be locked. Mastery above still credits
-  // the champion that was actually played.
+  // Midline Continue preserves request settings; mastery credits the actual pick.
   const lastSetup =
     facts.mode === 'midline' && current.lastSetup?.mode === 'midline'
       ? current.lastSetup
@@ -129,18 +130,24 @@ export function applyMatchOutcome(
           enemyChampionId: facts.enemyChampionId,
         };
 
-  return {
+  const next: ChampsProfile = {
     ...current,
     accountXp: current.accountXp + rewards.accountXp,
     currency: current.currency + rewards.currency,
     mastery,
     tutorialCompleted:
-      current.tutorialCompleted || facts.matchKind === 'tutorial',
-    practiceCompleted:
-      current.practiceCompleted || facts.matchKind === 'practice',
+      current.tutorialCompleted ||
+      (facts.matchKind === 'tutorial' && facts.learningRequirementsCompleted === true),
+    practiceCompleted: current.practiceCompleted || facts.matchKind === 'practice',
     lastSetup,
-    appliedMatchIds: [...current.appliedMatchIds, facts.matchId].slice(
-      -MAX_APPLIED_MATCH_IDS,
-    ),
+    appliedMatchIds: [...current.appliedMatchIds, facts.matchId].slice(-MAX_APPLIED_MATCH_IDS),
   };
+  return { profile: next, applied: true, rewards };
+}
+
+export function applyMatchOutcome(
+  profile: ChampsProfile,
+  facts: ProfileMatchOutcomeFacts,
+): ChampsProfile {
+  return applyMatchOutcomeTransaction(profile, facts).profile;
 }

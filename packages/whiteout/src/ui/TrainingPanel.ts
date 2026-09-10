@@ -222,11 +222,13 @@ export class TrainingPanel {
       now,
       this.state.buildings.hasWarCamp,
       this.tier,
+      this.state.maxTroopTier(),
+      this.hasYard(row.troop),
     );
     if (result.ok) {
       AudioManager.get(this.scene).playSfx(AudioKeys.TrainComplete, 0.5);
       // Training a batch progresses the daily 'train' quest metric.
-      this.state.quests.record('troopTrained', 1, now);
+      this.state.recordQuest('troopTrained', 1, now);
       this.state.save(now);
     }
     this.refresh();
@@ -253,7 +255,7 @@ export class TrainingPanel {
         `${tr('training.cost', { cost: this.costString(row.troop) })}   ${tr('training.time', { seconds })}`,
       );
       row.armyLabel.setText(tr('training.army', { count: army[row.troop] }));
-      row.trainButton.setEnabled(hasWarCamp && this.affordable(row));
+      row.trainButton.setEnabled(hasWarCamp && this.hasYard(row.troop) && this.affordable(row));
       row.trainButton.setText(tr('training.trainCount', { count: row.count }));
     }
 
@@ -270,6 +272,11 @@ export class TrainingPanel {
       });
       this.queueText.setText(`${tr('training.queue')}:\n${lines.join('\n')}`);
     }
+  }
+
+  private hasYard(troop: TroopKind): boolean {
+    const yard = troop === 'vanguard' ? 'infantry_yard' : troop === 'trapper' ? 'lancer_yard' : 'marksman_range';
+    return this.state.buildings.level(yard) > 0;
   }
 
   /** Whether the player can currently afford a batch (without enqueuing). */

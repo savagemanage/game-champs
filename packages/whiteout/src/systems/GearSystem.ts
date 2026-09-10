@@ -109,6 +109,11 @@ export class GearSystem {
   socketCharm(slot: GearSlot, kind: CharmKind, store: ResourceStore): GearCheck {
     if (!GEAR_SLOT_DEFS[slot] || !CHARM_DEFS[kind]) return { ok: false, reason: 'unknown' };
     if (this.level(slot) <= 0) return { ok: false, reason: 'no_charm' };
+    const existing = this.charm(slot);
+    if (existing) {
+      // The contract keeps a socket's charm kind stable; callers upgrade it in place.
+      return existing.kind === kind ? { ok: false, reason: 'max_level' } : { ok: false, reason: 'no_charm' };
+    }
     const cost = charmUpgradeCost(kind, 0);
     if (!store.canAfford(cost)) return { ok: false, reason: 'cost' };
     store.spend(cost);

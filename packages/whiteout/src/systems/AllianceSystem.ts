@@ -30,12 +30,18 @@ export type TimerReducer = (ms: number, now: number) => number;
 export class AllianceSystem {
   private _techPoints: number;
   private _helpsAvailable: number;
+  private _helpAccrual: number;
+  private _lastContributionAt: number;
 
   constructor(state?: AllianceState) {
     this._techPoints = state ? Math.max(0, state.techPoints ?? 0) : 0;
     this._helpsAvailable = state
       ? clampHelps(state.helpsAvailable ?? 0)
       : 0;
+    this._helpAccrual = state && Number.isFinite(state.helpAccrual) ? Math.max(0, state.helpAccrual ?? 0) : 0;
+    this._lastContributionAt = state && Number.isFinite(state.lastContributionAt)
+      ? state.lastContributionAt ?? Number.MIN_SAFE_INTEGER
+      : Number.MIN_SAFE_INTEGER;
   }
 
   /** The fixed NPC member count of the simulated alliance. */
@@ -77,6 +83,28 @@ export class AllianceSystem {
     return shaved;
   }
 
+  /** Accrue one help per five minutes of active simulation, preserving fractions. */
+  tickActive(deltaMs: number): number {
+    if (deltaMs <= 0 || this._helpsAvailable >= ALLIANCE.MAX_HELPS) return 0;
+    this._helpAccrual += deltaMs / ALLIANCE.HELP_GEN_INTERVAL_MS;
+    const whole = Math.floor(this._helpAccrual);
+    if (whole <= 0) return 0;
+    const before = this._helpsAvailable;
+    this.grantHelps(whole);
+    this._helpAccrual -= whole;
+    if (this._helpsAvailable >= ALLIANCE.MAX_HELPS) this._helpAccrual = 0;
+    return this._helpsAvailable - before;
+  }
+
+  /** Paid direct contribution with a one-second debounce. */
+  directContribute(resources: import('./ResourceStore').ResourceStore, now: number): boolean {
+    if (now - this._lastContributionAt < ALLIANCE.CONTRIBUTION_DEBOUNCE_MS) return false;
+    if (!resources.spend({ food: 100, wood: 100 })) return false;
+    this._lastContributionAt = now;
+    this.contribute(ALLIANCE.DIRECT_CONTRIBUTION_POINTS);
+    return true;
+  }
+
   /**
    * Contribute `points` to the alliance-tech track (from the player's activity /
    * spending). Monotonic; raises the tech level when a threshold is crossed.
@@ -97,7 +125,12 @@ export class AllianceSystem {
 
   /** Serialize to a plain {@link AllianceState}. */
   toJSON(): AllianceState {
-    return { techPoints: this._techPoints, helpsAvailable: this._helpsAvailable };
+    return {
+      techPoints: this._techPoints,
+      helpsAvailable: this._helpsAvailable,
+      helpAccrual: this._helpAccrual,
+      lastContributionAt: this._lastContributionAt,
+    };
   }
 
   /**

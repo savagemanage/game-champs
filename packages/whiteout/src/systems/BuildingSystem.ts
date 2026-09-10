@@ -42,8 +42,16 @@ export class BuildingSystem {
     if (states && states.length > 0) {
       for (const s of states) {
         if (BUILDING_DEFS[s.kind]) {
-          this._buildings.set(s.kind, { kind: s.kind, level: s.level, upgradeEndsAt: s.upgradeEndsAt });
+          const level = Math.min(BUILDING_DEFS[s.kind].maxLevel, Math.max(0, Math.floor(Number.isFinite(s.level) ? s.level : 0)));
+          const upgradeEndsAt = typeof s.upgradeEndsAt === 'number' && Number.isFinite(s.upgradeEndsAt) && s.upgradeEndsAt >= 0
+            ? s.upgradeEndsAt
+            : null;
+          this._buildings.set(s.kind, { kind: s.kind, level, upgradeEndsAt });
         }
+      }
+      const furnace = this.furnaceLevel;
+      for (const state of this._buildings.values()) {
+        if (state.kind !== 'furnace') state.level = Math.min(state.level, furnace);
       }
     } else {
       // Fresh game: a level-1 Furnace is lit, everything else unbuilt.
@@ -112,7 +120,7 @@ export class BuildingSystem {
    * Start an upgrade: spends the cost from `store` and schedules completion at
    * `now + upgradeTime`. Returns the check result; on failure nothing changes.
    */
-  startUpgrade(kind: BuildingKind, store: ResourceStore, now: number): UpgradeCheck {
+  startUpgrade(kind: BuildingKind, store: ResourceStore, now: number, buildSpeed = 0): UpgradeCheck {
     const check = this.canUpgrade(kind, store);
     if (!check.ok) return check;
 
@@ -121,7 +129,9 @@ export class BuildingSystem {
 
     const existing = this._buildings.get(kind) ?? { kind, level: 0, upgradeEndsAt: null };
     existing.kind = kind;
-    existing.upgradeEndsAt = now + this.nextUpgradeTimeMs(kind);
+    const baseDuration = this.nextUpgradeTimeMs(kind);
+    const effectiveDuration = Math.max(1_000, Math.ceil(baseDuration / (1 + Math.max(0, buildSpeed))));
+    existing.upgradeEndsAt = now + effectiveDuration;
     this._buildings.set(kind, existing);
     return { ok: true };
   }

@@ -96,6 +96,10 @@ export interface BuildingState {
 export interface TrainingOrder {
   troop: TroopKind;
   count: number;
+  /** Epoch ms when this batch starts after the order ahead. */
+  startsAt?: number;
+  /** Enqueue-time duration after research speed is applied. */
+  durationMs?: number;
   /** Epoch ms when this batch completes. */
   completesAt: number;
 }
@@ -121,6 +125,8 @@ export interface ResearchStateSave {
  */
 export interface HeroStateSave {
   recruited: Record<string, { level: number; stars: number; shards: number }>;
+  /** Canonical per-hero wallets, including unrecruited heroes. */
+  shardsByHero?: Record<string, number>;
   active: string | null;
 }
 
@@ -199,6 +205,11 @@ export interface GameState {
    * brand-new game starts `false` so the guided tutorial runs exactly once.
    */
   tutorialDone?: boolean;
-  /** Epoch ms of the last simulation update (drives offline reconciliation). */
+  /** Optional additive v7 battle receipt and idempotency revision. */
+  lastBattleReceipt?: import('../systems/BattleReceipt').BattleReceipt | null;
+  battleRevision?: number;
+  /** Epoch ms of the latest save attempt (drives absence reporting). */
   lastSeenAt: number;
+  /** Last fully settled 1,000ms economic boundary; preserves fractional phase. */
+  simulationCursorAt?: number;
 }

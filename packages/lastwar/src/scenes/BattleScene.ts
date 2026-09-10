@@ -8,6 +8,7 @@ import {
   HERO_PORTRAIT_ROLE_INDEX,
 } from '../config/AssetKeys';
 import { AudioManager } from '../systems/AudioManager';
+import { GameStore } from '../systems/GameStore';
 import { heroDef } from '../config/Heroes';
 import type { Combatant, Team } from '../systems/Formation';
 import type { BattleEvent, Side } from '../systems/Combat';
@@ -15,6 +16,7 @@ import { tr } from '../i18n/i18n';
 import type { TrKey } from '../i18n/strings';
 import { Menu } from '../ui/Menu';
 import { textStyle } from '../ui/UiText';
+import { setAccessibleScreen } from '../systems/Accessibility';
 
 /**
  * Launch data for {@link BattleScene}. This is the reusable animated-view
@@ -103,6 +105,14 @@ export class BattleScene extends Phaser.Scene {
   private cursor = 0;
   private advantageCue!: Phaser.GameObjects.Text;
   private finished = false;
+  private paused = false;
+  private speed = 1;
+  private roundText!: Phaser.GameObjects.Text;
+  private exitLayer: Phaser.GameObjects.Container | null = null;
+  private readonly lifecyclePause = (): void => this.pauseReplay();
+  private readonly visibilityPause = (): void => {
+    if (document.visibilityState === 'hidden') this.pauseReplay();
+  };
 
   constructor() {
     super({ key: SceneKeys.Battle });
@@ -115,6 +125,11 @@ export class BattleScene extends Phaser.Scene {
     this.endTimer = null;
     this.cursor = 0;
     this.finished = false;
+    this.paused = false;
+    this.speed = 1;
+    this.exitLayer = null;
+    this.time.timeScale = 1;
+    setAccessibleScreen(data.title, tr('battle.round', { round: 0 }));
 
     const cx = CANVAS.WIDTH / 2;
     this.cameras.main.resetFX();
@@ -125,6 +140,21 @@ export class BattleScene extends Phaser.Scene {
     this.add.image(cx, CANVAS.HEIGHT / 2, TextureKeys.BgBattle).setOrigin(0.5).setAlpha(0.55);
 
     Menu.title(this, cx, CANVAS.HEIGHT * 0.06, data.title, 26).setColor(PALETTE.SQUAD_CSS);
+    this.roundText = this.add.text(16, 88, tr('battle.round', { round: 0 }), textStyle(12, { allowSmall: true })).setDepth(95);
+    Menu.button(this, 210, 88, tr('battle.pause'), () => this.togglePause(), { width: 86, height: 44, fontSize: 11, allowSmall: true }).container.setDepth(95);
+    ([1, 2, 4] as const).forEach((speed, index) => {
+      Menu.button(this, 302 + index * 58, 88, `${speed}×`, () => this.setSpeed(speed), { width: 50, height: 44, fontSize: 11, allowSmall: true }).container.setDepth(95);
+    });
+    Menu.button(this, 488, 88, tr('battle.skip'), () => this.skip(), { width: 76, height: 44, fontSize: 11, allowSmall: true }).container.setDepth(95);
+    this.input.keyboard?.on('keydown-SPACE', () => this.togglePause());
+    this.input.keyboard?.on('keydown-ONE', () => this.setSpeed(1));
+    this.input.keyboard?.on('keydown-TWO', () => this.setSpeed(2));
+    this.input.keyboard?.on('keydown-FOUR', () => this.setSpeed(4));
+    this.input.keyboard?.on('keydown-S', () => this.skip());
+    this.input.keyboard?.on('keydown-ESC', () => this.requestExit());
+    document.addEventListener('visibilitychange', this.visibilityPause);
+    window.addEventListener('blur', this.lifecyclePause);
+    window.addEventListener('orientationchange', this.lifecyclePause);
 
     // Enemy squad along the top, player squad along the bottom.
     this.layoutTeam(data.enemyTeam, 'defender', CANVAS.HEIGHT * 0.22, CANVAS.HEIGHT * 0.34);
@@ -213,17 +243,98 @@ export class BattleScene extends Phaser.Scene {
     return tr(`herotype.${member.type}` as TrKey);
   }
 
+  private togglePause(): void {
+    if (this.finished || this.exitLayer) return;
+    if (this.paused) this.resumeReplay();
+    else this.pauseReplay();
+  }
+
+  private pauseReplay(): void {
+    if (this.finished || this.paused) return;
+    this.paused = true;
+    this.stepTimer?.remove();
+    this.stepTimer = null;
+    this.time.paused = true;
+    this.tweens.pauseAll();
+  }
+
+  private resumeReplay(): void {
+    if (this.finished || !this.paused) return;
+    this.exitLayer?.destroy(true);
+    this.exitLayer = null;
+    this.time.paused = false;
+    this.tweens.resumeAll();
+    this.paused = false;
+    this.stepTimer = this.time.delayedCall(STEP_MS / this.speed, () => this.step());
+  }
+
+  /** Show an explicit leave confirmation; outcomes/rewards are already saved. */
+  public requestExit(): void {
+    if (this.finished) {
+      this.returnToCaller();
+      return;
+    }
+    if (this.exitLayer) return;
+    this.pauseReplay();
+    const cx = CANVAS.WIDTH / 2;
+    const cy = CANVAS.HEIGHT / 2;
+    const scrim = this.add.rectangle(cx, cy, CANVAS.WIDTH, CANVAS.HEIGHT, 0x000000, 0.78).setInteractive();
+    const panel = Menu.panel(this, cx, cy, 400, 240, 0.99);
+    const title = Menu.title(this, cx, cy - 68, tr('battle.leaveConfirm'), 24);
+    const resume = Menu.button(this, cx, cy, tr('run.resume'), () => this.resumeReplay(), { width: 220 });
+    const leave = Menu.button(this, cx, cy + 62, tr('battle.leave'), () => this.returnToCaller(), { width: 220, accent: PALETTE.DANGER });
+    this.exitLayer = this.add.container(0, 0, [scrim, panel, title, resume.container, leave.container]).setDepth(200);
+  }
+
+  private setSpeed(speed: 1 | 2 | 4): void {
+    this.speed = speed;
+    if (!this.paused && this.stepTimer) {
+      this.stepTimer.remove();
+      this.stepTimer = this.time.delayedCall(STEP_MS / speed, () => this.step());
+    }
+  }
+
+  private skip(): void {
+    if (this.finished) return;
+    this.exitLayer?.destroy(true);
+    this.exitLayer = null;
+    this.time.paused = false;
+    this.paused = false;
+    this.tweens.resumeAll();
+    this.stepTimer?.remove();
+    this.stepTimer = null;
+    this.tweens.killAll();
+    while (this.cursor < this.battle.timeline.length) {
+      const event = this.battle.timeline[this.cursor++];
+      if (event.kind === 'attack') {
+        const target = this.actorsById.get(actorKey(event.targetSide, event.target));
+        if (target) this.applyDamage(target, event.damage);
+      } else if (event.kind === 'heal') {
+        const target = this.actorsById.get(actorKey(event.targetSide, event.target));
+        if (target && !target.dead) {
+          target.hp = Math.min(target.maxHp, target.hp + event.amount);
+          this.setHpBar(target);
+        }
+      } else {
+        const actor = this.actorsById.get(actorKey(event.side, event.unit));
+        if (actor) { actor.dead = true; actor.container.setAlpha(0.15); }
+      }
+    }
+    this.finish();
+  }
+
   /** Advance the timeline by one event, scheduling the next step. */
   private step(): void {
-    if (this.finished) return;
+    if (this.finished || this.paused) return;
     if (this.cursor >= this.battle.timeline.length) {
       this.finish();
       return;
     }
     const event = this.battle.timeline[this.cursor];
     this.cursor += 1;
+    this.roundText.setText(tr('battle.round', { round: event.round }));
     this.playEvent(event);
-    this.stepTimer = this.time.delayedCall(STEP_MS, () => this.step());
+    this.stepTimer = this.time.delayedCall(STEP_MS / this.speed, () => this.step());
   }
 
   /** Animate a single battle event straight off its (already-resolved) numbers. */
@@ -255,9 +366,9 @@ export class BattleScene extends Phaser.Scene {
     // Type-advantage cue + extra shake when the resolved event was advantageous.
     if (event.typeMult > 1) {
       this.flashAdvantage();
-      this.cameras.main.shake(160, 0.006);
+      this.shake(160, 0.006);
     } else {
-      this.cameras.main.shake(80, 0.002);
+      this.shake(80, 0.002);
     }
   }
 
@@ -368,6 +479,10 @@ export class BattleScene extends Phaser.Scene {
     });
   }
 
+  private shake(duration: number, intensity: number): void {
+    if (AudioManager.get(this).getSettings().shakeEnabled) this.cameras.main.shake(duration, intensity);
+  }
+
   /** End of timeline: banner + stinger, then return to the caller. */
   private finish(): void {
     if (this.finished) return;
@@ -389,16 +504,25 @@ export class BattleScene extends Phaser.Scene {
       .setAlpha(0)
       .setScale(0.6);
     this.tweens.add({ targets: banner, alpha: 1, scale: 1, duration: 320, ease: 'Back.out' });
-    this.cameras.main.shake(220, win ? 0.004 : 0.008);
+    this.shake(220, win ? 0.004 : 0.008);
 
     // Return to the caller after a beat so it can surface the reward summary.
-    this.endTimer = this.time.delayedCall(1200, () => {
-      Menu.fadeTo(this, () =>
-        this.scene.start(this.battle.returnTo, {
-          returnTo: SceneKeys.Home,
-          battleResult: { win, ...(this.battle.returnData ?? {}) },
-        }),
-      );
+    this.endTimer = this.time.delayedCall(1200, () => this.returnToCaller());
+  }
+
+  /** Return through the caller-specific path with the already-settled result. */
+  private returnToCaller(): void {
+    if (!this.battle) return;
+    const win = this.battle.win;
+    this.time.paused = false;
+    this.time.timeScale = 1;
+    this.tweens.resumeAll();
+    this.exitLayer?.destroy(true);
+    this.exitLayer = null;
+    GameStore.get().consumePendingBattleSummary();
+    this.scene.start(this.battle.returnTo, {
+      returnTo: SceneKeys.Home,
+      battleResult: { win, ...(this.battle.returnData ?? {}) },
     });
   }
 
@@ -415,5 +539,10 @@ export class BattleScene extends Phaser.Scene {
     }
     this.tweens.killAll();
     this.time.removeAllEvents();
+    this.time.paused = false;
+    this.time.timeScale = 1;
+    document.removeEventListener('visibilitychange', this.visibilityPause);
+    window.removeEventListener('blur', this.lifecyclePause);
+    window.removeEventListener('orientationchange', this.lifecyclePause);
   }
 }

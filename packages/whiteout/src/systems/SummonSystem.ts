@@ -69,10 +69,23 @@ function isHighRarity(rarity: HeroRarity): boolean {
 export class SummonSystem {
   private _totalPulls: number;
   private _pityCounter: number;
+  private _rngState: number;
 
   constructor(state?: SummonState) {
     this._totalPulls = state ? Math.max(0, Math.floor(state.totalPulls ?? 0)) : 0;
     this._pityCounter = state ? Math.max(0, Math.floor(state.pityCounter ?? 0)) : 0;
+    this._rngState = state && Number.isFinite(state.rngState)
+      ? (state.rngState ?? 0) >>> 0
+      : (0x6d2b79f5 ^ this._totalPulls) >>> 0;
+  }
+
+  /** Advance and sample the persisted PRNG stream. */
+  private nextRandom(): number {
+    this._rngState = (this._rngState + 0x6d2b79f5) >>> 0;
+    let t = this._rngState;
+    t = Math.imul(t ^ (t >>> 15), 1 | t);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   }
 
   /** Total summons ever performed. */
@@ -132,10 +145,11 @@ export class SummonSystem {
    * @param rng        injected deterministic random source
    * @param isOwned    predicate: is this hero already owned by the roster?
    */
-  pull(rng: Rng, isOwned: (id: HeroId) => boolean): SummonResult {
+  pull(rng: Rng | undefined, isOwned: (id: HeroId) => boolean): SummonResult {
+    const random = rng ?? (() => this.nextRandom());
     const forceHigh = this.pityReady;
-    const rarity = this.rollRarity(rng, forceHigh);
-    const hero = this.rollHero(rng, rarity);
+    const rarity = this.rollRarity(random, forceHigh);
+    const hero = this.rollHero(random, rarity);
 
     // Pity bookkeeping: any epic+ resets the counter; otherwise it grows.
     const high = isHighRarity(rarity);
@@ -176,7 +190,7 @@ export class SummonSystem {
 
   /** Serialize to a plain {@link SummonState}. */
   toJSON(): SummonState {
-    return { totalPulls: this._totalPulls, pityCounter: this._pityCounter };
+    return { totalPulls: this._totalPulls, pityCounter: this._pityCounter, rngState: this._rngState };
   }
 
   /**

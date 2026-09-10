@@ -42,7 +42,10 @@
     "yourPick": "Your pick",
     "locked": "Locked",
     "unlock": "Unlock · {{cost}}",
-    "unlockAria": "Unlock {{champion}} for {{cost}} currency"
+    "unlockAria": "Unlock {{champion}} for {{cost}} currency",
+    "randomRoster": "Random Roster",
+    "randomRosterDescription": "All ten champions are available here. Your actual 5v5 roster is drawn from the match seed when battle starts—there is no unlock fee.",
+    "randomRosterRule": "The same seed always produces the same disjoint teams; a rematch issues a new seed."
   },
   "client": {
     "home": "Home",
@@ -77,7 +80,8 @@
     "mastery": "Selected mastery",
     "masteryLevel": "Mastery level {{value}}",
     "matches": "Matches",
-    "matchesValue": "{{value}} matches"
+    "matchesValue": "{{value}} matches",
+    "storageWarning": "Progress may not be saved during this session. You can keep playing."
   },
   "battle": {
     "title": "Arena Battle",
@@ -85,15 +89,31 @@
     "enemyNexus": "Enemy Core",
     "resource": "Resource",
     "controlsHint": "Left/right-click to move · A then click to attack-move · S to stop · Q/W/E/R to cast",
-    "loadError": "The battle renderer could not start. Return to champion select and try again.",
-    "surrender": "Surrender"
+    "loadError": "The battle renderer could not start. You can retry with a clean renderer or return to selection.",
+    "surrender": "Surrender",
+    "retry": "Retry",
+    "backToSelect": "Back to selection",
+    "paused": "Paused",
+    "resume": "Resume",
+    "pause": "Pause",
+    "recall": "Recall",
+    "attackMove": "Attack-move",
+    "stop": "Stop",
+    "touchControls": "Touch battle controls",
+    "useWarden": "Use Warden",
+    "surrenderConfirm": "Abandon this match? It will not be recorded and grants no rewards.",
+    "surrenderYes": "Abandon match"
   },
   "result": {
     "title": "Match Result",
     "victory": "Victory",
     "defeat": "Defeat",
+    "draw": "Draw",
+    "abandoned": "Match Abandoned",
     "winSubtitle": "The arena is yours. Glory to the champion.",
     "loseSubtitle": "The core has fallen. Regroup and try again.",
+    "drawSubtitle": "Every tie-break remained equal. The match ends in a draw.",
+    "abandonedSubtitle": "This match was not recorded.",
     "vs": "vs",
     "duration": "Duration",
     "championKills": "Champion Takedowns",
@@ -113,7 +133,8 @@
     "masteryProgress": "{{champion}} mastery progress",
     "endReasons": {
       "nexus-destroyed": "Core destroyed",
-      "hard-cap-score": "Hard-cap score"
+      "hard-cap-score": "Hard-cap score",
+      "surrendered": "Abandoned by player"
     }
   },
   "mode": {
@@ -148,12 +169,20 @@
     "close": "Close",
     "gold": "Gold",
     "purchaseQueued": "{{item}} purchase queued",
+    "purchaseSuccess": "{{item}} purchased",
+    "rejections": {
+      "unknown-item": "Unknown item",
+      "not-in-shop": "Return to your fountain to buy",
+      "insufficient-gold": "Not enough gold",
+      "inventory-full": "Inventory is full (6 slots)",
+      "duplicate-finished-item": "You already own this finished item"
+    },
     "buildPlan": "Strategic build plan",
     "target": "Build target",
     "nextComponent": "Next component",
     "remainingCost": "Remaining build cost",
     "saveForComponent": "Save for the next component",
-    "checkoutNote": "Build cost credits owned components for planning; each purchase still uses its listed shop price."
+    "checkoutNote": "Owned direct components are consumed once and credited toward the authoritative purchase price."
   },
   "items": {
     "huntersRelic": {
@@ -170,7 +199,7 @@
     },
     "sunfireGreatblade": {
       "name": "Sunfire Greatblade",
-      "desc": "A legendary blade granting heavy attack damage, attack speed and cooldown reduction."
+      "desc": "A legendary blade granting AD, attack speed and cooldown reduction. Basic attacks add 15 raw damage per target, with a 1-second cooldown."
     },
     "emberRod": {
       "name": "Ember Rod",
@@ -186,15 +215,15 @@
     },
     "aegisColossus": {
       "name": "Aegis of the Colossus",
-      "desc": "A legendary bulwark granting massive health, armor and cooldown reduction."
+      "desc": "A legendary bulwark granting health, armor and cooldown reduction. Crossing below 30% health grants a 200 shield for 4 seconds (45-second cooldown)."
     },
     "vampiricEdge": {
       "name": "Vampiric Edge",
-      "desc": "A hungry blade granting attack damage and attack speed for sustained fights."
+      "desc": "A hungry blade granting attack damage and attack speed. Basic attacks heal for 8% of actual damage dealt."
     },
     "bloodreaver": {
       "name": "Bloodreaver",
-      "desc": "A legendary lifesteal weapon granting heavy attack damage, attack speed and health."
+      "desc": "A legendary weapon granting AD, attack speed and health. Basic attacks heal for 12% of actual damage dealt."
     },
     "manaCrystal": {
       "name": "Mana Crystal",
@@ -202,7 +231,7 @@
     },
     "chronoCore": {
       "name": "Chrono Core",
-      "desc": "A legendary core granting a huge resource pool, ability power and cooldown reduction."
+      "desc": "A legendary core granting resource, AP and cooldown reduction. A damaging cast trims current cooldowns by 0.5 seconds once."
     }
   },
   "buff": {
@@ -214,6 +243,15 @@
     "dragon": "Dragon",
     "herald": "Stone Warden",
     "baron": "Void Tyrant"
+  },
+  "camp": {
+    "blue": "Blue",
+    "red": "Red",
+    "raptors": "Raptors",
+    "wolves": "Wolves",
+    "gromp": "Gromp",
+    "krugs": "Krugs",
+    "scuttle": "Scuttle"
   },
   "laneRole": {
     "top": "Top",
@@ -228,6 +266,7 @@
     "minimap": "Minimap",
     "xp": "XP",
     "alive": "Up",
+    "campTimers": "Jungle camp and buff timers",
     "minimapSummary": "Minimap with {{count}} tracked units",
     "defeated": "Defeated",
     "respawnIn": "Respawn in {{seconds}}s",
@@ -238,7 +277,33 @@
     "statusRespawning": "Respawn countdown started.",
     "statusRespawned": "You have respawned with brief protection.",
     "statusSuddenDeath": "Sudden death has begun.",
-    "statusHardCap": "The hard cap has been reached; the match will resolve by score."
+    "statusHardCap": "The hard cap has been reached; the match will resolve by score.",
+    "semanticSummary": "Live battle summary",
+    "semanticState": "Health {{hp}} of {{maxHp}}, resource {{resource}}, level {{level}}, target {{target}}, life {{life}}, respawn {{respawn}}s, protection {{invulnerable}}s, cooldowns {{cooldowns}}, objectives {{objectives}}, objective points {{objectivePoints}}.",
+    "noTarget": "none",
+    "recalling": "Recalling",
+    "recallRemaining": "{{seconds}} seconds remaining",
+    "recallCancelled": {
+      "movement": "Recall cancelled by movement.",
+      "attack": "Recall cancelled by an attack.",
+      "ability": "Recall cancelled by an ability.",
+      "enemy-damage": "Recall cancelled by enemy damage."
+    }
+  },
+  "learning": {
+    "skip": "Skip this instruction",
+    "steps": {
+      "move": "Move by clicking or tapping the battlefield.",
+      "basic-attack": "Select an enemy and land a basic attack.",
+      "cast-Q": "Cast Q.",
+      "cast-W": "Cast W.",
+      "cast-E": "Cast E.",
+      "cast-R": "Cast R.",
+      "recall-shop": "Recall for 6 seconds and visit the shop.",
+      "level-up": "Earn XP and level up.",
+      "destroy-turret": "Destroy an enemy turret.",
+      "victory-condition": "Destroy the enemy Core or reach the 15-minute judgment."
+    }
   },
   "settings": {
     "open": "Settings",
@@ -298,6 +363,17 @@
     "cost": "Cost",
     "range": "Range",
     "damage": "Damage",
+    "healing": "Healing",
+    "shield": "Shield",
+    "apRatio": "AP ratio",
+    "radius": "Radius",
+    "duration": "Duration",
+    "slow": "Slow",
+    "armor": "Armor",
+    "movement": "Move speed",
+    "pull": "Pull",
+    "trap": "Trap lifetime",
+    "cleanse": "Cleanses slows",
     "seconds": "{{value}}s",
     "behavior": {
       "skillshot": "Skillshot",

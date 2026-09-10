@@ -27,7 +27,7 @@ describe('Tutorial', () => {
     const ids = TUTORIAL_STEPS.map((s) => s.id);
     expect(new Set(ids).size).toBe(ids.length);
     // Covers the core loop + the gate-runner controls.
-    expect(ids).toEqual(['welcome', 'base', 'heroes', 'battle', 'runner']);
+    expect(ids).toEqual(['welcome', 'base', 'recruit', 'formation', 'campaign', 'runner']);
   });
 
   it('firstStep is the first element of the sequence', () => {
@@ -69,7 +69,7 @@ describe('Tutorial', () => {
   });
 
   it('stepById resolves known ids and rejects unknown ones', () => {
-    expect(stepById('heroes')?.id).toBe('heroes');
+    expect(stepById('recruit')?.id).toBe('recruit');
     expect(stepById('nope')).toBeUndefined();
   });
 

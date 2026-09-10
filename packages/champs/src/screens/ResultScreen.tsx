@@ -33,16 +33,19 @@ export default function ResultScreen({ outcome, profile, rewards, onRematch, onM
 
   useEffect(() => { headingRef.current?.focus(); }, []);
 
+  const resultKey = outcome.result === 'win' ? 'victory' : outcome.result === 'loss' ? 'defeat' : outcome.result;
+  const subtitleKey = outcome.result === 'win' ? 'winSubtitle' : outcome.result === 'loss' ? 'loseSubtitle' : `${outcome.result}Subtitle`;
+
   return (
-    <section className={`screen result-screen result-screen--${outcome.win ? 'win' : 'lose'}`} aria-labelledby="result-heading">
+    <section className={`screen result-screen result-screen--${outcome.result}`} aria-labelledby="result-heading">
       <div className="result-screen__title-group">
         <p className="result-screen__eyebrow">
           {t('result.title')} · {t(`mode.${outcome.mode}`)} · {t(`matchKind.${outcome.matchKind}`)} · {t(`difficulty.${outcome.difficulty}`)}
         </p>
         <h1 ref={headingRef} id="result-heading" className="result-screen__banner" tabIndex={-1}>
-          {outcome.win ? t('result.victory') : t('result.defeat')}
+          {t(`result.${resultKey}`)}
         </h1>
-        <p className="result-screen__subtitle">{outcome.win ? t('result.winSubtitle') : t('result.loseSubtitle')}</p>
+        <p className="result-screen__subtitle">{t(`result.${subtitleKey}`)}</p>
       </div>
 
       <div className="result-screen__matchup" aria-label={`${playerName} ${t('result.vs')} ${enemyName}`}>
@@ -66,8 +69,9 @@ export default function ResultScreen({ outcome, profile, rewards, onRematch, onM
         <ResultStat label={t('result.damageDealt')} value={formatNumber.format(outcome.stats.damageDealt)} />
         <ResultStat label={t('result.level')} value={formatNumber.format(outcome.stats.level)} />
         <ResultStat label={t('result.totalGoldEarned')} value={formatNumber.format(outcome.totalGoldEarned)} />
-        <ResultStat label={t('result.endReason')} value={t(`result.endReasons.${outcome.endReason}`)} />
+        <ResultStat label={t('result.gold')} value={formatNumber.format(outcome.stats.gold)} />
       </dl>
+      <p className="result-screen__end-reason">{t('result.endReason')}: {t(`result.endReasons.${outcome.endReason}`)}</p>
 
       <div className="result-screen__progression">
         <section className="result-screen__rewards" aria-labelledby="rewards-heading">

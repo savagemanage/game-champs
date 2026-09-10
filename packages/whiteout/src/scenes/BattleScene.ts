@@ -12,6 +12,8 @@ import { Battler } from '../entities/Battler';
 import { BattleHud } from '../ui/BattleHud';
 import { Menu } from '../ui/Menu';
 import { textStyle } from '../ui/UiText';
+import { announce } from '../ui/AccessibilityBridge';
+import { prefersReducedMotion } from '../ui/Motion';
 import { tr } from '../i18n/i18n';
 import type { GameOverData } from './GameOverScene';
 import { onViewportRefit, type VisibleWorldRect } from '@open-games/shared';
@@ -26,7 +28,7 @@ const TIMELINE_STEPS = 10;
 const STEP_MS = 520;
 
 /** Enemy kinds in draw order (frost wolves front, heavies behind). */
-const ENEMY_ORDER: readonly EnemyKind[] = ['frost_wolf', 'ravager', 'frost_titan'] as const;
+const ENEMY_ORDER: readonly EnemyKind[] = ['frost_wolf', 'ravager', 'frost_titan', 'rime_alpha', 'glacier_behemoth'] as const;
 
 /**
  * BattleScene - the animated wave battle, a VISUALIZATION of CombatSystem.
@@ -68,6 +70,7 @@ export class BattleScene extends Phaser.Scene {
   private stepIndex = 0;
   private resolved = false;
   private finished = false;
+  private actionId = '';
   private stepEvent?: Phaser.Time.TimerEvent;
   private bgBattle!: Phaser.GameObjects.Image;
 
@@ -82,6 +85,12 @@ export class BattleScene extends Phaser.Scene {
 
   create(): void {
     const cx = CANVAS.WIDTH / 2;
+    this.stepIndex = 0;
+    this.resolved = false;
+    this.finished = false;
+    this.speedIndex = 0;
+    this.friendlyUnits = [];
+    this.enemyUnits = [];
     this.state = GameState.get();
     this.audio = AudioManager.get(this);
 
@@ -95,7 +104,16 @@ export class BattleScene extends Phaser.Scene {
     onViewportRefit(this, { width: CANVAS.WIDTH, height: CANVAS.HEIGHT }, (rect) => this.refitBackdrop(rect));
 
     this.wave = this.state.waveCleared + 1;
+    this.actionId = `battle:${this.wave}:${Date.now()}`;
     this.army = { ...this.state.army };
+
+    if (this.wave > TOTAL_WAVES) {
+      Menu.title(this, cx, CANVAS.HEIGHT * 0.4, tr('battle.title'), 44);
+      Menu.label(this, cx, CANVAS.HEIGHT * 0.54, tr('battle.complete'), 20);
+      Menu.button(this, cx, CANVAS.HEIGHT * 0.7, tr('common.back'), () => this.goTown(), { width: 220 });
+      this.input.keyboard?.on('keydown-ESC', () => this.goTown());
+      return;
+    }
 
     // Guard: no army to send. Show a hint and bounce back to Town.
     if (this.armyTotal(this.army) <= 0) {
@@ -131,18 +149,23 @@ export class BattleScene extends Phaser.Scene {
       onToggleSpeed: () => this.cycleSpeed(),
     });
 
-    this.spawnUnits();
-    this.refreshHud();
-
     const incoming = waveComposition(this.wave).reduce((s, e) => s + e.count, 0);
     this.hud.announceWave(this.wave, TOTAL_WAVES, incoming);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.cleanup());
+
+    if (prefersReducedMotion()) {
+      this.refreshHud();
+      this.time.delayedCall(0, () => this.finishBattle());
+      return;
+    }
+
+    this.spawnUnits();
+    this.refreshHud();
 
     this.input.keyboard?.on('keydown-ESC', () => this.skipToEnd());
 
     // Short beat, then the two lines march together and the battle plays out.
     this.time.delayedCall(1100, () => this.beginClash());
-
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.cleanup());
   }
 
   /**
@@ -159,20 +182,32 @@ export class BattleScene extends Phaser.Scene {
   // ---- Layout / spawning ---------------------------------------------------
 
   private spawnUnits(): void {
-    // Friendly troops, grouped by kind, stacked in columns on the left.
-    const friendlyList: TroopKind[] = [];
-    for (const kind of TROOP_ORDER) {
-      for (let i = 0; i < (this.army[kind] ?? 0); i++) friendlyList.push(kind);
-    }
-    this.friendlyUnits = this.layOut(friendlyList, 'friendly', BattleScene.FRIENDLY_X, -1);
+    const friendlyCounts = TROOP_ORDER.map((kind) => ({ kind, count: this.army[kind] ?? 0 }));
+    this.friendlyUnits = this.layOut(this.visibleKinds(friendlyCounts), 'friendly', BattleScene.FRIENDLY_X, -1);
 
-    // Frozen Horde from the wave composition on the right.
-    const enemyList: EnemyKind[] = [];
-    for (const kind of ENEMY_ORDER) {
-      const entry = waveComposition(this.wave).find((e) => e.kind === kind);
-      if (entry) for (let i = 0; i < entry.count; i++) enemyList.push(kind);
+    const composition = waveComposition(this.wave);
+    const enemyCounts = ENEMY_ORDER.map((kind) => ({
+      kind,
+      count: composition.find((entry) => entry.kind === kind)?.count ?? 0,
+    }));
+    this.enemyUnits = this.layOut(this.visibleKinds(enemyCounts), 'enemy', BattleScene.ENEMY_X, 1);
+  }
+
+  /** Build at most 42 representative kind entries without army-sized arrays. */
+  private visibleKinds<T extends TroopKind | EnemyKind>(counts: { kind: T; count: number }[]): T[] {
+    const total = counts.reduce((sum, entry) => sum + Math.max(0, Math.floor(entry.count)), 0);
+    const visible = Math.min(42, total);
+    const out: T[] = [];
+    if (visible <= 0) return out;
+    for (let i = 0; i < visible; i++) {
+      const target = ((i + 0.5) / visible) * total;
+      let cursor = 0;
+      for (const entry of counts) {
+        cursor += Math.max(0, Math.floor(entry.count));
+        if (target <= cursor) { out.push(entry.kind); break; }
+      }
     }
-    this.enemyUnits = this.layOut(enemyList, 'enemy', BattleScene.ENEMY_X, 1);
+    return out;
   }
 
   /**
@@ -312,7 +347,8 @@ export class BattleScene extends Phaser.Scene {
       survivors: this.armyTotal(this.result.survivors),
     };
 
-    this.time.delayedCall(900, () => {
+    announce(this.result.win ? tr('result.victory') : tr('result.defeat'), !this.result.win);
+    this.time.delayedCall(prefersReducedMotion() ? 0 : 900, () => {
       Menu.fadeTo(this, () => this.scene.start(SceneKeys.GameOver, data));
     });
   }
@@ -324,15 +360,7 @@ export class BattleScene extends Phaser.Scene {
    * army is set to the survivors so the loss of troops is reflected in Town.
    */
   private applyResult(): void {
-    const now = Date.now();
-    if (this.result.win) {
-      this.state.resources.add(this.result.reward);
-      this.state.recordWaveCleared(this.wave);
-    }
-    // On a win survivors < army (casualties), on a loss survivors are all zero.
-    // Pass the per-tier survivor breakdown so the tiered army stays accurate.
-    this.state.setArmy(this.result.survivors, this.result.survivorTiers);
-    this.state.save(now);
+    this.state.commitBattleResult(this.wave, this.result, Date.now(), this.actionId);
   }
 
   // ---- HUD / controls ------------------------------------------------------

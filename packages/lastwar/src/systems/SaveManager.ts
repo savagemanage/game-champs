@@ -40,12 +40,18 @@ import {
   UPGRADE_ORDER,
 } from '../config/GameConfig';
 import { CAMPAIGN_ORDER, SEASON } from '../config/Progression';
+import { cumulativeXpForTier } from './Season';
 
 /** Current save-format version. Bump when GameState shape changes. */
 export const SAVE_VERSION = 3;
 
 /** Default localStorage key for the single meta save slot. */
 export const SAVE_KEY = 'last-squad:save';
+export const SAVE_BACKUP_KEY = `${SAVE_KEY}:backup`;
+export const SAVE_TEMP_KEY = `${SAVE_KEY}:temp`;
+export const SAVE_QUARANTINE_KEY = `${SAVE_KEY}:quarantine`;
+
+export type SaveWarning = 'recovered_backup' | 'corrupt_reset' | 'future_version' | 'storage_unavailable';
 
 /**
  * Minimal synchronous key/value storage. `window.localStorage` satisfies this,
@@ -86,6 +92,15 @@ export class SaveManager {
       campaign: freshCampaign(),
       league: freshLeague(),
       tutorial: freshTutorial(),
+      runSequence: 0,
+      settledRunSequence: 0,
+      appliedRunIds: [],
+      dailyCompletedRuns: { dayKey: -1, count: 0 },
+      maxSeenWallTime: 0,
+      maxDayOrdinal: -1,
+      maxWeekOrdinal: -1,
+      maxSeasonOrdinal: -1,
+      pendingBattleSummary: null,
     };
   }
 
@@ -107,78 +122,160 @@ export class SaveManager {
       campaign: normalizeCampaign(state.campaign),
       league: normalizeLeague(state.league),
       tutorial: normalizeTutorial(state.tutorial),
+      runSequence: safeInt(state.runSequence),
+      settledRunSequence: Math.max(
+        safeInt(state.settledRunSequence),
+        highestRunSequence(state.appliedRunIds),
+      ),
+      appliedRunIds: normalizeStringArray(state.appliedRunIds),
+      dailyCompletedRuns: normalizeDailyRuns(state.dailyCompletedRuns),
+      maxSeenWallTime: safeInt(state.maxSeenWallTime),
+      maxDayOrdinal: safeKeyInt(state.maxDayOrdinal),
+      maxWeekOrdinal: safeKeyInt(state.maxWeekOrdinal),
+      maxSeasonOrdinal: safeKeyInt(state.maxSeasonOrdinal),
+      pendingBattleSummary: normalizeBattleSummary(state.pendingBattleSummary),
     };
   }
 
-  /** Persist a state to storage as versioned JSON. Returns the normalized state. */
+  private readonly fallback = memoryStorage();
+  private fallbackActive = false;
+  private futureVersionLocked = false;
+  private warningsInternal: SaveWarning[] = [];
+
+  /** Non-fatal persistence/recovery notices for the UI. */
+  get warnings(): readonly SaveWarning[] {
+    return this.warningsInternal;
+  }
+
+  /** Persist a normalized state transactionally; fall back to session memory on failure. */
   save(state: GameState): GameState {
     const normalized = SaveManager.serialize(state);
-    this.storage.setItem(this.key, JSON.stringify(normalized));
+    const json = JSON.stringify(normalized);
+    // Validate our own serialization before replacing durable state.
+    JSON.parse(json);
+    const target = this.fallbackActive || this.futureVersionLocked ? this.fallback : this.storage;
+    try {
+      target.setItem(`${this.key}:temp`, json);
+      const verified = target.getItem(`${this.key}:temp`);
+      if (!verified || (JSON.parse(verified) as { version?: number }).version !== SAVE_VERSION) {
+        throw new Error('save verification failed');
+      }
+      target.setItem(this.key, json);
+      target.setItem(`${this.key}:backup`, json);
+      target.removeItem(`${this.key}:temp`);
+    } catch {
+      this.fallbackActive = true;
+      if (!this.warningsInternal.includes('storage_unavailable')) this.warningsInternal.push('storage_unavailable');
+      this.fallback.setItem(this.key, json);
+      this.fallback.setItem(`${this.key}:backup`, json);
+    }
     return normalized;
   }
 
-  /**
-   * Load from storage. Returns { state, loaded }. When no valid save exists
-   * (missing / corrupt / wrong version) `loaded` is false and a fresh game is
-   * returned instead of throwing.
-   */
-  load(): { state: GameState; loaded: boolean } {
-    const raw = this.storage.getItem(this.key);
-    if (!raw) return { state: SaveManager.freshGame(), loaded: false };
+  /** Load primary, then backup; quarantine damage and migrate valid old saves. */
+  load(): { state: GameState; loaded: boolean; warnings: readonly SaveWarning[] } {
+    const primary = this.safeGet(this.key);
+    const primaryVersion = primary ? readVersion(primary) : -1;
 
-    let parsed: unknown = null;
+    // A save written by a newer build is authoritative even when an older
+    // backup exists. Never overwrite or quarantine it: use session memory and
+    // lock durable writes until the player explicitly resets progress.
+    if (primary && primaryVersion > SAVE_VERSION) {
+      this.futureVersionLocked = true;
+      this.warningsInternal.push('future_version');
+      return { state: SaveManager.freshGame(), loaded: false, warnings: this.warnings };
+    }
+
+    const backup = this.safeGet(`${this.key}:backup`);
+    let decoded = this.decode(primary);
+
+    if (!decoded && backup) {
+      decoded = this.decode(backup);
+      if (decoded) {
+        this.warningsInternal.push('recovered_backup');
+        try { this.storage.setItem(this.key, JSON.stringify(decoded)); } catch { this.fallbackActive = true; }
+      }
+    }
+
+    if (!decoded) {
+      if (primary) {
+        this.warningsInternal.push('corrupt_reset');
+        try { this.storage.setItem(`${this.key}:quarantine`, primary); } catch { this.fallbackActive = true; }
+      }
+      return { state: SaveManager.freshGame(), loaded: false, warnings: this.warnings };
+    }
+
+    // Normalize/migrate missing old-v3 fields and immediately persist the
+    // complete v3 shape. A future version is never decoded or overwritten.
+    const normalized = SaveManager.serialize(decoded);
+    this.save(normalized);
+    return { state: normalized, loaded: true, warnings: this.warnings };
+  }
+
+  private safeGet(key: string): string | null {
     try {
-      parsed = JSON.parse(raw);
+      return (this.fallbackActive ? this.fallback : this.storage).getItem(key);
     } catch {
-      parsed = null;
+      this.fallbackActive = true;
+      if (!this.warningsInternal.includes('storage_unavailable')) this.warningsInternal.push('storage_unavailable');
+      return this.fallback.getItem(key);
     }
+  }
 
-    if (!parsed || typeof parsed !== 'object') {
-      // Corrupt / bare-value save: start fresh rather than crash.
-      return { state: SaveManager.freshGame(), loaded: false };
-    }
-
+  private decode(raw: string | null): GameState | null {
+    if (!raw) return null;
+    let parsed: unknown;
+    try { parsed = JSON.parse(raw); } catch { return null; }
+    if (!parsed || typeof parsed !== 'object') return null;
     const version = (parsed as { version?: unknown }).version;
-
-    // Current v3 save: normalize and use as-is.
     if (version === SAVE_VERSION) {
       const state = parsed as GameState;
-      if (typeof state.miniGame !== 'object' || state.miniGame === null) {
-        return { state: SaveManager.freshGame(), loaded: false };
-      }
-      // Normalize (fills any missing fields, clamps, coerces) so downstream
-      // code always sees a complete, well-formed state.
-      return { state: SaveManager.serialize(state), loaded: true };
+      return typeof state.miniGame === 'object' && state.miniGame !== null ? state : null;
     }
-
-    // Existing v2 save: a real player who is already mid-game and predates the
-    // onboarding tutorial. Migrate forward, marking the tutorial as SEEN so a
-    // returning player is NOT forced back through first-run onboarding.
     if (version === 2) {
       const state = parsed as GameState;
-      if (typeof state.miniGame !== 'object' || state.miniGame === null) {
-        return { state: SaveManager.freshGame(), loaded: false };
-      }
-      return { state: SaveManager.serialize(migrateV2toV3(state)), loaded: true };
+      return typeof state.miniGame === 'object' && state.miniGame !== null ? migrateV2toV3(state) : null;
     }
-
-    // Legacy v1 save: a top-level `meta` block. Migrate it forward.
     if (version === 1) {
       const legacy = parsed as GameStateV1;
-      if (typeof legacy.meta !== 'object' || legacy.meta === null) {
-        return { state: SaveManager.freshGame(), loaded: false };
-      }
-      return { state: SaveManager.serialize(migrateV1toV2(legacy)), loaded: true };
+      return typeof legacy.meta === 'object' && legacy.meta !== null ? migrateV1toV2(legacy) : null;
     }
-
-    // Unknown / missing version: start fresh rather than crash.
-    return { state: SaveManager.freshGame(), loaded: false };
+    return null;
   }
 
-  /** Delete the save slot. */
+  /** Delete game save slots while settings (a separate key) remain untouched. */
   clear(): void {
-    this.storage.removeItem(this.key);
+    this.futureVersionLocked = false;
+    this.fallbackActive = false;
+    for (const suffix of ['', ':backup', ':temp', ':quarantine']) {
+      try { this.storage.removeItem(`${this.key}${suffix}`); } catch { /* memory-only session */ }
+      this.fallback.removeItem(`${this.key}${suffix}`);
+    }
   }
+}
+
+function readVersion(raw: string): number {
+  try {
+    const value = JSON.parse(raw) as { version?: unknown };
+    const version = Number(value?.version);
+    return Number.isFinite(version) ? version : -1;
+  } catch {
+    return -1;
+  }
+}
+
+/** Highest valid sequence encoded by a generated `run-N` id. */
+function highestRunSequence(ids: unknown): number {
+  if (!Array.isArray(ids)) return 0;
+  let highest = 0;
+  for (const id of ids) {
+    if (typeof id !== 'string') continue;
+    const match = /^run-(\d+)$/.exec(id);
+    if (!match) continue;
+    const sequence = Number(match[1]);
+    if (Number.isSafeInteger(sequence)) highest = Math.max(highest, sequence);
+  }
+  return highest;
 }
 
 /**
@@ -203,6 +300,15 @@ function migrateV1toV2(legacy: GameStateV1): GameState {
     // A migrated legacy player is an EXISTING player: mark the onboarding
     // tutorial as already seen so they are not forced into first-run onboarding.
     tutorial: seenTutorial(),
+    runSequence: 0,
+    settledRunSequence: 0,
+    appliedRunIds: [],
+    dailyCompletedRuns: { dayKey: -1, count: 0 },
+    maxSeenWallTime: 0,
+    maxDayOrdinal: -1,
+    maxWeekOrdinal: -1,
+    maxSeasonOrdinal: -1,
+    pendingBattleSummary: null,
   };
 }
 
@@ -298,6 +404,8 @@ function freshSeason(): SeasonState {
     current: 1,
     progress: GAME_STATE.SEASON.START_PROGRESS,
     xp: 0,
+    earnedXp: 0,
+    availableXp: 0,
     tier: 0,
     claimedFree: 0,
     claimedPremium: 0,
@@ -341,7 +449,7 @@ function freshLeague(): LeagueState {
  * completed, so a brand-new game shows the first-run tutorial once.
  */
 function freshTutorial(): TutorialState {
-  return { seen: false, completedSteps: [] };
+  return { seen: false, completedSteps: [], grantClaimed: false };
 }
 
 /**
@@ -350,12 +458,20 @@ function freshTutorial(): TutorialState {
  * completion is back-filled (that only matters for the replay overlay).
  */
 function seenTutorial(): TutorialState {
-  return { seen: true, completedSteps: [] };
+  // Migrated existing players are considered already granted so migration can
+  // never mint a new-player currency reward.
+  return { seen: true, completedSteps: [], grantClaimed: true };
 }
 
 /* -------------------------------------------------------------------------- */
 /* Normalizers: coerce a possibly-partial sub-state into a complete one.      */
 /* -------------------------------------------------------------------------- */
+
+/** Coerce any value into a finite non-negative number, preserving fractions. */
+function safeNumber(value: unknown, fallback = 0): number {
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 ? n : fallback;
+}
 
 /** Coerce any value into a non-negative integer (missing/NaN -> 0). */
 function safeInt(value: unknown): number {
@@ -403,10 +519,14 @@ function normalizeIntRecord(input: unknown): Record<string, number> {
  * guarantees a well-formed shape), and a non-negative lastTickTimestamp.
  */
 function normalizeResources(resources: Partial<ResourceState> | undefined): ResourceState {
-  const rawStockpiles = normalizeIntRecord(resources?.stockpiles);
+  const raw = resources?.stockpiles && typeof resources.stockpiles === 'object'
+    ? resources.stockpiles
+    : {};
   const stockpiles: Record<string, number> = {};
   for (const kind of RESOURCE_ORDER) {
-    stockpiles[kind] = rawStockpiles[kind] ?? ECONOMY.RESOURCES[kind].start;
+    stockpiles[kind] = Object.prototype.hasOwnProperty.call(raw, kind)
+      ? safeNumber(raw[kind], 0)
+      : ECONOMY.RESOURCES[kind].start;
   }
   return { stockpiles, lastTickTimestamp: safeInt(resources?.lastTickTimestamp) };
 }
@@ -518,7 +638,7 @@ function normalizeSeed(value: unknown): number {
 /** Coerce a possibly-partial pity state into a complete one. */
 function normalizePity(pity: Partial<PityState> | undefined): PityState {
   return {
-    sinceHighGrade: safeInt(pity?.sinceHighGrade),
+    sinceHighGrade: Math.min(20, safeInt(pity?.sinceHighGrade)),
     totalPulls: safeInt(pity?.totalPulls),
   };
 }
@@ -580,14 +700,25 @@ function normalizeStringArray(input: unknown): string[] {
  * 1 (a started season) and `progress` is kept in sync with `xp`.
  */
 function normalizeSeason(season: Partial<SeasonState> | undefined): SeasonState {
-  const xp = safeInt(season?.xp ?? season?.progress);
-  const current = Math.max(1, safeInt(season?.current) || 1);
+  const legacy = safeInt(season?.xp ?? season?.progress);
   const clampMax = (v: unknown, max: number): number => Math.min(max, safeInt(v));
+  const savedTier = clampMax(season?.tier, SEASON.MAX_TIER);
+  // Older v3 payloads stored only spendable XP. Resistance purchases reduce
+  // that balance but must never erase lifetime tier progress, so reconstruct
+  // missing earned XP from the larger of the legacy balance and tier floor.
+  const earnedXp = Math.max(
+    safeInt(season?.earnedXp ?? legacy),
+    cumulativeXpForTier(savedTier),
+  );
+  const availableXp = Math.min(earnedXp, safeInt(season?.availableXp ?? legacy));
+  const current = Math.max(1, safeInt(season?.current) || 1);
   return {
     current,
-    progress: xp,
-    xp,
-    tier: clampMax(season?.tier, SEASON.MAX_TIER),
+    progress: availableXp,
+    xp: availableXp,
+    earnedXp,
+    availableXp,
+    tier: savedTier,
     claimedFree: clampMax(season?.claimedFree, SEASON.MAX_TIER),
     claimedPremium: clampMax(season?.claimedPremium, SEASON.MAX_TIER),
     premiumUnlocked: season?.premiumUnlocked === true,
@@ -640,7 +771,10 @@ function normalizeLeague(league: Partial<LeagueState> | undefined): LeagueState 
     period: safeInt(league?.period),
     wins: safeInt(league?.wins),
     losses: safeInt(league?.losses),
-    bestRank: safeInt(league?.bestRank),
+    bestRank: (() => {
+      const rank = safeInt(league?.bestRank);
+      return rank >= 1 && rank <= 10 ? rank : 0;
+    })(),
   };
 }
 
@@ -656,6 +790,24 @@ function normalizeTutorial(tutorial: Partial<TutorialState> | undefined): Tutori
   return {
     seen: tutorial?.seen === true,
     completedSteps: normalizeStringArray(tutorial?.completedSteps),
+    grantClaimed: tutorial?.grantClaimed === true,
+  };
+}
+
+function normalizeBattleSummary(value: GameState['pendingBattleSummary'] | undefined): GameState['pendingBattleSummary'] {
+  if (!value || typeof value !== 'object') return null;
+  return {
+    win: value.win === true,
+    rounds: Math.min(40, safeInt(value.rounds)),
+    survivors: Math.min(5, safeInt(value.survivors)),
+    timedOut: value.timedOut === true,
+  };
+}
+
+function normalizeDailyRuns(value: GameState['dailyCompletedRuns'] | undefined): GameState['dailyCompletedRuns'] {
+  return {
+    dayKey: safeKeyInt(value?.dayKey),
+    count: Math.min(5_000, safeInt(value?.count)),
   };
 }
 

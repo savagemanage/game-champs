@@ -21,12 +21,15 @@ import { tr } from '../i18n/i18n';
 import type { TrKey } from '../i18n/strings';
 import { Menu } from '../ui/Menu';
 import { textStyle } from '../ui/UiText';
+import { buildTopNav } from '../ui/TopNav';
+import { teamPower } from '../systems/League';
 import type { BattleSceneData } from './BattleScene';
 
 /** Data passed when launching the Campaign scene, and back from Battle. */
 export interface CampaignSceneData {
   /** Scene key to return to (the Home hub). */
   returnTo?: string;
+  tab?: 'campaign' | 'horde';
   /**
    * Result echoed back by BattleScene when a replay finishes, so the scene can
    * surface the result overlay for the reward the store already applied.
@@ -37,6 +40,9 @@ export interface CampaignSceneData {
     reward?: RewardBundle;
     firstClear?: boolean;
     waveIndex?: number;
+    rounds?: number;
+    survivors?: number;
+    timedOut?: boolean;
   };
 }
 
@@ -71,6 +77,7 @@ function hashString(s: string): number {
  */
 export class CampaignScene extends Phaser.Scene {
   private returnTo: string = SceneKeys.Home;
+  private tab: 'campaign' | 'horde' = 'campaign';
   private toast: Phaser.GameObjects.Container | null = null;
 
   constructor() {
@@ -79,6 +86,7 @@ export class CampaignScene extends Phaser.Scene {
 
   create(data: CampaignSceneData): void {
     this.returnTo = data?.returnTo ?? SceneKeys.Home;
+    this.tab = data?.tab ?? (data?.battleResult?.kind === 'zombie' ? 'horde' : 'campaign');
     const cx = CANVAS.WIDTH / 2;
 
     this.cameras.main.resetFX();
@@ -91,10 +99,13 @@ export class CampaignScene extends Phaser.Scene {
     Menu.title(this, cx, CANVAS.HEIGHT * 0.06, tr('campaign.title'), 30).setColor(PALETTE.SQUAD_CSS);
     Menu.label(this, cx, CANVAS.HEIGHT * 0.1, tr('season.resistance', { level: GameStore.get().resistance() }), 12, 0.75, true);
 
-    this.buildStageList();
-    this.buildHordeSection();
+    Menu.button(this, cx - 105, CANVAS.HEIGHT * 0.135, tr('campaign.title'), () => this.scene.restart({ returnTo: this.returnTo, tab: 'campaign' }), { width: 180, fontSize: 13, allowSmall: true });
+    Menu.button(this, cx + 105, CANVAS.HEIGHT * 0.135, tr('zombie.title'), () => this.scene.restart({ returnTo: this.returnTo, tab: 'horde' }), { width: 180, fontSize: 13, accent: PALETTE.BOSS, allowSmall: true });
+    if (this.tab === 'campaign') this.buildStageList();
+    else this.buildHordeSection();
 
-    Menu.button(this, cx, CANVAS.HEIGHT * 0.955, tr('common.back'), () => this.close(), { width: 160 });
+    buildTopNav(this, SceneKeys.Campaign);
+    Menu.button(this, cx, CANVAS.HEIGHT * 0.875, tr('heroes.formation'), () => this.scene.start(SceneKeys.Formation, { returnTo: SceneKeys.Campaign }), { width: 180, fontSize: 13, allowSmall: true });
     this.input.keyboard?.on('keydown-ESC', () => this.close());
 
     // If we returned from a battle, surface the result overlay.
@@ -106,7 +117,7 @@ export class CampaignScene extends Phaser.Scene {
     const store = GameStore.get();
     const cleared = store.clearedStages();
     const resistance = store.resistance();
-    const startY = CANVAS.HEIGHT * 0.15;
+    const startY = CANVAS.HEIGHT * 0.21;
     const rowH = 62;
     const rowW = CANVAS.WIDTH - 48;
     const cx = CANVAS.WIDTH / 2;
@@ -121,8 +132,11 @@ export class CampaignScene extends Phaser.Scene {
       panel.setStrokeStyle(2, isCleared ? PALETTE.SUCCESS : unlocked ? PALETTE.ACCENT : PALETTE.LANE_LINE);
 
       this.add
-        .text(cx - rowW / 2 + 16, y, tr(stage.nameKey as TrKey), textStyle(15, { fontStyle: 'bold', allowSmall: true }))
+        .text(cx - rowW / 2 + 16, y - 10, tr(stage.nameKey as TrKey), textStyle(14, { fontStyle: 'bold', allowSmall: true }))
         .setOrigin(0, 0.5);
+      const enemy = stageEnemyTeam(stage);
+      const types = [...new Set(enemy.members.map((member) => tr(`herotype.${member.type}` as TrKey)))].join('/');
+      this.add.text(cx - rowW / 2 + 16, y + 12, `${types} · ${tr('hero.power', { power: teamPower(enemy) })}`, textStyle(9, { color: PALETTE.MUTED_CSS, allowSmall: true })).setOrigin(0, 0.5);
 
       const status = this.stageStatusText(stage, isCleared, unlocked, resistance);
       this.add
@@ -157,7 +171,7 @@ export class CampaignScene extends Phaser.Scene {
   private buildHordeSection(): void {
     const store = GameStore.get();
     const cx = CANVAS.WIDTH / 2;
-    const y = CANVAS.HEIGHT * 0.72;
+    const y = CANVAS.HEIGHT * 0.34;
     Menu.panel(this, cx, y + 6, CANVAS.WIDTH - 48, 96, 0.9).setStrokeStyle(2, PALETTE.BOSS);
 
     Menu.title(this, cx, y - 24, tr('zombie.title'), 20).setColor(PALETTE.BOSS_CSS);
@@ -169,12 +183,15 @@ export class CampaignScene extends Phaser.Scene {
 
     Menu.button(
       this,
-      cx,
-      y + 32,
+      cx + 105,
+      y + 52,
       `${tr('zombie.next')} (${tr('zombie.wave', { wave: nextWave + 1 })})`,
-      () => this.attemptZombieWave(),
-      { width: 260, fontSize: 15, allowSmall: true },
+      () => this.attemptZombieWave(nextWave),
+      { width: 200, fontSize: 13, allowSmall: true },
     );
+    if (store.highestZombieWave() >= 0) {
+      Menu.button(this, cx - 105, y + 52, tr('zombie.replay', { wave: store.highestZombieWave() + 1 }), () => this.attemptZombieWave(store.highestZombieWave()), { width: 200, fontSize: 13, accent: PALETTE.SQUAD, allowSmall: true });
+    }
   }
 
   /** Guard a filled squad, resolve the stage via the store, launch Battle. */
@@ -205,19 +222,21 @@ export class CampaignScene extends Phaser.Scene {
         kind: 'stage',
         reward: result.outcome.reward,
         firstClear: Object.keys(result.outcome.reward).length > 0,
+        rounds: result.outcome.battle.rounds,
+        survivors: result.outcome.battle.attackerSurvivors.length,
+        timedOut: result.outcome.battle.timedOut,
       },
     };
     Menu.fadeTo(this, () => this.scene.start(SceneKeys.Battle, battleData));
   }
 
   /** Guard a filled squad, resolve the next wave via the store, launch Battle. */
-  private attemptZombieWave(): void {
+  private attemptZombieWave(waveIndex: number): void {
     const store = GameStore.get();
     if (store.battleTeam().members.length === 0) {
       this.showToast(tr('formation.needFive'));
       return;
     }
-    const waveIndex = store.highestZombieWave() + 1;
     const seed = (Date.now() ^ hashString(`wave_${waveIndex}`)) >>> 0;
     const result = store.attemptZombieWave(waveIndex, seed);
     if (!result.ok) {
@@ -237,6 +256,9 @@ export class CampaignScene extends Phaser.Scene {
         kind: 'zombie',
         reward: result.outcome.reward,
         firstClear: Object.keys(result.outcome.reward).length > 0,
+        rounds: result.outcome.battle.rounds,
+        survivors: result.outcome.battle.attackerSurvivors.length,
+        timedOut: result.outcome.battle.timedOut,
         waveIndex,
       },
     };
@@ -269,7 +291,9 @@ export class CampaignScene extends Phaser.Scene {
     const panel = Menu.panel(this, cx, cy, CANVAS.WIDTH - 80, 260, 0.98);
     panel.setDepth(101);
 
-    const headline = win
+    const headline = !win && res.timedOut
+      ? tr('battle.timeoutDefeat')
+      : win
       ? isZombie
         ? tr('zombie.cleared')
         : tr('campaign.victory')
@@ -280,6 +304,8 @@ export class CampaignScene extends Phaser.Scene {
       .text(cx, cy - 90, headline, textStyle(24, { fontStyle: 'bold', color: win ? PALETTE.SUCCESS_CSS : PALETTE.DANGER_CSS }))
       .setOrigin(0.5)
       .setDepth(102);
+
+    this.add.text(cx, cy - 60, tr('battle.summary', { rounds: res.rounds ?? 0, survivors: res.survivors ?? 0 }), textStyle(11, { color: PALETTE.MUTED_CSS, allowSmall: true })).setOrigin(0.5).setDepth(102);
 
     if (win && res.reward && Object.keys(res.reward).length > 0) {
       this.add

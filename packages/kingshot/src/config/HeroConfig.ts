@@ -64,6 +64,8 @@ export interface HeroDef {
   levelUpBaseCost: ResourceCost;
   /** Hero shards required to gain each star (a star-up spends this many). */
   shardsPerStar: number;
+  /** Repeatable Royal Patronage cost for one guaranteed shard. */
+  patronageCost: ResourceCost;
 }
 
 /**
@@ -84,6 +86,7 @@ export const HERO_DEFS: Record<HeroId, HeroDef> = {
     starMax: 5,
     levelUpBaseCost: { gold: 60, food: 40 },
     shardsPerStar: 10,
+    patronageCost: { gold: 120, food: 100 },
   },
   kara_stormblade: {
     id: 'kara_stormblade',
@@ -96,6 +99,7 @@ export const HERO_DEFS: Record<HeroId, HeroDef> = {
     starMax: 5,
     levelUpBaseCost: { gold: 80, wood: 50 },
     shardsPerStar: 12,
+    patronageCost: { gold: 150, wood: 120 },
   },
 
   // --- Economy --------------------------------------------------------------
@@ -110,6 +114,7 @@ export const HERO_DEFS: Record<HeroId, HeroDef> = {
     starMax: 5,
     levelUpBaseCost: { gold: 50, stone: 40 },
     shardsPerStar: 10,
+    patronageCost: { gold: 120, stone: 100 },
   },
   old_bram: {
     id: 'old_bram',
@@ -122,6 +127,7 @@ export const HERO_DEFS: Record<HeroId, HeroDef> = {
     starMax: 5,
     levelUpBaseCost: { food: 60, wood: 40 },
     shardsPerStar: 8,
+    patronageCost: { food: 150, wood: 120 },
   },
 };
 

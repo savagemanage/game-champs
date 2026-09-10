@@ -16,6 +16,7 @@ import { tr } from '../i18n/i18n';
 import type { TrKey } from '../i18n/strings';
 import { Menu } from '../ui/Menu';
 import { textStyle } from '../ui/UiText';
+import { setAccessibleScreen } from '../systems/Accessibility';
 
 /** A single bottom-nav tab definition: its icon, label, and target scene key. */
 interface NavTab {
@@ -90,6 +91,8 @@ export class HomeScene extends Phaser.Scene {
     const now = Date.now();
     const ticked = store.tick(now);
     store.refreshMissions(now);
+    const interruptedBattle = store.consumePendingBattleSummary();
+    setAccessibleScreen(tr('home.title'), RESOURCE_ORDER.map((kind) => `${tr(`resource.${kind}` as TrKey)} ${Math.floor(store.resource(kind))}`).join(', '));
 
     // Keep the music bed going across scenes.
     AudioManager.get(this).playMusic();
@@ -120,9 +123,15 @@ export class HomeScene extends Phaser.Scene {
     });
 
     // Surface offline construction completions as a toast.
-    if (ticked.completed.length > 0) {
+    if (interruptedBattle) {
+      this.showToast(tr('battle.summary', { rounds: interruptedBattle.rounds, survivors: interruptedBattle.survivors }));
+    } else if (ticked.completed.length > 0) {
       this.showToast(tr('home.buildComplete'));
       AudioManager.get(this).playSfx(AudioKeys.UpgradeComplete, 0.7);
+    } else if (ticked.clockFrozen) {
+      this.showToast(tr('save.clockRollback'));
+    } else if (store.saveWarnings().length > 0) {
+      this.showToast(tr('save.recoveryWarning'));
     }
 
     // FIRST-RUN ONBOARDING: a genuinely fresh game (tutorial not seen) is

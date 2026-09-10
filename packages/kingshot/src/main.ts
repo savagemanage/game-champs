@@ -17,6 +17,11 @@ import { TownScene } from './scenes/TownScene';
 import { BattleScene } from './scenes/BattleScene';
 import { GameOverScene } from './scenes/GameOverScene';
 import { SettingsScene } from './scenes/SettingsScene';
+import { RuntimeCoordinator } from './systems/RuntimeCoordinator';
+import { AudioManager } from './systems/AudioManager';
+import { AudioKeys } from './config/AssetKeys';
+import { announceStatus } from './ui/Accessibility';
+import { tr } from './i18n/i18n';
 
 /**
  * Phaser bootstrap for Kingdom Rise.
@@ -163,3 +168,35 @@ function seedLanguage(): void {
 seedLanguage();
 const game = new Phaser.Game(config);
 registerRenderScale(game);
+
+// One simulation/autosave owner remains active across Title, Town, Settings,
+// Battle, and GameOver. Scene transitions therefore cannot pause production or
+// duplicate listeners. Lifecycle exits synchronously request a durable save.
+const runtime = new RuntimeCoordinator();
+game.events.once(Phaser.Core.Events.READY, () => {
+  runtime.subscribe((done) => {
+    const trained = Object.values(done.trainingDone).reduce((sum, count) => sum + (count ?? 0), 0);
+    const activeScene = game.scene.getScenes(true)[0];
+    if (activeScene) {
+      const audio = AudioManager.get(activeScene);
+      if (done.buildingsDone.length > 0 || done.researchDone.length > 0) {
+        audio.playSfx(AudioKeys.BuildComplete, 0.6);
+      }
+      if (trained > 0) audio.playSfx(AudioKeys.TrainComplete, 0.5);
+    }
+    announceStatus(tr('status.completions', {
+      buildings: done.buildingsDone.length,
+      research: done.researchDone.length,
+      trained,
+    }));
+  });
+  game.events.on(Phaser.Core.Events.STEP, () => runtime.step());
+  game.events.on(Phaser.Core.Events.BLUR, () => runtime.save());
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) runtime.save();
+      else runtime.resume();
+    });
+  }
+  if (typeof window !== 'undefined') window.addEventListener('pagehide', () => runtime.save());
+});

@@ -32,7 +32,9 @@ export function getLanguage(): Language {
  * every subscriber when the language actually changes.
  */
 export function setLanguage(lang: Language): void {
-  if (!LANGUAGES.includes(lang) || lang === currentLang) return;
+  if (!LANGUAGES.includes(lang)) return;
+  if (typeof document !== 'undefined') document.documentElement.lang = lang;
+  if (lang === currentLang) return;
   currentLang = lang;
   for (const fn of listeners) fn(currentLang);
 }
@@ -63,5 +65,7 @@ export function tr(key: TrKey, params?: Record<string, string | number>): string
       return value === undefined ? whole : String(value);
     });
   }
+  const unresolved = template.match(/\{\w+\}/)?.[0];
+  if (unresolved) throw new Error(`Missing translation placeholder ${unresolved} for ${key}`);
   return template;
 }

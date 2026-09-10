@@ -13,7 +13,7 @@ describe('QuestSystem', () => {
 
   it('records progress on matching daily + growth quests', () => {
     const q = new QuestSystem();
-    // 'daily_battle' + 'growth_first_wave' + 'growth_champion' all watch waveCleared.
+    q.record('battleCompleted', 1, 0);
     q.record('waveCleared', 1, 0);
     expect(q.dailyProgress('daily_battle')).toBe(1);
     expect(q.milestoneProgress('growth_first_wave')).toBe(1);
@@ -22,6 +22,7 @@ describe('QuestSystem', () => {
 
   it('resets the daily set on a day boundary but keeps milestones', () => {
     const q = new QuestSystem();
+    q.record('battleCompleted', 3, 0);
     q.record('waveCleared', 3, 0); // day 0
     expect(q.dailyProgress('daily_battle')).toBe(3);
     expect(q.milestoneProgress('growth_first_wave')).toBe(3);
@@ -33,37 +34,32 @@ describe('QuestSystem', () => {
     expect(q.milestoneProgress('growth_first_wave')).toBe(3);
   });
 
-  it('claims a completed daily reward once per day, then resets next day', () => {
+  it('auto-claims a completed daily reward once per day, then resets next day', () => {
     const q = new QuestSystem();
     const target = dailyQuest('daily_battle')!.target;
-    q.record('waveCleared', target, 0);
+    const rewards = q.record('battleCompleted', target, 0);
     expect(q.isDailyComplete('daily_battle')).toBe(true);
-
-    const first = q.claimDaily('daily_battle', 0);
-    expect(first.ok).toBe(true);
-    expect(first.reward).toEqual(dailyQuest('daily_battle')!.reward);
-
-    // Second claim same day fails (already claimed).
+    expect(q.isDailyClaimed('daily_battle')).toBe(true);
+    expect(rewards).toContainEqual(dailyQuest('daily_battle')!.reward);
     expect(q.claimDaily('daily_battle', 0).reason).toBe('already_claimed');
 
-    // Next day: it resets and can be earned + claimed again.
-    q.record('waveCleared', target, DAY);
-    expect(q.isDailyClaimed('daily_battle')).toBe(false);
-    expect(q.claimDaily('daily_battle', DAY).ok).toBe(true);
+    const nextRewards = q.record('battleCompleted', target, DAY);
+    expect(q.isDailyClaimed('daily_battle')).toBe(true);
+    expect(nextRewards).toContainEqual(dailyQuest('daily_battle')!.reward);
   });
 
   it('rejects claiming an incomplete quest', () => {
     const q = new QuestSystem();
-    q.record('waveCleared', 1, 0); // below target
+    q.record('battleCompleted', 1, 0); // below target
     expect(q.claimDaily('daily_battle', 0).reason).toBe('incomplete');
   });
 
   it('grants a one-time growth milestone reward exactly once, ever', () => {
     const q = new QuestSystem();
     const target = growthQuest('growth_first_wave')!.target;
-    q.record('waveCleared', target, 0);
-    const first = q.claimMilestone('growth_first_wave', 0);
-    expect(first.ok).toBe(true);
+    const rewards = q.record('waveCleared', target, 0);
+    expect(rewards).toContainEqual(growthQuest('growth_first_wave')!.reward);
+    expect(q.claimMilestone('growth_first_wave', 0).reason).toBe('already_claimed');
     // Never claimable again, even on a later day.
     expect(q.claimMilestone('growth_first_wave', DAY * 5).reason).toBe('already_claimed');
     // Progress on a claimed milestone is frozen (does not keep accruing).

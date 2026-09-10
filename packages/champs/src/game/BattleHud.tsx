@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore, type PointerEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { battleStore } from './battleStore';
 import { getChampionById } from '../data/champions';
@@ -16,6 +16,13 @@ export default function BattleHud({ onOpenShop }: BattleHudProps) {
   const [status, setStatus] = useState('');
   const previousLife = useRef(state.playerLife.phase);
   const previousMatchPhase = useRef(state.matchStatus.phase);
+  const dragAim = useRef<{
+    slot: 'Q' | 'W' | 'E' | 'R';
+    pointerId: number;
+    startX: number;
+    startY: number;
+    moved: boolean;
+  } | null>(null);
 
   useEffect(() => {
     const phase = state.playerLife.phase;
@@ -47,14 +54,81 @@ export default function BattleHud({ onOpenShop }: BattleHudProps) {
   const lifeOverlay = state.playerLife.phase === 'dead' || state.playerLife.phase === 'respawning';
   const suddenDeath = state.matchStatus.suddenDeath || state.matchStatus.phase === 'sudden-death';
 
+  const beginAbilityAim = (event: PointerEvent<HTMLButtonElement>, slot: 'Q' | 'W' | 'E' | 'R') => {
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    dragAim.current = {
+      slot,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      moved: false,
+    };
+    battleStore.request({ type: 'aim-start', slot, clientX: event.clientX, clientY: event.clientY });
+  };
+  const updateAbilityAim = (event: PointerEvent<HTMLButtonElement>) => {
+    const drag = dragAim.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    if (Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) >= 8) drag.moved = true;
+    battleStore.request({ type: 'aim-update', slot: drag.slot, clientX: event.clientX, clientY: event.clientY });
+  };
+  const finishAbilityAim = (event: PointerEvent<HTMLButtonElement>) => {
+    const drag = dragAim.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    if (drag.moved) {
+      battleStore.request({ type: 'aim-commit', slot: drag.slot, clientX: event.clientX, clientY: event.clientY });
+    } else {
+      battleStore.request({ type: 'aim-cancel', slot: drag.slot });
+      battleStore.request({ type: 'arm-cast', slot: drag.slot });
+    }
+    dragAim.current = null;
+  };
+  const cancelAbilityAim = (event: PointerEvent<HTMLButtonElement>) => {
+    if (dragAim.current?.pointerId !== event.pointerId) return;
+    battleStore.request({ type: 'aim-cancel', slot: dragAim.current.slot });
+    dragAim.current = null;
+  };
+
   return (
     <div className="battle-hud">
       <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{status}</p>
+      <section className="sr-only" aria-label={t('hud.semanticSummary')}>
+        <h2>{t('hud.semanticSummary')}</h2>
+        <p>{t('hud.semanticState', {
+          hp: Math.round(state.playerHp),
+          maxHp: Math.round(state.playerMaxHp),
+          resource: Math.round(state.playerResource),
+          level: state.level,
+          target: state.currentTargetId ?? t('hud.noTarget'),
+          life: state.playerLife.phase,
+          objectivePoints: state.objectivePoints,
+          cooldowns: state.abilities.map((ability) => `${ability.slot}:${ability.remaining}`).join(', '),
+          objectives: state.objectives.map((objective) => `${objective.id}:${objective.alive ? 'up' : objective.spawnsIn}`).join(', '),
+          respawn: state.playerLife.respawnSeconds.toFixed(1),
+          invulnerable: state.playerLife.invulnerableSeconds.toFixed(1),
+        })}</p>
+      </section>
 
+      {state.learning?.current && (
+        <div className="battle-hud__learning" role="status">
+          <span>{t(`learning.steps.${state.learning.current}`)}</span>
+          <button type="button" onClick={() => battleStore.request({ type: 'skip-learning' })}>{t('learning.skip')}</button>
+        </div>
+      )}
+      {state.recall.channeling && (
+        <div className="battle-hud__recall" role="status">
+          <strong>{t('hud.recalling')}</strong>
+          <span>{t('hud.recallRemaining', { seconds: state.recall.remaining.toFixed(1) })}</span>
+        </div>
+      )}
+      {!state.recall.channeling && state.recall.cancellation && (
+        <p className="battle-hud__recall-cancel" role="status">{t(`hud.recallCancelled.${state.recall.cancellation}`)}</p>
+      )}
       {lifeOverlay && (
         <div className="battle-hud__alert battle-hud__alert--respawn" aria-hidden="true">
           <strong>{t('hud.defeated')}</strong>
-          <span>{t('hud.respawnIn', { seconds: Math.ceil(state.playerLife.respawnSeconds) })}</span>
+          <span>{t('hud.respawnIn', { seconds: state.playerLife.respawnSeconds.toFixed(1) })}</span>
         </div>
       )}
       {(suddenDeath || state.matchStatus.phase === 'hard-cap') && (
@@ -74,7 +148,7 @@ export default function BattleHud({ onOpenShop }: BattleHudProps) {
             <span className="battle-hud__struct">{t('hud.inhibitors')} {state.allyStructures.inhibitors}/{state.allyStructures.inhibitorsMax}</span>
           </div>
           <div className="battle-hud__center">
-            <span className="battle-hud__mode">{t(`mode.${state.mode}`)}</span>
+            <span className="battle-hud__mode">{t(`mode.${state.mode}`)} · {t(`matchKind.${state.matchKind}`)} · {t(`difficulty.${state.difficulty}`)}</span>
             <span className="battle-hud__timer">{formatTime(state.elapsed)}</span>
           </div>
           <div className="battle-hud__structures battle-hud__structures--enemy">
@@ -84,6 +158,7 @@ export default function BattleHud({ onOpenShop }: BattleHudProps) {
           </div>
         </div>
         {state.mode === 'conquest' && (
+          <>
           <div className="battle-hud__objectives">
             {state.objectives.map((objective) => (
               <span key={objective.id} className={`battle-hud__objective${objective.alive ? ' is-alive' : ''}`}>
@@ -92,6 +167,16 @@ export default function BattleHud({ onOpenShop }: BattleHudProps) {
             ))}
             <span className="battle-hud__dragons">{t('objective.dragon')} ×{state.dragonStacks}</span>
           </div>
+          <div className="battle-hud__camps" aria-label={t('hud.campTimers')}>
+            {state.camps.map((camp) => (
+              <span key={camp.id} className={`battle-hud__camp${camp.alive ? ' is-alive' : ''}`}>
+                {t(`camp.${camp.type}`)} {camp.side === 'ally' ? '◆' : '◇'}: {camp.alive
+                  ? `${camp.membersAlive}/${camp.membersTotal}`
+                  : formatTime(camp.respawnsIn)}
+              </span>
+            ))}
+          </div>
+          </>
         )}
       </div>
 
@@ -141,16 +226,38 @@ export default function BattleHud({ onOpenShop }: BattleHudProps) {
                 <button
                   type="button"
                   key={ability.slot}
-                  className={`battle-ability${ability.ready ? ' is-ready' : ' is-cooling'}`}
+                  className={`battle-ability${ability.ready ? ' is-ready' : ' is-cooling'}${state.aimingSlot === ability.slot ? ' is-aiming' : ''}`}
                   style={{ borderColor: player.accentColor, color: player.accentColor }}
-                  title={definition ? t(definition.nameKey) : ability.slot}
-                  aria-label={`${ability.slot} — ${definition ? t(definition.nameKey) : ability.slot}`}
+                  title={definition ? [
+                    t(definition.nameKey),
+                    `${t('ability.cost')} ${definition.cost}`,
+                    `${t('ability.cooldown')} ${ability.cooldown ?? definition.cooldown}s`,
+                    `${t('ability.range')} ${definition.range}`,
+                    definition.damage > 0 ? `${t('ability.damage')} ${definition.damage} + ${(definition.mechanics?.apRatio ?? 0.6) * 100}% AP` : '',
+                    definition.mechanics?.duration ? `${t('ability.duration')} ${definition.mechanics.duration}s` : '',
+                    definition.mechanics?.slowPercent ? `${t('ability.slow')} ${definition.mechanics.slowPercent * 100}%` : '',
+                    definition.mechanics?.armor ? `${t('ability.armor')} +${definition.mechanics.armor}` : '',
+                    definition.mechanics?.shield ? `${t('ability.shield')} ${definition.mechanics.shield}` : '',
+                    definition.mechanics?.healing ? `${t('ability.healing')} ${definition.mechanics.healing} + ${(definition.mechanics.apRatio ?? 0.4) * 100}% AP` : '',
+                    definition.mechanics?.movementPercent ? `${t('ability.movement')} +${definition.mechanics.movementPercent * 100}%` : '',
+                    definition.mechanics?.pullDuration ? `${t('ability.pull')} ${definition.mechanics.pullDuration}s` : '',
+                    definition.mechanics?.trapDuration ? `${t('ability.trap')} ${definition.mechanics.trapDuration}s` : '',
+                  ].filter(Boolean).join(' · ') : ability.slot}
+                  aria-label={`${ability.slot} — ${definition ? t(definition.nameKey) : ability.slot}${definition ? `, ${t('ability.cost')} ${definition.cost}` : ''}`}
                   aria-keyshortcuts={ability.slot}
-                  disabled={!ability.ready}
-                  onClick={() => window.dispatchEvent(new CustomEvent('champs:cast-ability', { detail: { slot: ability.slot } }))}
+                  aria-pressed={state.aimingSlot === ability.slot}
+                  disabled={!ability.ready || state.lifecycle !== 'running'}
+                  onPointerDown={(event) => beginAbilityAim(event, ability.slot)}
+                  onPointerMove={updateAbilityAim}
+                  onPointerUp={finishAbilityAim}
+                  onPointerCancel={cancelAbilityAim}
+                  onClick={(event) => {
+                    if (event.detail === 0) battleStore.request({ type: 'arm-cast', slot: ability.slot });
+                  }}
                 >
                   <span className="battle-ability__icon" aria-hidden="true" dangerouslySetInnerHTML={{ __html: iconSvg }} />
                   <span className="battle-ability__key">{t(`slot.${ability.slot}`)}</span>
+                  {definition && <span className="battle-ability__cost">{definition.cost}</span>}
                   {!ability.ready && (
                     <>
                       <span className="battle-ability__cooldown" style={{ height: `${(1 - ability.progress) * 100}%` }} />

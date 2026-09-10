@@ -1,12 +1,13 @@
-import { ALLIANCE, HEROES, POPULATION, QUESTS, RESOURCE_ORDER, heroTrainXp } from '../config/GameConfig';
+import { HEROES, heroTrainXp } from '../config/GameConfig';
+import { BUILDING_ORDER, buildingDef, isProducer, outputPerSec } from '../config/BuildingConfig';
 import { combineModifiers, economyMultiplierFor } from '../config/StatModifiers';
 import { maxTrainableTier } from '../config/TroopConfig';
-import type { Army, ArmyTiers, HeroId, ResourceCost, StatModifiers, TroopKind } from '../types';
+import type { Army, ArmyTiers, HeroId, ResourceCost, Resources, StatModifiers, TroopKind } from '../types';
 import { AllianceSystem } from './AllianceSystem';
 import { ArenaSystem, type ArenaMatchResult } from './ArenaSystem';
 import { BuildingSystem } from './BuildingSystem';
 import { CampaignSystem, type CampaignAttemptResult } from './CampaignSystem';
-import { CombatSystem } from './CombatSystem';
+import { CombatSystem, type CombatResult } from './CombatSystem';
 import { GearSystem } from './GearSystem';
 import { HeroRoster, type HeroBonuses } from './HeroRoster';
 import { PopulationSystem } from './PopulationSystem';
@@ -19,6 +20,7 @@ import { SummonSystem, type Rng, type SummonResult } from './SummonSystem';
 import { TrainingQueue } from './TrainingQueue';
 import { VipSystem } from './VipSystem';
 import { WarmthSystem } from './WarmthSystem';
+import { settleDueCompletions, simulate } from './SimulationEngine';
 import type { QuestReward } from '../config/QuestConfig';
 import type { RallyReward } from '../config/RallyConfig';
 import type { BuildingKind } from '../types';
@@ -75,11 +77,12 @@ export class GameState {
    * the snapshot so a returning player is never re-onboarded.
    */
   private _onboarding: OnboardingState;
+  private readonly processedActionIds = new Set<string>();
 
   private readonly saver: SaveManager;
   private msSinceSave = 0;
-  /** Fractional alliance-help accrual carried between ticks (see tick()). */
-  private allianceHelpAccrual = 0;
+  private simulationAt: number;
+  private clockHighWater: number;
 
   /** Whether an existing save was found on load (vs a fresh game). */
   readonly loaded: boolean;
@@ -87,8 +90,10 @@ export class GameState {
   readonly offlineSeconds: number;
   /** Resources credited from offline idle production on load. */
   readonly offlineGains: LoadResult['offlineGains'];
+  /** Recovery/migration diagnostic surfaced to the player. */
+  readonly loadDiagnostic: LoadResult['diagnostic'];
 
-  private constructor(result: LoadResult, saver: SaveManager, now: number) {
+  private constructor(result: LoadResult, saver: SaveManager) {
     this.resources = result.snapshot.resources;
     this.buildings = result.snapshot.buildings;
     this.training = result.snapshot.training;
@@ -107,14 +112,17 @@ export class GameState {
     this.vip = result.snapshot.vip;
     this._waveCleared = result.snapshot.waveCleared;
     this._onboarding = result.snapshot.onboarding;
+    for (const id of result.snapshot.processedActionIds ?? []) this.processedActionIds.add(id);
     this.saver = saver;
     this.loaded = result.loaded;
     this.offlineSeconds = result.offlineSeconds;
     this.offlineGains = result.offlineGains;
-    // Arm the day's rotating event immediately (fresh game or load) so the
-    // events framework is live from the first frame and the QuestsScene shows
-    // it. Uses the creation clock; subsequent ticks keep it rolling per day.
-    this.quests.dailySync(now);
+    this.loadDiagnostic = result.diagnostic;
+    this.simulationAt = result.clockAt;
+    this.clockHighWater = result.clockAt;
+    // Arm/sync from the save layer's sanitized monotonic watermark. A rolled
+    // back or invalid local clock must never reset daily state or poison ticks.
+    this.quests.dailySync(this.clockHighWater);
   }
 
   /**
@@ -134,7 +142,14 @@ export class GameState {
    */
   static create(storage: KeyValueStorage, now: number): GameState {
     const saver = new SaveManager(storage);
-    return new GameState(saver.load(now), saver, now);
+    return new GameState(saver.load(now), saver);
+  }
+
+  /** Sanitize caller clocks and preserve a monotonic runtime/calendar watermark. */
+  private monotonicClock(now: number): number {
+    const observed = Number.isFinite(now) && now >= 0 ? now : this.clockHighWater;
+    this.clockHighWater = Math.max(this.clockHighWater, observed);
+    return this.clockHighWater;
   }
 
   /** Highest battle wave cleared. */
@@ -168,13 +183,57 @@ export class GameState {
     this.save(now);
   }
 
+  /** Reserve a persisted action receipt; false means this submission already committed. */
+  private beginAction(actionId?: string): boolean {
+    if (!actionId) return true;
+    if (this.processedActionIds.has(actionId)) return false;
+    this.processedActionIds.add(actionId);
+    while (this.processedActionIds.size > 256) {
+      const oldest = this.processedActionIds.values().next().value as string | undefined;
+      if (!oldest) break;
+      this.processedActionIds.delete(oldest);
+    }
+    return true;
+  }
+
+  /** Remove a receipt when validation rejects an action before any mutation. */
+  private rejectAction(actionId?: string): void {
+    if (actionId) this.processedActionIds.delete(actionId);
+  }
+
   /**
    * Record a newly-cleared wave (monotonic) and fire the `waveCleared` quest
    * hook so daily/growth quests progress. `now` defaults to the wall clock.
    */
-  recordWaveCleared(wave: number, now: number = Date.now()): void {
-    if (wave > this._waveCleared) this._waveCleared = wave;
-    this.quests.record('waveCleared', 1, now);
+  recordWaveCleared(wave: number, now: number = Date.now(), eventId?: string): void {
+    const newlyCleared = wave > this._waveCleared;
+    if (newlyCleared) {
+      this._waveCleared = Math.min(20, Math.max(this._waveCleared, Math.floor(wave)));
+      this.recordQuest('waveCleared', 1, now, eventId);
+    }
+    this.recordQuest('battleCompleted', 1, now, eventId);
+  }
+
+  /** Record a quest metric and atomically apply all auto-claim rewards. */
+  recordQuest(metric: import('../config/QuestConfig').QuestMetric, amount: number, now: number, eventId?: string): void {
+    const effectiveNow = this.monotonicClock(now);
+    const receipt = eventId ? `${eventId}:${metric}` : undefined;
+    for (const reward of this.quests.record(metric, amount, effectiveNow, receipt)) this.grantReward(reward);
+  }
+
+  /** Commit one normal battle result exactly once, including casualties and quests. */
+  commitBattleResult(wave: number, result: CombatResult, now: number = Date.now(), actionId?: string): boolean {
+    if (wave < 1 || wave > 20 || !this.beginAction(actionId)) return false;
+    if (result.win) {
+      this.resources.add(result.reward);
+      this.recordWaveCleared(wave, now, actionId);
+    } else {
+      this.recordQuest('battleCompleted', 1, now, actionId);
+    }
+    this.training.setArmy(result.survivors, result.survivorTiers);
+    this._onboarding.battleAttempted = true;
+    this.save(now);
+    return true;
   }
 
   /**
@@ -224,7 +283,7 @@ export class GameState {
    * the bundle's troopAttack field, which only feeds the economy/UI view).
    */
   private battleModifiers(): StatModifiers {
-    return combineModifiers(this.research.modifiers(), this.gear.modifiers());
+    return combineModifiers(this.research.modifiers(), this.gear.modifiers(), this.alliance.modifiers());
   }
 
   /**
@@ -267,7 +326,7 @@ export class GameState {
       this.battleModifiers(),
       this.training.armyTiers,
     );
-    return rawArmy * this.heroes.armyPowerMultiplier() + this.heroes.totalPower();
+    return rawArmy * this.heroes.armyPowerMultiplier();
   }
 
   /** The current MAX trainable troop tier, gated by completed research. */
@@ -275,19 +334,58 @@ export class GameState {
     return maxTrainableTier(this.research.maxTroopTier());
   }
 
+  /** Current effective net resource rates used by the Town HUD. */
+  effectiveResourceRates(now: number = Date.now()): Resources {
+    const rates = ResourceStore.emptyBundle();
+    const mods = this.modifiers();
+    const warmth = this.warmth.productionMultiplier(this.buildings.furnaceLevel);
+    const satisfaction = this.population.satisfactionProduction(this.buildings.totalHousing());
+    const event = this.quests.productionBonus(this.monotonicClock(now));
+    for (const kind of BUILDING_ORDER) {
+      if (!isProducer(kind)) continue;
+      const level = this.buildings.level(kind);
+      const resource = buildingDef(kind).produces;
+      if (level <= 0 || !resource) continue;
+      rates[resource] += outputPerSec(kind, level)
+        * this.population.staffingMultiplier(kind, level)
+        * warmth * satisfaction * economyMultiplierFor(mods, resource) * event;
+    }
+    const fuel = this.warmth.fuelPerSecond(this.buildings.furnaceLevel);
+    const fueled = this.buildings.furnaceLevel > 0 && this.resources.get('wood') >= fuel.wood && this.resources.get('coal') >= fuel.coal;
+    if (fueled) {
+      rates.wood -= fuel.wood;
+      rates.coal -= fuel.coal;
+    }
+    const forgeLevel = this.buildings.level('forge_hall');
+    if (forgeLevel > 0) {
+      const capacity = this.buildings.steelThroughput()
+        * this.population.staffingMultiplier('forge_hall', forgeLevel)
+        * warmth * satisfaction * economyMultiplierFor(mods, 'steel') * event;
+      const actual = Math.max(0, Math.min(capacity, this.resources.get('iron') / 2, this.resources.get('coal')));
+      rates.steel += actual;
+      rates.iron -= actual * 2;
+      rates.coal -= actual;
+    }
+    return rates;
+  }
+
   /**
    * Perform ONE summon: spend Ember Sparks (returns null if unaffordable), roll
    * a hero via the injected deterministic {@link Rng}, and apply the result to
    * the roster (a first copy, or shards for a duplicate). Returns the outcome.
    */
-  summonOnce(rng: Rng, now: number = Date.now()): SummonResult | null {
-    if (!this.premium.spend(this.summon.sparkCost)) return null;
+  summonOnce(rng?: Rng, now: number = Date.now(), actionId?: string): SummonResult | null {
+    if (this.premium.sparks < this.summon.sparkCost || !this.beginAction(actionId)) return null;
+    if (!this.premium.spend(this.summon.sparkCost)) {
+      this.rejectAction(actionId);
+      return null;
+    }
     const result = this.summon.pull(rng, (id) => this.heroes.isOwned(id));
     if (result.outcome === 'hero') this.heroes.grantHero(result.hero);
     else this.heroes.addShards(result.hero, result.shards);
-    // Spending sparks on summons contributes VIP points + a quest metric.
     this.vip.addPoints(this.summon.sparkCost);
-    this.quests.record('summonPulled', 1, now);
+    this.recordQuest('summonPulled', 1, now, actionId);
+    this.save(now);
     return result;
   }
 
@@ -298,11 +396,19 @@ export class GameState {
    * insufficient (nothing spent). Spending also feeds VIP points, matching the
    * summon path.
    */
-  trainHero(id: HeroId): number {
-    if (!this.heroes.isOwned(id)) return -1;
-    if (!this.premium.spend(HEROES.TRAIN_SPARK_COST)) return -1;
+  trainHero(id: HeroId, now: number = Date.now(), actionId?: string): number {
+    const hero = this.heroes.get(id);
+    if (!hero?.owned || hero.level >= HEROES.MAX_LEVEL) return -1;
+    if (this.buildings.level('warming_ward') < 1 || this.premium.sparks < HEROES.TRAIN_SPARK_COST) return -1;
+    if (!this.beginAction(actionId)) return -1;
+    if (!this.premium.spend(HEROES.TRAIN_SPARK_COST)) {
+      this.rejectAction(actionId);
+      return -1;
+    }
     this.vip.addPoints(HEROES.TRAIN_SPARK_COST);
-    return this.heroes.addXp(id, heroTrainXp(HEROES.TRAIN_SPARK_COST));
+    const gained = this.heroes.addXp(id, heroTrainXp(HEROES.TRAIN_SPARK_COST));
+    this.save(now);
+    return gained;
   }
 
   /**
@@ -311,11 +417,16 @@ export class GameState {
    * Ember Sparks to the wallet, and hero shards to the roster. Returns the full
    * attempt result (rewards already applied).
    */
-  attemptCampaignStage(stageId: string): CampaignAttemptResult {
+  attemptCampaignStage(stageId: string, now: number = Date.now(), actionId?: string): CampaignAttemptResult {
+    if (!this.beginAction(actionId)) return this.campaign.attempt(stageId, this.campaignPower());
     const result = this.campaign.attempt(stageId, this.campaignPower());
-    if (result.win && result.firstClear && result.reward) {
-      this.grantCampaignReward(result.reward);
+    if (result.reason === 'unknown_stage' || result.reason === 'locked') {
+      this.rejectAction(actionId);
+      return result;
     }
+    if (result.win && result.firstClear && result.reward) this.grantCampaignReward(result.reward);
+    this.recordQuest('battleCompleted', 1, now, actionId);
+    this.save(now);
     return result;
   }
 
@@ -341,13 +452,9 @@ export class GameState {
    * caller can surface it. Deterministic given `now`.
    */
   rallyDailyEvent(now: number = Date.now()): string | null {
-    this.quests.dailySync(now);
-    // If the day's event already ran and expired, restart it so the action is
-    // always meaningful within a day.
-    if (!this.quests.eventActive(now)) {
-      this.quests.startEvent(QuestSystem.eventForDay(Math.floor(now / QUESTS.DAY_MS)).id, now);
-    }
-    return this.quests.activeEvent(now);
+    const effectiveNow = this.monotonicClock(now);
+    this.quests.dailySync(effectiveNow);
+    return this.quests.activeEvent(effectiveNow);
   }
 
   // --- FEAT-005: rallies, arena, alliance, quests, VIP ---------------------
@@ -359,12 +466,26 @@ export class GameState {
    * any newly-unlocked reward tier ONCE (rewards applied here). Also advances
    * the `rallyAttempt` quest metric. Returns the full attempt result.
    */
-  attackRally(bossId: string, now: number = Date.now()): RallyAttemptResult {
+  attackRally(bossId: string, now: number = Date.now(), actionId?: string): RallyAttemptResult {
+    const effectiveNow = this.monotonicClock(now);
+    this.rally.syncDay(effectiveNow);
+    if (!this.beginAction(actionId)) {
+      return { bossId, playerDamage: 0, allianceDamage: 0, dealt: 0, remaining: this.rally.remaining(bossId), defeated: this.rally.isDefeated(bossId), rewards: [] };
+    }
+    if (this.buildings.level('envoy_hall') < 1) {
+      this.rejectAction(actionId);
+      return this.rally.attack(bossId, 0);
+    }
     const result = this.rally.attack(bossId, this.campaignPower());
+    if (result.dealt <= 0) {
+      this.rejectAction(actionId);
+      return result;
+    }
     for (const reward of result.rewards) this.grantReward(reward);
-    // Each attempt also earns a little alliance-tech contribution.
-    if (result.dealt > 0) this.alliance.contribute(1);
-    this.quests.record('rallyAttempt', 1, now);
+    this.alliance.contribute(1);
+    this.recordQuest('rallyAttempt', 1, effectiveNow, actionId);
+    this.recordQuest('battleCompleted', 1, effectiveNow, actionId);
+    this.save(effectiveNow);
     return result;
   }
 
@@ -374,12 +495,14 @@ export class GameState {
    * a loss slips a rank. Deterministic given the persisted arena seed. Advances
    * the `arenaWin` quest metric on a win. Returns the match result.
    */
-  fightArena(now: number = Date.now()): ArenaMatchResult {
-    const result = this.arena.fight(this.campaignPower());
-    if (result.win) {
-      if (result.sparks > 0) this.premium.grant(result.sparks);
-      this.quests.record('arenaWin', 1, now);
+  fightArena(now: number = Date.now(), actionId?: string): ArenaMatchResult {
+    if (!this.beginAction(actionId)) {
+      return { win: false, playerPower: this.campaignPower(), opponentPower: this.arena.previewOpponentPower(), rankBefore: this.arena.rank, rankAfter: this.arena.rank, sparks: 0 };
     }
+    const result = this.arena.fight(this.campaignPower());
+    if (result.win && result.sparks > 0) this.premium.grant(result.sparks);
+    this.recordQuest('battleCompleted', 1, now, actionId);
+    this.save(now);
     return result;
   }
 
@@ -390,14 +513,30 @@ export class GameState {
    * charge or no active timer).
    */
   useAllianceHelp(now: number = Date.now()): number {
+    if (this.buildings.level('envoy_hall') < 1) return 0;
+    const effectiveNow = this.monotonicClock(now);
+    let shaved = 0;
     if (this.research.isBusy) {
-      return this.alliance.help((ms, n) => this.research.reduceTimer(ms, n), now);
+      shaved = this.alliance.help((ms, n) => this.research.reduceTimer(ms, n), effectiveNow);
+    } else {
+      const kind: BuildingKind | null = this.buildings.firstUpgrading();
+      if (kind) shaved = this.alliance.help((ms, n) => this.buildings.reduceUpgradeTimer(kind, ms, n), effectiveNow);
     }
-    const kind: BuildingKind | null = this.buildings.firstUpgrading();
-    if (kind) {
-      return this.alliance.help((ms, n) => this.buildings.reduceUpgradeTimer(kind, ms, n), now);
+    if (shaved > 0) this.save(effectiveNow);
+    return shaved;
+  }
+
+  /** Make one gated, paid NPC-alliance contribution. */
+  contributeAlliance(now: number = Date.now(), actionId?: string): boolean {
+    if (this.buildings.level('envoy_hall') < 1 || !this.beginAction(actionId)) return false;
+    const effectiveNow = this.monotonicClock(now);
+    const ok = this.alliance.directContribute(this.resources, effectiveNow);
+    if (!ok) {
+      this.rejectAction(actionId);
+      return false;
     }
-    return 0;
+    this.save(effectiveNow);
+    return true;
   }
 
   /**
@@ -405,7 +544,7 @@ export class GameState {
    * returns the claim result.
    */
   claimDailyQuest(id: string, now: number = Date.now()): QuestClaimResult {
-    const result = this.quests.claimDaily(id, now);
+    const result = this.quests.claimDaily(id, this.monotonicClock(now));
     if (result.ok && result.reward) this.grantReward(result.reward);
     return result;
   }
@@ -415,7 +554,7 @@ export class GameState {
    * the claim result.
    */
   claimMilestone(id: string, now: number = Date.now()): QuestClaimResult {
-    const result = this.quests.claimMilestone(id, now);
+    const result = this.quests.claimMilestone(id, this.monotonicClock(now));
     if (result.ok && result.reward) this.grantReward(result.reward);
     return result;
   }
@@ -446,6 +585,7 @@ export class GameState {
       vip: this.vip,
       waveCleared: this._waveCleared,
       onboarding: this._onboarding,
+      processedActionIds: [...this.processedActionIds],
     };
   }
 
@@ -456,87 +596,54 @@ export class GameState {
    * this tick so callers can play completion SFX.
    */
   tick(now: number, deltaMs: number): { buildingsDone: ReturnType<BuildingSystem['update']>; trainingDone: ReturnType<TrainingQueue['advance']> } {
-    if (deltaMs > 0) {
-      const furnaceLevel = this.buildings.furnaceLevel;
-      const extraHousing = this.buildings.totalHousing();
-      // Advance warmth FIRST: burn fuel from the stockpile at the current
-      // Furnace level, raising or decaying warmth. Then grow the survivor
-      // workforce and credit production scaled by BOTH the warmth-derived
-      // multiplier AND the population (satisfaction x staffing) multiplier, so a
-      // cold, crowded, or understaffed hold produces less.
-      this.warmth.tick(deltaMs, furnaceLevel, this.resources);
-      this.population.tick(deltaMs, extraHousing);
-
-      const warmthMult = this.warmth.productionMultiplier(furnaceLevel);
-      const popMult = this.population.outputMultiplier(
-        this.warmth.warmthRatio(furnaceLevel),
-        extraHousing,
-        this.buildings.totalProducerLevels() * POPULATION.STAFF_PER_PRODUCER_LEVEL,
-      );
-      // The combined economy modifiers (research + gear + heroes) scale idle
-      // output PER RESOURCE on top of warmth x population, so investing in any
-      // of the three progression sources visibly matters for production.
-      const mods = this.modifiers();
-      // A running time-boxed event lifts idle output by its production bonus, so
-      // events are a meaningful (temporary) boost on top of the permanent mods.
-      const eventBonus = this.quests.productionBonus(now);
-      const baseEfficiency = warmthMult * popMult * eventBonus;
-      // Pre-scale the per-second production rates by each resource's economy
-      // multiplier, then credit at the warmth x population x event efficiency.
-      const rates = this.buildings.productionRates();
-      for (const res of RESOURCE_ORDER) {
-        rates[res] *= economyMultiplierFor(mods, res);
-      }
-      this.resources.applyProduction(rates, deltaMs, baseEfficiency);
-      // Refine raw stock into steel (consumes iron + coal), scaled the same way
-      // plus the steel-specific economy multiplier.
-      this.buildings.refineryConversion(
-        this.resources,
-        deltaMs,
-        baseEfficiency * economyMultiplierFor(mods, 'steel'),
-      );
-      // The lit Furnace drips premium Ember Sparks (warmth-independent).
-      this.premium.drip(deltaMs, furnaceLevel);
+    const elapsed = Number.isFinite(deltaMs) ? Math.max(0, deltaMs) : 0;
+    const observed = Number.isFinite(now) && now >= 0 ? Math.max(this.clockHighWater, now) : this.clockHighWater;
+    // Advance by measured active delta without allowing a backward/invalid wall
+    // clock to poison simulation. The simulated target becomes the new runtime
+    // high-water mark; unsimulated wall jumps are not checkpointed early.
+    const target = Math.min(Math.max(this.simulationAt, observed), this.simulationAt + elapsed);
+    const start = this.simulationAt;
+    const result = simulate(this.snapshot(), start, target, 1);
+    this.simulationAt = target;
+    this.clockHighWater = Math.max(this.clockHighWater, target);
+    this.msSinceSave += elapsed;
+    if (result.buildingsDone.length > 0 || result.researchDone.length > 0 || Object.keys(result.trainingDone).length > 0) {
+      this.save(this.clockHighWater);
+    } else if (this.msSinceSave >= AUTOSAVE_INTERVAL_MS) {
+      this.save(this.clockHighWater);
     }
-    const buildingsDone = this.buildings.update(now);
-    const trainingDone = this.training.advance(now);
-    // Complete any research whose timer elapsed this tick, and fire quest hooks
-    // for the progress made this tick (buildings upgraded, research completed).
-    const researchDone = this.research.advance(now);
-
-    // Roll the daily-quest board over on a day boundary, expire stale events,
-    // AND arm the day's rotating event so the events framework is always live
-    // (its production bonus is applied in the tick above). This is the real
-    // trigger the review asked for: a returning player finds today's event
-    // running without any manual action.
-    this.quests.dailySync(now);
-    for (let i = 0; i < buildingsDone.length; i++) {
-      this.quests.record('buildingUpgraded', 1, now);
-    }
-    if (researchDone) this.quests.record('researchCompleted', 1, now);
-
-    // The simulated alliance trickles in help charges over real time so a
-    // returning player has some banked to spend on their timers. Fractional
-    // accrual is carried between ticks so a slow drip still adds up.
-    if (deltaMs > 0) {
-      this.allianceHelpAccrual += deltaMs / ALLIANCE.HELP_GEN_INTERVAL_MS;
-      const whole = Math.floor(this.allianceHelpAccrual);
-      if (whole > 0) {
-        this.alliance.grantHelps(whole);
-        this.allianceHelpAccrual -= whole;
-      }
-    }
-
-    this.msSinceSave += deltaMs;
-    if (this.msSinceSave >= AUTOSAVE_INTERVAL_MS) {
-      this.save(now);
-    }
-    return { buildingsDone, trainingDone };
+    return { buildingsDone: result.buildingsDone, trainingDone: result.trainingDone };
   }
 
-  /** Persist the current state immediately, stamping `now` as last-seen. */
+  /** Reconcile a hidden/suspended wall-clock gap under the 8h offline policy. */
+  reconcileAbsence(now: number = Date.now()): void {
+    if (!Number.isFinite(now) || now < 0) return;
+    const effectiveNow = Math.max(this.clockHighWater, now);
+    if (effectiveNow <= this.simulationAt) return;
+    const windowStart = Math.max(this.simulationAt, effectiveNow - 8 * 60 * 60 * 1000);
+    settleDueCompletions(this.snapshot(), windowStart);
+    simulate(this.snapshot(), windowStart, effectiveNow, 0.5);
+    this.simulationAt = effectiveNow;
+    this.clockHighWater = effectiveNow;
+    this.save(effectiveNow);
+  }
+
+  get persistenceWarning(): string | null {
+    return this.saver.lastSaveError;
+  }
+
+  get blockedSave(): boolean {
+    return this.saver.blockedPayload !== null;
+  }
+
+  exportSave(now: number = Date.now()): string {
+    return this.saver.blockedPayload ?? JSON.stringify(SaveManager.serialize(this.snapshot(), now), null, 2);
+  }
+
+  /** Persist immediately without ever moving the durable clock backwards. */
   save(now: number = Date.now()): void {
-    this.saver.save(this.snapshot(), now);
+    const checkpointAt = this.monotonicClock(now);
+    this.saver.save(this.snapshot(), checkpointAt);
     this.msSinceSave = 0;
   }
 

@@ -3,6 +3,7 @@ import { SceneKeys, PALETTE, CANVAS } from '../config/GameConfig';
 import { TextureKeys } from '../config/AssetKeys';
 import { Menu } from '../ui/Menu';
 import { textStyle } from '../ui/UiText';
+import { announce } from '../ui/AccessibilityBridge';
 import { tr } from '../i18n/i18n';
 import type { ResourceCost } from '../types';
 import { onViewportRefit, type VisibleWorldRect } from '@open-games/shared';
@@ -78,6 +79,7 @@ export class GameOverScene extends Phaser.Scene {
     }
 
     Menu.title(this, cx, CANVAS.HEIGHT / 2 - 120, headline, 46).setColor(headlineColor);
+    announce(headline, !data.win);
 
     const lines: string[] = [];
     if (data.fullVictory) {

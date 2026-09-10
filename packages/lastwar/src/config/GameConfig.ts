@@ -123,7 +123,7 @@ export const SQUAD = {
   /** Maximum soldiers individually drawn (formation cap). */
   MAX_RENDERED: 60,
   /** Base shots-per-second per soldier (before meta-upgrades). */
-  FIRE_RATE: 2,
+  FIRE_RATE: 1,
   /** Base damage per shot per soldier (before meta-upgrades). */
   DAMAGE: 1,
 } as const;

@@ -2,7 +2,6 @@ import { rulesForMode } from '../config/matchRules';
 import type { GameMode } from './battleStore';
 import type { MapSide } from './rift/map';
 
-/** Scoring inputs for one side at a forced hard-cap resolution. */
 export interface MatchTeamSnapshot {
   nexusHp: number;
   nexusMaxHp: number;
@@ -13,7 +12,6 @@ export interface MatchTeamSnapshot {
   gold: number;
 }
 
-/** Complete pure snapshot required to determine whether the match has ended. */
 export interface MatchResolutionSnapshot {
   elapsedSeconds: number;
   ally: MatchTeamSnapshot;
@@ -21,18 +19,17 @@ export interface MatchResolutionSnapshot {
 }
 
 export type MatchPhase = 'regulation' | 'sudden-death' | 'hard-cap';
-export type MatchResolutionReason = 'nexus-destroyed' | 'hard-cap-score';
+export type MatchResolutionReason = 'nexus-destroyed' | 'hard-cap-score' | 'surrendered';
+export type MatchWinner = MapSide | 'draw' | null;
 
-/** Deterministic result; a null winner means play continues. */
 export interface MatchResolution {
   phase: MatchPhase;
-  winner: MapSide | null;
-  reason: MatchResolutionReason | null;
+  winner: MatchWinner;
+  reason: Exclude<MatchResolutionReason, 'surrendered'> | null;
   allyScore: number;
   enemyScore: number;
 }
 
-/** Current match phase from elapsed time and mode tuning. */
 export function matchPhaseAt(
   elapsedSeconds: number,
   mode: GameMode = 'conquest',
@@ -44,7 +41,6 @@ export function matchPhaseAt(
   return 'regulation';
 }
 
-/** Weighted, normalized score used only when the hard cap is reached. */
 export function scoreTeamForHardResolution(
   team: MatchTeamSnapshot,
   mode: GameMode = 'conquest',
@@ -61,15 +57,10 @@ export function scoreTeamForHardResolution(
   );
 }
 
-/**
- * Resolve immediate nexus destruction first, then force a deterministic winner
- * from normalized scores at the hard cap. Exact ties use `tieWinner` so callers
- * can choose a stable policy; the default avoids granting a free player win.
- */
+/** Nexus destruction and hard-cap judgment use the same frozen snapshot. */
 export function resolveMatch(
   snapshot: MatchResolutionSnapshot,
   mode: GameMode = 'conquest',
-  tieWinner: MapSide = 'enemy',
 ): MatchResolution {
   const phase = matchPhaseAt(snapshot.elapsedSeconds, mode);
   const allyScore = scoreTeamForHardResolution(snapshot.ally, mode);
@@ -79,17 +70,9 @@ export function resolveMatch(
 
   if (allyNexusDestroyed || enemyNexusDestroyed) {
     const winner = allyNexusDestroyed === enemyNexusDestroyed
-      ? winnerFromScores(allyScore, enemyScore, tieWinner)
-      : allyNexusDestroyed
-        ? 'enemy'
-        : 'ally';
-    return {
-      phase,
-      winner,
-      reason: 'nexus-destroyed',
-      allyScore,
-      enemyScore,
-    };
+      ? winnerFromSnapshot(snapshot.ally, snapshot.enemy, allyScore, enemyScore)
+      : allyNexusDestroyed ? 'enemy' : 'ally';
+    return { phase, winner, reason: 'nexus-destroyed', allyScore, enemyScore };
   }
 
   if (phase !== 'hard-cap') {
@@ -98,21 +81,32 @@ export function resolveMatch(
 
   return {
     phase,
-    winner: winnerFromScores(allyScore, enemyScore, tieWinner),
+    winner: winnerFromSnapshot(snapshot.ally, snapshot.enemy, allyScore, enemyScore),
     reason: 'hard-cap-score',
     allyScore,
     enemyScore,
   };
 }
 
-function winnerFromScores(
+function winnerFromSnapshot(
+  ally: MatchTeamSnapshot,
+  enemy: MatchTeamSnapshot,
   allyScore: number,
   enemyScore: number,
-  tieWinner: MapSide,
-): MapSide {
-  if (allyScore > enemyScore) return 'ally';
-  if (enemyScore > allyScore) return 'enemy';
-  return tieWinner;
+): Exclude<MatchWinner, null> {
+  const comparisons: Array<[number, number]> = [
+    [allyScore, enemyScore],
+    [fraction(ally.nexusHp, ally.nexusMaxHp), fraction(enemy.nexusHp, enemy.nexusMaxHp)],
+    [fraction(ally.structuresStanding, ally.structuresTotal), fraction(enemy.structuresStanding, enemy.structuresTotal)],
+    [positive(ally.championKills), positive(enemy.championKills)],
+    [positive(ally.objectivePoints), positive(enemy.objectivePoints)],
+    [positive(ally.gold), positive(enemy.gold)],
+  ];
+  for (const [allyValue, enemyValue] of comparisons) {
+    if (allyValue > enemyValue) return 'ally';
+    if (enemyValue > allyValue) return 'enemy';
+  }
+  return 'draw';
 }
 
 function fraction(value: number, maximum: number): number {

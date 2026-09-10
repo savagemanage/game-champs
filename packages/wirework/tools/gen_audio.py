@@ -7,8 +7,8 @@ library (no samples, no third-party audio, no IP). Output is 16-bit PCM WAV at
 22.05kHz mono, which every modern browser (and Phaser's WebAudio backend) plays
 natively. WAV keeps the pipeline dependency-free (no ffmpeg required).
 
-SFX: grapple_fire, wire_attach, swing_whoosh, slash, hit, enemy_death,
-     citizen_scream, ui_click.
+SFX: tether_fire, wire_attach, swing_whoosh, arc_cut, machine_hit,
+     machine_shutdown, six role-specific machine attacks, citizen_alarm, ui_click.
 Music: one looping ambient/action bed (music_loop).
 
 Run:  python3 tools/gen_audio.py
@@ -101,10 +101,10 @@ def square(x):
 # --------------------------------------------------------------------------
 # SFX
 # --------------------------------------------------------------------------
-def sfx_grapple_fire():
+def sfx_tether_fire():
     # metallic launch: quick upward pitched click + noise burst
     s = mix(sweep(300, 1200, 0.12, 0.4, saw), noise(0.12, 0.25, 0.3))
-    write_wav("grapple_fire.wav", s)
+    write_wav("tether_fire.wav", s)
 
 
 def sfx_wire_attach():
@@ -127,25 +127,32 @@ def sfx_swing_whoosh():
     write_wav("swing_whoosh.wav", out)
 
 
-def sfx_slash():
+def sfx_arc_cut():
     # bright fast whoosh + high tick
     s = mix(sweep(1800, 400, 0.14, 0.35), noise(0.14, 0.3, 0.5))
-    write_wav("slash.wav", s)
+    write_wav("arc_cut.wav", s)
 
 
-def sfx_hit():
-    # meaty impact: low thud + noise
+def sfx_machine_hit():
+    # metallic impact: low thud + noise
     s = mix(sweep(220, 60, 0.16, 0.6), noise(0.1, 0.3, 0.2))
-    write_wav("hit.wav", s)
+    write_wav("machine_hit.wav", s)
 
 
-def sfx_enemy_death():
-    # descending groan with steam-ish noise tail
+def sfx_machine_shutdown():
+    # descending power-down tone with coolant-hiss tail
     s = mix(sweep(200, 50, 0.6, 0.5, saw), noise(0.6, 0.25, 0.08))
-    write_wav("enemy_death.wav", s)
+    write_wav("machine_shutdown.wav", s)
 
 
-def sfx_citizen_scream():
+def sfx_machine_attack(name, base, top, pulse):
+    """Role-specific servo/weapon cue with a distinct pitch contour and pulse."""
+    main = sweep(base, top, 0.18 + pulse * 0.015, 0.34, saw if pulse % 2 else square)
+    accent = tone(top * (1.25 + pulse * 0.04), 0.045 + pulse * 0.006, 0.22)
+    write_wav(f"attack_{name}.wav", mix(main, accent, noise(len(main) / RATE, 0.08 + pulse * 0.01, 0.18)))
+
+
+def sfx_citizen_alarm():
     # vocal-ish frightened cry: vibrato tone dropping
     n = int(RATE * 0.5)
     out = []
@@ -154,7 +161,7 @@ def sfx_citizen_scream():
         vib = 1 + 0.04 * math.sin(2 * math.pi * 11 * t)
         f = (720 - 240 * t) * vib
         out.append(0.4 * math.sin(2 * math.pi * f * i / RATE) * env(i, n, 0.02, 0.35))
-    write_wav("citizen_scream.wav", out)
+    write_wav("citizen_alarm.wav", out)
 
 
 def sfx_ui_click():
@@ -231,13 +238,19 @@ def music_loop():
 
 if __name__ == "__main__":
     random.seed(1234)   # deterministic output for reproducible builds
-    sfx_grapple_fire()
+    sfx_tether_fire()
     sfx_wire_attach()
     sfx_swing_whoosh()
-    sfx_slash()
-    sfx_hit()
-    sfx_enemy_death()
-    sfx_citizen_scream()
+    sfx_arc_cut()
+    sfx_machine_hit()
+    sfx_machine_shutdown()
+    sfx_machine_attack("surveyor", 180, 520, 1)
+    sfx_machine_attack("skitter", 520, 1320, 2)
+    sfx_machine_attack("rammer", 90, 210, 3)
+    sfx_machine_attack("fluxborn", 310, 760, 4)
+    sfx_machine_attack("bastion", 120, 360, 5)
+    sfx_machine_attack("bombard", 240, 980, 6)
+    sfx_citizen_alarm()
     sfx_ui_click()
     music_loop()
     print("\nAll original audio synthesized (WAV, 22.05kHz mono).")

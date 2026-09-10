@@ -176,7 +176,11 @@ export class HeroScene extends HubScene {
     const h = this.state.heroes.get(id)!;
     // Train (spark -> XP level up).
     this.trainButton.setText(tr('hero.levelUp'));
-    this.trainButton.setEnabled(this.state.premium.sparks >= HEROES.TRAIN_SPARK_COST);
+    this.trainButton.setEnabled(
+      h.level < HEROES.MAX_LEVEL &&
+      this.state.buildings.level('warming_ward') > 0 &&
+      this.state.premium.sparks >= HEROES.TRAIN_SPARK_COST,
+    );
 
     // Star up.
     if (h.stars >= maxStars(id)) {
@@ -205,7 +209,8 @@ export class HeroScene extends HubScene {
         this.toast(tr('summon.gotHero', { name: tr(`hero.${id}.name`) }));
       }
     } else {
-      const levels = this.state.trainHero(id);
+      const now = Date.now();
+      const levels = this.state.trainHero(id, now, `hero-train:${id}:${now}`);
       if (levels >= 0) {
         this.audio.playSfx(AudioKeys.LevelUp, 0.6);
         this.refreshCurrency();
