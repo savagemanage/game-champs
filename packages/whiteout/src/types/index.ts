@@ -158,6 +158,8 @@ export interface PopulationState {
   total: number;
   /** Survivors assigned to each producer building (missing = 0 assigned). */
   assignments: Partial<Record<BuildingKind, number>>;
+  /** Fractional survivor growth preserved across saves. */
+  growthCarry?: number;
 }
 
 // --- FEAT-003: heroes, summon (gacha) and story campaign ---------------------
@@ -235,6 +237,8 @@ export interface SummonState {
   totalPulls: number;
   /** Draws since the last high-rarity (epic+) pull; drives the pity guarantee. */
   pityCounter: number;
+  /** Persisted 32-bit PRNG state; prevents reload rerolls. */
+  rngState?: number;
 }
 
 /** The persisted campaign progress: highest cleared stage index + claimed rewards. */
@@ -339,6 +343,8 @@ export interface RallyBossState {
 /** The persisted rally state: per-boss progress keyed by boss id. */
 export interface RallyState {
   bosses: Record<string, RallyBossState>;
+  /** UTC day index for the current daily boss cycle. */
+  dayKey?: number;
 }
 
 /**
@@ -369,6 +375,10 @@ export interface AllianceState {
   techPoints: number;
   /** Alliance help charges currently available to spend on timers. */
   helpsAvailable: number;
+  /** Fractional help-generation carry, in charges. */
+  helpAccrual?: number;
+  /** Last accepted direct-contribution timestamp for debounce. */
+  lastContributionAt?: number;
 }
 
 /**
@@ -391,6 +401,12 @@ export interface QuestProgressState {
 export interface QuestState {
   /** The day index (floor(now/DAY_MS)) the current daily quests belong to. */
   dailyDayIndex: number;
+  /**
+   * Recently applied domain-event ids. This bounded receipt ledger makes quest
+   * progress and its automatic reward idempotent across double submissions and
+   * reloads without growing the save forever.
+   */
+  processedEventIds?: string[];
   /** Daily quest progress keyed by quest id (reset each day). */
   daily: Record<string, QuestProgressState>;
   /** One-time growth/beginner milestone progress keyed by quest id. */
@@ -475,6 +491,8 @@ export interface OnboardingState {
   introDismissed: boolean;
   /** True once the guided objective flow has been completed (or skipped). */
   guidedComplete: boolean;
+  /** True after the first valid normal-battle attempt, win or loss. */
+  battleAttempted?: boolean;
 }
 
 /** The complete persisted game state (serialized to localStorage by the save feature). */
@@ -544,6 +562,8 @@ export interface GameState {
    * so long-time players are never re-onboarded.
    */
   onboarding?: OnboardingState;
+  /** Bounded ids of committed result-bearing actions for reload-safe dedupe. */
+  processedActionIds?: string[];
   /** Epoch ms of the last simulation update (drives offline reconciliation). */
   lastSeenAt: number;
 }

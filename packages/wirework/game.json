@@ -1,14 +1,11 @@
 {
   "slug": "wirework",
   "title": "Wirework",
-  "titleKo": "",
-  "genre": "Wall-Defense Action",
-  "summary": "A top-down wall-defense action game: grapple across a besieged arena, hold the double ring, and strike each giant's exposed nape.",
-  "summaryKo": "탑다운 성벽 방어 액션. 포위된 아레나를 갈고리로 누비며 이중 방어선을 지키고 거인의 약점을 노립니다.",
-  "stack": [
-    "typescript",
-    "phaser3"
-  ],
+  "titleKo": "Wirework",
+  "genre": "Top-down Ring Defense Action",
+  "summary": "Tether through a capacitor city and cut rear cooling nodes to stop autonomous siege machines.",
+  "summaryKo": "축전 도시를 테더로 가로지르며 후방 냉각 노드를 절단해 자율 공성기계를 막으세요.",
+  "stack": ["typescript", "phaser3"],
   "status": "playable",
   "thumbnail": "thumb.png"
 }

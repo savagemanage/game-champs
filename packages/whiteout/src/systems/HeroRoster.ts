@@ -200,6 +200,15 @@ export class HeroRoster {
     h.stars += 1;
     // Unlock any newly-available skill and raise all unlocked skills to the star.
     h.skillLevels = mergeSkillLevels(id, h.stars, h.skillLevels);
+    // XP intentionally banks at a star cap. Raising the cap must immediately
+    // consume that wallet, potentially granting several levels in one action.
+    const cap = levelCapForStars(h.stars);
+    while (h.level < cap) {
+      const need = xpToNextLevel(h.level);
+      if (h.xp < need) break;
+      h.xp -= need;
+      h.level += 1;
+    }
     return true;
   }
 
@@ -244,8 +253,8 @@ export class HeroRoster {
       const h = this._heroes.get(id);
       if (!h || !h.owned) continue;
       const def = heroDef(id);
-      const levelFactor = 1 + HEROES.POWER_PER_LEVEL * (h.level - 1);
-      const starFactor = 1 + HEROES.POWER_PER_STAR * (h.stars - 1);
+      const levelFactor = 1 + 0.02 * (h.level - 1);
+      const starFactor = 1 + 0.15 * (h.stars - 1);
       const skillFactor = 1 + this.skillMagnitude(id, h);
       const value = def.bonus.base * levelFactor * starFactor * skillFactor;
       if (def.bonus.kind === 'army') army += value;

@@ -52,7 +52,10 @@ export function subscribe(fn: (lang: Language) => void): () => void {
 export function tr(key: TrKey, params?: Record<string, string | number>): string {
   const entry = STRINGS[key];
   let template = entry[currentLang];
-  if (!template) template = entry.en;
+  if (!template) {
+    if (typeof console !== 'undefined') console.warn(`[i18n] Missing ${currentLang} translation: ${key}`);
+    template = entry.en;
+  }
 
   if (params) {
     template = template.replace(/\{(\w+)\}/g, (whole, name: string) => {

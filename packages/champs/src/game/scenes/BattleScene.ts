@@ -2,14 +2,12 @@ import Phaser from 'phaser';
 import {
   CHAMPIONS,
   getChampionById,
-  randomChampionId,
   type Champion,
   type Ability,
 } from '../../data/champions';
 import {
   advanceAttackCooldown,
   abilityDamage,
-  applyDamage,
   applyHeal,
   areHostile,
   canBasicAttack,
@@ -32,11 +30,20 @@ import {
 } from '../combat';
 import { decideAction, type AiIntent, type AiSnapshot } from '../ai';
 import {
+  lowestHpRatioHostile,
+  resolveDashEndpoint,
+  targetsIntersectingLine,
+} from '../abilitySemantics';
+import { shouldDeployHeldWarden, type WardenCharge } from '../wardenPolicy';
+import {
   battleStore,
   DEFAULT_DIFFICULTY,
   DEFAULT_MATCH_KIND,
+  type AuthorityMatchRequest,
+  type BattleCommand,
   type BattleOutcome,
   type GameMode,
+  type QueuedBattleCommand,
 } from '../battleStore';
 import {
   activeLanesForMode,
@@ -63,6 +70,22 @@ import {
   type MatchKind,
 } from '../tutorial/config';
 import { audio } from '../audio';
+import {
+  activePull,
+  applyArmor,
+  applyBurn,
+  applyDamageWithEffects,
+  applyMovementBuff,
+  applyPull,
+  applyShield,
+  applySlow,
+  cleanseSlows,
+  createEffectState,
+  expireEffects,
+  strongestMovementBuff,
+  strongestSlow,
+  type EffectState,
+} from '../effects';
 
 // --- Rift pure modules (all Phaser-free, unit tested) --------------------
 import {
@@ -75,7 +98,6 @@ import {
   LANE_WAYPOINTS,
   laneWaypoints,
   RIVER_ANCHORS,
-  JUNGLE_CAMPS,
   EPIC_PITS,
 } from '../rift/map';
 import {
@@ -137,7 +159,6 @@ import {
 import { composeTeams, enemyFacingSlot } from '../rift/teams';
 import {
   computeEffectiveStats,
-  getItemById,
   recommendBuild,
   recommendPurchase,
 } from '../rift/loadout';
@@ -145,7 +166,10 @@ import { totalModifiers } from '../../data/items';
 import {
   createBuffState,
   expireBuffs,
+  applyBuff,
   BUFF_EFFECTS,
+  CAMPS,
+  type Camp,
   type BuffState,
 } from '../rift/jungle';
 import {
@@ -161,6 +185,17 @@ import {
   type BaronBuffState,
 } from '../rift/objectives';
 import type { EpicMonster } from '../rift/economy';
+import { attemptPurchase } from '../inventory';
+import {
+  createLearningState,
+  currentLearningStep,
+  learningRequirementsCompleted,
+  recordLearningAction,
+  skipCurrentLearningStep,
+  LEARNING_STEPS,
+  type LearningAction,
+  type LearningState,
+} from '../tutorial/flow';
 
 /** Data passed into the scene from React via `scene.start(key, data)`. */
 export interface BattleSceneData {
@@ -172,7 +207,8 @@ export interface BattleSceneData {
   reducedMotion?: boolean;
   /** Fires after create, bounded critical-texture settlement, and initial visual sync. */
   onSceneReady?: () => void;
-  matchId?: string;
+  matchId: string;
+  matchSeed: string;
   matchKind?: MatchKind;
   difficulty?: Difficulty;
 }
@@ -209,7 +245,8 @@ const TURRET_RANGE = 260;
 const TURRET_DAMAGE = 152;
 const TURRET_ATTACK_SPEED = 0.83;
 const RESOURCE_REGEN = 8; // per second
-const MAX_FRAME_SECONDS = 0.05;
+const SIMULATION_TICK_SECONDS = 1 / 60;
+const MAX_STEPS_PER_RENDER = 12;
 const HUD_INTERVAL_SECONDS = 0.1;
 const BASIC_PROJECTILE_SPEED = 1650 * SCALE;
 const SKILLSHOT_PROJECTILE_SPEED = 1350 * SCALE;
@@ -312,6 +349,7 @@ interface BotState {
   maxResource: number;
   progress: ProgressState;
   ownedItems: string[];
+  buffs: BuffState;
   goldAccrual: number;
   totalGoldEarned: number;
   currentIntent: AiIntent;
@@ -347,6 +385,7 @@ interface Entity {
   hpBar?: Phaser.GameObjects.Rectangle;
   /** Remaining stun seconds; entity cannot act while > 0. */
   stunned: number;
+  effects: EffectState;
   /** For structures: the pure graph node (kind, lane, shields). */
   node?: StructureNode;
   /** For minions: pure rift minion state (lane path progress). */
@@ -369,24 +408,39 @@ interface Entity {
   abilityPower?: number;
   /** Neutral epic objective identity. */
   objectiveId?: EpicMonster;
+  /** Neutral jungle camp identity. */
+  campId?: string;
+  campMemberKey?: string;
 }
 
 interface PendingImpact {
   dueAt: number;
+  insertionOrder: number;
   source: Unit;
   targetId?: string;
   point?: Vec2;
+  line?: {
+    origin: Vec2;
+    endpoint: Vec2;
+    halfWidth: number;
+    subsequentDamageMultiplier: number;
+  };
   radius: number;
   rawDamage: number;
   color: number;
   stunDuration: number;
+  slowPercent?: number;
+  slowDuration?: number;
+  pullDuration?: number;
   ability: boolean;
   ultimate: boolean;
   singleTarget: boolean;
+  chronoProc: boolean;
 }
 
 interface PendingWaveSpawn {
   dueAt: number;
+  insertionOrder: number;
   type: MinionType;
   team: MapSide;
   lane: Lane;
@@ -399,9 +453,32 @@ interface ObjectiveRuntime {
   permanentlyGone: boolean;
 }
 
+interface CampRuntime {
+  camp: Camp;
+  members: Entity[];
+  nextSpawnAt: number;
+}
+
+interface TrapRuntime {
+  id: string;
+  source: Unit;
+  point: Vec2;
+  radius: number;
+  rawDamage: number;
+  color: number;
+  expiresAt: number;
+  slowPercent: number;
+  slowDuration: number;
+}
+
+interface ScheduledBattleCommand extends QueuedBattleCommand {
+  targetTick: number;
+}
+
 interface TeamFacts {
   championKills: number;
-  objectives: number;
+  epicMonstersKilled: number;
+  objectivePoints: number;
   totalGoldEarned: number;
 }
 
@@ -425,6 +502,7 @@ export default class BattleScene extends Phaser.Scene {
   private matchKind: MatchKind = DEFAULT_MATCH_KIND;
   private difficulty: Difficulty = DEFAULT_DIFFICULTY;
   private matchId = '';
+  private matchSeed = '';
   private playerChampion!: Champion;
   private enemyChampion!: Champion;
   /** The lanes active this match (all three for Conquest, mid only for Midline Skirmish). */
@@ -442,6 +520,9 @@ export default class BattleScene extends Phaser.Scene {
   private entityById = new Map<string, Entity>();
   /** Last acquired target per acting entity; retained until it becomes invalid. */
   private targetByEntityId = new Map<string, string>();
+  private sunfireHitAt = new Map<string, number>();
+  private passiveCounters = new Map<string, number>();
+  private internalCooldowns = new Map<string, number>();
   /** Structure entities keyed by their pure graph id. */
   private structureById = new Map<string, Entity>();
   private allyNexus!: Entity;
@@ -462,8 +543,8 @@ export default class BattleScene extends Phaser.Scene {
   private playerDeaths = 0;
 
   private teamFacts: Record<MapSide, TeamFacts> = {
-    ally: { championKills: 0, objectives: 0, totalGoldEarned: STARTING_GOLD * 5 },
-    enemy: { championKills: 0, objectives: 0, totalGoldEarned: STARTING_GOLD * 5 },
+    ally: { championKills: 0, epicMonstersKilled: 0, objectivePoints: 0, totalGoldEarned: STARTING_GOLD * 5 },
+    enemy: { championKills: 0, epicMonstersKilled: 0, objectivePoints: 0, totalGoldEarned: STARTING_GOLD * 5 },
   };
 
   // Buffs / objectives (ally-team perspective drives HUD + player stats).
@@ -473,8 +554,12 @@ export default class BattleScene extends Phaser.Scene {
   private allyDragonStacks = 0;
   private enemyDragonStacks = 0;
   private objectives: ObjectiveRuntime[] = [];
+  private camps: CampRuntime[] = [];
+  private traps: TrapRuntime[] = [];
+  private trapGraphics = new Map<string, Phaser.GameObjects.Arc>();
   private pendingImpacts: PendingImpact[] = [];
   private pendingWaveSpawns: PendingWaveSpawn[] = [];
+  private authorityInsertionOrder = 0;
 
   // Wave scheduling.
   private spawnedWaves = 0;
@@ -484,6 +569,16 @@ export default class BattleScene extends Phaser.Scene {
   private moveTarget: Vec2 | null = null;
   private playerOrder: 'move' | 'attack-move' | 'target' | 'stop' = 'stop';
   private attackMoveArmed = false;
+  private armedAbility: CooldownKey | null = null;
+  private aimPoint: Vec2 | null = null;
+  private aimPreview?: Phaser.GameObjects.Graphics;
+  private pauseReasons = new Set<'manual' | 'settings' | 'hidden'>();
+  private recallStartedAt: number | null = null;
+  private recallCancellation = '';
+  private learning: LearningState = createLearningState();
+  private wardenCharge: Record<MapSide, WardenCharge | null> = { ally: null, enemy: null };
+  private purchaseFeedbackSequence = 0;
+  private lastPurchaseFeedback: { itemId: string; accepted: boolean; reason?: string; sequence: number } | undefined;
   private abilityKeys!: Record<CooldownKey, Phaser.Input.Keyboard.Key>;
   private touchCastHandler?: EventListener;
 
@@ -495,6 +590,9 @@ export default class BattleScene extends Phaser.Scene {
   private minionSequence = 0;
 
   private elapsed = 0;
+  private simulationTick = 0;
+  private simulationAccumulator = 0;
+  private scheduledCommands: ScheduledBattleCommand[] = [];
   private nextHudAt = 0;
   private ended = false;
   /** Guards the cosmetic kill slow-mo so rapid kills cannot stack/strand it. */
@@ -546,18 +644,15 @@ export default class BattleScene extends Phaser.Scene {
     this.lanes = activeLanesForMode(this.mode);
     this.matchKind = data.matchKind ?? DEFAULT_MATCH_KIND;
     this.difficulty = data.difficulty ?? DEFAULT_DIFFICULTY;
-    this.matchId = data.matchId?.trim() || `local-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-    // Midline Skirmish randomizes both champions onto its configured single active lane.
-    if (this.mode === 'midline') {
-      const p = randomChampionId();
-      this.playerChampion = getChampionById(p)!;
-      this.enemyChampion = getChampionById(randomChampionId(p))!;
-    } else {
-      this.playerChampion =
-        getChampionById(data.playerChampionId) ?? getChampionById('ashborne')!;
-      this.enemyChampion =
-        getChampionById(data.enemyChampionId) ?? getChampionById('nightveil')!;
+    this.matchId = data.matchId.trim();
+    this.matchSeed = data.matchSeed.trim();
+    if (!this.matchId || !this.matchSeed) {
+      throw new Error('BattleScene requires a non-empty authoritative match id and seed');
     }
+    this.playerChampion =
+      getChampionById(data.playerChampionId) ?? getChampionById('ashborne')!;
+    this.enemyChampion =
+      getChampionById(data.enemyChampionId) ?? getChampionById('nightveil')!;
 
     // Reset per-run state so a restart/rematch starts clean.
     this.champions = [];
@@ -566,6 +661,9 @@ export default class BattleScene extends Phaser.Scene {
     this.allEntities = [];
     this.entityById.clear();
     this.targetByEntityId.clear();
+    this.sunfireHitAt.clear();
+    this.passiveCounters.clear();
+    this.internalCooldowns.clear();
     this.structureById.clear();
     this.structureLines = [];
     this.playerCds = createCooldownState();
@@ -576,8 +674,8 @@ export default class BattleScene extends Phaser.Scene {
     this.playerTotalGoldEarned = STARTING_GOLD;
     this.playerDeaths = 0;
     this.teamFacts = {
-      ally: { championKills: 0, objectives: 0, totalGoldEarned: STARTING_GOLD * 5 },
-      enemy: { championKills: 0, objectives: 0, totalGoldEarned: STARTING_GOLD * 5 },
+      ally: { championKills: 0, epicMonstersKilled: 0, objectivePoints: 0, totalGoldEarned: STARTING_GOLD * 5 },
+      enemy: { championKills: 0, epicMonstersKilled: 0, objectivePoints: 0, totalGoldEarned: STARTING_GOLD * 5 },
     };
     this.playerBuffs = createBuffState();
     this.allyBaron = noBaronBuff();
@@ -591,18 +689,50 @@ export default class BattleScene extends Phaser.Scene {
           { id: 'baron', entity: null, nextSpawnAt: this.rules.objectives.majorSpawnSeconds, permanentlyGone: false },
         ]
       : [];
+    this.camps = this.mode === 'conquest'
+      ? CAMPS.map((camp) => ({ camp, members: [], nextSpawnAt: 0 }))
+      : [];
+    this.traps = [];
+    for (const marker of this.trapGraphics.values()) marker.destroy();
+    this.trapGraphics.clear();
     this.pendingImpacts = [];
     this.pendingWaveSpawns = [];
+    this.authorityInsertionOrder = 0;
     this.spawnedWaves = 0;
     this.inhibitorKillTimes.clear();
     this.moveTarget = null;
     this.playerOrder = 'stop';
     this.attackMoveArmed = false;
+    this.armedAbility = null;
+    this.aimPoint = null;
+    this.aimPreview?.clear();
+    this.pauseReasons.clear();
+    this.recallStartedAt = null;
+    this.recallCancellation = '';
+    this.learning = createLearningState();
+    this.wardenCharge = { ally: null, enemy: null };
+    this.purchaseFeedbackSequence = 0;
+    this.lastPurchaseFeedback = undefined;
     this.elapsed = 0;
+    this.simulationTick = 0;
+    this.simulationAccumulator = 0;
+    this.scheduledCommands = [];
     this.nextHudAt = 0;
     this.ended = false;
     this.stats = { championKills: 0, minionKills: 0, damageDealt: 0 };
-    battleStore.reset(this.playerChampion.id, this.enemyChampion.id, this.mode);
+    const authorityMatchRequest: AuthorityMatchRequest = {
+      matchId: this.matchId,
+      matchSeed: this.matchSeed,
+      mode: this.mode,
+      matchKind: this.matchKind,
+      difficulty: this.difficulty,
+      playerChampionId: this.playerChampion.id,
+      enemyChampionId: this.enemyChampion.id,
+    };
+    battleStore.reset(this.playerChampion.id, this.enemyChampion.id, this.mode, authorityMatchRequest);
+    this.scheduledCommands = battleStore
+      .consumeImportedReplay(authorityMatchRequest)
+      .filter(({ command }) => command.type !== 'pause' && command.type !== 'resume');
   }
 
   create() {
@@ -615,6 +745,7 @@ export default class BattleScene extends Phaser.Scene {
 
     this.spawnTeams();
 
+    this.aimPreview = this.add.graphics().setDepth(VFX_DEPTH - 1);
     this.setupInput();
     this.setupCamera();
     this.syncVisuals();
@@ -702,7 +833,7 @@ export default class BattleScene extends Phaser.Scene {
     // Deterministic, matchup-derived seed: the same picks + mode always
     // reproduce the same teams (reproducible replays/QA) while different
     // matchups get varied non-picked champions. No Date.now/Math.random here.
-    const teamSeed = `${this.playerChampion.id}:${this.enemyChampion.id}:${this.mode}`;
+    const teamSeed = `${this.playerChampion.id}:${this.enemyChampion.id}:${this.mode}:${this.matchSeed}`;
     const composition = composeTeams(
       CHAMPIONS,
       this.playerChampion.id,
@@ -745,6 +876,7 @@ export default class BattleScene extends Phaser.Scene {
             maxResource: 300,
             progress: createProgress(STARTING_GOLD),
             ownedItems: [],
+            buffs: createBuffState(),
             goldAccrual: 0,
             totalGoldEarned: STARTING_GOLD,
             currentIntent: 'approach',
@@ -923,7 +1055,7 @@ export default class BattleScene extends Phaser.Scene {
 
     // Jungle camp + epic pit markers (Conquest only), as depth-sorted billboards.
     if (this.mode === 'conquest') {
-      for (const camp of JUNGLE_CAMPS) {
+      for (const camp of CAMPS) {
         this.spawnMarker('jungle', camp.pos);
       }
       for (const pit of EPIC_PITS) {
@@ -1081,6 +1213,7 @@ export default class BattleScene extends Phaser.Scene {
       shadow,
       heightPx,
       stunned: 0,
+      effects: createEffectState(),
       life: createChampionLifeState(),
       champion,
       championPose: 'idle',
@@ -1187,7 +1320,7 @@ export default class BattleScene extends Phaser.Scene {
     const body = this.makeBillboard(key, size);
     const container = this.add.container(pos.x, pos.y, [body]);
     const shadow = this.makeShadow(size.width * 0.8);
-    const entity: Entity = { unit, container, body, shadow, heightPx, stunned: 0, node };
+    const entity: Entity = { unit, container, body, shadow, heightPx, stunned: 0, effects: createEffectState(), node };
     this.attachHpBar(entity, size.height + 8);
     this.addEntity(entity);
     return entity;
@@ -1262,16 +1395,17 @@ export default class BattleScene extends Phaser.Scene {
       R: kb.addKey(Phaser.Input.Keyboard.KeyCodes.R),
     };
     (['Q', 'W', 'E', 'R'] as CooldownKey[]).forEach((slot) => {
-      this.abilityKeys[slot].on('down', () => this.tryPlayerCast(slot));
+      this.abilityKeys[slot].on('down', () => {
+        battleStore.request({ type: 'cast', slot, aim: this.pointerToGround(this.input.activePointer) });
+      });
     });
     kb.addKey(Phaser.Input.Keyboard.KeyCodes.A).on('down', () => {
+      if (this.pauseReasons.size > 0 || this.hasModalFocus()) return;
       this.attackMoveArmed = true;
     });
     kb.addKey(Phaser.Input.Keyboard.KeyCodes.S).on('down', () => {
-      this.attackMoveArmed = false;
-      this.moveTarget = null;
-      this.playerOrder = 'stop';
-      this.targetByEntityId.delete(this.player.unit.id);
+      if (this.pauseReasons.size > 0 || this.hasModalFocus()) return;
+      battleStore.request({ type: 'stop' });
     });
 
     // Touch HUD buttons dispatch this lightweight event. It enters the exact
@@ -1280,7 +1414,7 @@ export default class BattleScene extends Phaser.Scene {
     this.touchCastHandler = ((event: CustomEvent<{ slot?: string }>) => {
       const slot = event.detail?.slot;
       if (slot === 'Q' || slot === 'W' || slot === 'E' || slot === 'R') {
-        this.tryPlayerCast(slot);
+        battleStore.request({ type: 'cast', slot, aim: this.pointerToGround(this.input.activePointer) });
       }
     }) as EventListener;
     window.addEventListener('champs:cast-ability', this.touchCastHandler);
@@ -1298,6 +1432,13 @@ export default class BattleScene extends Phaser.Scene {
       this.tweens.timeScale = 1;
       this.slowMoActive = false;
       this.clearTransientVfx();
+      this.clearAimPreview();
+      this.aimPreview?.destroy();
+      this.aimPreview = undefined;
+      for (const marker of this.trapGraphics.values()) marker.destroy();
+      this.trapGraphics.clear();
+      this.traps = [];
+      this.scheduledCommands = [];
       this.pendingWaveSpawns = [];
       this.pendingImpacts = [];
       this.criticalTextureReadiness = [];
@@ -1308,26 +1449,30 @@ export default class BattleScene extends Phaser.Scene {
     this.input.mouse?.disableContextMenu();
 
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      if (this.pauseReasons.size > 0 || this.hasModalFocus()) return;
       const ground = this.pointerToGround(pointer);
+      if (this.armedAbility) {
+        const slot = this.armedAbility;
+        this.clearAimPreview();
+        battleStore.request({ type: 'cast', slot, aim: ground });
+        return;
+      }
       if (this.attackMoveArmed) {
         this.attackMoveArmed = false;
-        this.playerOrder = 'attack-move';
-        this.moveTarget = ground;
-        this.targetByEntityId.delete(this.player.unit.id);
+        battleStore.request({ type: 'attack-move-to', point: ground });
         return;
       }
 
       const clicked = this.entityAtPoint(ground, this.player.unit);
-      if (clicked) {
-        this.playerOrder = 'target';
-        this.moveTarget = null;
-        this.targetByEntityId.set(this.player.unit.id, clicked.unit.id);
-        return;
-      }
+      battleStore.request(clicked
+        ? { type: 'target-at', point: ground }
+        : { type: 'move-to', point: ground });
+    });
 
-      this.playerOrder = 'move';
-      this.moveTarget = ground;
-      this.targetByEntityId.delete(this.player.unit.id);
+    this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+      if (!this.armedAbility || this.pauseReasons.size > 0) return;
+      this.aimPoint = this.pointerToGround(pointer);
+      this.syncAimPreview();
     });
   }
 
@@ -1337,9 +1482,61 @@ export default class BattleScene extends Phaser.Scene {
    * ({@link screenToWorld}) to world units and re-apply {@link toScreen} to get
    * the flat pixel that all gameplay math (movement/aim/ranges) operates in.
    */
+  private hasModalFocus(): boolean {
+    const active = document.activeElement;
+    return Boolean(
+      document.querySelector('[aria-modal="true"]') ||
+      active instanceof HTMLInputElement ||
+      active instanceof HTMLSelectElement ||
+      active instanceof HTMLTextAreaElement ||
+      (active instanceof HTMLElement && active.closest('form')),
+    );
+  }
+
   private pointerToGround(pointer: Phaser.Input.Pointer): Vec2 {
     const world = screenToWorld({ x: pointer.worldX, y: pointer.worldY }, DEFAULT_PROJECTION);
     return toScreen(world);
+  }
+
+  private clientToGround(clientX: number, clientY: number): Vec2 {
+    const rect = this.game.canvas.getBoundingClientRect();
+    const canvasX = ((clientX - rect.left) / Math.max(1, rect.width)) * this.scale.gameSize.width;
+    const canvasY = ((clientY - rect.top) / Math.max(1, rect.height)) * this.scale.gameSize.height;
+    const projected = this.cameras.main.getWorldPoint(canvasX, canvasY);
+    return toScreen(screenToWorld(projected, DEFAULT_PROJECTION));
+  }
+
+  private clearAimPreview(): void {
+    this.armedAbility = null;
+    this.aimPoint = null;
+    this.aimPreview?.clear();
+  }
+
+  private syncAimPreview(): void {
+    const graphics = this.aimPreview;
+    const slot = this.armedAbility;
+    const aim = this.aimPoint;
+    if (!graphics || !slot || !aim || !this.player || this.ended) {
+      graphics?.clear();
+      return;
+    }
+    const ability = this.abilityBySlot(this.playerChampion, slot);
+    const origin = this.player.unit.pos;
+    const endpoint = this.resolveCastEndpoint(this.player, ability, aim);
+    const color = Phaser.Display.Color.HexStringToColor(this.playerChampion.accentColor).color;
+    const points: Phaser.Geom.Point[] = [];
+    const radius = ability.range * SCALE;
+    for (let index = 0; index <= 40; index += 1) {
+      const angle = (Math.PI * 2 * index) / 40;
+      const point = project({ x: origin.x + Math.cos(angle) * radius, y: origin.y + Math.sin(angle) * radius });
+      points.push(new Phaser.Geom.Point(point.x, point.y));
+    }
+    const from = project(origin);
+    const to = project(endpoint);
+    graphics.clear();
+    graphics.lineStyle(2, color, 0.7).strokePoints(points, true, false);
+    graphics.lineStyle(4, color, 0.9).lineBetween(from.x, from.y, to.x, to.y);
+    graphics.fillStyle(color, 0.3).fillCircle(to.x, to.y, Math.max(5, (ability.mechanics?.radius ?? 34) * SCALE));
   }
 
   private entityAtPoint(point: Vec2, source: Unit): Entity | undefined {
@@ -1369,9 +1566,40 @@ export default class BattleScene extends Phaser.Scene {
 
   update(_time: number, deltaMs: number) {
     if (this.ended || !this.sceneReady) return;
+    this.simulationAccumulator += Math.max(0, deltaMs / 1000);
+    this.ingestCommands();
+    if (this.pauseReasons.size > 0 || this.ended) {
+      this.simulationAccumulator = 0;
+      this.syncAimPreview();
+      return;
+    }
+
+    let steps = 0;
     for (const champion of this.champions) champion.movedThisFrame = false;
-    const dt = Math.min(MAX_FRAME_SECONDS, Math.max(0, deltaMs / 1000));
-    this.elapsed += dt;
+    while (
+      this.simulationAccumulator + Number.EPSILON >= SIMULATION_TICK_SECONDS &&
+      steps < MAX_STEPS_PER_RENDER &&
+      !this.ended
+    ) {
+      this.simulationAccumulator -= SIMULATION_TICK_SECONDS;
+      this.stepAuthority();
+      steps += 1;
+    }
+    this.refreshChampionLocomotionPoses();
+    this.syncVisuals();
+    this.syncTrapVisuals();
+    this.syncAimPreview();
+  }
+
+  private stepAuthority(): void {
+    const nextElapsed = (this.simulationTick + 1) * SIMULATION_TICK_SECONDS;
+    if (nextElapsed > this.rules.hardCapSeconds + Number.EPSILON) return;
+    this.simulationTick += 1;
+    this.elapsed = Math.min(this.rules.hardCapSeconds, this.simulationTick * SIMULATION_TICK_SECONDS);
+    const dt = SIMULATION_TICK_SECONDS;
+    this.processScheduledCommands();
+    if (this.ended || this.pauseReasons.size > 0) return;
+    this.tickRecall();
 
     this.advanceChampionLives();
     this.reviveInhibitors();
@@ -1381,15 +1609,19 @@ export default class BattleScene extends Phaser.Scene {
     for (const c of this.champions) {
       if (!c.bot) continue;
       tickCooldowns(c.bot.cds, dt);
-      c.bot.resource = Math.min(c.bot.maxResource, c.bot.resource + RESOURCE_REGEN * dt);
+      const botBlueRegen = c.bot.buffs.buffs.some((buff) => buff.kind === 'blue')
+        ? BUFF_EFFECTS.blue.resourceRegenPerSecond : 0;
+      c.bot.resource = Math.min(c.bot.maxResource, c.bot.resource + (RESOURCE_REGEN + botBlueRegen) * dt);
     }
 
     this.tickEconomy(dt);
     this.tickBuffsAndObjectives();
+    this.tickHeldWardenPolicy();
     this.processPurchases();
     this.maybeSpawnWaves();
     this.processWaveSpawns();
     this.processPendingImpacts();
+    this.tickTraps();
     this.refreshLivingSnapshot();
 
     this.updatePlayerMovement(dt);
@@ -1398,17 +1630,170 @@ export default class BattleScene extends Phaser.Scene {
     }
     this.updateMinions(dt);
     this.updateObjectiveMonsters();
+    this.updateJungleCamps(dt);
     for (const s of this.structures) {
       if (s.unit.kind === 'turret') this.updateTurret(s);
     }
     this.regenAndTick(dt);
-    this.refreshChampionLocomotionPoses();
-    this.syncVisuals();
     this.checkWinLose();
     if (!this.ended && this.elapsed >= this.nextHudAt) {
       this.pushHud();
       this.nextHudAt = this.elapsed + HUD_INTERVAL_SECONDS;
     }
+  }
+
+  private ingestCommands(): void {
+    for (const queued of battleStore.consumeQueuedCommands()) {
+      const command = queued.command;
+      if (command.type === 'aim-start' || command.type === 'aim-update') {
+        this.armedAbility = command.slot;
+        this.aimPoint = this.clientToGround(command.clientX, command.clientY);
+        this.syncAimPreview();
+        continue;
+      }
+      if (command.type === 'aim-cancel') {
+        if (!command.slot || this.armedAbility === command.slot) this.clearAimPreview();
+        continue;
+      }
+      if (command.type === 'arm-cast') {
+        this.armedAbility = command.slot;
+        this.aimPoint = this.pointerToGround(this.input.activePointer);
+        this.syncAimPreview();
+        continue;
+      }
+
+      const canonicalCommand: BattleCommand = command.type === 'aim-commit'
+        ? {
+            type: 'cast',
+            slot: command.slot,
+            aim: this.clientToGround(command.clientX, command.clientY),
+          }
+        : command.type === 'cast' && !command.aim
+          ? { type: 'cast', slot: command.slot, aim: this.pointerToGround(this.input.activePointer) }
+          : command;
+      if (command.type === 'aim-commit') this.clearAimPreview();
+
+      if (canonicalCommand.type === 'pause') {
+        battleStore.recordAuthorityCommand({ ...queued, command: canonicalCommand, targetTick: this.simulationTick });
+        this.pauseReasons.add(canonicalCommand.reason);
+        this.simulationAccumulator = 0;
+        this.clearAimPreview();
+        this.pushHud();
+      } else if (canonicalCommand.type === 'resume') {
+        battleStore.recordAuthorityCommand({ ...queued, command: canonicalCommand, targetTick: this.simulationTick });
+        this.pauseReasons.delete(canonicalCommand.reason);
+        this.simulationAccumulator = 0;
+        this.pushHud();
+      } else if (canonicalCommand.type === 'surrender') {
+        battleStore.recordAuthorityCommand({ ...queued, command: canonicalCommand, targetTick: this.simulationTick });
+        this.endAbandoned();
+        return;
+      } else {
+        const backlogTicks = Math.floor(this.simulationAccumulator / SIMULATION_TICK_SECONDS);
+        const targetTick = this.simulationTick + backlogTicks + 1;
+        const scheduled = { ...queued, command: canonicalCommand, targetTick };
+        this.scheduledCommands.push(scheduled);
+        battleStore.recordAuthorityCommand(scheduled);
+      }
+    }
+    this.scheduledCommands.sort((a, b) => a.targetTick - b.targetTick || a.sequence - b.sequence);
+  }
+
+  private processScheduledCommands(): void {
+    const due = this.scheduledCommands.filter((queued) => queued.targetTick <= this.simulationTick);
+    this.scheduledCommands = this.scheduledCommands.filter((queued) => queued.targetTick > this.simulationTick);
+    for (const queued of due) this.processCommand(queued.command);
+  }
+
+  private processCommand(command: BattleCommand): void {
+    if (this.pauseReasons.size > 0 || this.elapsed >= this.rules.hardCapSeconds) return;
+    if (command.type === 'purchase') {
+      this.processPurchase(command.itemId);
+    } else if (command.type === 'arm-cast') {
+      this.armedAbility = command.slot;
+      this.aimPoint = this.pointerToGround(this.input.activePointer);
+      this.syncAimPreview();
+    } else if (command.type === 'aim-start' || command.type === 'aim-update') {
+      this.armedAbility = command.slot;
+      this.aimPoint = this.clientToGround(command.clientX, command.clientY);
+      this.syncAimPreview();
+    } else if (command.type === 'aim-commit') {
+      const aim = this.clientToGround(command.clientX, command.clientY);
+      this.clearAimPreview();
+      this.tryPlayerCastAt(command.slot, aim);
+    } else if (command.type === 'aim-cancel') {
+      if (!command.slot || this.armedAbility === command.slot) this.clearAimPreview();
+    } else if (command.type === 'cast') {
+      this.cancelRecall('ability');
+      if (command.aim) this.tryPlayerCastAt(command.slot, command.aim);
+      else this.tryPlayerCast(command.slot);
+    } else if (command.type === 'attack-move') {
+      this.cancelRecall('movement');
+      this.attackMoveArmed = true;
+    } else if (command.type === 'move-to') {
+      this.cancelRecall('movement');
+      this.attackMoveArmed = false;
+      this.playerOrder = 'move';
+      this.moveTarget = { ...command.point };
+      this.targetByEntityId.delete(this.player.unit.id);
+    } else if (command.type === 'target-at') {
+      this.cancelRecall('movement');
+      this.attackMoveArmed = false;
+      const target = this.entityAtPoint(command.point, this.player.unit);
+      if (target) {
+        this.playerOrder = 'target';
+        this.moveTarget = null;
+        this.targetByEntityId.set(this.player.unit.id, target.unit.id);
+      } else {
+        this.playerOrder = 'move';
+        this.moveTarget = { ...command.point };
+        this.targetByEntityId.delete(this.player.unit.id);
+      }
+    } else if (command.type === 'attack-move-to') {
+      this.cancelRecall('movement');
+      this.attackMoveArmed = false;
+      this.playerOrder = 'attack-move';
+      this.moveTarget = { ...command.point };
+      this.targetByEntityId.delete(this.player.unit.id);
+    } else if (command.type === 'stop') {
+      this.cancelRecall('movement');
+      this.attackMoveArmed = false;
+      this.moveTarget = null;
+      this.playerOrder = 'stop';
+      this.targetByEntityId.delete(this.player.unit.id);
+    } else if (command.type === 'recall') {
+      this.startRecall();
+    } else if (command.type === 'surrender') {
+      this.endAbandoned();
+    } else if (command.type === 'use-warden') {
+      this.useWardenCharge('ally');
+    } else if (command.type === 'skip-learning') {
+      this.learning = skipCurrentLearningStep(this.learning);
+    }
+  }
+
+  private startRecall() {
+    if (!isChampionPresent(this.player.life!) || this.inBase(this.player.unit, 'ally')) return;
+    this.recallStartedAt = this.elapsed;
+    this.recallCancellation = '';
+    this.playerOrder = 'stop';
+    this.moveTarget = null;
+  }
+
+  private cancelRecall(reason: string) {
+    if (this.recallStartedAt === null) return;
+    this.recallStartedAt = null;
+    this.recallCancellation = reason;
+  }
+
+  private tickRecall() {
+    if (this.recallStartedAt === null || this.elapsed - this.recallStartedAt < 6) return;
+    this.player.unit.pos = { ...toScreen(BASE_POSITIONS.ally) };
+    this.recallStartedAt = null;
+  }
+
+  private recordLearning(action: LearningAction) {
+    if (this.matchKind === 'tutorial') this.learning = recordLearningAction(this.learning, action);
   }
 
   private blueBuffRegen(): number {
@@ -1440,21 +1825,35 @@ export default class BattleScene extends Phaser.Scene {
       }
       if (!this.inBase(entity.unit, bot.side) || !isChampionPresent(entity.life!)) continue;
       const item = recommendPurchase(bot.champion.role, bot.progress.gold, bot.ownedItems);
-      if (!item || bot.progress.gold < item.cost) continue;
-      bot.progress.gold -= item.cost;
-      bot.ownedItems.push(item.id);
+      if (!item) continue;
+      const purchase = attemptPurchase({
+        gold: bot.progress.gold,
+        items: bot.ownedItems,
+        inShop: true,
+      }, item.id);
+      if (!purchase.accepted) continue;
+      bot.progress.gold = purchase.gold;
+      bot.ownedItems = purchase.items;
       this.applyChampionStats(entity, bot.side);
     }
   }
 
   private tickBuffsAndObjectives() {
     expireBuffs(this.playerBuffs, this.elapsed);
+    for (const champion of this.champions) {
+      if (champion.bot) expireBuffs(champion.bot.buffs, this.elapsed);
+    }
     const allyWasActive = this.allyBaron.active;
     const enemyWasActive = this.enemyBaron.active;
     this.allyBaron = expireBaronBuff(this.allyBaron, this.elapsed);
     this.enemyBaron = expireBaronBuff(this.enemyBaron, this.elapsed);
     if (allyWasActive !== this.allyBaron.active) this.applyTeamChampionStats('ally');
     if (enemyWasActive !== this.enemyBaron.active) this.applyTeamChampionStats('enemy');
+    for (const runtime of this.camps) {
+      if (runtime.members.length === 0 && this.elapsed >= runtime.nextSpawnAt) {
+        runtime.members = this.spawnCamp(runtime.camp);
+      }
+    }
     if (!this.rules.objectives.enabled) return;
 
     for (const runtime of this.objectives) {
@@ -1478,21 +1877,27 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   private processPurchases() {
-    const requests = battleStore.consumePurchases();
-    if (requests.length === 0) return;
-    let changed = false;
-    for (const id of requests) {
-      const item = getItemById(id);
-      if (!item) continue;
-      if (this.ownedItems.includes(id)) continue;
-      if (this.playerProgress.gold < item.cost) continue;
-      // Only allowed in base (fountain proximity), matching the shop gating.
-      if (!this.inBase(this.player.unit, 'ally')) continue;
-      this.playerProgress.gold -= item.cost;
-      this.ownedItems.push(id);
-      changed = true;
-    }
-    if (changed) this.applyChampionStats(this.player, 'ally');
+    // Commands are drained before the simulation tick so paused matches can
+    // still resume without advancing authoritative time.
+  }
+
+  private processPurchase(id: string) {
+    const result = attemptPurchase({
+      gold: this.playerProgress.gold,
+      items: this.ownedItems,
+      inShop: this.inBase(this.player.unit, 'ally'),
+    }, id);
+    this.lastPurchaseFeedback = {
+      itemId: id,
+      accepted: result.accepted,
+      ...(!result.accepted ? { reason: result.reason } : {}),
+      sequence: ++this.purchaseFeedbackSequence,
+    };
+    if (!result.accepted) return;
+    this.playerProgress.gold = result.gold;
+    this.ownedItems = result.items;
+    this.recordLearning('recall-shop');
+    this.applyChampionStats(this.player, 'ally');
   }
 
   /** Whether a champion is close enough to its fountain to shop. */
@@ -1521,6 +1926,7 @@ export default class BattleScene extends Phaser.Scene {
         comp.forEach((type, i) => {
           this.pendingWaveSpawns.push({
             dueAt: this.elapsed + (i * this.rules.waves.unitStaggerMilliseconds) / 1000,
+            insertionOrder: this.authorityInsertionOrder++,
             type,
             team,
             lane,
@@ -1539,7 +1945,7 @@ export default class BattleScene extends Phaser.Scene {
       const key = `${minion.rift.team}:${minion.rift.lane}`;
       liveByBucket.set(key, (liveByBucket.get(key) ?? 0) + 1);
     }
-    for (const spawn of partitioned.due) {
+    for (const spawn of partitioned.due.sort((a, b) => a.dueAt - b.dueAt || a.insertionOrder - b.insertionOrder)) {
       const key = `${spawn.team}:${spawn.lane}`;
       const live = liveByBucket.get(key) ?? 0;
       // The population cap protects frame time, but scheduled wave members are
@@ -1587,6 +1993,7 @@ export default class BattleScene extends Phaser.Scene {
       shadow,
       heightPx: MINION_HEIGHT_PX,
       stunned: 0,
+      effects: createEffectState(),
       rift,
       path: laneWaypoints(lane, team).map(toScreen),
       minionType: type,
@@ -1600,6 +2007,28 @@ export default class BattleScene extends Phaser.Scene {
 
   private regenAndTick(dt: number) {
     for (const e of this.allEntities) {
+      expireEffects(e.effects, this.elapsed);
+      const pull = activePull(e.effects, this.elapsed);
+      if (pull && !e.unit.dead) {
+        const pullDistance = distance(e.unit.pos, pull.destination);
+        if (pullDistance > 1) {
+          const travel = Math.min(pullDistance, pull.speed * dt);
+          e.unit.pos.x = this.clampX(e.unit.pos.x + ((pull.destination.x - e.unit.pos.x) / pullDistance) * travel);
+          e.unit.pos.y = this.clampY(e.unit.pos.y + ((pull.destination.y - e.unit.pos.y) / pullDistance) * travel);
+        }
+      }
+      for (const burn of [...e.effects.burns]) {
+        burn.accumulator += burn.rawDamagePerSecond * dt;
+        const wholeDamage = Math.floor(burn.accumulator);
+        const source = this.entityById.get(burn.sourceId);
+        if (source && wholeDamage > 0 && this.isEntityDamageable(e)) {
+          burn.accumulator -= wholeDamage;
+          this.applyTargetedDamage(source, e, wholeDamage, 0xe8703a, {
+            ability: true,
+            periodic: true,
+          });
+        }
+      }
       if (e.stunned > 0) e.stunned = Math.max(0, e.stunned - dt);
       advanceAttackCooldown(e.unit, dt);
     }
@@ -1723,8 +2152,9 @@ export default class BattleScene extends Phaser.Scene {
       case 'castR': {
         const slot = intent.slice(4) as CooldownKey;
         const ability = this.abilityBySlot(state.champion, slot);
-        const aim =
-          ability.behavior === 'heal' || ability.behavior === 'buff'
+        const aim = ability.mechanics?.targetPolicy === 'aimed-ally'
+          ? this.preferredAllyAim(bot, ability)
+          : ability.behavior === 'heal' || ability.behavior === 'buff'
             ? { ...u.pos }
             : target?.pos;
         if (aim) this.botCast(bot, slot, aim);
@@ -1880,7 +2310,43 @@ export default class BattleScene extends Phaser.Scene {
     const targetEntity = this.entityForUnit(target);
     if (!targetEntity || !this.isEntityDamageable(targetEntity)) return;
     let ad = u.ad;
-    if (attacker === this.player && this.playerBuffs.buffs.some((b) => b.kind === 'red')) {
+    if (attacker.champion?.id === 'duskarrow') {
+      const key = `duskarrow-distance:${u.id}`;
+      if ((this.passiveCounters.get(key) ?? 0) >= 300) ad += 18;
+      this.passiveCounters.set(key, 0);
+    }
+    if (attacker.champion?.id === 'nightveil') {
+      const key = `nightveil-dash:${u.id}`;
+      if ((this.internalCooldowns.get(key) ?? 0) > this.elapsed) {
+        ad += 40;
+        this.internalCooldowns.set(key, 0);
+      }
+    }
+    if (attacker.champion?.id === 'ashborne') {
+      const key = `ashborne:${u.id}:${target.id}`;
+      const expiryKey = `${key}:expires`;
+      const prior = (this.internalCooldowns.get(expiryKey) ?? 0) > this.elapsed
+        ? this.passiveCounters.get(key) ?? 0 : 0;
+      const count = prior + 1;
+      this.internalCooldowns.set(expiryKey, this.elapsed + 4);
+      if (count >= 3) {
+        ad += 15;
+        this.passiveCounters.set(key, 0);
+      } else this.passiveCounters.set(key, count);
+    }
+    const attackerItems = attacker === this.player ? this.ownedItems : attacker.bot?.ownedItems ?? [];
+    if (attacker === this.player) {
+      this.cancelRecall('attack');
+    }
+    if (
+      attackerItems.includes('sunfireGreatblade') &&
+      this.elapsed - (this.sunfireHitAt.get(`${u.id}:${target.id}`) ?? Number.NEGATIVE_INFINITY) >= 1
+    ) {
+      ad += 15;
+      this.sunfireHitAt.set(`${u.id}:${target.id}`, this.elapsed);
+    }
+    const attackerBuffs = attacker === this.player ? this.playerBuffs : attacker.bot?.buffs;
+    if (attackerBuffs?.buffs.some((buff) => buff.kind === 'red')) {
       ad += BUFF_EFFECTS.red.bonusDamage;
     }
     if (attacker.champion) {
@@ -1907,17 +2373,87 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   private tryPlayerCast(slot: CooldownKey) {
-    if (this.ended || !isChampionPresent(this.player.life!) || this.player.stunned > 0) return;
+    if (
+      this.ended || this.pauseReasons.size > 0 || this.hasModalFocus() ||
+      !isChampionPresent(this.player.life!) || this.player.stunned > 0
+    ) return;
+    this.cancelRecall('ability');
     const pointer = this.input.activePointer;
-    // Aim is taken from the pointer, re-mapped through the projection to the
-    // flat gameplay plane so cursor-aimed abilities land where intended.
-    const aim = this.pointerToGround(pointer);
+    this.tryPlayerCastAt(slot, this.pointerToGround(pointer));
+  }
+
+  private tryPlayerCastAt(slot: CooldownKey, aim: Vec2) {
+    if (
+      this.ended || this.pauseReasons.size > 0 || this.hasModalFocus() ||
+      !isChampionPresent(this.player.life!) || this.player.stunned > 0
+    ) return;
+    this.cancelRecall('ability');
+    // Aim has already been converted to the flat authoritative plane.
     this.castAbility(this.player, slot, aim, this.playerChampion, this.playerCds, () => {
       const cost = this.abilityBySlot(this.playerChampion, slot).cost;
       if (this.playerResource < cost || this.playerCds[slot] > 0) return false;
       this.playerResource -= cost;
       return true;
     });
+  }
+
+  private aimedAlly(caster: Entity, ability: Ability, aim: Vec2): Entity | undefined {
+    return this.champions
+      .filter(
+        (ally) =>
+          ally.unit.team === caster.unit.team &&
+          isChampionPresent(ally.life!) &&
+          distance(ally.unit.pos, caster.unit.pos) <= ability.range * SCALE &&
+          distance(ally.unit.pos, aim) <= 90 * SCALE,
+      )
+      .sort(
+        (a, b) =>
+          distance(a.unit.pos, aim) - distance(b.unit.pos, aim) ||
+          a.unit.id.localeCompare(b.unit.id),
+      )[0];
+  }
+
+  private preferredAllyAim(caster: Entity, ability: Ability): Vec2 | undefined {
+    return this.champions
+      .filter(
+        (ally) =>
+          ally.unit.team === caster.unit.team &&
+          isChampionPresent(ally.life!) &&
+          distance(ally.unit.pos, caster.unit.pos) <= ability.range * SCALE,
+      )
+      .sort(
+        (a, b) =>
+          a.unit.hp / Math.max(1, a.unit.maxHp) - b.unit.hp / Math.max(1, b.unit.maxHp) ||
+          a.unit.id.localeCompare(b.unit.id),
+      )[0]?.unit.pos;
+  }
+
+  private triggerCastPassive(caster: Entity, champion: Champion) {
+    const side = caster.unit.team;
+    const candidates = this.champions
+      .filter(
+        (ally) => ally.unit.team === side && isChampionPresent(ally.life!) &&
+          distance(ally.unit.pos, caster.unit.pos) <= (champion.id === 'dawnsong' ? 600 : 650) * SCALE,
+      )
+      .sort(
+        (a, b) => a.unit.hp / a.unit.maxHp - b.unit.hp / b.unit.maxHp || a.unit.id.localeCompare(b.unit.id),
+      );
+    const target = candidates[0];
+    if (!target) return;
+    if (champion.id === 'dawnsong') {
+      const key = `dawnsong-passive:${caster.unit.id}`;
+      if ((this.internalCooldowns.get(key) ?? 0) <= this.elapsed) {
+        applyHeal(target.unit, 35);
+        this.internalCooldowns.set(key, this.elapsed + 3);
+      }
+    } else if (champion.id === 'wardlight') {
+      const key = `wardlight-passive:${caster.unit.id}`;
+      const count = (this.passiveCounters.get(key) ?? 0) + 1;
+      if (count >= 3) {
+        applyHeal(target.unit, 45);
+        this.passiveCounters.set(key, 0);
+      } else this.passiveCounters.set(key, count);
+    }
   }
 
   private botCast(bot: Entity, slot: CooldownKey, aim: Vec2) {
@@ -1946,6 +2482,8 @@ export default class BattleScene extends Phaser.Scene {
     let cdr = totalModifiers(itemIds).cooldownReduction;
     if (caster === this.player && this.playerBuffs.buffs.some((b) => b.kind === 'blue')) {
       cdr += BUFF_EFFECTS.blue.cooldownReduction;
+    } else if (caster.bot?.buffs.buffs.some((buff) => buff.kind === 'blue')) {
+      cdr += BUFF_EFFECTS.blue.cooldownReduction;
     }
     return base * (1 - Math.min(0.5, cdr));
   }
@@ -1959,11 +2497,29 @@ export default class BattleScene extends Phaser.Scene {
     spend: () => boolean,
   ) {
     const ability = this.abilityBySlot(champion, slot);
-    if (!spend()) return;
-    startCooldown(cds, slot, this.cooldownFor(caster, champion, slot));
-    const effect = resolveAbility(ability);
-    const color = Phaser.Display.Color.HexStringToColor(champion.accentColor).color;
     const origin = { ...caster.unit.pos };
+    const aimedAlly = ability.mechanics?.targetPolicy === 'aimed-ally'
+      ? this.aimedAlly(caster, ability, aim)
+      : undefined;
+    const executeTarget = ability.mechanics?.targetPolicy === 'lowest-hp-ratio-hostile'
+      ? lowestHpRatioHostile(
+          caster.unit,
+          this.champions.filter((entity) => this.isEntityDamageable(entity)).map((entity) => entity.unit),
+          ability.range * SCALE,
+        )
+      : undefined;
+    if (ability.mechanics?.targetPolicy === 'aimed-ally' && !aimedAlly) return;
+    if (ability.mechanics?.targetPolicy === 'lowest-hp-ratio-hostile' && !executeTarget) return;
+    const resolvedAim = aimedAlly?.unit.pos ?? executeTarget?.pos ?? aim;
+    const endpoint = this.resolveCastEndpoint(caster, ability, resolvedAim);
+    if (executeTarget && distance(endpoint, executeTarget.pos) > 50 * SCALE) return;
+    if (!spend()) return;
+    if (caster === this.player) this.recordLearning(`cast-${slot}` as LearningAction);
+    startCooldown(cds, slot, this.cooldownFor(caster, champion, slot));
+    this.triggerCastPassive(caster, champion);
+    let effect = resolveAbility(ability);
+    if (ability.mechanics?.dash) effect = { ...effect, dashes: true };
+    const color = Phaser.Display.Color.HexStringToColor(champion.accentColor).color;
 
     this.setChampionPose(
       caster,
@@ -1974,45 +2530,116 @@ export default class BattleScene extends Phaser.Scene {
     audio.playChampionCue(champion.id, slot, this.audioOptionsFor(origin));
     this.castFlare(caster, color, slot === 'R');
 
-    const dir = this.clampAim(origin, aim, ability.range * SCALE);
-
     if (effect.dashes) {
-      caster.unit.pos.x = this.clampX(dir.x);
-      caster.unit.pos.y = this.clampY(dir.y);
+      caster.unit.pos.x = endpoint.x;
+      caster.unit.pos.y = endpoint.y;
+      if (champion.id === 'nightveil') this.internalCooldowns.set(`nightveil-dash:${caster.unit.id}`, this.elapsed + 3);
       this.drawDashTrail(origin, caster.unit.pos, color);
     }
+    const alliesInRange = this.champions
+      .filter(
+        (ally) => ally.unit.team === caster.unit.team && isChampionPresent(ally.life!) &&
+          distance(ally.unit.pos, caster.unit.pos) <= ability.range * SCALE,
+      )
+      .sort(
+        (a, b) => a.unit.hp / a.unit.maxHp - b.unit.hp / b.unit.maxHp || a.unit.id.localeCompare(b.unit.id),
+      );
+    if ((champion.id === 'dawnsong' || champion.id === 'wardlight') && slot === 'W') {
+      const target = aimedAlly;
+      if (!target) return;
+      const healed = applyHeal(target.unit, (ability.mechanics?.healing ?? 180) + (caster.abilityPower ?? 0) * (ability.mechanics?.apRatio ?? 0.4));
+      this.floatingDamage(target.unit.pos, healed, 0x3ad16a, '+');
+      effect = { ...effect, heal: 0 };
+    } else if (champion.id === 'dawnsong' && slot === 'R') {
+      for (const ally of alliesInRange) {
+        applyHeal(ally.unit, (ability.mechanics?.healing ?? 180) + (caster.abilityPower ?? 0) * (ability.mechanics?.apRatio ?? 0.4));
+        applyArmor(ally.effects, `dawnsong-R:${caster.unit.id}`, ability.mechanics?.armor ?? 20, this.elapsed + (ability.mechanics?.duration ?? 4));
+      }
+      effect = { ...effect, heal: 0 };
+    }
+    if (champion.id === 'dawnsong' && slot === 'E') {
+      const target = aimedAlly;
+      if (!target) return;
+      applyShield(target.effects, `dawnsong-E:${caster.unit.id}`, ability.mechanics?.shield ?? 140, this.elapsed + (ability.mechanics?.duration ?? 3));
+    } else if (champion.id === 'wardlight' && slot === 'R') {
+      for (const ally of alliesInRange) {
+        applyShield(ally.effects, `wardlight-R:${caster.unit.id}`, ability.mechanics?.shield ?? 160, this.elapsed + (ability.mechanics?.duration ?? 4));
+        applyMovementBuff(ally.effects, `wardlight-R:${caster.unit.id}`, ability.mechanics?.movementPercent ?? 0.15, this.elapsed + (ability.mechanics?.duration ?? 4));
+      }
+    } else if (champion.id === 'thornwarden' && slot === 'W') {
+      applyArmor(caster.effects, `thornwarden-W:${caster.unit.id}`, ability.mechanics?.armor ?? 30, this.elapsed + (ability.mechanics?.duration ?? 3));
+      cleanseSlows(caster.effects);
+    }
+
     if (effect.heal > 0) {
       const healed = applyHeal(caster.unit, effect.heal);
       this.floatingDamage(caster.unit.pos, healed, 0x3ad16a, '+');
-      // Cosmetic SVG heal sparkle over the healed caster.
       this.pulse(caster.container, 0x3ad16a);
     }
     if (effect.buffDuration > 0 && effect.damage === 0 && effect.heal === 0) {
+      if (champion.id === 'nightveil' && slot === 'W') {
+        this.internalCooldowns.set(`nightveil-smoke:${caster.unit.id}`, this.elapsed + 3);
+      }
+      if (champion.id === 'ironhold' && slot === 'W') {
+        applyShield(caster.effects, 'ironhold-W', caster.unit.maxHp * 0.12, this.elapsed + 3);
+      }
       this.pulse(caster.container, color);
     }
+
+    if (champion.id === 'duskarrow' && slot === 'W') {
+      this.traps.push({
+        id: `trap-${caster.unit.id}-${this.authorityInsertionOrder++}`,
+        source: { ...caster.unit, pos: { ...origin } },
+        point: { ...endpoint },
+        radius: (ability.mechanics?.radius ?? 90) * SCALE,
+        rawDamage: abilityDamage(ability.damage, caster.abilityPower ?? 0),
+        color,
+        expiresAt: this.elapsed + (ability.mechanics?.trapDuration ?? 4),
+        slowPercent: ability.mechanics?.slowPercent ?? 0.3,
+        slowDuration: ability.mechanics?.duration ?? 2,
+      });
+      return;
+    }
+
     if (effect.damage > 0) {
-      const center = dir;
-      const hitRadius = effect.area ? effect.radius * SCALE : effect.dashes ? 40 : 34;
+      const itemIds = caster === this.player ? this.ownedItems : caster.bot?.ownedItems ?? [];
+      const hitRadius = effect.area ? (ability.mechanics?.radius ?? effect.radius) * SCALE : effect.dashes ? 40 : 34;
       const damage = abilityDamage(effect.damage, caster.abilityPower ?? 0);
       const dueAt = effect.dashes
         ? this.elapsed
-        : projectileImpactTime(this.elapsed, origin, center, SKILLSHOT_PROJECTILE_SPEED);
-      if (effect.area) this.drawAoe(center, hitRadius, color);
+        : projectileImpactTime(this.elapsed, origin, endpoint, SKILLSHOT_PROJECTILE_SPEED);
+      if (effect.area) this.drawAoe(endpoint, hitRadius, color);
       else if (!effect.dashes) {
-        this.drawProjectile(origin, center, color, Math.max(1, (dueAt - this.elapsed) * 1000));
+        this.drawProjectile(origin, endpoint, color, Math.max(1, (dueAt - this.elapsed) * 1000));
       }
 
       this.pendingImpacts.push({
         dueAt,
+        insertionOrder: this.authorityInsertionOrder++,
         source: { ...caster.unit, pos: { ...origin } },
-        point: { ...center },
+        ...(executeTarget
+          ? { targetId: executeTarget.id }
+          : ability.mechanics?.lineWidth
+            ? {
+                line: {
+                  origin: { ...origin },
+                  endpoint: { ...endpoint },
+                  halfWidth: ability.mechanics.lineWidth * SCALE,
+                  subsequentDamageMultiplier: ability.mechanics.piercingDamageMultiplier ?? 1,
+                },
+              }
+            : { point: { ...endpoint } }),
         radius: hitRadius,
         rawDamage: damage,
         color,
         stunDuration: effect.stunDuration,
+        slowPercent: ability.mechanics?.slowPercent,
+        slowDuration: ability.mechanics?.duration,
+        pullDuration: ability.mechanics?.pullDuration,
         ability: true,
         ultimate: slot === 'R',
-        singleTarget: !effect.area,
+        singleTarget: executeTarget ? true : ability.mechanics?.lineWidth ? false : !effect.area,
+        chronoProc: itemIds.includes('chronoCore'),
       });
     }
   }
@@ -2029,12 +2656,30 @@ export default class BattleScene extends Phaser.Scene {
     };
   }
 
-  private clampAim(origin: Vec2, aim: Vec2, range: number): Vec2 {
+  private resolveCastEndpoint(caster: Entity, ability: Ability, aim: Vec2): Vec2 {
+    const origin = caster.unit.pos;
+    const range = ability.range * SCALE;
+    if (ability.behavior === 'dash' || ability.mechanics?.dash) {
+      const blockers = this.structures
+        .filter((structure) => !structure.unit.dead)
+        .map((structure) => ({ id: structure.unit.id, pos: structure.unit.pos, radius: 52 * SCALE }));
+      return resolveDashEndpoint(
+        origin,
+        aim,
+        range,
+        { minX: OFF_X, maxX: OFF_X + WORLD_SIZE * SCALE, minY: OFF_Y, maxY: OFF_Y + WORLD_SIZE * SCALE },
+        blockers,
+        ability.mechanics?.direction === 'away-from-aim',
+      );
+    }
     const dx = aim.x - origin.x;
     const dy = aim.y - origin.y;
     const d = Math.hypot(dx, dy) || 1;
-    if (d <= range) return { x: aim.x, y: aim.y };
-    return { x: origin.x + (dx / d) * range, y: origin.y + (dy / d) * range };
+    if (d <= range) return { x: this.clampX(aim.x), y: this.clampY(aim.y) };
+    return {
+      x: this.clampX(origin.x + (dx / d) * range),
+      y: this.clampY(origin.y + (dy / d) * range),
+    };
   }
 
   private clampX(x: number): number {
@@ -2048,10 +2693,28 @@ export default class BattleScene extends Phaser.Scene {
   private moveUnitToward(u: Unit, goal: Vec2, dt: number) {
     const d = distance(u.pos, goal);
     if (d < 1) return;
-    const travel = Math.min(d, u.moveSpeed * dt);
+    const entity = this.entityForUnit(u);
+    if (entity && activePull(entity.effects, this.elapsed)) return;
+    const smokeMultiplier = entity?.champion?.id === 'nightveil' &&
+      (this.internalCooldowns.get(`nightveil-smoke:${u.id}`) ?? 0) > this.elapsed ? 1.2 : 1;
+    const huntingBonus = entity?.champion?.id === 'grimtrail' && this.champions.some(
+      (candidate) => areHostile(u.team, candidate.unit.team) && !candidate.unit.dead &&
+        candidate.unit.hp / candidate.unit.maxHp < 0.35 && distance(u.pos, candidate.unit.pos) <= 700 * SCALE,
+    ) ? 25 * SCALE : 0;
+    const effectState = entity?.effects;
+    const travel = Math.min(
+      d,
+      (u.moveSpeed * smokeMultiplier * (1 + (effectState ? strongestMovementBuff(effectState, this.elapsed) : 0)) + huntingBonus) *
+        (1 - (effectState ? strongestSlow(effectState, this.elapsed) : 0)) * dt,
+    );
     u.pos.x = this.clampX(u.pos.x + ((goal.x - u.pos.x) / d) * travel);
     u.pos.y = this.clampY(u.pos.y + ((goal.y - u.pos.y) / d) * travel);
     const champion = this.entityForUnit(u);
+    if (champion === this.player && travel > 0) this.recordLearning('move');
+    if (champion?.champion?.id === 'duskarrow' && travel > 0) {
+      const key = `duskarrow-distance:${u.id}`;
+      this.passiveCounters.set(key, (this.passiveCounters.get(key) ?? 0) + travel / SCALE);
+    }
     if (champion?.champion && travel > 0) champion.movedThisFrame = true;
   }
 
@@ -2076,7 +2739,9 @@ export default class BattleScene extends Phaser.Scene {
         entity.stunned = 0;
         entity.container.setVisible(true).setAlpha(1);
         entity.shadow?.setVisible(true).setAlpha(0.32);
+        if (entity === this.player) this.playerResource = this.playerMaxResource;
         if (entity.bot) {
+          entity.bot.resource = entity.bot.maxResource;
           entity.bot.pushIndex = 0;
           entity.bot.currentIntent = 'approach';
           entity.bot.pendingIntent = null;
@@ -2113,6 +2778,52 @@ export default class BattleScene extends Phaser.Scene {
     }
   }
 
+  private tickTraps(): void {
+    const active: TrapRuntime[] = [];
+    for (const trap of this.traps.sort((a, b) => a.id.localeCompare(b.id))) {
+      if (trap.expiresAt <= this.elapsed) continue;
+      const target = this.allEntities
+        .filter(
+          (candidate) =>
+            candidate.unit.kind !== 'turret' &&
+            candidate.unit.kind !== 'nexus' &&
+            this.canDamageTarget(trap.source, candidate) &&
+            distance(candidate.unit.pos, trap.point) <= trap.radius,
+        )
+        .sort((a, b) => distance(a.unit.pos, trap.point) - distance(b.unit.pos, trap.point) || a.unit.id.localeCompare(b.unit.id))[0];
+      if (!target) {
+        active.push(trap);
+        continue;
+      }
+      this.applyTargetedDamage(trap.source, target, trap.rawDamage, trap.color, {
+        ability: true,
+        slowPercent: trap.slowPercent,
+        slowDuration: trap.slowDuration,
+      });
+    }
+    this.traps = active;
+  }
+
+  private syncTrapVisuals(): void {
+    const activeIds = new Set(this.traps.map((trap) => trap.id));
+    for (const [id, marker] of this.trapGraphics) {
+      if (activeIds.has(id)) continue;
+      marker.destroy();
+      this.trapGraphics.delete(id);
+    }
+    for (const trap of this.traps) {
+      const point = project(trap.point);
+      let marker = this.trapGraphics.get(trap.id);
+      if (!marker) {
+        marker = this.add.circle(point.x, point.y, Math.max(8, trap.radius), trap.color, 0.16)
+          .setStrokeStyle(2, trap.color, 0.9)
+          .setDepth(VFX_DEPTH - 2);
+        this.trapGraphics.set(trap.id, marker);
+      }
+      marker.setPosition(point.x, point.y).setVisible(true);
+    }
+  }
+
   private spawnObjective(id: EpicMonster): Entity {
     const profile = monsterStats(id);
     const pit = EPIC_PITS.find((candidate) => candidate.id === id)!;
@@ -2136,11 +2847,88 @@ export default class BattleScene extends Phaser.Scene {
       shadow,
       heightPx: 10,
       stunned: 0,
+      effects: createEffectState(),
       objectiveId: id,
     };
     this.attachHpBar(entity, size.height + 8);
     this.addEntity(entity);
     return entity;
+  }
+
+  private spawnCamp(camp: Camp): Entity[] {
+    const center = toScreen(camp.pos);
+    const tintByType: Record<Camp['type'], number> = {
+      blue: 0x4f8fff,
+      red: 0xe85b45,
+      raptors: 0xcf7b45,
+      wolves: 0x9eb7c9,
+      gromp: 0x69a85b,
+      krugs: 0xb99b78,
+      scuttle: 0x65d6c4,
+    };
+    return camp.members.map((member, index) => {
+      const angle = camp.members.length === 1 ? 0 : (Math.PI * 2 * index) / camp.members.length;
+      const spread = camp.members.length === 1 ? 0 : 42 * SCALE;
+      const pos = {
+        x: center.x + Math.cos(angle) * spread,
+        y: center.y + Math.sin(angle) * spread,
+      };
+      const unit = this.makeUnit(`camp-${camp.id}-${member.key}`, 'monster', 'neutral', pos, {
+        maxHp: member.hp,
+        ad: member.ad,
+        armor: member.armor,
+        attackRange: 160 * SCALE,
+        attackSpeed: 0.7,
+        moveSpeed: 260 * SCALE,
+      });
+      const { key, size } = this.sprites.ensure({ kind: 'marker', variant: 'jungle' });
+      const body = this.makeBillboard(key, size);
+      body.setTint(tintByType[camp.type]).setScale(member.scale);
+      const container = this.add.container(pos.x, pos.y, [body]);
+      const shadow = this.makeShadow(size.width * 0.8 * member.scale);
+      const entity: Entity = {
+        unit,
+        container,
+        body,
+        shadow,
+        heightPx: 5,
+        stunned: 0,
+        effects: createEffectState(),
+        campId: camp.id,
+        campMemberKey: member.key,
+      };
+      this.attachHpBar(entity, size.height * member.scale + 7);
+      this.addEntity(entity);
+      return entity;
+    });
+  }
+
+  private campMemberHome(runtime: CampRuntime, member: Entity): Vec2 {
+    const center = toScreen(runtime.camp.pos);
+    const index = Math.max(0, runtime.camp.members.findIndex((candidate) => candidate.key === member.campMemberKey));
+    const angle = runtime.camp.members.length === 1 ? 0 : (Math.PI * 2 * index) / runtime.camp.members.length;
+    const spread = runtime.camp.members.length === 1 ? 0 : 42 * SCALE;
+    return { x: center.x + Math.cos(angle) * spread, y: center.y + Math.sin(angle) * spread };
+  }
+
+  private updateJungleCamps(dt: number) {
+    for (const runtime of this.camps) {
+      for (const campEntity of runtime.members) {
+        if (campEntity.unit.dead || campEntity.stunned > 0) continue;
+        const home = this.campMemberHome(runtime, campEntity);
+        const target = this.findTarget(campEntity.unit, 420 * SCALE);
+        if (target && distance(target.pos, toScreen(runtime.camp.pos)) <= 620 * SCALE) {
+          if (distance(campEntity.unit.pos, target.pos) <= campEntity.unit.attackRange) {
+            this.tryBasicAttackUnit(campEntity, target);
+          } else this.moveUnitToward(campEntity.unit, target.pos, dt);
+        } else if (distance(campEntity.unit.pos, home) > 4) {
+          this.moveUnitToward(campEntity.unit, home, dt);
+          applyHeal(campEntity.unit, campEntity.unit.maxHp * 0.12 * dt);
+        } else {
+          applyHeal(campEntity.unit, campEntity.unit.maxHp * 0.08 * dt);
+        }
+      }
+    }
   }
 
   private updateObjectiveMonsters() {
@@ -2180,6 +2968,7 @@ export default class BattleScene extends Phaser.Scene {
     const dueAt = projectileImpactTime(this.elapsed, source.unit.pos, target.pos, speed);
     this.pendingImpacts.push({
       dueAt,
+      insertionOrder: this.authorityInsertionOrder++,
       source: { ...source.unit, pos: { ...source.unit.pos } },
       targetId: target.id,
       radius: 0,
@@ -2189,6 +2978,7 @@ export default class BattleScene extends Phaser.Scene {
       ability: false,
       ultimate: false,
       singleTarget: true,
+      chronoProc: false,
     });
     return dueAt;
   }
@@ -2196,12 +2986,52 @@ export default class BattleScene extends Phaser.Scene {
   private processPendingImpacts() {
     const partitioned = partitionImpacts(this.pendingImpacts, this.elapsed);
     this.pendingImpacts = partitioned.pending;
-    for (const impact of partitioned.due) {
+    for (const impact of partitioned.due.sort((a, b) => a.dueAt - b.dueAt || a.insertionOrder - b.insertionOrder)) {
       const source = impact.source;
       if (impact.targetId) {
         const target = this.entityById.get(impact.targetId);
         if (target && this.canDamageTarget(source, target)) {
-          this.applyTargetedDamage(source, target, impact.rawDamage, impact.color);
+          this.applyTargetedDamage(source, target, impact.rawDamage, impact.color, {
+            ability: impact.ability,
+            ultimate: impact.ultimate,
+            stunDuration: impact.stunDuration,
+            slowPercent: impact.slowPercent,
+            slowDuration: impact.slowDuration,
+            pullDuration: impact.pullDuration,
+          });
+        }
+        continue;
+      }
+      if (impact.line) {
+        const line = impact.line;
+        const struck = targetsIntersectingLine(
+          line.origin,
+          line.endpoint,
+          line.halfWidth,
+          this.allEntities
+            .filter((target) => this.canDamageTarget(source, target))
+            .map((entity) => ({ id: entity.unit.id, pos: entity.unit.pos, entity })),
+        );
+        struck.forEach(({ entity }, index) => {
+          this.applyTargetedDamage(
+            source,
+            entity,
+            impact.rawDamage * (index === 0 ? 1 : line.subsequentDamageMultiplier),
+            impact.color,
+            {
+              ability: impact.ability,
+              ultimate: impact.ultimate,
+              stunDuration: impact.stunDuration,
+              slowPercent: impact.slowPercent,
+              slowDuration: impact.slowDuration,
+              pullDuration: impact.pullDuration,
+            },
+          );
+        });
+        if (impact.chronoProc && struck.length > 0) {
+          const caster = this.entityById.get(source.id);
+          const cds = caster === this.player ? this.playerCds : caster?.bot?.cds;
+          if (cds) tickCooldowns(cds, 0.5);
         }
         continue;
       }
@@ -2223,7 +3053,15 @@ export default class BattleScene extends Phaser.Scene {
           ability: impact.ability,
           ultimate: impact.ultimate,
           stunDuration: impact.stunDuration,
+          slowPercent: impact.slowPercent,
+          slowDuration: impact.slowDuration,
+          pullDuration: impact.pullDuration,
         });
+      }
+      if (impact.chronoProc && struck.length > 0) {
+        const caster = this.entityById.get(source.id);
+        const cds = caster === this.player ? this.playerCds : caster?.bot?.cds;
+        if (cds) tickCooldowns(cds, 0.5);
       }
     }
   }
@@ -2247,12 +3085,92 @@ export default class BattleScene extends Phaser.Scene {
     target: Entity,
     rawDamage: number,
     color: number,
-    options: { ability?: boolean; ultimate?: boolean; stunDuration?: number } = {},
+    options: {
+      ability?: boolean;
+      ultimate?: boolean;
+      stunDuration?: number;
+      slowPercent?: number;
+      slowDuration?: number;
+      pullDuration?: number;
+      periodic?: boolean;
+    } = {},
   ) {
     const sourceUnit = 'unit' in source ? source.unit : source;
     if (!this.canDamageTarget(sourceUnit, target)) return;
-    const result = applyDamage(target.unit, rawDamage);
-    if (sourceUnit.id === this.player.unit.id) this.stats.damageDealt += result.dealt;
+    const hpPctBefore = target.unit.maxHp > 0 ? target.unit.hp / target.unit.maxHp : 0;
+    const result = applyDamageWithEffects(target.unit, target.effects, rawDamage, this.elapsed);
+    const sourceEntity = this.entityById.get(sourceUnit.id);
+    if (options.ability && !options.periodic && sourceEntity?.champion?.id === 'embermage' && !result.lethal) {
+      const burnTotal = 25 + (sourceEntity.abilityPower ?? 0) * 0.1;
+      applyBurn(target.effects, sourceUnit.id, burnTotal / 3, this.elapsed + 3);
+    }
+    if (
+      options.ability && sourceEntity?.champion?.id === 'frostquill' &&
+      (options.stunDuration ?? 0) === 0 && !result.lethal
+    ) applySlow(target.effects, `frostquill:${sourceUnit.id}`, 0.2, this.elapsed + 1.5);
+    if ((options.slowPercent ?? 0) > 0 && !result.lethal) {
+      applySlow(target.effects, `ability:${sourceUnit.id}`, options.slowPercent!, this.elapsed + (options.slowDuration ?? 0));
+    }
+    if ((options.pullDuration ?? 0) > 0 && !result.lethal) {
+      applyPull(
+        target.effects,
+        `ability:${sourceUnit.id}`,
+        sourceUnit.pos,
+        600 * SCALE,
+        this.elapsed + options.pullDuration!,
+      );
+    }
+    const sourceBuffs = sourceEntity === this.player ? this.playerBuffs : sourceEntity?.bot?.buffs;
+    if (
+      !options.ability && sourceBuffs?.buffs.some((buff) => buff.kind === 'red') && !result.lethal
+    ) applySlow(target.effects, `red-buff:${sourceUnit.id}`, 0.2, this.elapsed + 2);
+
+    const targetItems = target === this.player ? this.ownedItems : target.bot?.ownedItems ?? [];
+    const hpPctAfter = target.unit.maxHp > 0 ? target.unit.hp / target.unit.maxHp : 0;
+    const aegisKey = `aegis:${target.unit.id}`;
+    if (
+      targetItems.includes('aegisColossus') && hpPctBefore > 0.3 && hpPctAfter <= 0.3 &&
+      (this.internalCooldowns.get(aegisKey) ?? 0) <= this.elapsed && !result.lethal
+    ) {
+      applyShield(target.effects, 'aegisColossus', 200, this.elapsed + 4);
+      this.internalCooldowns.set(aegisKey, this.elapsed + 45);
+    }
+    const ironholdKey = `ironhold-passive:${target.unit.id}`;
+    if (
+      target.champion?.id === 'ironhold' && hpPctBefore > 0.35 && hpPctAfter <= 0.35 &&
+      (this.internalCooldowns.get(ironholdKey) ?? 0) <= this.elapsed && !result.lethal
+    ) {
+      applyArmor(target.effects, ironholdKey, 25, this.elapsed + 3);
+      this.internalCooldowns.set(ironholdKey, this.elapsed + 12);
+    }
+    if (target.champion?.id === 'nightveil' && result.dealt > 0) {
+      this.internalCooldowns.set(`nightveil-smoke:${target.unit.id}`, 0);
+    }
+    if (
+      !options.ability && target.champion?.id === 'thornwarden' && sourceEntity &&
+      sourceEntity.unit.kind === 'champion' && !sourceEntity.unit.dead
+    ) {
+      const reflectKey = `thorn-reflect:${target.unit.id}:${sourceUnit.id}`;
+      if ((this.internalCooldowns.get(reflectKey) ?? 0) <= this.elapsed) {
+        this.internalCooldowns.set(reflectKey, this.elapsed + 1);
+        this.applyTargetedDamage(target, sourceEntity, 12, 0x59b07e, { ability: true, periodic: true });
+      }
+    }
+    if (target === this.player && result.dealt > 0 && areHostile(sourceUnit.team, target.unit.team)) {
+      this.cancelRecall('enemy-damage');
+    }
+    if (sourceUnit.id === this.player.unit.id) {
+      this.stats.damageDealt += result.dealt;
+      if (!options.ability && result.dealt > 0) this.recordLearning('basic-attack');
+    }
+    const sourceItems = sourceEntity === this.player ? this.ownedItems : sourceEntity?.bot?.ownedItems ?? [];
+    const neutral = target.unit.team === 'neutral';
+    if (!options.ability && !neutral && result.dealt > 0 && sourceEntity) {
+      const ratio = sourceItems.includes('bloodreaver')
+        ? 0.12
+        : sourceItems.includes('vampiricEdge') ? 0.08 : 0;
+      if (ratio > 0) applyHeal(sourceEntity.unit, result.dealt * ratio);
+    }
     this.registerKill(sourceUnit, target.unit, result.lethal);
     this.onDamage(target, target.unit.pos, result.dealt, color, result.lethal, {
       fromPos: sourceUnit.pos,
@@ -2277,6 +3195,7 @@ export default class BattleScene extends Phaser.Scene {
         ? this.playerProgress.level
         : targetEntity.bot?.progress.level ?? 1;
       targetEntity.life = killChampion(targetEntity.life, this.elapsed, level, this.mode);
+      if (targetEntity.champion?.id === 'duskarrow') this.passiveCounters.set(`duskarrow-distance:${target.id}`, 0);
       if (targetEntity === this.player) this.playerDeaths += 1;
       if (sourceSide) {
         this.teamFacts[sourceSide].championKills += 1;
@@ -2296,10 +3215,25 @@ export default class BattleScene extends Phaser.Scene {
           : 'turret';
       this.awardBounty(sourceEntity, structureBounty(bountyKind));
       if (node?.kind === 'inhibitor') this.inhibitorKillTimes.set(target.id, this.elapsed);
+      if (source.id === 'player' && node?.kind.endsWith('Turret')) this.recordLearning('destroy-turret');
+    } else if (target.kind === 'monster' && targetEntity?.campId) {
+      const runtime = this.camps.find((candidate) => candidate.camp.id === targetEntity.campId);
+      if (runtime) {
+        runtime.members = runtime.members.filter((member) => member !== targetEntity && !member.unit.dead);
+        if (runtime.members.length === 0) {
+          this.awardBounty(sourceEntity, runtime.camp.bounty);
+          runtime.nextSpawnAt = this.elapsed + runtime.camp.respawnSeconds;
+          if (runtime.camp.type === 'blue' || runtime.camp.type === 'red') {
+            const buffs = sourceEntity === this.player ? this.playerBuffs : sourceEntity?.bot?.buffs;
+            if (buffs) applyBuff(buffs, runtime.camp.type, this.elapsed);
+          }
+        }
+      }
     } else if (target.kind === 'monster' && targetEntity?.objectiveId && sourceSide) {
       const objectiveId = targetEntity.objectiveId;
       this.awardBounty(sourceEntity, monsterStats(objectiveId).bounty);
-      this.teamFacts[sourceSide].objectives += 1;
+      this.teamFacts[sourceSide].epicMonstersKilled += 1;
+      this.teamFacts[sourceSide].objectivePoints += objectiveId === 'dragon' ? 1 : objectiveId === 'herald' ? 2 : 3;
       const runtime = this.objectives.find((objective) => objective.id === objectiveId);
       if (runtime) {
         runtime.entity = null;
@@ -2315,7 +3249,11 @@ export default class BattleScene extends Phaser.Scene {
         else this.enemyBaron = applyBaronBuff(this.elapsed);
         this.applyTeamChampionStats(sourceSide);
       } else {
-        this.applyHeraldPush(source, sourceSide);
+        const reward = heraldReward();
+        this.wardenCharge[sourceSide] = {
+          acquiredAt: this.elapsed,
+          expiresAt: this.elapsed + reward.durationSeconds,
+        };
       }
     }
 
@@ -2334,17 +3272,17 @@ export default class BattleScene extends Phaser.Scene {
     if (entity === this.player) this.playerTotalGoldEarned += bounty.gold;
     else if (entity.bot) entity.bot.totalGoldEarned += bounty.gold;
     if (xp.leveled) {
+      if (entity === this.player) this.recordLearning('level-up');
       this.floatingDamage(entity.unit.pos, xp.newLevel, 0xffd45c, 'LV ');
       this.pulse(entity.container, 0xffd45c);
     }
   }
 
-  private applyHeraldPush(source: Unit, sourceSide: MapSide) {
-    const reward = heraldReward();
+  private wardenTargets(sourceSide: MapSide): Entity[] {
     const livingIds = new Set(
       this.structures.filter((structure) => !structure.unit.dead).map((structure) => structure.unit.id),
     );
-    const target = this.structures
+    return this.structures
       .filter(
         (structure) =>
           structure.unit.team !== sourceSide &&
@@ -2354,10 +3292,46 @@ export default class BattleScene extends Phaser.Scene {
       .sort(
         (a, b) =>
           distance(a.unit.pos, toScreen(BASE_POSITIONS[sourceSide])) -
-          distance(b.unit.pos, toScreen(BASE_POSITIONS[sourceSide])),
-      )[0];
+            distance(b.unit.pos, toScreen(BASE_POSITIONS[sourceSide])) ||
+          a.unit.id.localeCompare(b.unit.id),
+      );
+  }
+
+  private tickHeldWardenPolicy(): void {
+    for (const side of ['ally', 'enemy'] as MapSide[]) {
+      const charge = this.wardenCharge[side];
+      if (charge && this.elapsed >= charge.expiresAt) this.wardenCharge[side] = null;
+    }
+    const charge = this.wardenCharge.enemy;
+    const targets = this.wardenTargets('enemy');
+    const target = targets[0];
+    const hasSiegePressure = Boolean(target && [...this.champions, ...this.minions].some(
+      (entity) =>
+        !entity.unit.dead &&
+        entity.unit.team === 'enemy' &&
+        distance(entity.unit.pos, target.unit.pos) <= 650 * SCALE,
+    ));
+    if (shouldDeployHeldWarden({
+      now: this.elapsed,
+      charge,
+      hasValidTarget: targets.length > 0,
+      hasSiegePressure,
+    })) this.useWardenCharge('enemy', target);
+  }
+
+  private useWardenCharge(sourceSide: MapSide, chosenTarget?: Entity) {
+    const charge = this.wardenCharge[sourceSide];
+    if (!charge || charge.expiresAt <= this.elapsed) {
+      this.wardenCharge[sourceSide] = null;
+      return;
+    }
+    const source = sourceSide === 'ally' ? this.player.unit : this.enemy.unit;
+    const reward = heraldReward();
+    const targets = this.wardenTargets(sourceSide);
+    const target = chosenTarget && targets.includes(chosenTarget) ? chosenTarget : targets[0];
     if (!target) return;
-    const result = applyDamage(target.unit, reward.structureDamage);
+    this.wardenCharge[sourceSide] = null;
+    const result = applyDamageWithEffects(target.unit, target.effects, reward.structureDamage, this.elapsed);
     this.registerKill(source, target.unit, result.lethal);
     this.onDamage(target, target.unit.pos, result.dealt, 0xc18cff, result.lethal, {
       fromPos: source.pos,
@@ -3057,6 +4031,10 @@ export default class BattleScene extends Phaser.Scene {
     const xpPct = this.xpProgressPct();
     battleStore.set({
       mode: this.mode,
+      matchKind: this.matchKind,
+      difficulty: this.difficulty,
+      lifecycle: this.ended ? 'ended' : this.pauseReasons.size > 0 ? 'paused' : 'running',
+      pauseReasons: [...this.pauseReasons],
       playerChampionId: this.playerChampion.id,
       enemyChampionId: this.enemyChampion.id,
       playerHp: Math.round(this.player.unit.hp),
@@ -3071,7 +4049,8 @@ export default class BattleScene extends Phaser.Scene {
       gold: Math.floor(this.playerProgress.gold),
       level: this.playerProgress.level,
       xpPct,
-      shopAvailable: this.inBase(this.player.unit, 'ally'),
+      xpCapped: this.playerProgress.level >= 18,
+      shopAvailable: this.inBase(this.player.unit, 'ally') && this.pauseReasons.size === 0,
       ownedItems: [...this.ownedItems],
       buffs: [
         ...this.playerBuffs.buffs.map((b) => ({
@@ -3082,25 +4061,54 @@ export default class BattleScene extends Phaser.Scene {
           ? [{ kind: 'baron', remaining: Math.ceil(this.allyBaron.expiresAt - this.elapsed) }]
           : []),
       ],
+      camps: this.camps.map((runtime) => ({
+        id: runtime.camp.id,
+        type: runtime.camp.type,
+        side: runtime.camp.side,
+        alive: runtime.members.length > 0,
+        membersAlive: runtime.members.filter((member) => !member.unit.dead).length,
+        membersTotal: runtime.camp.members.length,
+        respawnsIn: runtime.members.length > 0 ? 0 : Math.max(0, Math.ceil(runtime.nextSpawnAt - this.elapsed)),
+      })),
       objectives: this.buildObjectives(),
+      ...(this.armedAbility ? { aimingSlot: this.armedAbility } : {}),
       dragonStacks: this.allyDragonStacks,
+      objectivePoints: this.teamFacts.ally.objectivePoints,
+      wardenChargeSeconds: Math.max(
+        0,
+        Math.ceil((this.wardenCharge.ally?.expiresAt ?? this.elapsed) - this.elapsed),
+      ),
       playerLife: {
         phase: this.player.life!.phase,
         deaths: this.playerDeaths,
         respawnSeconds:
           this.player.life!.phase === 'dead' || this.player.life!.phase === 'respawning'
-            ? Math.ceil(championLifeTimerRemaining(this.player.life!, this.elapsed))
+            ? Math.round(championLifeTimerRemaining(this.player.life!, this.elapsed) * 10) / 10
             : 0,
         invulnerableSeconds:
           this.player.life!.phase === 'invulnerable'
-            ? Math.ceil(championLifeTimerRemaining(this.player.life!, this.elapsed))
+            ? Math.round(championLifeTimerRemaining(this.player.life!, this.elapsed) * 10) / 10
             : 0,
       },
       matchStatus: {
         phase: matchPhaseAt(this.elapsed, this.mode),
-        suddenDeath: matchPhaseAt(this.elapsed, this.mode) !== 'regulation',
+        suddenDeath: matchPhaseAt(this.elapsed, this.mode) === 'sudden-death',
         hardCapSecondsRemaining: Math.max(0, Math.ceil(this.rules.hardCapSeconds - this.elapsed)),
       },
+      recall: {
+        channeling: this.recallStartedAt !== null,
+        remaining: this.recallStartedAt === null ? 0 : Math.max(0, Math.round((6 - (this.elapsed - this.recallStartedAt)) * 10) / 10),
+        ...(this.recallCancellation ? { cancellation: this.recallCancellation } : {}),
+      },
+      ...(this.matchKind === 'tutorial' ? {
+        learning: {
+          current: currentLearningStep(this.learning)?.id,
+          completed: this.learning.completed.length,
+          total: LEARNING_STEPS.length,
+        },
+      } : {}),
+      currentTargetId: this.targetByEntityId.get(this.player.unit.id),
+      ...(this.lastPurchaseFeedback ? { purchaseFeedback: this.lastPurchaseFeedback } : {}),
       allyStructures: this.structureStatus('ally'),
       enemyStructures: this.structureStatus('enemy'),
       minimap: this.buildMinimap(),
@@ -3111,7 +4119,9 @@ export default class BattleScene extends Phaser.Scene {
           slot,
           progress: total <= 0 ? 1 : Math.min(1, Math.max(0, 1 - remaining / total)),
           remaining: Math.ceil(remaining),
+          cooldown: total,
           ready: remaining <= 0,
+          cost: this.abilityBySlot(this.playerChampion, slot).cost,
         };
       }),
     });
@@ -3148,35 +4158,39 @@ export default class BattleScene extends Phaser.Scene {
       },
       this.mode,
     );
-    if (resolution.winner) this.endGame(resolution);
+    if (resolution.reason) this.endGame(resolution);
   }
 
   private matchTeamSnapshot(side: MapSide) {
-    const structures = this.structures.filter((structure) => structure.unit.team === side);
+    const countedKinds = new Set(['outerTurret', 'innerTurret', 'inhibitor']);
+    const structures = this.structures.filter(
+      (structure) => structure.unit.team === side && structure.node && countedKinds.has(structure.node.kind),
+    );
     const nexus = side === 'ally' ? this.allyNexus : this.enemyNexus;
     const facts = this.teamFacts[side];
     return {
       nexusHp: nexus?.unit.hp ?? 0,
       nexusMaxHp: nexus?.unit.maxHp ?? NEXUS_HP,
       structuresStanding: structures.filter((structure) => !structure.unit.dead).length,
-      structuresTotal: structures.length,
+      structuresTotal: this.mode === 'conquest' ? 9 : 3,
       championKills: facts.championKills,
-      objectivePoints: facts.objectives,
+      objectivePoints: facts.objectivePoints,
       gold: facts.totalGoldEarned,
     };
   }
 
   private endGame(resolution: MatchResolution) {
-    const win = resolution.winner === 'ally';
+    const result = resolution.winner === 'ally' ? 'win' : resolution.winner === 'enemy' ? 'loss' : 'draw';
+    this.recordLearning('victory-condition');
     this.ended = true;
     this.pushHud();
-    audio.play(win ? 'victory' : 'defeat');
+    audio.play(result === 'win' ? 'victory' : 'defeat');
     if (!this.reducedMotion) {
-      this.cameras.main.flash(300, win ? 10 : 80, win ? 200 : 20, win ? 185 : 30);
+      this.cameras.main.flash(300, result === 'win' ? 10 : 80, result === 'win' ? 200 : 20, result === 'win' ? 185 : 30);
     }
     const outcome: BattleOutcome = {
       matchId: this.matchId,
-      win,
+      result,
       mode: this.mode,
       matchKind: this.matchKind,
       difficulty: this.difficulty,
@@ -3184,11 +4198,13 @@ export default class BattleScene extends Phaser.Scene {
       enemyChampionId: this.enemyChampion.id,
       deaths: this.playerDeaths,
       totalGoldEarned: Math.floor(this.playerTotalGoldEarned),
-      objectives: this.teamFacts.ally.objectives,
+      objectives: this.teamFacts.ally.epicMonstersKilled,
+      objectivePoints: this.teamFacts.ally.objectivePoints,
       ownedItems: [...this.ownedItems],
       endReason: resolution.reason!,
+      learningRequirementsCompleted: learningRequirementsCompleted(this.learning),
       stats: {
-        durationSeconds: Math.round(this.elapsed),
+        durationSeconds: Math.min(this.rules.hardCapSeconds, Math.round(this.elapsed)),
         championKills: this.stats.championKills,
         minionKills: this.stats.minionKills,
         damageDealt: Math.round(this.stats.damageDealt),
@@ -3197,5 +4213,36 @@ export default class BattleScene extends Phaser.Scene {
       },
     };
     this.time.delayedCall(400, () => this.onGameEnd(outcome));
+  }
+
+  private endAbandoned() {
+    if (this.ended) return;
+    this.ended = true;
+    this.pushHud();
+    const outcome: BattleOutcome = {
+      matchId: this.matchId,
+      result: 'abandoned',
+      mode: this.mode,
+      matchKind: this.matchKind,
+      difficulty: this.difficulty,
+      playerChampionId: this.playerChampion.id,
+      enemyChampionId: this.enemyChampion.id,
+      deaths: 0,
+      totalGoldEarned: 0,
+      objectives: 0,
+      objectivePoints: 0,
+      ownedItems: [],
+      endReason: 'surrendered',
+      learningRequirementsCompleted: false,
+      stats: {
+        durationSeconds: Math.round(this.elapsed),
+        championKills: 0,
+        minionKills: 0,
+        damageDealt: 0,
+        level: 1,
+        gold: 0,
+      },
+    };
+    this.onGameEnd(outcome);
   }
 }

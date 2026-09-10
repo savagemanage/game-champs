@@ -46,7 +46,7 @@ export const STRINGS = {
   'title.howto': { en: 'How to Play', ko: '플레이 방법' },
   'title.upgrades': { en: 'Upgrades', ko: '업그레이드' },
   'title.settings': { en: 'Settings', ko: '설정' },
-  'title.hint': { en: 'SPACE Deploy    U Upgrades    S Settings', ko: 'SPACE 출격    U 업그레이드    S 설정' },
+  'title.hint': { en: 'SPACE Start    U Upgrades    S Settings', ko: 'SPACE 게임 시작    U 업그레이드    S 설정' },
   'title.best': { en: 'Best {meters} m', ko: '최고 {meters} m' },
   'title.bestScore': { en: 'Best score {score}', ko: '최고 점수 {score}' },
 
@@ -67,6 +67,10 @@ export const STRINGS = {
   'run.bossWarning': { en: 'BOSS AHEAD', ko: '보스 접근' },
   'run.enemyIncoming': { en: 'Enemies incoming', ko: '적 접근 중' },
   'run.pause': { en: 'Pause', ko: '일시정지' },
+  'run.paused': { en: 'RUN PAUSED', ko: '런 일시정지' },
+  'run.resume': { en: 'Resume', ko: '계속하기' },
+  'run.abandon': { en: 'Abandon (no rewards)', ko: '포기 (보상 없음)' },
+  'run.rewardsRemaining': { en: 'Main rewards left today: {count}', ko: '오늘 본게임 보상 {count}회 남음' },
   'run.go': { en: 'GO!', ko: '출발!' },
   'run.tapHint': { en: 'Drag / ← → to move', ko: '드래그 / ← → 이동' },
 
@@ -84,6 +88,8 @@ export const STRINGS = {
   'result.distance': { en: 'Distance: {meters} m', ko: '거리: {meters} m' },
   'result.score': { en: 'Score: {score}', ko: '점수: {score}' },
   'result.squadPeak': { en: 'Peak squad: {count}', ko: '최대 분대: {count}' },
+  'result.squadFinal': { en: 'Surviving squad: {count}', ko: '생존 분대: {count}' },
+  'result.rewardsRemaining': { en: 'Main rewards remaining today: {count}', ko: '오늘 본게임 보상 잔여: {count}회' },
   'result.best': { en: 'Best: {meters} m', ko: '최고 기록: {meters} m' },
   'result.bestScore': { en: 'Best score: {score}', ko: '최고 점수: {score}' },
   'result.coinsEarned': { en: '+{coins} coins', ko: '코인 +{coins}' },
@@ -122,6 +128,11 @@ export const STRINGS = {
   'settings.sfx': { en: 'SFX', ko: '효과음' },
   'settings.music': { en: 'Music', ko: '음악' },
   'settings.language': { en: 'Language', ko: '언어' },
+  'settings.mute': { en: 'Mute', ko: '음소거' },
+  'settings.reducedMotion': { en: 'Reduced motion', ko: '모션 감소' },
+  'settings.shake': { en: 'Screen shake', ko: '화면 흔들림' },
+  'settings.on': { en: 'On', ko: '켜기' },
+  'settings.off': { en: 'Off', ko: '끄기' },
   'settings.reset': { en: 'Reset Progress', ko: '진행 초기화' },
   'settings.resetConfirm': { en: 'Erase all progress and coins?', ko: '모든 진행과 코인을 지울까요?' },
   'settings.reset.done': { en: 'Progress reset', ko: '진행이 초기화되었습니다' },
@@ -311,6 +322,8 @@ export const STRINGS = {
   'recruit.shards': { en: 'Shards: {shards}', ko: '파편: {shards}' },
   'recruit.pull1': { en: 'Recruit x1', ko: '1회 모집' },
   'recruit.pull10': { en: 'Recruit x10', ko: '10회 모집' },
+  'recruit.pullCost': { en: 'Recruit x{count} · {cost}', ko: '{count}회 모집 · 조각 {cost}' },
+  'recruit.rates': { en: 'UR 3% · SSR 15% · SR 82% (Total 100%)', ko: 'UR 3% · SSR 15% · SR 82% (합계 100%)' },
   'recruit.pityCount': { en: 'Pity {count}/{max}', ko: '천장 {count}/{max}' },
   'recruit.tapToClose': { en: 'Tap to continue', ko: '탭하여 계속' },
 
@@ -351,7 +364,7 @@ export const STRINGS = {
   'formation.empty': { en: 'Empty', ko: '빈 자리' },
   'formation.sameTypeBuff': { en: 'Same-type squad: +20% HP/ATK/DEF', ko: '동일 타입 분대: 체력/공격력/방어력 +20%' },
   'formation.duplicate': { en: 'Hero already placed', ko: '이미 배치된 영웅입니다' },
-  'formation.needFive': { en: 'Place 5 heroes', ko: '영웅 5명을 배치하세요' },
+  'formation.needFive': { en: 'Place at least 1 hero', ko: '영웅을 1명 이상 배치하세요' },
 
   // Battle log verbs (timeline replay in FEAT-007).
   'battle.attack': { en: '{attacker} hits {target} for {damage}', ko: '{attacker}이(가) {target}에게 {damage} 피해' },
@@ -360,6 +373,13 @@ export const STRINGS = {
   'battle.advantage': { en: 'Type advantage!', ko: '상성 우위!' },
   'battle.victory': { en: 'Squad prevails', ko: '분대 승리' },
   'battle.defeat': { en: 'Squad wiped out', ko: '분대 전멸' },
+  'battle.round': { en: 'Round {round}', ko: '{round} 라운드' },
+  'battle.pause': { en: 'Pause', ko: '일시정지' },
+  'battle.leaveConfirm': { en: 'Leave this battle replay?', ko: '전투 리플레이를 나갈까요?' },
+  'battle.leave': { en: 'Leave battle', ko: '전투 나가기' },
+  'battle.skip': { en: 'Skip', ko: '건너뛰기' },
+  'battle.timeoutDefeat': { en: 'Time-out defeat', ko: '시간 초과 패배' },
+  'battle.summary': { en: '{rounds} rounds · {survivors} survivors', ko: '{rounds} 라운드 · 생존자 {survivors}명' },
 
   // PvE campaign (FEAT-004).
   'campaign.title': { en: 'CAMPAIGN', ko: '캠페인' },
@@ -377,9 +397,10 @@ export const STRINGS = {
   'campaign.stage.citadel': { en: 'The Citadel', ko: '요새' },
 
   // Zombie waves (FEAT-004, endless defense).
-  'zombie.title': { en: 'HORDE DEFENSE', ko: '군단 방어전' },
+  'zombie.title': { en: 'HORDE DEFENSE', ko: 'Horde 방어' },
   'zombie.wave': { en: 'Wave {wave}', ko: '{wave} 웨이브' },
   'zombie.next': { en: 'Next wave', ko: '다음 웨이브' },
+  'zombie.replay': { en: 'Replay wave {wave}', ko: '{wave} 웨이브 재도전' },
   'zombie.best': { en: 'Best wave {wave}', ko: '최고 웨이브 {wave}' },
   'zombie.cleared': { en: 'Wave cleared!', ko: '웨이브 격퇴!' },
   'zombie.overrun': { en: 'The squad was overrun', ko: '분대가 돌파당했습니다' },
@@ -395,10 +416,10 @@ export const STRINGS = {
   'mission.daily.recruitMany': { en: 'Recruit 5 heroes', ko: '영웅 5명 모집' },
   'mission.daily.powerUp': { en: 'Power up heroes twice', ko: '영웅 강화 2회' },
   'mission.daily.powerUpMany': { en: 'Power up heroes 6 times', ko: '영웅 강화 6회' },
-  'mission.daily.combat': { en: 'Win 2 battles', ko: '전투 2회 승리' },
-  'mission.daily.combatMany': { en: 'Win 5 battles', ko: '전투 5회 승리' },
-  'mission.daily.miniGame': { en: 'Run a Falcon Rescue', ko: '팰컨 구조대 1회 플레이' },
-  'mission.daily.miniGameMany': { en: 'Run 3 Falcon Rescues', ko: '팰컨 구조대 3회 플레이' },
+  'mission.daily.combat': { en: 'Complete 2 battles', ko: '전투 2회 완료' },
+  'mission.daily.combatMany': { en: 'Complete 5 battles', ko: '전투 5회 완료' },
+  'mission.daily.miniGame': { en: 'Complete a Falcon Rescue', ko: '팔콘 구조대 1회 완료' },
+  'mission.daily.miniGameMany': { en: 'Complete 3 Falcon Rescues', ko: '팔콘 구조대 3회 완료' },
 
   // Weekly alliance duel (FEAT-004, AI simulation).
   'mission.duel.title': { en: 'ALLIANCE DUEL', ko: '연맹 대결' },
@@ -414,6 +435,8 @@ export const STRINGS = {
   'season.current': { en: 'Season {season}', ko: '시즌 {season}' },
   'season.tier': { en: 'Tier {tier}', ko: '{tier} 등급' },
   'season.xp': { en: '{xp} XP', ko: '{xp} XP' },
+  'season.xpSplit': { en: 'Earned {earned} / Available {available} XP', ko: '누적 {earned} / 사용 가능 {available} XP' },
+  'season.deadline': { en: 'Next tier: {xp} XP · Ends {end}', ko: '다음 티어: {xp} XP · 종료 {end}' },
   'season.free': { en: 'Free', ko: '무료' },
   'season.premium': { en: 'Premium', ko: '프리미엄' },
   'season.premiumLocked': { en: 'Raise virus resistance to {level} to unlock', ko: '바이러스 저항 {level} 달성 시 해제' },
@@ -455,7 +478,7 @@ export const STRINGS = {
   'home.comingSoon': { en: 'Coming soon', ko: '준비 중' },
   'nav.base': { en: 'Base', ko: '기지' },
   'nav.heroes': { en: 'Heroes', ko: '영웅' },
-  'nav.campaign': { en: 'Campaign', ko: '전역' },
+  'nav.campaign': { en: 'Campaign', ko: '캠페인' },
   'nav.missions': { en: 'Missions', ko: '임무' },
   'nav.season': { en: 'Season', ko: '시즌' },
   'nav.falcon': { en: 'Falcon Rescue', ko: '팔콘 구조대' },
@@ -483,6 +506,21 @@ export const STRINGS = {
     en: 'Open 영웅 to recruit heroes and set your 5-slot squad formation before battle.',
     ko: '영웅 탭에서 영웅을 모집하고 전투 전에 5칸 분대 편성을 구성하세요.',
   },
+  'tutorial.step.recruit.title': { en: 'Recruit and Upgrade', ko: '모집과 강화' },
+  'tutorial.step.recruit.body': {
+    en: 'Use the one-time 200-shard starter grant after this guide to recruit, then strengthen an owned hero.',
+    ko: '안내 완료 후 계정당 한 번 받는 영웅 조각 200개로 모집하고 보유 영웅을 강화하세요.',
+  },
+  'tutorial.step.formation.title': { en: 'Set Formation', ko: '편성 구성' },
+  'tutorial.step.formation.body': {
+    en: 'Place up to two heroes in front and three in back. A partial squad may deploy; five matching types activate the bonus.',
+    ko: '전열 2칸과 후열 3칸에 영웅을 배치하세요. 부분 편성도 출전 가능하며 5칸이 같은 타입이면 보너스가 발동합니다.',
+  },
+  'tutorial.step.campaign.title': { en: 'Campaign Battle', ko: '캠페인 전투' },
+  'tutorial.step.campaign.body': {
+    en: 'Review enemy type and power, adjust formation, then play the saved deterministic battle replay.',
+    ko: '적 타입과 전투력을 확인하고 편성을 조정한 뒤 저장된 결정론적 전투를 재생하세요.',
+  },
   'tutorial.step.battle.title': { en: 'Deploy the Squad', ko: '분대 출격' },
   'tutorial.step.battle.body': {
     en: 'Enter a Campaign battle, or tap 팔콘 구조대 to launch the Falcon Rescue runner.',
@@ -497,9 +535,13 @@ export const STRINGS = {
   // Save / load feedback.
   'save.saved': { en: 'Saved', ko: '저장됨' },
   'save.loaded': { en: 'Progress loaded', ko: '진행 불러옴' },
+  'save.recoveryWarning': { en: 'Save recovery was used. Progress may be memory-only this session.', ko: '저장 복구를 사용했습니다. 이번 세션 진행은 메모리에만 남을 수 있습니다.' },
+  'save.clockRollback': { en: 'Clock moved backward. Timed rewards are frozen until it catches up.', ko: '시계가 뒤로 이동했습니다. 따라잡을 때까지 시간 보상이 동결됩니다.' },
 
   // Preload scene.
   'preload.loading': { en: 'Loading {pct}%', ko: '불러오는 중 {pct}%' },
+  'preload.error': { en: '{count} assets failed to load. Check the connection and retry.', ko: '에셋 {count}개를 불러오지 못했습니다. 연결을 확인하고 다시 시도하세요.' },
+  'preload.retry': { en: 'Retry', ko: '다시 시도' },
 } satisfies Record<string, TrEntry>;
 
 /** The set of valid translation keys, derived from {@link STRINGS}. */

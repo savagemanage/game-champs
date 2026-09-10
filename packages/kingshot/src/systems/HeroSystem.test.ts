@@ -125,14 +125,15 @@ describe('HeroSystem', () => {
     expect(heroes.progress('ser_alden')!.shards).toBe(3); // per spent
   });
 
-  it('addShards is a no-op for a non-recruited hero or a non-positive amount', () => {
+  it('preserves shards received before recruitment and ignores non-positive grants', () => {
     const heroes = new HeroSystem();
     const store = richStore();
-    heroes.addShards('ser_alden', 10); // not recruited yet
+    heroes.addShards('ser_alden', 10);
+    expect(heroes.shards('ser_alden')).toBe(10);
     heroes.recruit('ser_alden', store);
     heroes.addShards('ser_alden', 0);
     heroes.addShards('ser_alden', -5);
-    expect(heroes.progress('ser_alden')!.shards).toBe(0);
+    expect(heroes.progress('ser_alden')!.shards).toBe(10);
   });
 
   it('cannot star up past the star cap (maxLevel reason)', () => {

@@ -3,6 +3,7 @@ import { PALETTE, CANVAS } from '../config/GameConfig';
 import { AudioKeys } from '../config/AssetKeys';
 import { Menu } from '../ui/Menu';
 import { textStyle } from '../ui/UiText';
+import { announce } from '../ui/AccessibilityBridge';
 import { tr } from '../i18n/i18n';
 import { HubScene } from './HubScene';
 
@@ -30,6 +31,8 @@ export class ArenaScene extends HubScene {
 
   protected build(): void {
     const cx = CANVAS.WIDTH / 2;
+    this.add.text(cx, 58, tr('meta.localDisclosure'),
+      textStyle(11, { align: 'center', color: PALETTE.MUTED_CSS })).setOrigin(0.5);
     Menu.panel(this, cx, 250, 420, 320);
     this.rankText = this.add.text(cx, 130, '', textStyle(30, { fontStyle: 'bold', align: 'center', color: PALETTE.ACCENT_CSS })).setOrigin(0.5);
     this.recordText = this.add.text(cx, 176, '', textStyle(15, { align: 'center', color: PALETTE.MUTED_CSS })).setOrigin(0.5);
@@ -51,7 +54,7 @@ export class ArenaScene extends HubScene {
 
   private doFight(): void {
     const now = Date.now();
-    const result = this.state.fightArena(now);
+    const result = this.state.fightArena(now, `arena:${now}`);
     if (result.win) {
       this.audio.playSfx(AudioKeys.Victory, 0.6);
       this.resultText.setText(`${tr('arena.win', { rank: result.rankAfter })}\n${tr('arena.reward', { sparks: result.sparks })}`).setColor(PALETTE.SUCCESS_CSS);
@@ -59,6 +62,7 @@ export class ArenaScene extends HubScene {
       this.audio.playSfx(AudioKeys.Defeat, 0.5);
       this.resultText.setText(tr('arena.loss', { rank: result.rankAfter })).setColor(PALETTE.DANGER_CSS);
     }
+    announce(this.resultText.text, !result.win);
     this.state.save(now);
     this.refresh();
   }

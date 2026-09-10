@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   CHAMPIONS,
@@ -68,10 +68,55 @@ export default function ChampionSelect({
 
   const handleRandomizeOpponent = () => setEnemyId(randomChampionId(selectedId));
 
+  const handleRosterKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    const available = CHAMPIONS.filter((champion) => profile.unlockedChampionIds.includes(champion.id));
+    const current = Math.max(0, available.findIndex((champion) => champion.id === selectedId));
+    const nextIndex = event.key === 'Home'
+      ? 0
+      : event.key === 'End'
+        ? available.length - 1
+        : (current + (event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 1) + available.length) % available.length;
+    const next = available[nextIndex];
+    if (!next) return;
+    handleSelect(next.id);
+    requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(`[data-champion-id="${next.id}"]`)?.focus());
+  };
+
   const handleLockIn = () => {
+    if (mode === 'midline') {
+      // Values are request placeholders only; the issued match seed resolves the
+      // actual disjoint roster before Phaser starts.
+      onLockIn(CHAMPIONS[0].id, CHAMPIONS[1].id);
+      return;
+    }
     if (!profile.unlockedChampionIds.includes(selectedId)) return;
     onLockIn(selectedId, enemyId === selectedId ? randomChampionId(selectedId) : enemyId);
   };
+
+  if (mode === 'midline') {
+    return (
+      <section className="champion-select champion-select--random" aria-labelledby="random-roster-heading">
+        <ClientNav controls={navControls} />
+        <div className="random-roster">
+          <p className="mode-select__eyebrow">{t('mode.midline')}</p>
+          <h2 id="random-roster-heading" className="screen__heading">{t('select.randomRoster')}</h2>
+          <p>{t('select.randomRosterDescription')}</p>
+          <div className="random-roster__slots" aria-label={t('select.randomRoster')}>
+            {Array.from({ length: 10 }, (_, index) => (
+              <span key={index} className="random-roster__slot" aria-hidden="true">?</span>
+            ))}
+          </div>
+          <p className="random-roster__note">{t('select.randomRosterRule')}</p>
+          <div className="random-roster__actions">
+            <button type="button" className="btn btn--primary" onClick={handleLockIn}>{t('select.findMatch')}</button>
+            {onBack && <button type="button" className="btn" onClick={onBack}>{t('common.back')}</button>}
+          </div>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="champion-select" aria-label={t('select.heading')}>
@@ -91,7 +136,7 @@ export default function ChampionSelect({
             </div>
           </header>
 
-          <div className="champion-select__cards" role="listbox" aria-label={t('select.rosterLabel')}>
+          <div className="champion-select__cards" role="listbox" aria-label={t('select.rosterLabel')} onKeyDown={handleRosterKeyDown}>
             {CHAMPIONS.map((champion) => {
               const unlocked = profile.unlockedChampionIds.includes(champion.id);
               const isSelf = champion.id === selectedId;
@@ -106,6 +151,8 @@ export default function ChampionSelect({
                   <button
                     type="button"
                     role="option"
+                    data-champion-id={champion.id}
+                    tabIndex={unlocked && isSelf ? 0 : -1}
                     aria-selected={isSelf}
                     aria-disabled={!unlocked}
                     aria-label={`${name} - ${t(champion.titleKey)}${unlocked ? '' : ` - ${t('select.locked')}`}`}

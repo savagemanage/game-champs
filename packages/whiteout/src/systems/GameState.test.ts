@@ -3,6 +3,7 @@ import { GameState } from './GameState';
 import { memoryStorage } from './SaveManager';
 import { ResourceStore } from './ResourceStore';
 import { HEROES, heroTrainXp } from '../config/GameConfig';
+import type { BuildingKind } from '../types';
 
 /**
  * Integration tests that the FEAT-004 progression sources are actually CONSUMED
@@ -142,6 +143,7 @@ describe('GameState endgame integration', () => {
   it('a rally attempt records the quest metric and grants tier rewards', () => {
     const gs = freshState();
     gs.setArmy({ trapper: 0, marksman: 0, vanguard: 5_000 }); // huge power -> big damage
+    buildToLevelOne(gs, 'envoy_hall');
     const sparks0 = gs.premium.sparks;
     const res = gs.attackRally('rime_alpha', 0);
     expect(res.dealt).toBeGreaterThan(0);
@@ -164,8 +166,8 @@ describe('GameState endgame integration', () => {
 
   it('alliance help shortens the active building timer via GameState', () => {
     const gs = freshState();
+    buildToLevelOne(gs, 'envoy_hall');
     gs.alliance.grantHelps(1);
-    // Furnace at a level that lets the hut build; fund it and start an upgrade.
     while (gs.buildings.furnaceLevel < 3) {
       gs.buildings.startUpgrade('furnace', highStore(), 0);
       gs.buildings.update(1e12);
@@ -177,18 +179,17 @@ describe('GameState endgame integration', () => {
     expect(gs.buildings.upgradeEndsAt('hunters_hut')!).toBe(before - shaved);
   });
 
-  it('claims a daily quest reward through GameState once complete', () => {
+  it('auto-claims a daily quest reward in the causing action', () => {
     const gs = freshState();
-    // daily_battle needs 3 waves cleared.
+    const iron0 = gs.resources.get('iron');
+    const sparks0 = gs.premium.sparks;
     gs.recordWaveCleared(1, 0);
     gs.recordWaveCleared(2, 0);
     gs.recordWaveCleared(3, 0);
-    const food0 = gs.resources.get('food');
-    const res = gs.claimDailyQuest('daily_battle', 0);
-    expect(res.ok).toBe(true);
-    // The reward (iron + sparks) was applied.
-    expect(gs.resources.get('iron')).toBeGreaterThan(0);
-    expect(food0).toBe(gs.resources.get('food')); // this reward is not food
+    expect(gs.quests.isDailyClaimed('daily_battle')).toBe(true);
+    expect(gs.resources.get('iron')).toBe(iron0 + 60);
+    expect(gs.premium.sparks).toBeGreaterThanOrEqual(sparks0 + 20);
+    expect(gs.claimDailyQuest('daily_battle', 0).reason).toBe('already_claimed');
   });
 
   it('arms the day event on creation so the production bonus is live', () => {
@@ -259,6 +260,7 @@ describe('hero training (FEAT-006)', () => {
   it('trainHero spends sparks and grants XP to an owned hero', () => {
     const gs = freshState();
     gs.heroes.grantHero('ember_warden');
+    buildToLevelOne(gs, 'warming_ward');
     gs.premium.grant(HEROES.TRAIN_SPARK_COST * 5);
     const sparks0 = gs.premium.sparks;
     const vip0 = gs.vip.points;
@@ -281,6 +283,16 @@ describe('hero training (FEAT-006)', () => {
     expect(gs.trainHero('ember_warden')).toBe(-1);
   });
 });
+
+/** Build a gated support building for integration fixtures. */
+function buildToLevelOne(gs: GameState, kind: BuildingKind): void {
+  while (gs.buildings.furnaceLevel < 2) {
+    gs.buildings.startUpgrade('furnace', highStore(), 0);
+    gs.buildings.update(1e12);
+  }
+  gs.buildings.startUpgrade(kind, highStore(), 0);
+  gs.buildings.update(1e12);
+}
 
 /** A well-stocked store so the endgame integration tests never fail on cost. */
 function highStore(): ResourceStore {

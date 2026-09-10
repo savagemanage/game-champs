@@ -20,6 +20,8 @@ export interface LastMatchSetup {
 /** Persisted profile schema. Changes require a version migration. */
 export interface ChampsProfile {
   version: number;
+  /** Next installation-local monotonic match counter (never decremented). */
+  nextMatchCounter: number;
   accountXp: number;
   currency: number;
   unlockedChampionIds: string[];
@@ -38,10 +40,14 @@ export interface ProfileStorage {
   removeItem(key: string): void;
 }
 
+export type ProfileMatchResult = 'win' | 'loss' | 'draw' | 'abandoned';
+
 /** Self-contained facts needed to apply a result to progression. */
 export interface ProfileMatchOutcomeFacts extends LastMatchSetup {
   matchId: string;
-  win: boolean;
+  result: ProfileMatchResult;
+  /** True only when every mandatory Learning action was performed. */
+  learningRequirementsCompleted?: boolean;
 }
 
 

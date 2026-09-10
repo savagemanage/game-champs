@@ -106,9 +106,10 @@ export class TrainingQueue {
     // {@link ResearchSystem.trainSpeedMultiplier} through here so "training
     // speed" techs shorten real batch completion times.
     const perUnitMs = def.trainTimeMs * Math.max(0, trainSpeedMult);
-    const startAt = this._queue.length > 0 ? this._queue[this._queue.length - 1].completesAt : now;
-    const completesAt = startAt + count * perUnitMs;
-    this._queue.push({ troop, count, completesAt });
+    const startsAt = this._queue.length > 0 ? this._queue[this._queue.length - 1].completesAt : now;
+    const durationMs = count * perUnitMs;
+    const completesAt = startsAt + durationMs;
+    this._queue.push({ troop, count, startsAt, durationMs, completesAt });
     return { ok: true };
   }
 
@@ -140,9 +141,8 @@ export class TrainingQueue {
   frontProgress(now: number): number {
     if (this._queue.length === 0) return 1;
     const front = this._queue[0];
-    const def = troopDef(front.troop);
-    const span = front.count * def.trainTimeMs;
-    const startAt = front.completesAt - span;
+    const span = Math.max(1, front.durationMs ?? front.count * troopDef(front.troop).trainTimeMs);
+    const startAt = front.startsAt ?? front.completesAt - span;
     if (now <= startAt) return 0;
     if (now >= front.completesAt) return 1;
     return (now - startAt) / span;

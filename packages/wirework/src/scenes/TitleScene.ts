@@ -6,6 +6,7 @@ import { Menu } from '../ui/Menu';
 import { textStyle } from '../ui/UiText';
 import { tr } from '../i18n/i18n';
 import { LANGUAGES } from '../i18n/strings';
+import { prefersReducedMotion } from '../systems/Persistence';
 import { onViewportRefit, type VisibleWorldRect } from '@open-games/shared';
 
 /**
@@ -18,12 +19,14 @@ export class TitleScene extends Phaser.Scene {
   private bgHills!: Phaser.GameObjects.TileSprite;
   private bgWall!: Phaser.GameObjects.Image;
   private drift = 0;
+  private reducedMotion = false;
 
   constructor() {
     super({ key: SceneKeys.Title });
   }
 
   create(): void {
+    this.reducedMotion = prefersReducedMotion(AudioManager.get(this).getSettings());
     this.cameras.main.setBackgroundColor(PALETTE.BG_SKY_CSS);
     Menu.fadeIn(this);
 
@@ -51,7 +54,7 @@ export class TitleScene extends Phaser.Scene {
 
     // Title + tagline.
     const title = Menu.title(this, cx, CANVAS.HEIGHT * 0.3, tr('brand.name'), 64);
-    this.tweens.add({ targets: title, y: title.y - 4, duration: 1800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    if (!this.reducedMotion) this.tweens.add({ targets: title, y: title.y - 4, duration: 1800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     Menu.label(this, cx, CANVAS.HEIGHT * 0.44, tr('title.tagline'), 20, 0.85);
 
     // Menu buttons.
@@ -75,7 +78,8 @@ export class TitleScene extends Phaser.Scene {
     const audio = AudioManager.get(this);
     // The browser may hold audio locked until the first gesture; retry on input.
     audio.playMusic(AudioKeys.MusicLoop);
-    this.input.once(Phaser.Input.Events.POINTER_DOWN, () => audio.playMusic(AudioKeys.MusicLoop));
+    this.input.once(Phaser.Input.Events.POINTER_DOWN, () => { audio.unlock(); audio.playMusic(AudioKeys.MusicLoop); });
+    this.input.keyboard?.once('keydown', () => { audio.unlock(); audio.playMusic(AudioKeys.MusicLoop); });
   }
 
   /**
@@ -90,6 +94,7 @@ export class TitleScene extends Phaser.Scene {
   }
 
   update(_time: number, delta: number): void {
+    if (this.reducedMotion) return;
     this.drift += delta * 0.004;
     this.bgSky.tilePositionX = this.drift * 0.4;
     this.bgHills.tilePositionX = this.drift;
@@ -135,7 +140,8 @@ export class TitleScene extends Phaser.Scene {
   }
 
   private startGame(): void {
-    Menu.fadeTo(this, () => this.scene.start(SceneKeys.Game));
+    const difficulty = AudioManager.get(this).getSettings().difficulty;
+    Menu.fadeTo(this, () => this.scene.start(SceneKeys.Game, { difficulty }));
   }
 
   private openSettings(): void {

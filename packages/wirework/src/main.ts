@@ -40,7 +40,9 @@ function measureDisplay(): { cssWidth: number; cssHeight: number; dpr: number } 
   const rect = parent?.getBoundingClientRect();
   const cssWidth = rect && rect.width > 0 ? rect.width : window.innerWidth || CANVAS.WIDTH;
   const cssHeight = rect && rect.height > 0 ? rect.height : window.innerHeight || CANVAS.HEIGHT;
-  return { cssWidth, cssHeight, dpr: clampDpr(window.devicePixelRatio || 1) };
+  const rawDpr = clampDpr(window.devicePixelRatio || 1);
+  const budgetDpr = Math.sqrt(CANVAS.MAX_BACKBUFFER_PIXELS / Math.max(1, cssWidth * cssHeight));
+  return { cssWidth, cssHeight, dpr: Math.min(rawDpr, budgetDpr) };
 }
 
 function planFromDisplay(): ViewportPlan {
@@ -82,9 +84,13 @@ const config: Phaser.Types.Core.GameConfig = {
     arcade: {
       // Top-down view: no gravity. PHYSICS.GRAVITY_Y is 0 so movement is planar.
       gravity: { x: 0, y: PHYSICS.GRAVITY_Y },
+      fps: PHYSICS.FIXED_FPS,
+      fixedStep: true,
+      customUpdate: true,
       debug: false,
     },
   },
+  input: { gamepad: true },
   scene: [BootScene, PreloadScene, TitleScene, SettingsScene, GameScene, PauseScene, GameOverScene],
 };
 
@@ -123,14 +129,25 @@ function registerRenderScale(game: Phaser.Game): void {
     publishVisibleWorldRect(game, getVisibleWorldRect());
   };
 
+  let resizeFrame = 0;
+  const scheduleRecompute = (): void => {
+    if (resizeFrame !== 0) cancelAnimationFrame(resizeFrame);
+    resizeFrame = requestAnimationFrame(() => { resizeFrame = 0; recompute(); });
+  };
+
   game.events.once(Phaser.Core.Events.READY, () => {
     for (const scene of game.scene.scenes) {
       attach(scene);
     }
     recompute();
     if (typeof window !== 'undefined') {
-      window.addEventListener('resize', recompute);
-      window.addEventListener('orientationchange', recompute);
+      window.addEventListener('resize', scheduleRecompute);
+      window.addEventListener('orientationchange', scheduleRecompute);
+      game.events.once(Phaser.Core.Events.DESTROY, () => {
+        window.removeEventListener('resize', scheduleRecompute);
+        window.removeEventListener('orientationchange', scheduleRecompute);
+        if (resizeFrame !== 0) cancelAnimationFrame(resizeFrame);
+      });
     }
   });
 }

@@ -100,12 +100,13 @@ export class ResearchSystem {
    * completion at `now + duration`. Returns the check result; on failure
    * nothing changes.
    */
-  start(id: string, store: ResourceStore, labLevel: number, now: number): ResearchCheck {
+  start(id: string, store: ResourceStore, labLevel: number, now: number, buildSpeed = 0): ResearchCheck {
     const check = this.canResearch(id, store, labLevel);
     if (!check.ok) return check;
     const def = RESEARCH_DEFS[id];
     if (!store.spend(def.cost)) return { ok: false, reason: 'cost' };
-    this._active = { nodeId: id, endsAt: now + def.durationMs };
+    const effectiveDuration = Math.max(1_000, Math.ceil(def.durationMs / (1 + Math.max(0, buildSpeed))));
+    this._active = { nodeId: id, endsAt: now + effectiveDuration };
     return { ok: true };
   }
 

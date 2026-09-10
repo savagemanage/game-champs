@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { SceneKeys, PALETTE, CANVAS } from '../config/GameConfig';
 import { AudioKeys } from '../config/AssetKeys';
 import { AudioManager, type GameSettings } from '../systems/AudioManager';
-import { MetaStore } from '../systems/MetaStore';
+import { GameStore } from '../systems/GameStore';
 import { LANGUAGES } from '../i18n/strings';
 import { tr } from '../i18n/i18n';
 import { Menu } from '../ui/Menu';
@@ -49,8 +49,8 @@ export class SettingsScene extends Phaser.Scene {
     const cx = CANVAS.WIDTH / 2;
     Menu.title(this, cx, CANVAS.HEIGHT * 0.12, tr('settings.title'), 40);
 
-    let y = CANVAS.HEIGHT * 0.28;
-    const step = 58;
+    let y = CANVAS.HEIGHT * 0.22;
+    const step = 50;
     this.buildSlider(tr('settings.master'), y, this.settings.masterVolume, (v) => {
       this.settings.masterVolume = v;
       this.audioMgr.updateSettings({ masterVolume: v });
@@ -70,6 +70,24 @@ export class SettingsScene extends Phaser.Scene {
 
     // Language selector: prev VALUE next (bidirectional). Rebuilds on change.
     this.buildStepper(tr('settings.language'), y, this.languageText(), (dir) => this.stepLanguage(dir));
+    y += step;
+    this.buildStepper(tr('settings.mute'), y, this.boolText(this.settings.muted), () => {
+      this.settings.muted = !this.settings.muted;
+      this.audioMgr.updateSettings({ muted: this.settings.muted });
+      this.scene.restart({ returnTo: this.returnTo });
+    });
+    y += step;
+    this.buildStepper(tr('settings.reducedMotion'), y, this.boolText(this.settings.reducedMotion), () => {
+      this.settings.reducedMotion = !this.settings.reducedMotion;
+      this.audioMgr.updateSettings({ reducedMotion: this.settings.reducedMotion });
+      this.scene.restart({ returnTo: this.returnTo });
+    });
+    y += step;
+    this.buildStepper(tr('settings.shake'), y, this.boolText(this.settings.shakeEnabled), () => {
+      this.settings.shakeEnabled = !this.settings.shakeEnabled;
+      this.audioMgr.updateSettings({ shakeEnabled: this.settings.shakeEnabled });
+      this.scene.restart({ returnTo: this.returnTo });
+    });
     y += step;
 
     // Reset progress (two-press confirm).
@@ -136,6 +154,10 @@ export class SettingsScene extends Phaser.Scene {
     Menu.button(this, cx + 200, y, '\u25B6', () => onStep(1), { width: 44, fontSize: 18 });
   }
 
+  private boolText(value: boolean): string {
+    return tr(value ? 'settings.on' : 'settings.off');
+  }
+
   private languageText(): string {
     return tr(`language.${this.settings.language}`);
   }
@@ -159,7 +181,7 @@ export class SettingsScene extends Phaser.Scene {
       this.resetButtonText?.(tr('settings.resetConfirm'));
       return;
     }
-    MetaStore.get().reset();
+    GameStore.get().reset();
     Menu.fadeTo(this, () => this.scene.start(SceneKeys.Title));
   }
 

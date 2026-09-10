@@ -29,7 +29,9 @@ export function getLanguage(): Language {
  * every subscriber when the language actually changes.
  */
 export function setLanguage(lang: Language): void {
-  if (!LANGUAGES.includes(lang) || lang === currentLang) return;
+  if (!LANGUAGES.includes(lang)) return;
+  if (typeof document !== 'undefined') document.documentElement.lang = lang;
+  if (lang === currentLang) return;
   currentLang = lang;
   for (const fn of listeners) fn(currentLang);
 }

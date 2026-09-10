@@ -5,11 +5,13 @@ import type { DerivedStats, Gate, Lane, RunResult } from '../types';
 import { applyGate, gateLabel, isGoodGate } from '../systems/GateMath';
 import { buildTrack, resolveRun, squadFirepower, type RunTrack } from '../systems/RunSimulator';
 import { AudioManager } from '../systems/AudioManager';
-import { MetaStore } from '../systems/MetaStore';
+import { GameStore } from '../systems/GameStore';
+import { deriveStats } from '../systems/MetaProgress';
 import { RunHud } from '../ui/RunHud';
 import { tr } from '../i18n/i18n';
 import { Menu } from '../ui/Menu';
 import { textStyle } from '../ui/UiText';
+import { setAccessibleScreen } from '../systems/Accessibility';
 
 /**
  * RunScene - the core LAST SQUAD gate-runner loop.
@@ -56,6 +58,7 @@ type Obstacle =
 
 export class RunScene extends Phaser.Scene {
   private seed = 0;
+  private runId = '';
   private stats!: DerivedStats;
   private track!: RunTrack;
 
@@ -75,15 +78,24 @@ export class RunScene extends Phaser.Scene {
 
   private travelled = 0;
   private running = false;
+  private suspended = false;
   private finished = false;
+  private startTimer: Phaser.Time.TimerEvent | null = null;
 
   private fireTimer = 0;
   private shootSfxTimer = 0;
+  private bossFxTimer = 0;
   private bossActive = false;
   private bossTimer = 0;
   private activeBoss: Extract<Obstacle, { type: 'cluster' }> | null = null;
 
   private dragActive = false;
+  private pauseLayer: Phaser.GameObjects.Container | null = null;
+  private resumeRunning = false;
+  private readonly lifecyclePause = (): void => this.pauseRun();
+  private readonly visibilityPause = (): void => {
+    if (document.visibilityState === 'hidden') this.pauseRun();
+  };
 
   constructor() {
     super({ key: SceneKeys.Run });
@@ -94,9 +106,11 @@ export class RunScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor(PALETTE.BG_SKY_CSS);
     Menu.fadeIn(this, 250);
 
-    const meta = MetaStore.get();
-    this.stats = meta.derivedStats();
-    this.seed = (Date.now() ^ Math.floor(Math.random() * 0xffffffff)) >>> 0;
+    const gameStore = GameStore.get();
+    this.stats = deriveStats(gameStore.state.miniGame.upgrades);
+    const identity = gameStore.beginFalconRun();
+    this.runId = identity.runId;
+    this.seed = identity.seed;
 
     this.squadSize = Math.max(1, Math.round(this.stats.startSize));
     this.squadPeak = this.squadSize;
@@ -105,8 +119,11 @@ export class RunScene extends Phaser.Scene {
     this.travelled = 0;
     this.finished = false;
     this.running = false;
+    this.suspended = false;
+    this.startTimer = null;
     this.bossActive = false;
     this.bossTimer = 0;
+    this.bossFxTimer = 0;
     this.activeBoss = null;
     this.obstacles = [];
     this.soldiers = [];
@@ -125,13 +142,34 @@ export class RunScene extends Phaser.Scene {
     this.hud.setSquad(this.squadSize);
     this.hud.setDistance(0);
     this.hud.setScore(0);
+    this.hud.setRewardsRemaining(gameStore.falconRewardsRemaining(Date.now()));
+    setAccessibleScreen(tr('nav.falcon'), tr('run.rewardsRemaining', { count: gameStore.falconRewardsRemaining(Date.now()) }));
+
+    Menu.button(this, CANVAS.WIDTH - 38, 78, tr('run.pause'), () => this.pauseRun(), {
+      width: 64,
+      height: 44,
+      fontSize: 12,
+      allowSmall: true,
+    }).container.setDepth(100);
 
     this.setupInput();
+    document.addEventListener('visibilitychange', this.visibilityPause);
+    window.addEventListener('blur', this.lifecyclePause);
+    window.addEventListener('orientationchange', this.lifecyclePause);
 
     // Short "GO!" countdown flash, then start running.
     this.showGo();
 
-    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.hud.destroy());
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.hud.destroy();
+      this.startTimer?.remove();
+      this.startTimer = null;
+      this.time.paused = false;
+      this.tweens.resumeAll();
+      document.removeEventListener('visibilitychange', this.visibilityPause);
+      window.removeEventListener('blur', this.lifecyclePause);
+      window.removeEventListener('orientationchange', this.lifecyclePause);
+    });
   }
 
   // ---- Setup helpers ----------------------------------------------------
@@ -236,8 +274,9 @@ export class RunScene extends Phaser.Scene {
 
   private setupInput(): void {
     // Pointer drag steers toward the pointer's lane.
-    this.input.on(Phaser.Input.Events.POINTER_DOWN, () => {
+    this.input.on(Phaser.Input.Events.POINTER_DOWN, (p: Phaser.Input.Pointer) => {
       this.dragActive = true;
+      this.setLane(p.worldX < CANVAS.WIDTH / 2 ? 0 : 1);
     });
     this.input.on(Phaser.Input.Events.POINTER_UP, () => {
       this.dragActive = false;
@@ -252,6 +291,44 @@ export class RunScene extends Phaser.Scene {
     kb?.on('keydown-A', () => this.setLane(0));
     kb?.on('keydown-RIGHT', () => this.setLane(1));
     kb?.on('keydown-D', () => this.setLane(1));
+    kb?.on('keydown-P', () => this.pauseRun());
+    kb?.on('keydown-ESC', () => this.pauseRun());
+  }
+
+  private pauseRun(): void {
+    if (this.finished || this.pauseLayer) return;
+    this.resumeRunning = this.running;
+    this.running = false;
+    this.suspended = true;
+    this.time.paused = true;
+    this.tweens.pauseAll();
+    const cx = CANVAS.WIDTH / 2;
+    const cy = CANVAS.HEIGHT / 2;
+    const scrim = this.add.rectangle(cx, cy, CANVAS.WIDTH, CANVAS.HEIGHT, 0x000000, 0.78).setInteractive();
+    const panel = Menu.panel(this, cx, cy, 400, 250, 0.99);
+    const title = Menu.title(this, cx, cy - 70, tr('run.paused'), 28);
+    const resume = Menu.button(this, cx, cy, tr('run.resume'), () => this.resumeRun(), { width: 220 });
+    const abandon = Menu.button(this, cx, cy + 62, tr('run.abandon'), () => this.abandonRun(), { width: 220, accent: PALETTE.DANGER });
+    this.pauseLayer = this.add.container(0, 0, [scrim, panel, title, resume.container, abandon.container]).setDepth(200);
+  }
+
+  private resumeRun(): void {
+    this.pauseLayer?.destroy(true);
+    this.pauseLayer = null;
+    this.time.paused = false;
+    this.tweens.resumeAll();
+    this.suspended = false;
+    this.running = this.resumeRunning;
+  }
+
+  private abandonRun(): void {
+    this.time.paused = false;
+    this.tweens.resumeAll();
+    this.pauseLayer?.destroy(true);
+    this.pauseLayer = null;
+    this.suspended = false;
+    this.finished = true;
+    this.scene.start(SceneKeys.Home);
   }
 
   private showGo(): void {
@@ -268,8 +345,9 @@ export class RunScene extends Phaser.Scene {
       ease: 'Cubic.easeOut',
       onComplete: () => t.destroy(),
     });
-    this.time.delayedCall(300, () => {
-      this.running = true;
+    this.startTimer = this.time.delayedCall(300, () => {
+      this.startTimer = null;
+      if (!this.suspended && !this.finished) this.running = true;
     });
   }
 
@@ -339,7 +417,7 @@ export class RunScene extends Phaser.Scene {
   // ---- Main loop --------------------------------------------------------
 
   update(_time: number, delta: number): void {
-    if (this.finished) return;
+    if (this.finished || this.suspended) return;
     const dt = delta / 1000;
 
     if (this.running && !this.bossActive) {
@@ -421,7 +499,7 @@ export class RunScene extends Phaser.Scene {
     this.playFx(grew ? TextureKeys.FxSparkle : TextureKeys.FxHit, 'fx_sparkle_play', gx, gy, grew);
     AudioManager.get(this).playSfx(grew ? AudioKeys.GatePass : AudioKeys.Hit, 0.7);
     if (grew) AudioManager.get(this).playSfx(AudioKeys.LevelUp, 0.4);
-    else this.cameras.main.shake(120, 0.006);
+    else this.shake(120, 0.006);
 
     // Dissolve the passed gates.
     ob.sprites.forEach((c) => {
@@ -477,7 +555,7 @@ export class RunScene extends Phaser.Scene {
     }
     AudioManager.get(this).playSfx(AudioKeys.Hit, 0.6);
     if (casualties > 0) {
-      this.cameras.main.shake(160, 0.008);
+      this.shake(160, 0.008);
       this.setSquadSize(after, false);
     }
   }
@@ -504,11 +582,11 @@ export class RunScene extends Phaser.Scene {
     this.hud.setBossHp(ob.hp / ob.maxHp);
 
     // Occasional muzzle/hit FX on the boss.
-    this.shootSfxTimer -= dt;
-    if (boss && this.shootSfxTimer <= 0) {
+    this.bossFxTimer -= dt;
+    if (boss && this.bossFxTimer <= 0) {
       this.playFx(TextureKeys.FxHit, 'fx_hit_play', boss.x + Phaser.Math.Between(-20, 20), boss.y + Phaser.Math.Between(-10, 10), false);
       AudioManager.get(this).playSfx(AudioKeys.Shoot, 0.3);
-      this.shootSfxTimer = 0.12;
+      this.bossFxTimer = 0.12;
     }
 
     if (this.bossTimer >= ENEMIES.BOSS_DURATION || ob.hp <= 0) {
@@ -531,9 +609,9 @@ export class RunScene extends Phaser.Scene {
         this.playFx(TextureKeys.FxHit, 'fx_hit_play', boss.x, boss.y, false);
         this.tweens.add({ targets: boss, alpha: 0, scale: 2.2, angle: 20, duration: 400, onComplete: () => boss.destroy() });
       }
-      this.cameras.main.shake(300, 0.014);
+      this.shake(300, 0.014);
     } else {
-      if (casualties > 0) this.cameras.main.shake(300, 0.02);
+      if (casualties > 0) this.shake(300, 0.02);
       this.setSquadSize(after, false);
     }
     this.hud.setBossHp(Math.max(0, ob.hp / ob.maxHp));
@@ -566,6 +644,10 @@ export class RunScene extends Phaser.Scene {
     }
   }
 
+  private shake(duration: number, intensity: number): void {
+    if (AudioManager.get(this).getSettings().shakeEnabled) this.cameras.main.shake(duration, intensity);
+  }
+
   private playFx(tex: string, anim: string, x: number, y: number, tintGood: boolean, scale = 1.6): void {
     const fx = this.add.sprite(x, y, tex).setScale(scale).setDepth(40);
     if (tex === TextureKeys.FxSparkle) fx.setTint(tintGood ? PALETTE.SUCCESS : PALETTE.ACCENT);
@@ -591,17 +673,20 @@ export class RunScene extends Phaser.Scene {
     const resolved = resolveRun(this.seed, this.stats, this.laneChoices);
     const result: RunResult = resolved.result;
 
-    const meta = MetaStore.get();
-    const bests = meta.recordRun(result);
+    const settlement = GameStore.get().settleFalconRun(this.runId, result, Date.now());
 
     AudioManager.get(this).playSfx(result.win ? AudioKeys.Victory : AudioKeys.Defeat, 0.9);
 
     this.time.delayedCall(400, () => {
       Menu.fadeTo(this, () =>
         this.scene.start(SceneKeys.Results, {
+          runId: this.runId,
           result,
-          newBestDistance: bests.newBestDistance,
-          newBestScore: bests.newBestScore,
+          newBestDistance: settlement.newBestDistance,
+          newBestScore: settlement.newBestScore,
+          reward: settlement.reward,
+          grantedMainGame: settlement.grantedMainGame,
+          remainingToday: settlement.remainingToday,
         }),
       );
     });

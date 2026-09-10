@@ -2,12 +2,10 @@
 """
 gen_sprites.py - Original pixel-art asset generator for WIREWORK.
 
-Everything produced by this script is ORIGINAL art authored programmatically for
-this project. Nothing is traced, ripped, or derived from any existing IP. The
-game is an original-world "wall-defense ODM action inspired by the genre"; the
-six enemy giants are role-based original designs (Wanderer, Sprinter, Breaker,
-Aberrant, Armored, Thrower), each with a distinct silhouette/color and a visible
-NAPE weak-point marker (the only reliably lethal target).
+Everything produced by this script is original programmatic art for this project.
+The Arc Guardian, six autonomous machine roles, citizens, structures, effects,
+and interface assets are designed specifically for Wirework's original setting.
+Each machine has a distinct silhouette and a visible rear NODE weak-point marker.
 
 All output PNGs are nearest-neighbour pixel art on a cohesive palette that lines
 up with src/config/GameConfig.ts (logical canvas 480x270).
@@ -32,44 +30,44 @@ for d in (SPR, BG, UI, FX):
 # ---------------------------------------------------------------------------
 T = (0, 0, 0, 0)  # transparent
 
-# Skin / flesh tones for the giants (varied per role for distinct silhouettes)
-FLESH = {
-    "wanderer": (198, 150, 130, 255),
-    "wanderer_sh": (150, 108, 92, 255),
-    "sprinter": (176, 128, 150, 255),
-    "sprinter_sh": (128, 88, 108, 255),
-    "breaker": (170, 128, 96, 255),
-    "breaker_sh": (120, 88, 64, 255),
-    "aberrant": (150, 176, 150, 255),
-    "aberrant_sh": (100, 128, 100, 255),
-    "armored": (140, 140, 132, 255),
-    "armored_sh": (96, 96, 90, 255),
-    "thrower": (170, 158, 130, 255),
-    "thrower_sh": (120, 110, 88, 255),
+# Machine shell tones (varied per role for distinct silhouettes)
+MACHINE_METAL = {
+    "surveyor": (198, 150, 130, 255),
+    "surveyor_sh": (150, 108, 92, 255),
+    "skitter": (176, 128, 150, 255),
+    "skitter_sh": (128, 88, 108, 255),
+    "rammer": (170, 128, 96, 255),
+    "rammer_sh": (120, 88, 64, 255),
+    "fluxborn": (150, 176, 150, 255),
+    "fluxborn_sh": (100, 128, 100, 255),
+    "bastion": (140, 140, 132, 255),
+    "bastion_sh": (96, 96, 90, 255),
+    "bombard": (170, 158, 130, 255),
+    "bombard_sh": (120, 110, 88, 255),
 }
-MUSCLE = (196, 106, 90, 255)       # exposed muscle striations
-MUSCLE_DK = (150, 74, 62, 255)
-PLATE = (92, 96, 104, 255)         # armored plating
+SPARK = (196, 106, 90, 255)       # exposed muscle striations
+SPARK_DK = (150, 74, 62, 255)
+PLATE = (92, 96, 104, 255)         # bastion plating
 PLATE_HI = (128, 132, 140, 255)
 PLATE_DK = (58, 60, 66, 255)
-NAPE = (255, 90, 77, 255)          # weak-point marker (PALETTE.ENEMY_WEAKPOINT)
-NAPE_GLOW = (255, 160, 120, 255)
-EYE = (255, 226, 120, 255)
+NODE = (255, 90, 77, 255)          # weak-point marker (PALETTE.ENEMY_WEAKPOINT)
+NODE_GLOW = (255, 160, 120, 255)
+SENSOR = (255, 226, 120, 255)
 MOUTH = (60, 30, 26, 255)
 OUTLINE = (24, 18, 22, 255)
 
-# Hero palette
+# Arc Guardian palette
 HERO_SKIN = (240, 200, 160, 255)
 HERO_SKIN_SH = (196, 156, 120, 255)
 HERO_HAIR = (74, 54, 40, 255)
 HERO_JACKET = (94, 108, 92, 255)      # green field jacket
 HERO_JACKET_SH = (64, 76, 62, 255)
-HERO_STRAP = (70, 58, 44, 255)        # leather ODM harness straps
+HERO_STRAP = (70, 58, 44, 255)        # Arc rig harness straps
 HERO_PANTS = (86, 84, 96, 255)
 HERO_BOOT = (48, 42, 40, 255)
 HERO_BLADE = (200, 214, 228, 255)
 HERO_BLADE_HI = (240, 248, 255, 255)
-HERO_GEAR = (120, 120, 128, 255)      # ODM gear metal
+HERO_GEAR = (120, 120, 128, 255)      # Arc rig gear metal
 WIRE = (210, 220, 210, 255)
 
 # Citizen palette
@@ -120,7 +118,7 @@ def save(img, path, scale=1):
 
 
 # ===========================================================================
-# HERO: 32x32 frames, ODM soldier with grapple poses.
+# HERO: 32x32 frames, Arc rig soldier with grapple poses.
 # Frames: 0 idle, 1 run-a, 2 run-b, 3 grapple-fire (arm up), 4 swing, 5 slash, 6 hurt
 # ===========================================================================
 FRAME = 32
@@ -139,7 +137,7 @@ def draw_hero(img, ox, oy, pose):
     # --- torso / jacket ---
     rect(img, cx - 4, oy + 10, cx + 3, oy + 19, HERO_JACKET)
     rect(img, cx + 2, oy + 10, cx + 3, oy + 19, HERO_JACKET_SH)
-    # ODM harness straps (X across chest)
+    # Arc rig harness straps (X across chest)
     for i in range(10):
         px(img, cx - 4 + i * 0, oy + 10 + i, HERO_STRAP)
     for i in range(8):
@@ -188,7 +186,7 @@ def draw_hero(img, ox, oy, pose):
         px(img, cx + 11, oy + 16, HERO_BLADE_HI)
     elif pose == 5:       # slash: both blades out to the right (LONG reach)
         # Blades extended to the frame edge so the weapon reads as a long,
-        # far-reaching slash that visibly connects with a giant (matches the
+        # far-reaching slash that visibly connects with a machine (matches the
         # extended CombatSystem reach + scaled slash FX). 32px frame: cx=+16, so
         # cx+15 is the last in-bounds column.
         rect(img, cx + 4, oy + 10, cx + 6, oy + 12, HERO_JACKET)
@@ -206,104 +204,73 @@ def build_hero():
     for f in range(HERO_FRAMES):
         draw_hero(sheet, f * FRAME, 0, f)
     sheet = outline_alpha(sheet)
-    save(sheet, os.path.join(SPR, "hero.png"))
-    print("hero.png", sheet.size)
+    save(sheet, os.path.join(SPR, "arc_guardian.png"))
+    print("arc_guardian.png", sheet.size)
 
 
 # ===========================================================================
-# ENEMY GIANTS: 6 role-based originals. Each is a spritesheet of walk frames.
+# ENEMY MACHINES: 6 role-based originals. Each is a spritesheet of walk frames.
 # Frame size scales with the role's height (aligned to GameConfig heights).
-# Every giant has a NAPE marker (red) at the back of the neck.
+# Every machine has a NODE marker (red) at the back of the neck.
 # ===========================================================================
 
-def giant_base(img, ox, oy, fw, fh, flesh, shade, step, opts):
-    """
-    Generic bipedal humanoid giant. opts tweaks silhouette per role.
-      opts: dict(head_r, torso_w, arm_len, leg_spread, hunch, muscle, quad)
-    Returns nape pixel (x,y) in image space.
-    """
+def machine_base(img, ox, oy, fw, fh, metal, shade, step, opts):
+    """Draw a non-mechanical autonomous siege machine with a rear cooling node."""
     cx = ox + fw // 2
-    ground = oy + fh - 1
-    head_r = opts["head_r"]
-    torso_w = opts["torso_w"]
-    hunch = opts.get("hunch", 0)
-    quad = opts.get("quad", False)
+    ground = oy + fh - 2
+    half = max(5, opts["torso_w"])
+    chassis_top = oy + max(5, fh // 4)
+    chassis_bottom = oy + int(fh * 0.64)
 
-    # proportion anchors
-    head_cy = oy + head_r + 2 + hunch
-    neck_y = head_cy + head_r
-    torso_top = neck_y
-    torso_bot = oy + int(fh * (0.55 if not quad else 0.62))
-    hip_y = torso_bot
-    leg_len = ground - hip_y
+    # Angular bastion chassis and central sensor slit.
+    rect(img, cx - half, chassis_top, cx + half, chassis_bottom, metal)
+    rect(img, cx - half, chassis_top, cx + half, chassis_top + 2, PLATE_HI)
+    rect(img, cx + half - 2, chassis_top + 2, cx + half, chassis_bottom, shade)
+    rect(img, cx - half + 3, chassis_top + 5, cx - 2, chassis_top + 7, SENSOR)
+    rect(img, cx - 1, chassis_top + 5, cx + 1, chassis_top + 7, PLATE_DK)
 
-    # --- legs ---
-    spread = opts.get("leg_spread", torso_w // 2)
-    lw = max(2, torso_w // 3)
-    swing = 2 if step == 1 else -2
-    if quad:
-        # quadruped: front + back legs
-        rect(img, cx - spread - lw, hip_y, cx - spread, ground, flesh)
-        rect(img, cx + spread, hip_y, cx + spread + lw, ground - abs(swing), flesh)
-        rect(img, ox + 2, hip_y + 2, ox + 2 + lw, ground, flesh)          # front leg
-        rect(img, ox + fw - 3 - lw, hip_y + 2, ox + fw - 3, ground - 1, flesh)
+    # Mechanical treads / articulated pylons; no head, face, torso, arms, or legs.
+    stride = 1 if step else -1
+    if opts.get("quad"):
+        for sx in (-half, half - 3):
+            rect(img, cx + sx, chassis_bottom, cx + sx + 3, ground - 2 + stride, PLATE_DK)
+            rect(img, cx + sx - 1, ground - 3 + stride, cx + sx + 4, ground, metal)
     else:
-        rect(img, cx - spread - lw + swing, hip_y, cx - spread + swing, ground, flesh)
-        rect(img, cx + spread - swing, hip_y, cx + spread + lw - swing, ground, flesh)
-        rect(img, cx - spread - lw + swing, ground - 2, cx - spread + swing, ground, shade)
-        rect(img, cx + spread - swing, ground - 2, cx + spread + lw - swing, ground, shade)
+        rect(img, cx - half + stride, chassis_bottom, cx - 2 + stride, ground, PLATE_DK)
+        rect(img, cx + 2 - stride, chassis_bottom, cx + half - stride, ground, PLATE_DK)
+        rect(img, cx - half - 1 + stride, ground - 3, cx - 1 + stride, ground, metal)
+        rect(img, cx + 1 - stride, ground - 3, cx + half + 1 - stride, ground, metal)
 
-    # --- torso ---
-    for y in range(torso_top, torso_bot + 1):
-        t = (y - torso_top) / max(1, (torso_bot - torso_top))
-        halfw = int(torso_w * (0.75 + 0.25 * (1 - t)))
-        rect(img, cx - halfw, y, cx + halfw, y, flesh)
-        rect(img, cx + halfw - 1, y, cx + halfw, y, shade)   # right-side shade
-    # muscle striations if role has exposed flesh
-    if opts.get("muscle"):
-        for y in range(torso_top + 2, torso_bot - 1, 3):
-            rect(img, cx - torso_w + 1, y, cx - 1, y, MUSCLE_DK)
-            rect(img, cx - torso_w + 1, y + 1, cx - 1, y + 1, MUSCLE)
+    # Role tool: forward ram/cutter on screen-left and antenna mast.
+    tool = max(5, opts["arm_len"] // 2)
+    rect(img, cx - half - tool, chassis_top + 5, cx - half, chassis_top + 8, metal)
+    rect(img, cx - half - tool - 2, chassis_top + 6, cx - half - tool, chassis_top + 7, PLATE_HI)
+    rect(img, cx - 2, chassis_top - 5, cx, chassis_top, PLATE)
+    px(img, cx - 1, chassis_top - 6, SENSOR)
 
-    # --- head ---
-    rect(img, cx - head_r, head_cy - head_r, cx + head_r, head_cy + head_r, flesh)
-    rect(img, cx + head_r - 1, head_cy - head_r, cx + head_r, head_cy + head_r, shade)
-    # eyes + mouth
-    px(img, cx - head_r + 1, head_cy - 1, EYE)
-    px(img, cx + 1, head_cy - 1, EYE)
-    rect(img, cx - head_r + 1, head_cy + head_r - 1, cx + head_r - 1, head_cy + head_r, MOUTH)
-
-    # --- arms ---
-    arm_len = opts["arm_len"]
-    ay = torso_top + 2
-    # left arm reaching forward (toward the wall, i.e. screen-left)
-    rect(img, cx - torso_w - 3, ay, cx - torso_w, ay + arm_len, flesh)
-    rect(img, cx - torso_w - 4, ay + arm_len, cx - torso_w, ay + arm_len + 2, flesh)
-    # right arm trailing
-    rect(img, cx + torso_w, ay + 1, cx + torso_w + 3, ay + arm_len - 1, flesh)
-
-    # --- NAPE weak-point marker: back of neck (screen-right side of neck) ---
-    nx = cx + head_r - 1
-    ny = neck_y
-    rect(img, nx - 1, ny - 1, nx + 1, ny + 1, NAPE)
-    px(img, nx, ny, NAPE_GLOW)
+    # Rear cooling node on screen-right, visually distinct by diamond shape and vents.
+    nx = cx + half + 3
+    ny = (chassis_top + chassis_bottom) // 2
+    rect(img, nx - 1, ny - 3, nx + 1, ny + 3, NODE)
+    rect(img, nx - 3, ny - 1, nx + 3, ny + 1, NODE)
+    px(img, nx, ny, NODE_GLOW)
     return (nx, ny)
 
 
-def build_giant(name, fw, fh, frames, flesh, shade, opts, scale=1, extra=None):
+def build_machine(name, fw, fh, frames, metal, shade, opts, scale=1, extra=None):
     sheet = new(fw * frames, fh)
-    napes = []
+    nodes = []
     for f in range(frames):
-        n = giant_base(sheet, f * fw, 0, fw, fh, flesh, shade, f % 2, opts)
+        n = machine_base(sheet, f * fw, 0, fw, fh, metal, shade, f % 2, opts)
         if extra:
             extra(sheet, f * fw, 0, fw, fh, f % 2, opts)
-        napes.append(n)
+        nodes.append(n)
     sheet = outline_alpha(sheet)
-    save(sheet, os.path.join(SPR, f"giant_{name}.png"), scale)
-    print(f"giant_{name}.png", (sheet.width * scale, sheet.height * scale), "nape@", napes[0])
+    save(sheet, os.path.join(SPR, f"machine_{name}.png"), scale)
+    print(f"machine_{name}.png", (sheet.width * scale, sheet.height * scale), "node@", nodes[0])
 
 
-def extra_armored(img, ox, oy, fw, fh, step, opts):
+def extra_bastion(img, ox, oy, fw, fh, step, opts):
     """Armored: bony plate over face + chest, exposed weak points on limbs."""
     cx = ox + fw // 2
     # face/chest plate
@@ -315,10 +282,10 @@ def extra_armored(img, ox, oy, fw, fh, step, opts):
          oy + int(fh * 0.5), PLATE_DK)
     # exposed weak-point behind knee (secondary), marked with muscle tone
     rect(img, cx + opts["torso_w"], oy + int(fh * 0.6), cx + opts["torso_w"] + 2,
-         oy + int(fh * 0.66), MUSCLE)
+         oy + int(fh * 0.66), SPARK)
 
 
-def extra_thrower(img, ox, oy, fw, fh, step, opts):
+def extra_bombard(img, ox, oy, fw, fh, step, opts):
     """Thrower: holds a chunk of debris in the trailing hand."""
     cx = ox + fw // 2
     hx = cx + opts["torso_w"] + 3
@@ -328,34 +295,34 @@ def extra_thrower(img, ox, oy, fw, fh, step, opts):
     px(img, hx + 3, hy + 3, PLATE_DK)
 
 
-def build_all_giants():
-    # 1) Wanderer - standard size/speed, basic humanoid (height ~40)
-    build_giant("wanderer", 40, 48, 2,
-                FLESH["wanderer"], FLESH["wanderer_sh"],
+def build_all_machines():
+    # 1) Wanderer - standard size/speed, basic mechanical (height ~40)
+    build_machine("surveyor", 40, 48, 2,
+                MACHINE_METAL["surveyor"], MACHINE_METAL["surveyor_sh"],
                 dict(head_r=5, torso_w=8, arm_len=14, leg_spread=4, muscle=False))
     # 2) Sprinter - small, fast, quadrupedal charge (height ~24)
-    build_giant("sprinter", 40, 32, 2,
-                FLESH["sprinter"], FLESH["sprinter_sh"],
+    build_machine("skitter", 40, 32, 2,
+                MACHINE_METAL["skitter"], MACHINE_METAL["skitter_sh"],
                 dict(head_r=3, torso_w=6, arm_len=10, leg_spread=6, hunch=4,
                      muscle=True, quad=True))
     # 3) Breaker - huge, slow, high HP wall-smasher (height ~64)
-    build_giant("breaker", 56, 72, 2,
-                FLESH["breaker"], FLESH["breaker_sh"],
+    build_machine("rammer", 56, 72, 2,
+                MACHINE_METAL["rammer"], MACHINE_METAL["rammer_sh"],
                 dict(head_r=6, torso_w=13, arm_len=22, leg_spread=6, muscle=True))
     # 4) Aberrant - erratic, lean and twisted (height ~36)
-    build_giant("aberrant", 40, 44, 2,
-                FLESH["aberrant"], FLESH["aberrant_sh"],
+    build_machine("fluxborn", 40, 44, 2,
+                MACHINE_METAL["fluxborn"], MACHINE_METAL["fluxborn_sh"],
                 dict(head_r=4, torso_w=6, arm_len=18, leg_spread=3, hunch=2, muscle=True))
-    # 5) Armored - armored front + exposed weak points (height ~44)
-    build_giant("armored", 44, 52, 2,
-                FLESH["armored"], FLESH["armored_sh"],
+    # 5) Armored - bastion front + exposed weak points (height ~44)
+    build_machine("bastion", 44, 52, 2,
+                MACHINE_METAL["bastion"], MACHINE_METAL["bastion_sh"],
                 dict(head_r=5, torso_w=10, arm_len=15, leg_spread=5, muscle=False),
-                extra=extra_armored)
+                extra=extra_bastion)
     # 6) Thrower - ranged, lobs debris (height ~46)
-    build_giant("thrower", 46, 54, 2,
-                FLESH["thrower"], FLESH["thrower_sh"],
+    build_machine("bombard", 46, 54, 2,
+                MACHINE_METAL["bombard"], MACHINE_METAL["bombard_sh"],
                 dict(head_r=5, torso_w=9, arm_len=16, leg_spread=4, muscle=True),
-                extra=extra_thrower)
+                extra=extra_bombard)
 
 
 # ===========================================================================
@@ -562,7 +529,7 @@ def build_backgrounds():
 
 
 # ===========================================================================
-# FX: slash arc, spark/blood burst, dust puff, steam (giant death). 5-frame anims.
+# FX: slash arc, spark/energy burst, dust puff, steam (machine death). 5-frame anims.
 # ===========================================================================
 def build_fx():
     # slash arc: 24x24, 4 frames sweeping
@@ -581,10 +548,10 @@ def build_fx():
             y = int(cy + r * math.sin(ang))
             px(sheet, x, y, HERO_BLADE_HI)
             px(sheet, x, y + 1, HERO_BLADE)
-    save(sheet, os.path.join(FX, "slash.png"))
-    print("fx/slash.png", sheet.size)
+    save(sheet, os.path.join(FX, "arc_cut.png"))
+    print("fx/arc_cut.png", sheet.size)
 
-    # spark/blood: 16x16, 4 frames expanding
+    # spark/energy: 16x16, 4 frames expanding
     fw = 16
     sheet = new(fw * frames, fw)
     import math
@@ -595,9 +562,9 @@ def build_fx():
         for a in range(0, 360, 30):
             x = int(cx + r * math.cos(math.radians(a)))
             y = int(cy + r * math.sin(math.radians(a)))
-            c = MUSCLE if f < 2 else NAPE
+            c = SPARK if f < 2 else NODE
             px(sheet, x, y, c)
-            px(sheet, x, y + 1, MUSCLE_DK)
+            px(sheet, x, y + 1, SPARK_DK)
     save(sheet, os.path.join(FX, "spark.png"))
     print("fx/spark.png", sheet.size)
 
@@ -614,7 +581,7 @@ def build_fx():
     save(sheet, os.path.join(FX, "dust.png"))
     print("fx/dust.png", sheet.size)
 
-    # steam (giant vanishing): 24x24, 4 frames rising
+    # steam (machine vanishing): 24x24, 4 frames rising
     fw = 24
     sheet = new(fw * frames, fw)
     for f in range(frames):
@@ -624,8 +591,8 @@ def build_fx():
             y = 22 - ((i + f * 4) % 22)
             px(sheet, x, y, (210, 210, 214, 160))
             px(sheet, x + 1, y, (180, 180, 186, 140))
-    save(sheet, os.path.join(FX, "steam.png"))
-    print("fx/steam.png", sheet.size)
+    save(sheet, os.path.join(FX, "coolant.png"))
+    print("fx/coolant.png", sheet.size)
 
 
 # ===========================================================================
@@ -667,11 +634,11 @@ def build_ui():
     icons = new(ts * 4, ts)
     # heart
     for (dx, dy) in [(4,4),(5,3),(6,4),(9,4),(10,3),(11,4)]:
-        rect(icons, dx, dy, dx+1, dy+1, NAPE)
+        rect(icons, dx, dy, dx+1, dy+1, NODE)
     for y in range(5, 9):
-        rect(icons, 4 + (y-5), y, 11 - (y-5), y, NAPE)
-    rect(icons, 6, 9, 9, 10, NAPE)
-    px(icons, 7, 11, NAPE)
+        rect(icons, 4 + (y-5), y, 11 - (y-5), y, NODE)
+    rect(icons, 6, 9, 9, 10, NODE)
+    px(icons, 7, 11, NODE)
     # citizen head
     ox = ts
     rect(icons, ox+6, 3, ox+9, 6, CIT_SKIN)
@@ -692,7 +659,7 @@ def build_ui():
 
 
 # ===========================================================================
-# GRAPPLE ANCHOR / HOOK: 8x8 single sprite (the ODM hook that bites terrain).
+# GRAPPLE ANCHOR / HOOK: 8x8 single sprite (the Arc rig hook that bites terrain).
 # ===========================================================================
 def build_hook():
     h = new(8, 8)
@@ -703,13 +670,13 @@ def build_hook():
     px(h, 7, 4, HERO_GEAR)
     rect(h, 3, 3, 4, 6, (150, 150, 158, 255))
     h = outline_alpha(h)
-    save(h, os.path.join(SPR, "hook.png"))
-    print("hook.png", h.size)
+    save(h, os.path.join(SPR, "tether_probe.png"))
+    print("tether_probe.png", h.size)
 
 
 if __name__ == "__main__":
     build_hero()
-    build_all_giants()
+    build_all_machines()
     build_citizens()
     build_tiles()
     build_backgrounds()

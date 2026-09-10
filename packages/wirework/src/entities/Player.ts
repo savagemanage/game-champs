@@ -13,11 +13,11 @@ export interface MoveInput {
 }
 
 /**
- * Player - the ODM hero as a typed Arcade Physics sprite for the TOP-DOWN
+ * Player — the Arc Guardian as a typed Arcade Physics sprite for the top-down
  * arena.
  *
  * Owns planar 8-direction movement (accelerate toward a target velocity with
- * friction), facing (for sprite flip and nape-side logic), the omnidirectional
+ * friction), facing, directional combat readability, the omnidirectional
  * dash burst, hurt/i-frames/knockback, and the animation state machine wired to
  * the 32x32 hero spritesheet. The grapple system drives the same body while a
  * wire is attached; this class exposes helpers ({@link body}, {@link swinging},
@@ -26,7 +26,7 @@ export interface MoveInput {
 export class Player extends Phaser.Physics.Arcade.Sprite implements Damageable {
   declare public body: Phaser.Physics.Arcade.Body;
 
-  /** +1 facing right, -1 facing left (drives sprite flip + nape side). */
+  /** +1 facing right, -1 facing left (drives sprite flip). */
   private facing: 1 | -1 = 1;
 
   /**
@@ -53,6 +53,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite implements Damageable {
   /** Dash state. */
   private dashUntil = 0;
   private dashReadyAt = 0;
+  private releaseFling = false;
+  private releaseSweepPending = false;
 
   /** When true (grapple attached), movement defers to the wire fling/pull. */
   public swinging = false;
@@ -125,6 +127,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite implements Damageable {
   startDash(dirX: number, dirY: number, nowMs: number): void {
     const { x: nx, y: ny } = dashDirection(dirX, dirY);
     this.body.setVelocity(nx * DASH.IMPULSE, ny * DASH.IMPULSE);
+    this.releaseFling = false;
     this.dashUntil = nowMs + DASH.DURATION_MS;
     this.dashReadyAt = nowMs + DASH.COOLDOWN_MS;
     // Face along the horizontal component of the dash for sprite readability.
@@ -134,6 +137,28 @@ export class Player extends Phaser.Physics.Arcade.Sprite implements Damageable {
   /** True while the dash burst window is active. */
   isDashing(nowMs: number): boolean {
     return nowMs < this.dashUntil;
+  }
+
+  /** Mark momentum created by an attached-wire release as traversal fling. */
+  beginReleaseFling(): void {
+    this.releaseFling = true;
+    this.releaseSweepPending = true;
+  }
+
+  consumeReleaseSweep(): boolean {
+    const pending = this.releaseSweepPending;
+    this.releaseSweepPending = false;
+    return pending;
+  }
+
+  /** Whether explicit release momentum is still above ordinary movement speed. */
+  isFlinging(nowMs: number): boolean {
+    if (!this.releaseFling || this.swinging || this.isDashing(nowMs)) return false;
+    if (Math.hypot(this.body.velocity.x, this.body.velocity.y) <= AIR.FLING_SPEED_THRESHOLD) {
+      this.releaseFling = false;
+      return false;
+    }
+    return true;
   }
 
   /** Add a velocity impulse (used by grapple release / external forces). */
@@ -176,7 +201,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite implements Damageable {
 
     this.takeDamage(amount);
     this.invulnUntil = nowMs + HERO_COMBAT.INVULN_MS;
-    this.hurtUntil = nowMs + 260;
+    this.hurtUntil = nowMs + HERO_COMBAT.HURT_MS;
 
     // Knock the hero directly away from the source across the plane.
     let dx = this.x - srcX;
@@ -199,10 +224,16 @@ export class Player extends Phaser.Physics.Arcade.Sprite implements Damageable {
     return true;
   }
 
-  /** Blink the sprite alpha for the duration of the i-frame window. */
+  /** Show the i-frame state; reduced motion uses one static flash instead of repeated blink. */
   private startInvulnBlink(): void {
     this.scene.tweens.killTweensOf(this);
     this.setAlpha(1);
+    const reducedMotion = typeof document !== 'undefined' && document.documentElement.dataset.reducedMotion === 'on';
+    if (reducedMotion) {
+      this.setTintFill(0xe8f8ff);
+      this.scene.time.delayedCall(80, () => this.clearTint());
+      return;
+    }
     this.scene.tweens.add({
       targets: this,
       alpha: 0.35,
@@ -252,9 +283,15 @@ export class Player extends Phaser.Physics.Arcade.Sprite implements Damageable {
           const len = Math.hypot(ix, iy) || 1;
           const targetX = (ix / len) * MOVEMENT.MOVE_SPEED;
           const targetY = (iy / len) * MOVEMENT.MOVE_SPEED;
-          const k = 1 - Math.exp(-(MOVEMENT.MOVE_ACCEL / MOVEMENT.MOVE_SPEED) * dt);
-          body.velocity.x = Phaser.Math.Linear(body.velocity.x, targetX, k);
-          body.velocity.y = Phaser.Math.Linear(body.velocity.y, targetY, k);
+          const deltaX = targetX - body.velocity.x;
+          const deltaY = targetY - body.velocity.y;
+          const deltaLength = Math.hypot(deltaX, deltaY);
+          const maxDelta = MOVEMENT.MOVE_ACCEL * dt;
+          if (deltaLength <= maxDelta) body.setVelocity(targetX, targetY);
+          else {
+            body.velocity.x += (deltaX / deltaLength) * maxDelta;
+            body.velocity.y += (deltaY / deltaLength) * maxDelta;
+          }
         } else {
           this.applyFriction(body.velocity, MOVEMENT.MOVE_FRICTION * dt);
         }

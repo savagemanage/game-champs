@@ -52,8 +52,10 @@ function freshBoss(): RallyBossState {
  */
 export class RallySystem {
   private readonly _bosses: Map<string, RallyBossState> = new Map();
+  private _dayKey: number;
 
   constructor(state?: RallyState) {
+    this._dayKey = state && Number.isFinite(state.dayKey) ? Math.floor(state.dayKey ?? -1) : -1;
     if (state?.bosses) {
       for (const id of RALLY_BOSS_IDS) {
         const b = state.bosses[id];
@@ -107,6 +109,17 @@ export class RallySystem {
    * reward tiers (each tier granted once per cycle). Does NOT mutate any store —
    * the caller applies the rewards. Deterministic given the inputs + state.
    */
+  /** Reset all bosses exactly once when the UTC day changes. */
+  syncDay(now: number): boolean {
+    if (!Number.isFinite(now) || now < 0) return false;
+    const today = Math.floor(now / 86_400_000);
+    if (today <= this._dayKey) return false;
+    this._dayKey = today;
+    this._bosses.clear();
+    return true;
+  }
+
+  /** Perform one valid attack; defeated bosses and zero-power attempts are no-ops. */
   attack(bossId: string, playerDamage: number): RallyAttemptResult {
     const boss = rallyBoss(bossId);
     if (!boss) {
@@ -123,12 +136,21 @@ export class RallySystem {
     }
 
     const b = this.ensure(bossId);
-    const player = Math.max(0, playerDamage);
-    // Simulated alliance members pitch in a deterministic share of the player's
-    // damage (no randomness), so repeated rallies reproduce exactly.
-    const alliance = player * RALLY.ALLIANCE_DAMAGE_SHARE;
+    const player = Math.max(0, Math.round(playerDamage));
+    const remainingBefore = Math.max(0, boss.hpPool - b.damageDealt);
+    if (player <= 0 || remainingBefore <= 0) {
+      return {
+        bossId,
+        playerDamage: player,
+        allianceDamage: 0,
+        dealt: 0,
+        remaining: remainingBefore,
+        defeated: remainingBefore <= 0,
+        rewards: [],
+      };
+    }
+    const alliance = Math.round(player * RALLY.ALLIANCE_DAMAGE_SHARE);
     const before = b.damageDealt;
-    const remainingBefore = Math.max(0, boss.hpPool - before);
     const dealt = Math.min(player + alliance, remainingBefore);
 
     b.damageDealt = before + dealt;
@@ -190,7 +212,7 @@ export class RallySystem {
   toJSON(): RallyState {
     const bosses: RallyState['bosses'] = {};
     for (const [id, b] of this._bosses.entries()) bosses[id] = { ...b };
-    return { bosses };
+    return { bosses, dayKey: this._dayKey };
   }
 
   /**

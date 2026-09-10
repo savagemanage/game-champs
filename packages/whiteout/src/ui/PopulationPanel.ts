@@ -69,7 +69,7 @@ export class PopulationPanel {
 
   /** The producer buildings a survivor can be assigned to work. */
   private producerKinds(): BuildingKind[] {
-    return BUILDING_ORDER.filter((k) => isProducer(k));
+    return BUILDING_ORDER.filter((k) => isProducer(k) || k === 'forge_hall');
   }
 
   private build(): void {
@@ -169,7 +169,7 @@ export class PopulationPanel {
   private assignDelta(kind: BuildingKind, delta: number): void {
     const pop = this.state.population;
     const current = pop.assignedTo(kind);
-    pop.assign(kind, current + delta);
+    pop.assign(kind, current + delta, this.state.buildings.level(kind));
     this.audio().playSfx(AudioKeys.UiClick, 0.4);
     this.state.save(Date.now());
     this.refresh();
@@ -223,7 +223,7 @@ export class PopulationPanel {
       row.countLabel.setText(String(assigned));
       row.nameLabel.setColor(built ? PALETTE.TEXT_CSS : PALETTE.MUTED_CSS);
       // Can only assign to a built producer, and only when a survivor is idle.
-      row.plus.setEnabled(built && pop.idle > 0);
+      row.plus.setEnabled(built && pop.idle > 0 && assigned < this.state.buildings.level(row.kind));
       row.minus.setEnabled(built && assigned > 0);
     }
   }

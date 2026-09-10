@@ -7,7 +7,9 @@ import { Menu } from '../ui/Menu';
 import { tr } from '../i18n/i18n';
 import { LANGUAGES } from '../i18n/strings';
 import { textStyle } from '../ui/UiText';
+import { prefersReducedMotion } from '../ui/Motion';
 import { onViewportRefit, type VisibleWorldRect } from '@open-games/shared';
+import { announce } from '../ui/AccessibilityBridge';
 
 /**
  * TitleScene - the front door. Renders the layered pixel backdrop, the game
@@ -66,7 +68,9 @@ export class TitleScene extends Phaser.Scene {
 
     // Title + tagline.
     const title = Menu.title(this, cx, CANVAS.HEIGHT * 0.3, tr('brand.name'), 64);
-    this.tweens.add({ targets: title, y: title.y - 4, duration: 1800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    if (!prefersReducedMotion()) {
+      this.tweens.add({ targets: title, y: title.y - 4, duration: 1800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    }
     // The tagline lands on the skyline, the busiest part of the backdrop, so it
     // carries its own dark outline on top of the scrim rather than relying on
     // colour contrast alone.
@@ -75,12 +79,35 @@ export class TitleScene extends Phaser.Scene {
       .setStroke('#05080f', 5)
       .setShadow(0, 2, '#05080f', 4, true, true);
 
-    // Detect an existing save without mutating global state.
-    const hasSave = GameState.get().loaded;
+    // Detect an existing or blocked save without mutating progress.
+    const state = GameState.get();
+    const hasSave = state.loaded;
 
-    if (hasSave) {
+    if (state.blockedSave) {
+      this.add.text(cx, CANVAS.HEIGHT * 0.54, tr('save.blocked'),
+        textStyle(14, { align: 'center', color: PALETTE.DANGER_CSS, wordWrap: { width: 620 } })).setOrigin(0.5);
+      Menu.button(this, cx, CANVAS.HEIGHT * 0.64, tr('save.export'), () => this.exportBlockedSave(), { width: 260 });
+      let confirmsNewHold = false;
+      const newHold = Menu.button(this, cx, CANVAS.HEIGHT * 0.76, tr('title.newGame'), () => {
+        if (!confirmsNewHold) {
+          confirmsNewHold = true;
+          newHold.setText(tr('settings.resetConfirm'));
+          return;
+        }
+        this.enterTown(true);
+      }, { width: 260, accent: PALETTE.DANGER });
+      Menu.button(this, cx, CANVAS.HEIGHT * 0.88, tr('title.settings'), () => this.openSettings(), { width: 260 });
+    } else if (hasSave) {
       Menu.button(this, cx, CANVAS.HEIGHT * 0.6, tr('title.continue'), () => this.enterTown(false), { width: 260 });
-      Menu.button(this, cx, CANVAS.HEIGHT * 0.72, tr('title.newGame'), () => this.enterTown(true), { width: 260 });
+      let confirmsNewHold = false;
+      const newHold = Menu.button(this, cx, CANVAS.HEIGHT * 0.72, tr('title.newGame'), () => {
+        if (!confirmsNewHold) {
+          confirmsNewHold = true;
+          newHold.setText(tr('settings.resetConfirm'));
+          return;
+        }
+        this.enterTown(true);
+      }, { width: 260 });
       Menu.button(this, cx, CANVAS.HEIGHT * 0.84, tr('title.settings'), () => this.openSettings(), { width: 260 });
     } else {
       Menu.button(this, cx, CANVAS.HEIGHT * 0.64, tr('title.play'), () => this.enterTown(false), { width: 260 });
@@ -98,7 +125,7 @@ export class TitleScene extends Phaser.Scene {
     Menu.label(this, cx, CANVAS.HEIGHT * 0.94, tr('title.hint'), 14, 0.55);
 
     // Keyboard shortcuts mirror the buttons.
-    this.input.keyboard?.on('keydown-SPACE', () => this.enterTown(false));
+    this.input.keyboard?.on('keydown-SPACE', () => { if (!state.blockedSave) this.enterTown(false); });
     this.input.keyboard?.on('keydown-S', () => this.openSettings());
     // L cycles the language, mirroring the on-screen toggle.
     this.input.keyboard?.on('keydown-L', () => this.stepLanguage(1));
@@ -140,6 +167,7 @@ export class TitleScene extends Phaser.Scene {
   }
 
   update(_time: number, delta: number): void {
+    if (prefersReducedMotion()) return;
     this.drift += delta * 0.003;
     this.bgSky.tilePositionX = this.drift;
   }
@@ -152,6 +180,20 @@ export class TitleScene extends Phaser.Scene {
 
   private openSettings(): void {
     Menu.fadeTo(this, () => this.scene.start(SceneKeys.Settings));
+  }
+
+  /** Download the quarantined payload before the player explicitly resets it. */
+  private exportBlockedSave(): void {
+    const payload = GameState.get().exportSave();
+    if (!payload || typeof document === 'undefined') return;
+    const blob = new Blob([payload], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'frosthold-save-recovery.json';
+    link.click();
+    URL.revokeObjectURL(url);
+    announce(tr('save.exported'));
   }
 
   /**

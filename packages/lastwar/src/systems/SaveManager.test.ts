@@ -39,7 +39,16 @@ describe('SaveManager', () => {
       league: SaveManager.freshGame().league,
       // A round-trip fixture is a "current v3" save; a real player who has
       // already seen the tutorial.
-      tutorial: { seen: true, completedSteps: [] },
+      tutorial: { seen: true, completedSteps: [], grantClaimed: true },
+      runSequence: 0,
+      settledRunSequence: 0,
+      appliedRunIds: [],
+      dailyCompletedRuns: { dayKey: -1, count: 0 },
+      maxSeenWallTime: 0,
+      maxDayOrdinal: -1,
+      maxWeekOrdinal: -1,
+      maxSeasonOrdinal: -1,
+      pendingBattleSummary: null,
     };
   }
 
@@ -96,6 +105,8 @@ describe('SaveManager', () => {
       current: 1,
       progress: 0,
       xp: 0,
+      earnedXp: 0,
+      availableXp: 0,
       tier: 0,
       claimedFree: 0,
       claimedPremium: 0,
@@ -121,7 +132,7 @@ describe('SaveManager', () => {
       bestRank: 0,
     });
     // A brand-new game has NOT seen the onboarding tutorial (shows once).
-    expect(fresh.tutorial).toEqual({ seen: false, completedSteps: [] });
+    expect(fresh.tutorial).toEqual({ seen: false, completedSteps: [], grantClaimed: false });
     expect(fresh.tutorial.seen).toBe(false);
   });
 
@@ -240,7 +251,7 @@ describe('SaveManager', () => {
     expect(state.miniGame.coins).toBe(500);
     expect(state.heroes.shards).toBe(40);
     // ...and the tutorial is SEEN so the returning player is not re-onboarded.
-    expect(state.tutorial).toEqual({ seen: true, completedSteps: [] });
+    expect(state.tutorial).toEqual({ seen: true, completedSteps: [], grantClaimed: true });
   });
 
   it('normalizeTutorial fills a missing / partial tutorial block on a v3 save', () => {
@@ -264,7 +275,7 @@ describe('SaveManager', () => {
     const storage = memoryStorage();
     storage.setItem(SAVE_KEY, JSON.stringify({ version: SAVE_VERSION, miniGame: { coins: 1 } }));
     const { state } = new SaveManager(storage).load();
-    expect(state.tutorial).toEqual({ seen: false, completedSteps: [] });
+    expect(state.tutorial).toEqual({ seen: false, completedSteps: [], grantClaimed: false });
   });
 
   it('normalizes partial / floating / negative values on load', () => {
@@ -307,7 +318,7 @@ describe('SaveManager', () => {
     const { state } = new SaveManager(storage).load();
     // Known keys clamped to non-negative ints; unknown keys dropped; missing
     // keys (fuel/circuitry) filled from config start amounts.
-    expect(state.resources.stockpiles.rations).toBe(10); // floored
+    expect(state.resources.stockpiles.rations).toBe(10.9); // fractions preserved
     expect(state.resources.stockpiles.steel).toBe(0); // negative -> 0
     expect(state.resources.stockpiles).not.toHaveProperty('bogus');
     expect(Object.keys(state.resources.stockpiles).sort()).toEqual(
@@ -326,6 +337,8 @@ describe('SaveManager', () => {
       current: 2,
       progress: 40,
       xp: 40,
+      earnedXp: 40,
+      availableXp: 40,
       tier: 0,
       claimedFree: 0,
       claimedPremium: 0,

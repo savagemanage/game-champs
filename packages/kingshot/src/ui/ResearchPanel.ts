@@ -15,6 +15,7 @@ import type { ResearchDenyReason } from '../systems/ResearchSystem';
 import { tr } from '../i18n/i18n';
 import { Menu, type MenuButton } from './Menu';
 import { textStyle } from './UiText';
+import { closeAccessibleModal, openAccessibleModal, refreshAccessibleModalContext } from './Accessibility';
 
 /** Per-tech row widgets that need live updates. */
 interface TechRow {
@@ -60,7 +61,12 @@ export class ResearchPanel {
   setVisible(visible: boolean): void {
     this._visible = visible;
     this.root.setVisible(visible);
-    if (visible) this.refresh();
+    if (visible) {
+      this.refresh();
+      openAccessibleModal(this.root, () => this.setVisible(false));
+    } else {
+      closeAccessibleModal(this.root);
+    }
   }
 
   toggle(): void {
@@ -178,10 +184,13 @@ export class ResearchPanel {
   private research(tech: TechId): void {
     const now = Date.now();
     const level = this.state.buildings.level('research');
-    const result = this.state.research.startResearch(tech, this.state.resources, now, level);
-    if (result.ok) {
+    let ok = false;
+    const committed = this.state.commitDurableAction(() => {
+      ok = this.state.research.startResearch(tech, this.state.resources, now, level).ok;
+      return ok;
+    }, now);
+    if (committed) {
       AudioManager.get(this.scene).playSfx(AudioKeys.UiClick, 0.7);
-      this.state.save(now);
     }
     this.refresh();
   }
@@ -254,6 +263,7 @@ export class ResearchPanel {
         row.statusLabel.setText(this.reasonText(check.reason, row.tech)).setColor(PALETTE.DANGER_CSS);
       }
     }
+    refreshAccessibleModalContext(this.root);
   }
 
   update(): void {

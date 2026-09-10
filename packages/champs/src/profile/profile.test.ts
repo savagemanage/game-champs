@@ -35,7 +35,7 @@ class MemoryStorage implements ProfileStorage {
 
 const outcome: ProfileMatchOutcomeFacts = {
   matchId: 'match-1',
-  win: true,
+  result: 'win',
   mode: 'conquest',
   matchKind: 'standard',
   difficulty: 'normal',
@@ -128,7 +128,12 @@ describe('profile progression', () => {
 
   it('records practice/tutorial completion and suppresses their currency', () => {
     const practice = { ...outcome, matchId: 'practice-1', matchKind: 'practice' } as const;
-    const tutorial = { ...outcome, matchId: 'tutorial-1', matchKind: 'tutorial' } as const;
+    const tutorial = {
+      ...outcome,
+      matchId: 'tutorial-1',
+      matchKind: 'tutorial',
+      learningRequirementsCompleted: true,
+    } as const;
     const start = createDefaultProfile();
     const afterPractice = applyMatchOutcome(start, practice);
     const afterTutorial = applyMatchOutcome(afterPractice, tutorial);

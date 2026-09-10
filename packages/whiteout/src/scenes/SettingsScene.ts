@@ -8,6 +8,7 @@ import { tr } from '../i18n/i18n';
 import { Menu } from '../ui/Menu';
 import { textStyle } from '../ui/UiText';
 import { onViewportRefit, type VisibleWorldRect } from '@open-games/shared';
+import { mirrorRange, announce } from '../ui/AccessibilityBridge';
 
 /** Data passed when launching Settings (e.g. from the Town). */
 export interface SettingsData {
@@ -88,8 +89,9 @@ export class SettingsScene extends Phaser.Scene {
       accent: PALETTE.DANGER,
     });
     this.resetButtonText = reset.setText;
+    Menu.button(this, cx, y + 62, tr('save.export'), () => this.exportSave(), { width: 300, fontSize: 16 });
 
-    Menu.button(this, cx, CANVAS.HEIGHT * 0.92, tr('settings.back'), () => this.close(), { width: 220 });
+    Menu.button(this, cx, CANVAS.HEIGHT * 0.94, tr('settings.back'), () => this.close(), { width: 220 });
 
     this.input.keyboard?.on('keydown-ESC', () => this.close());
   }
@@ -119,7 +121,7 @@ export class SettingsScene extends Phaser.Scene {
     const readout = this.add.text(trackX + trackW + 16, y, `${Math.round(initial * 100)}`, textStyle(16)).setOrigin(0, 0.5);
 
     const handle = this.add
-      .rectangle(trackX + trackW * initial, y, 12, 24, PALETTE.TEXT)
+      .rectangle(trackX + trackW * initial, y, 16, 44, PALETTE.TEXT)
       .setOrigin(0.5)
       .setInteractive({ useHandCursor: true, draggable: true });
     handle.setStrokeStyle(2, PALETTE.PANEL);
@@ -130,14 +132,16 @@ export class SettingsScene extends Phaser.Scene {
       handle.x = clamped;
       fill.width = trackW * v;
       readout.setText(`${Math.round(v * 100)}`);
+      accessible.setValue(v);
       onChange(v);
     };
 
+    const accessible = mirrorRange(this, name, initial, (value) => apply(trackX + trackW * value));
     this.input.setDraggable(handle);
     handle.on(Phaser.Input.Events.DRAG, (_p: Phaser.Input.Pointer, dragX: number) => apply(dragX));
 
     const hitZone = this.add
-      .rectangle(trackX, y, trackW, 32, 0x000000, 0)
+      .rectangle(trackX, y, trackW, 44, 0x000000, 0)
       .setOrigin(0, 0.5)
       .setInteractive({ useHandCursor: true });
     hitZone.on(Phaser.Input.Events.POINTER_DOWN, (p: Phaser.Input.Pointer) => apply(p.worldX));
@@ -182,6 +186,19 @@ export class SettingsScene extends Phaser.Scene {
     }
     GameState.get().reset();
     Menu.fadeTo(this, () => this.scene.start(SceneKeys.Title));
+  }
+
+  private exportSave(): void {
+    if (typeof document === 'undefined') return;
+    const payload = GameState.get().exportSave();
+    const blob = new Blob([payload], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'frosthold-save.json';
+    link.click();
+    URL.revokeObjectURL(url);
+    announce(tr('save.exported'));
   }
 
   private close(): void {

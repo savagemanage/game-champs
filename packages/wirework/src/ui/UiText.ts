@@ -23,9 +23,9 @@ import { PALETTE } from '../config/GameConfig';
  * monitors, so a floor of 3x keeps HUD/menu glyphs crisp there too, and on
  * retina we go higher still. The world art stays pixel-art; only text sharpens.
  */
-export const TEXT_RESOLUTION = Math.max(
-  3,
-  Math.ceil((typeof window !== 'undefined' ? window.devicePixelRatio : 1) || 1) * 2,
+export const TEXT_RESOLUTION = Math.min(
+  4,
+  Math.max(3, Math.ceil((typeof window !== 'undefined' ? window.devicePixelRatio : 1) || 1) * 2),
 );
 
 /**

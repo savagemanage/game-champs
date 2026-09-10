@@ -1,41 +1,35 @@
 <!doctype html>
-<html lang="en">
+<html lang="ko">
   <head>
     <meta charset="UTF-8" />
-    <!--
-      RELATIVE href so the icon resolves under both the dev base ("/") and the
-      Pages base ("/open-games/wirework/"); an absolute "/favicon.ico" 404s on a
-      subpath deploy.
-    -->
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Wirework</title>
     <style>
-      :root {
-        color-scheme: dark;
-      }
-      html,
-      body {
-        margin: 0;
-        padding: 0;
-        height: 100%;
-        background: #0b0f14;
-        overflow: hidden;
-      }
+      :root { color-scheme: dark; }
+      html, body { margin: 0; min-height: 100%; background: #0b0f14; overflow: hidden; }
       #game {
         width: 100vw;
         height: 100vh;
+        box-sizing: border-box;
+        padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
         display: flex;
         align-items: center;
         justify-content: center;
       }
-      #game canvas {
-        image-rendering: pixelated;
-      }
+      #game canvas { image-rendering: pixelated; user-select: none; touch-action: manipulation; outline: 3px solid transparent; outline-offset: -3px; }
+      #game canvas:focus-visible { outline-color: #f2f5f7; }
+      html[data-color-mode="deuteranopia"] #game canvas { filter: saturate(.82) hue-rotate(10deg); }
+      html[data-color-mode="protanopia"] #game canvas { filter: saturate(.76) hue-rotate(18deg); }
+      html[data-color-mode="tritanopia"] #game canvas { filter: saturate(.82) hue-rotate(-18deg); }
+      html[data-color-mode="high-contrast"] #game canvas { filter: contrast(1.35) saturate(.65) brightness(1.08); }
+      #a11y-controls { position: fixed; left: -10000px; top: 0; width: 1px; height: 1px; overflow: hidden; }
     </style>
   </head>
   <body>
-    <div id="game"></div>
+    <main id="game" aria-label="Wirework"></main>
+    <nav id="a11y-controls" aria-label="Wirework menu controls"></nav>
+    <div id="a11y-status" role="status" aria-live="polite" style="position:fixed;left:-10000px"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

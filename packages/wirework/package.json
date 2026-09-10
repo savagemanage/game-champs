@@ -2,7 +2,7 @@
   "name": "wirework",
   "version": "0.1.0",
   "type": "module",
-  "description": "Wirework - an original-world 2D pixel-art wall-defense ODM action game built with Phaser 3.",
+  "description": "Wirework - an original 2D pixel-art Arc Guardian ring-defense action game built with Phaser 3.",
   "author": "Janghoon Lee",
   "license": "Apache-2.0",
   "homepage": "https://savagemanage.github.io/open-games/wirework/",
@@ -21,7 +21,7 @@
     "pixel-art",
     "html5-game",
     "web-game",
-    "grappling",
+    "charge-tether",
     "tower-defense",
     "wall-defense"
   ],

@@ -128,7 +128,8 @@ export class CampaignScene extends HubScene {
 
   private doMarch(): void {
     const id = this.selected;
-    const result = this.state.attemptCampaignStage(id);
+    const now = Date.now();
+    const result = this.state.attemptCampaignStage(id, now, `campaign:${id}:${now}`);
     if (result.win) {
       this.audio.playSfx(AudioKeys.Victory, 0.6);
       this.refreshCurrency();

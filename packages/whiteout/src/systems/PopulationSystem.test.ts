@@ -80,10 +80,10 @@ describe('PopulationSystem', () => {
     // Empty hold, ample housing, full warmth -> maximum satisfaction (1).
     expect(pop.satisfaction(1, 1000)).toBeCloseTo(1, 6);
     // Freezing but roomy: only the housing weight contributes.
-    expect(pop.satisfaction(0, 1000)).toBeCloseTo(POPULATION.SATISFACTION_HOUSING_WEIGHT, 6);
-    // Warm but overcrowded (total at cap -> headroom 0): only warmth weight.
+    expect(pop.satisfaction(0, 1000)).toBeCloseTo(0.7, 6);
+    // Warm but at capacity: only the Warmth contribution remains.
     const crowded = new PopulationSystem({ total: POPULATION.BASE_HOUSING, assignments: {} });
-    expect(crowded.satisfaction(1, 0)).toBeCloseTo(POPULATION.SATISFACTION_WARMTH_WEIGHT, 6);
+    expect(crowded.satisfaction(1, 0)).toBeCloseTo(0.3, 6);
   });
 
   it('output multiplier follows the shared curve and rewards staffing + satisfaction', () => {

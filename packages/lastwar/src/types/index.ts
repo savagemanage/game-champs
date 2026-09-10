@@ -328,12 +328,16 @@ export interface FormationState {
  * placeholder and mirrors the current season XP.
  */
 export interface SeasonState {
-  /** Current season identifier (0 = no season started). */
+  /** Current season identifier (1-based local 28-day window ordinal). */
   current: number;
-  /** Legacy alias for {@link SeasonState.xp}; kept so old saves round-trip. */
+  /** Legacy alias for available XP; kept so old saves round-trip safely. */
   progress: number;
-  /** Accumulated season XP this season. */
+  /** Legacy alias for available XP. New code uses availableXp. */
   xp: number;
+  /** Cumulative XP earned this season; never decreases when resistance is bought. */
+  earnedXp: number;
+  /** Spendable XP bank used for resistance purchases. */
+  availableXp: number;
   /** Derived pass tier reached this season (>= 0). */
   tier: number;
   /** Number of free-track tier rewards already claimed. */
@@ -426,6 +430,8 @@ export interface TutorialState {
   seen: boolean;
   /** Stable ids of tutorial steps the player has completed. */
   completedSteps: string[];
+  /** Permanent account-once marker for the 200-shard onboarding grant. */
+  grantClaimed: boolean;
 }
 
 /**
@@ -460,4 +466,20 @@ export interface GameState {
   league: LeagueState;
   /** First-run onboarding tutorial progress (FEAT-003). */
   tutorial: TutorialState;
+  /** Monotonic Falcon run id source. */
+  runSequence: number;
+  /** Highest generated Falcon run sequence already settled. Never decreases. */
+  settledRunSequence: number;
+  /** Settled run ids retained for save compatibility and diagnostics. */
+  appliedRunIds: string[];
+  /** Local-day Falcon conversion cap state. */
+  dailyCompletedRuns: { dayKey: number; count: number };
+  /** Highest trusted wall clock observed, used to freeze >5-minute rollback. */
+  maxSeenWallTime: number;
+  /** Highest local day/week/season ordinals ever activated. */
+  maxDayOrdinal: number;
+  maxWeekOrdinal: number;
+  maxSeasonOrdinal: number;
+  /** One-time result summary shown after a replay was interrupted/reloaded. */
+  pendingBattleSummary: { win: boolean; rounds: number; survivors: number; timedOut: boolean } | null;
 }

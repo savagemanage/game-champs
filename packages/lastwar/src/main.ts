@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
-import { setLanguage } from './i18n/i18n';
+import { setLanguage, tr } from './i18n/i18n';
 import { AudioManager } from './systems/AudioManager';
-import { CANVAS, PHYSICS, PALETTE } from './config/GameConfig';
+import { CANVAS, PHYSICS, PALETTE, SceneKeys } from './config/GameConfig';
 import { resolveRenderZoom } from './systems/RenderScale';
 import { BootScene } from './scenes/BootScene';
 import { PreloadScene } from './scenes/PreloadScene';
@@ -172,10 +172,59 @@ function seedLanguage(): void {
   setLanguage(AudioManager.peekPersistedLanguage());
 }
 
+let gameInstance: Phaser.Game | null = null;
+let resizeTimer = 0;
+
 function startGame(): void {
   seedLanguage();
-  // eslint-disable-next-line no-new
-  new Phaser.Game(config);
+  gameInstance = new Phaser.Game(config);
+  window.history.replaceState({ lastSquad: true }, '');
+  window.history.pushState({ lastSquad: true }, '');
+  window.addEventListener('popstate', handleBrowserBack);
+  window.addEventListener('resize', scheduleResize, { passive: true });
+  window.addEventListener('orientationchange', scheduleResize, { passive: true });
+}
+
+function handleBrowserBack(): void {
+  if (!gameInstance) return;
+  const active = gameInstance.scene.getScenes(true);
+  const top = active[active.length - 1];
+  if (!top) return;
+  const key = top.scene.key;
+  if (key === SceneKeys.Title) return;
+  if (key === SceneKeys.Tutorial) {
+    (top as unknown as { skipTutorial(): void }).skipTutorial();
+    window.history.pushState({ lastSquad: true }, '');
+    return;
+  }
+  if (key === SceneKeys.Battle) {
+    (top as unknown as { requestExit(): void }).requestExit();
+    window.history.pushState({ lastSquad: true }, '');
+    return;
+  }
+  if (key === SceneKeys.Run && !window.confirm(tr('run.abandon'))) {
+    window.history.pushState({ lastSquad: true }, '');
+    return;
+  }
+  const childScenes: readonly string[] = [SceneKeys.Formation, SceneKeys.Results, SceneKeys.Run, SceneKeys.Upgrade, SceneKeys.Settings];
+  if (childScenes.includes(key)) {
+    gameInstance.scene.start(SceneKeys.Home);
+  } else if (key !== SceneKeys.Home) {
+    gameInstance.scene.start(SceneKeys.Home);
+  } else {
+    gameInstance.scene.start(SceneKeys.Title);
+  }
+  window.history.pushState({ lastSquad: true }, '');
+}
+
+function scheduleResize(): void {
+  window.clearTimeout(resizeTimer);
+  resizeTimer = window.setTimeout(() => {
+    if (!gameInstance) return;
+    const zoom = resolveRenderZoom(window, CANVAS.WIDTH, CANVAS.HEIGHT);
+    gameInstance.scale.setZoom(zoom);
+    gameInstance.scale.refresh();
+  }, 100);
 }
 
 function whenFontReady(): Promise<void> {

@@ -20,11 +20,19 @@ import type {
   HeroInstance,
   ResourceBag,
   ResourceKind,
+  RunResult,
 } from '../types';
 import { SaveManager, browserStorage, type KeyValueStorage } from './SaveManager';
 import {
-  accrueSince,
+  isClockRollback,
+  localDayOrdinal,
+  localSeasonOrdinal,
+  localWeekOrdinal,
+} from './Calendar';
+import {
+  accrueProduction,
   addResources,
+  emptyBag,
   productionRates,
   spend,
   storageCaps,
@@ -57,7 +65,6 @@ import {
   recordProgress,
   rollover as rolloverMissions,
   settleAllianceDuel,
-  weekIndex,
   type DuelResult,
 } from './DailyMissions';
 import {
@@ -78,10 +85,19 @@ export class GameStore {
 
   private readonly saves: SaveManager;
   private stateInternal: GameState;
+  private lastPassivePersistAt = 0;
 
   private constructor(storage: KeyValueStorage) {
     this.saves = new SaveManager(storage);
     this.stateInternal = this.saves.load().state;
+    if (typeof window !== 'undefined') {
+      const checkpoint = (): void => this.persist();
+      window.addEventListener('pagehide', checkpoint);
+      window.addEventListener('blur', checkpoint);
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') checkpoint();
+      });
+    }
   }
 
   /** Fetch (or lazily create) the shared store backed by real localStorage. */
@@ -105,6 +121,11 @@ export class GameStore {
     return this.stateInternal;
   }
 
+  /** Persistence/recovery warnings that should be surfaced to the player. */
+  saveWarnings(): readonly string[] {
+    return this.saves.warnings;
+  }
+
   /** Persist the current state to storage; re-reads the normalized result. */
   persist(): void {
     this.stateInternal = this.saves.save(this.stateInternal);
@@ -112,6 +133,7 @@ export class GameStore {
 
   /** Wipe all progress back to a fresh v2 game and persist. */
   reset(): void {
+    this.saves.clear();
     this.stateInternal = SaveManager.freshGame();
     this.saves.save(this.stateInternal);
   }
@@ -127,34 +149,84 @@ export class GameStore {
    * Persists when anything changed. Returns the building upgrades completed on
    * this tick so a scene can surface "construction complete" feedback.
    */
-  tick(now: number): { completed: BuildingId[] } {
-    const buildings = this.stateInternal.buildings;
-
-    // 1) Resolve finished upgrades first so freshly-completed buildings feed
-    //    into the production accrual below.
-    const resolved = resolveUpgrades(buildings.levels, buildings.queue, now);
-    buildings.levels = resolved.levels;
-    buildings.queue = resolved.queue;
-
-    // 2) Accrue production for the elapsed wall-clock gap, clamped to storage.
-    //    On a brand-new save lastTickTimestamp is 0 (no baseline recorded yet):
-    //    seed it to `now` so the FIRST tick establishes the baseline and grants
-    //    nothing, rather than back-crediting a full offline window from epoch 0.
-    const resources = this.stateInternal.resources;
+  tick(now: number): {
+    completed: BuildingId[];
+    clockFrozen: boolean;
+    gained: ResourceBag;
+    discarded: ResourceBag;
+  } {
+    const state = this.stateInternal;
+    const gained = emptyBag();
+    const discarded = emptyBag();
+    if (isClockRollback(now, state.maxSeenWallTime)) {
+      return { completed: [], clockFrozen: true, gained, discarded };
+    }
+    state.maxSeenWallTime = Math.max(state.maxSeenWallTime, now);
+    const resources = state.resources;
+    const buildings = state.buildings;
     if (!resources.lastTickTimestamp) {
       resources.lastTickTimestamp = now;
+      const resolved = resolveUpgrades(buildings.levels, buildings.queue, now);
+      buildings.levels = resolved.levels;
+      buildings.queue = resolved.queue;
+      this.persist();
+      return {
+        completed: resolved.completed.map((upgrade) => upgrade.building),
+        clockFrozen: false,
+        gained,
+        discarded,
+      };
     }
-    const accrued = accrueSince(
-      resources.stockpiles,
-      buildings.levels,
-      resources.lastTickTimestamp,
-      now,
-    );
-    resources.stockpiles = accrued.stockpiles;
-    resources.lastTickTimestamp = accrued.lastTickTimestamp;
 
-    this.persist();
-    return { completed: resolved.completed.map((u) => u.building) };
+    const start = resources.lastTickTimestamp;
+    const end = Math.max(start, now);
+    let stockpiles = resources.stockpiles;
+    let levels = { ...buildings.levels };
+    const queue = [...buildings.queue];
+    const completed: BuildingId[] = [];
+    let cursor = Math.max(start, end - 86_400_000);
+
+    const accrueSegment = (seconds: number): void => {
+      if (seconds <= 0) return;
+      const before = stockpiles;
+      const rates = productionRates(levels);
+      const after = accrueProduction(before, levels, seconds);
+      for (const kind of Object.keys(gained) as ResourceKind[]) {
+        const gross = rates[kind] * seconds;
+        const granted = Math.max(0, after[kind] - (before[kind] ?? 0));
+        gained[kind] += granted;
+        discarded[kind] += Math.max(0, gross - granted);
+      }
+      stockpiles = after;
+    };
+
+    // Split production exactly at construction completion so neither old nor
+    // new rates are retroactively applied to the other interval.
+    const upgrade = queue[0];
+    if (upgrade && upgrade.completesAt > cursor && upgrade.completesAt <= end) {
+      accrueSegment((upgrade.completesAt - cursor) / 1000);
+      cursor = upgrade.completesAt;
+      levels[upgrade.building] = Math.max(levels[upgrade.building] ?? 0, upgrade.toLevel);
+      completed.push(upgrade.building);
+      queue.shift();
+    } else if (upgrade && upgrade.completesAt <= cursor) {
+      levels[upgrade.building] = Math.max(levels[upgrade.building] ?? 0, upgrade.toLevel);
+      completed.push(upgrade.building);
+      queue.shift();
+    }
+    accrueSegment((end - cursor) / 1000);
+    resources.stockpiles = stockpiles;
+    resources.lastTickTimestamp = end;
+    buildings.levels = levels;
+    buildings.queue = queue;
+
+    // Passive ticks may update in-memory precision every frame, but durable
+    // checkpoints are throttled to at most once/second unless construction ends.
+    if (completed.length > 0 || end - this.lastPassivePersistAt >= 1000) {
+      this.persist();
+      this.lastPassivePersistAt = end;
+    }
+    return { completed, clockFrozen: false, gained, discarded };
   }
 
   /** Current stockpile of a single resource. */
@@ -216,6 +288,7 @@ export class GameStore {
 
     resources.stockpiles = spent.stockpiles;
     buildings.queue = [...buildings.queue, started.upgrade];
+    this.recordMissionProgressNoPersist('build', 1, now);
     this.persist();
     return true;
   }
@@ -257,25 +330,39 @@ export class GameStore {
    * instance's `dupes`. Pass a `seed` so the pull is deterministic and testable.
    * Returns the recruit outcome plus whether it was a duplicate + shards gained.
    */
-  recruitOne(seed: number): RecruitResult & { duplicate: boolean; shardsGained: number } {
-    const heroes = this.stateInternal.heroes;
-    const rng = makeRng(seed);
-    const result = recruit(rng, heroes.pity);
-    heroes.pity = result.newPityState;
+  recruitOne(_callerSeed?: number): RecruitResult & { duplicate: boolean; shardsGained: number } {
+    const results = this.recruitMany(1);
+    if (!results) throw new Error('insufficient hero shards');
+    return results[0];
+  }
 
-    const existing = heroes.roster[result.heroId];
-    let duplicate = false;
-    let shardsGained = 0;
-    if (existing) {
-      duplicate = true;
-      shardsGained = duplicateShards(result.grade);
-      heroes.shards += shardsGained;
-      existing.dupes += 1;
-    } else {
-      heroes.roster[result.heroId] = makeHeroInstance(result.heroId);
+  /** Buy and resolve 1 or 10 pulls atomically using account-owned entropy. */
+  recruitMany(count: 1 | 10): (RecruitResult & { duplicate: boolean; shardsGained: number })[] | null {
+    const heroes = this.stateInternal.heroes;
+    const cost = count === 10 ? 180 : 20;
+    if (heroes.shards < cost) return null;
+    heroes.shards -= cost;
+    const results: (RecruitResult & { duplicate: boolean; shardsGained: number })[] = [];
+    for (let i = 0; i < count; i += 1) {
+      const seed = (heroes.recruitSeed ^ Math.imul(heroes.pity.totalPulls + 1, 0x9e3779b1)) >>> 0;
+      const result = recruit(makeRng(seed), heroes.pity);
+      heroes.pity = result.newPityState;
+      const existing = heroes.roster[result.heroId];
+      let duplicate = false;
+      let shardsGained = 0;
+      if (existing) {
+        duplicate = true;
+        shardsGained = duplicateShards(result.grade);
+        heroes.shards += shardsGained;
+        existing.dupes += 1;
+      } else {
+        heroes.roster[result.heroId] = makeHeroInstance(result.heroId);
+      }
+      results.push({ ...result, duplicate, shardsGained });
     }
+    this.recordMissionProgressNoPersist('recruit', count, Date.now());
     this.persist();
-    return { ...result, duplicate, shardsGained };
+    return results;
   }
 
   /**
@@ -311,6 +398,7 @@ export class GameStore {
     if (!res.ok) return false;
     heroes.roster[id] = res.instance;
     heroes.shards = res.shards;
+    this.recordMissionProgressNoPersist('power_up', 1, Date.now());
     this.persist();
     return true;
   }
@@ -428,6 +516,12 @@ export class GameStore {
       stageSeed,
     );
     if (!result.ok) return result;
+    this.stateInternal.pendingBattleSummary = {
+      win: result.outcome.win,
+      rounds: result.outcome.battle.rounds,
+      survivors: result.outcome.battle.attackerSurvivors.length,
+      timedOut: result.outcome.battle.timedOut,
+    };
     if (result.outcome.win && !this.stateInternal.campaign.clearedStages.includes(stageId)) {
       this.stateInternal.campaign.clearedStages = [
         ...this.stateInternal.campaign.clearedStages,
@@ -459,6 +553,12 @@ export class GameStore {
       waveSeed,
     );
     if (!result.ok) return result;
+    this.stateInternal.pendingBattleSummary = {
+      win: result.outcome.win,
+      rounds: result.outcome.battle.rounds,
+      survivors: result.outcome.battle.attackerSurvivors.length,
+      timedOut: result.outcome.battle.timedOut,
+    };
     if (result.outcome.win && waveIndex > this.stateInternal.campaign.highestWave) {
       this.stateInternal.campaign.highestWave = waveIndex;
     }
@@ -509,6 +609,7 @@ export class GameStore {
     const res = raiseResistance(this.stateInternal.season);
     if (!res.ok) return false;
     this.stateInternal.season = res.state;
+    this.applyRewardNoPersist(res.reward);
     this.persist();
     return true;
   }
@@ -533,17 +634,47 @@ export class GameStore {
    * settled duel result when a week rolled over, else null.
    */
   refreshMissions(now: number): DuelResult | null {
-    const missions = this.stateInternal.missions;
-    const week = weekIndex(now);
-    let duel: DuelResult | null = null;
-    // A real week rollover (an initialized prior week that differs) settles the
-    // just-ended week's duel before the activity score is reset.
-    if (missions.weekKey >= 0 && missions.weekKey !== week) {
-      duel = settleAllianceDuel(missions);
+    const duel = this.refreshMissionsNoPersist(now);
+    if (!isClockRollback(now, this.stateInternal.maxSeenWallTime)) this.persist();
+    return duel;
+  }
+
+  /** Advance trusted local calendar cursors without performing a durable write. */
+  private refreshMissionsNoPersist(now: number): DuelResult | null {
+    const state = this.stateInternal;
+    if (isClockRollback(now, state.maxSeenWallTime)) return null;
+    const day = localDayOrdinal(now);
+    const week = localWeekOrdinal(now);
+    const season = localSeasonOrdinal(now);
+    if (day < state.maxDayOrdinal || week < state.maxWeekOrdinal || season < state.maxSeasonOrdinal) {
+      return null;
     }
-    this.stateInternal.missions = rolloverMissions(missions, now);
-    if (duel) this.applyReward(duel.reward);
-    else this.persist();
+    state.maxSeenWallTime = Math.max(state.maxSeenWallTime, now);
+    let duel: DuelResult | null = null;
+
+    const priorWeek = state.maxWeekOrdinal;
+    if (priorWeek >= 0 && week > priorWeek) {
+      duel = settleAllianceDuel(state.missions);
+      this.applyRewardNoPersist(duel.reward);
+      const leagueResult = rolloverLeague(state.league, teamPower(this.battleTeam()), week);
+      state.league = leagueResult.state;
+      this.applyRewardNoPersist(leagueResult.reward);
+    } else if (priorWeek < 0) {
+      state.league.period = Math.max(0, week);
+    }
+
+    if (state.maxSeasonOrdinal >= 0 && season > state.maxSeasonOrdinal) {
+      state.season = rolloverSeason(state.season, season + 1);
+    } else if (state.maxSeasonOrdinal < 0) {
+      state.season.current = season + 1;
+    }
+
+    state.missions = rolloverMissions(state.missions, now);
+    state.maxDayOrdinal = Math.max(state.maxDayOrdinal, day);
+    state.maxWeekOrdinal = Math.max(state.maxWeekOrdinal, week);
+    state.maxSeasonOrdinal = Math.max(state.maxSeasonOrdinal, season);
+    const rank = this.leagueRank();
+    state.league.bestRank = state.league.bestRank === 0 ? rank : Math.min(state.league.bestRank, rank);
     return duel;
   }
 
@@ -571,10 +702,23 @@ export class GameStore {
     amount: number,
     now: number,
   ): number {
-    const result = recordProgress(this.stateInternal.missions, category, amount, now);
-    this.stateInternal.missions = result.state;
+    const state = this.stateInternal;
+    const day = localDayOrdinal(now);
+    const week = localWeekOrdinal(now);
+    const season = localSeasonOrdinal(now);
+    if (
+      isClockRollback(now, state.maxSeenWallTime)
+      || day < state.maxDayOrdinal
+      || week < state.maxWeekOrdinal
+      || season < state.maxSeasonOrdinal
+    ) {
+      return state.missions.armsScore;
+    }
+    this.refreshMissionsNoPersist(now);
+    const result = recordProgress(state.missions, category, amount, now);
+    state.missions = result.state;
     this.applyRewardNoPersist(result.reward);
-    return this.stateInternal.missions.armsScore;
+    return state.missions.armsScore;
   }
 
   /** The current daily arms-race score. */
@@ -599,9 +743,16 @@ export class GameStore {
    * combat engine, recording the win/loss on the current period. Persists.
    * Returns null when the squad is empty.
    */
-  playLeagueMatch(matchSeed: number): MatchOutcome | null {
-    const outcome = resolveLeagueMatch(this.battleTeam(), matchSeed);
+  playLeagueMatch(_matchSeed: number): MatchOutcome | null {
+    const seed = this.stateInternal.league.period >>> 0;
+    const outcome = resolveLeagueMatch(this.battleTeam(), seed);
     if (!outcome) return null;
+    this.stateInternal.pendingBattleSummary = {
+      win: outcome.win,
+      rounds: outcome.battle.rounds,
+      survivors: outcome.battle.attackerSurvivors.length,
+      timedOut: outcome.battle.timedOut,
+    };
     if (outcome.win) this.stateInternal.league.wins += 1;
     else this.stateInternal.league.losses += 1;
     this.persist();
@@ -622,43 +773,97 @@ export class GameStore {
     return { rank: res.rank, reward: res.reward };
   }
 
+  consumePendingBattleSummary(): GameState['pendingBattleSummary'] {
+    const summary = this.stateInternal.pendingBattleSummary;
+    if (summary) {
+      this.stateInternal.pendingBattleSummary = null;
+      this.persist();
+    }
+    return summary;
+  }
+
   /* --- Gate-runner (Falcon Rescue) integration --------------------- */
 
-  /**
-   * Feed a completed Falcon Rescue (gate-runner) run into the progression loop.
-   * The rescued squad / run quality translates into army economy rewards:
-   * shards scale with the squad brought home, resources with distance, and a
-   * win grants a bonus; the run also advances the daily "mini-game" arms-race
-   * task and (via {@link applyReward}) the season track. This is the store hook
-   * the FEAT-007 Results flow calls after a run resolves. Persists.
-   *
-   * @param squadFinal Surviving squad size at run end.
-   * @param distance   Distance travelled (world units).
-   * @param win        Whether the boss was defeated.
-   * @param now        Wall-clock epoch-ms (drives the daily/weekly rollover).
-   */
-  recordGateRunnerResult(
-    squadFinal: number,
-    distance: number,
-    win: boolean,
-    now: number,
-  ): RewardBundle {
-    const shards = Math.max(1, Math.round(Math.max(0, squadFinal) * 0.5));
-    const rations = Math.max(0, Math.round(Math.max(0, distance) * 0.1));
-    const fuel = Math.max(0, Math.round(Math.max(0, distance) * 0.05));
-    const reward: RewardBundle = {
-      shards: shards + (win ? 20 : 0),
-      resources: { rations, fuel },
-      seasonXp: 30 + (win ? 40 : 0),
-      coins: win ? 50 : 0,
-    };
-    // Batch the reward grant and the mini-game arms-race tick as in-memory
-    // mutations, then persist exactly ONCE for the whole run result.
-    this.applyRewardNoPersist(reward);
-    // One mini-game arms-race unit per completed run.
-    this.recordMissionProgressNoPersist('mini_game', 1, now);
+  /** Allocate and persist a unique replayable Falcon run identity. */
+  beginFalconRun(): { runId: string; seed: number } {
+    const sequence = this.stateInternal.runSequence + 1;
+    this.stateInternal.runSequence = sequence;
+    const runId = `run-${sequence}`;
+    const seed = (this.stateInternal.heroes.recruitSeed ^ Math.imul(sequence, 0x85ebca6b)) >>> 0;
     this.persist();
-    return reward;
+    return { runId, seed };
+  }
+
+  /** Atomically settle all Falcon meta/main-game effects once per runId. */
+  settleFalconRun(
+    runId: string,
+    result: RunResult,
+    now: number,
+  ): { reward: RewardBundle; grantedMainGame: boolean; remainingToday: number; newBestDistance: boolean; newBestScore: boolean } {
+    const state = this.stateInternal;
+    const match = /^run-(\d+)$/.exec(runId);
+    const sequence = match ? Number(match[1]) : Number.NaN;
+    const duplicate = !Number.isSafeInteger(sequence)
+      || sequence <= state.settledRunSequence
+      || state.appliedRunIds.includes(runId);
+    const day = Math.max(state.maxDayOrdinal, localDayOrdinal(now));
+    if (state.dailyCompletedRuns.dayKey !== day) state.dailyCompletedRuns = { dayKey: day, count: 0 };
+    if (duplicate) {
+      return { reward: {}, grantedMainGame: false, remainingToday: Math.max(0, 5 - state.dailyCompletedRuns.count), newBestDistance: false, newBestScore: false };
+    }
+
+    const newBestDistance = result.distance > state.miniGame.bestDistance;
+    const newBestScore = result.score > state.miniGame.bestScore;
+    state.miniGame.coins += Math.max(0, Math.floor(result.coinsEarned));
+    state.miniGame.bestDistance = Math.max(state.miniGame.bestDistance, result.distance);
+    state.miniGame.bestScore = Math.max(state.miniGame.bestScore, result.score);
+    state.miniGame.runsPlayed += 1;
+    state.dailyCompletedRuns.count += 1;
+    const grantedMainGame = state.dailyCompletedRuns.count <= 5;
+    const reward: RewardBundle = grantedMainGame ? {
+      shards: Math.max(1, Math.round(Math.max(0, result.squadFinal) * 0.5)) + (result.win ? 20 : 0),
+      resources: {
+        rations: Math.max(0, Math.round(Math.max(0, result.distance) * 0.1)),
+        fuel: Math.max(0, Math.round(Math.max(0, result.distance) * 0.05)),
+      },
+      seasonXp: 30 + (result.win ? 40 : 0),
+      coins: result.win ? 50 : 0,
+    } : {};
+    if (grantedMainGame) {
+      this.applyRewardNoPersist(reward);
+      this.recordMissionProgressNoPersist('mini_game', 1, now);
+    }
+    state.settledRunSequence = Math.max(state.settledRunSequence, sequence);
+    state.appliedRunIds = [...state.appliedRunIds, runId];
+    state.maxDayOrdinal = Math.max(state.maxDayOrdinal, day);
+    this.persist();
+    return {
+      reward,
+      grantedMainGame,
+      remainingToday: Math.max(0, 5 - state.dailyCompletedRuns.count),
+      newBestDistance,
+      newBestScore,
+    };
+  }
+
+  /** Compatibility wrapper for older callers; new code must pass a runId. */
+  recordGateRunnerResult(squadFinal: number, distance: number, win: boolean, now: number): RewardBundle {
+    const run = this.beginFalconRun();
+    return this.settleFalconRun(run.runId, {
+      squadFinal,
+      squadPeak: squadFinal,
+      distance,
+      win,
+      score: Math.floor(distance + squadFinal * 15 + (win ? 100 : 0)),
+      coinsEarned: 0,
+    }, now).reward;
+  }
+
+  falconRewardsRemaining(now: number): number {
+    const day = Math.max(this.stateInternal.maxDayOrdinal, localDayOrdinal(now));
+    return this.stateInternal.dailyCompletedRuns.dayKey === day
+      ? Math.max(0, 5 - this.stateInternal.dailyCompletedRuns.count)
+      : 5;
   }
 
   /** The day index for a timestamp (exposed so scenes share the derivation). */
@@ -689,7 +894,12 @@ export class GameStore {
    * so it never auto-shows again. Idempotent.
    */
   markTutorialSeen(): void {
-    this.stateInternal.tutorial.seen = true;
+    const tutorial = this.stateInternal.tutorial;
+    if (!tutorial.grantClaimed) {
+      this.stateInternal.heroes.shards += 200;
+      tutorial.grantClaimed = true;
+    }
+    tutorial.seen = true;
     this.persist();
   }
 
@@ -713,7 +923,8 @@ export class GameStore {
    * sequence again from the start.
    */
   resetTutorial(): void {
-    this.stateInternal.tutorial = { seen: false, completedSteps: [] };
+    const grantClaimed = this.stateInternal.tutorial.grantClaimed;
+    this.stateInternal.tutorial = { seen: false, completedSteps: [], grantClaimed };
     this.persist();
   }
 }

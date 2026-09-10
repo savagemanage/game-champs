@@ -60,6 +60,15 @@ function popMult(buildings: BuildingSystem, population: PopulationSystem, warmth
   );
 }
 
+function warmthIntegral(initial: number, max: number, seconds: number): number {
+  const startFactor = 0.25 + 0.75 * Math.min(1, initial / max);
+  const riseSeconds = Math.min(seconds, Math.max(0, (max - initial) / WARMTH.WARMTH_GAIN_PER_SEC));
+  const endFactor = 0.25 + 0.75 * Math.min(1, (initial + riseSeconds * WARMTH.WARMTH_GAIN_PER_SEC) / max);
+  return riseSeconds * (startFactor + endFactor) / 2 + (seconds - riseSeconds) * endFactor;
+}
+
+const DAY_ZERO_EVENT_MULTIPLIER = 1.5;
+
 /**
  * Unit tests for the versioned save layer with an INJECTED fake storage (no
  * window dependency): round-trip fidelity and offline idle-gain reconciliation.
@@ -151,7 +160,7 @@ describe('SaveManager', () => {
     // Workforce pinned AT the housing cap so it neither grows nor changes its
     // satisfaction/staffing over the window: the population multiplier is then a
     // single constant we can fold into the expectation. Fully staff the hut.
-    const population = atCapWorkforce(buildings, { hunters_hut: 99 });
+    const population = atCapWorkforce(buildings, { hunters_hut: 3 });
     const pm = popMult(buildings, population);
     mgr.save(
       { resources, buildings, training, warmth: new WarmthSystem(), population, premium: new PremiumWallet(), heroes: new HeroRoster(), summon: new SummonSystem(), campaign: new CampaignSystem(), research: new ResearchSystem(), gear: new GearSystem(), rally: new RallySystem(), arena: new ArenaSystem(), alliance: new AllianceSystem(), quests: new QuestSystem(), vip: new VipSystem(), waveCleared: 5, onboarding: freshOnboarding() },
@@ -165,7 +174,9 @@ describe('SaveManager', () => {
     // Only the level-2 hunters' hut produces (food). Warmth is pinned at max
     // (multiplier 1.0); expected = rate * seconds * efficiency * populationMult.
     const expectedFood =
-      outputPerSec('hunters_hut', 2) * elapsedSec * ECONOMY.OFFLINE_EFFICIENCY * pm;
+      outputPerSec('hunters_hut', 2) *
+      warmthIntegral(WARMTH.MAX_WARMTH, WARMTH.MAX_WARMTH + 2 * WARMTH.MAX_WARMTH_PER_LEVEL, elapsedSec) *
+      ECONOMY.OFFLINE_EFFICIENCY * pm * DAY_ZERO_EVENT_MULTIPLIER;
     expect(loaded.offlineGains.food).toBeCloseTo(expectedFood, 4);
     expect(loaded.snapshot.resources.get('food')).toBeCloseTo(100 + expectedFood, 4);
     // Warmth held at its Furnace-L3 maximum throughout.
@@ -195,7 +206,7 @@ describe('SaveManager', () => {
     // constant; only the STAFFING factor shifts when the hut hits L3 (its
     // desired staffing rises), so the multiplier differs per segment - we sample
     // each from a buildings snapshot at the matching level.
-    const population = atCapWorkforce(buildings, { hunters_hut: 99 });
+    const population = atCapWorkforce(buildings, { hunters_hut: 3 });
     mgr.save(
       { resources, buildings, training, warmth: new WarmthSystem(), population, premium: new PremiumWallet(), heroes: new HeroRoster(), summon: new SummonSystem(), campaign: new CampaignSystem(), research: new ResearchSystem(), gear: new GearSystem(), rally: new RallySystem(), arena: new ArenaSystem(), alliance: new AllianceSystem(), quests: new QuestSystem(), vip: new VipSystem(), waveCleared: 0, onboarding: freshOnboarding() },
       t0,
@@ -207,14 +218,19 @@ describe('SaveManager', () => {
     expect(loaded.snapshot.buildings.level('hunters_hut')).toBe(3);
 
     const eff = ECONOMY.OFFLINE_EFFICIENCY;
-    // Population multiplier per segment (producer level, hence desired staffing,
-    // rises at the boundary), sampled from the same systems the SaveManager uses.
-    const pmL2 = popMult(new BuildingSystem([{ kind: 'hunters_hut', level: 2, upgradeEndsAt: null }]), population);
-    const pmL3 = popMult(new BuildingSystem([{ kind: 'hunters_hut', level: 3, upgradeEndsAt: null }]), population);
-    const expectedSplit =
-      outputPerSec('hunters_hut', 2) * boundaryOffset * eff * pmL2 +
-      outputPerSec('hunters_hut', 3) * (windowSec - boundaryOffset) * eff * pmL3;
-    const naiveWhole = outputPerSec('hunters_hut', 3) * windowSec * eff * pmL3;
+    // The load validator clamps the saved over-assignment (3 workers on an L2
+    // hut) to L2's cap. The same two workers remain after the L3 completion, so
+    // only that producer's staffing factor changes at the exact boundary.
+    const normalizedPopulation = PopulationSystem.fromJSON({ total: population.total, assignments: { hunters_hut: 2 } });
+    const satisfaction = normalizedPopulation.satisfactionProduction(buildings.totalHousing());
+    const pmL2 = satisfaction * normalizedPopulation.staffingMultiplier('hunters_hut', 2);
+    const pmL3 = satisfaction * normalizedPopulation.staffingMultiplier('hunters_hut', 3);
+    const warmL2Seconds = warmthIntegral(WARMTH.MAX_WARMTH, WARMTH.MAX_WARMTH + 2 * WARMTH.MAX_WARMTH_PER_LEVEL, boundaryOffset);
+    const expectedSplit = (
+      outputPerSec('hunters_hut', 2) * warmL2Seconds * eff * pmL2 +
+      outputPerSec('hunters_hut', 3) * (windowSec - boundaryOffset) * eff * pmL3
+    ) * DAY_ZERO_EVENT_MULTIPLIER;
+    const naiveWhole = outputPerSec('hunters_hut', 3) * windowSec * eff * pmL3 * DAY_ZERO_EVENT_MULTIPLIER;
 
     expect(loaded.offlineGains.food).toBeCloseTo(expectedSplit, 4);
     // The split credit is strictly less than the old over-credit (post-upgrade
@@ -348,7 +364,7 @@ describe('SaveManager', () => {
     const training = new TrainingQueue(undefined, { trapper: 0, marksman: 0, vanguard: 0 });
     // At-cap, fully-staffed workforce -> constant population multiplier we fold
     // into the expected gross production below.
-    const population = atCapWorkforce(buildings, { sawmill: 99, coal_pit: 99 });
+    const population = atCapWorkforce(buildings, { sawmill: 1, coal_pit: 1 });
     const pm = popMult(buildings, population);
     mgr.save(
       { resources, buildings, training, warmth: new WarmthSystem(WARMTH.MAX_WARMTH), population, premium: new PremiumWallet(), heroes: new HeroRoster(), summon: new SummonSystem(), campaign: new CampaignSystem(), research: new ResearchSystem(), gear: new GearSystem(), rally: new RallySystem(), arena: new ArenaSystem(), alliance: new AllianceSystem(), quests: new QuestSystem(), vip: new VipSystem(), waveCleared: 0, onboarding: freshOnboarding() },
@@ -363,8 +379,8 @@ describe('SaveManager', () => {
 
     const eff = ECONOMY.OFFLINE_EFFICIENCY;
     // Gross production over the window (warmth 1.0, scaled by the population mult).
-    const grossWood = outputPerSec('sawmill', 1) * elapsedSec * eff * pm;
-    const grossCoal = outputPerSec('coal_pit', 1) * elapsedSec * eff * pm;
+    const grossWood = outputPerSec('sawmill', 1) * elapsedSec * eff * pm * DAY_ZERO_EVENT_MULTIPLIER;
+    const grossCoal = outputPerSec('coal_pit', 1) * elapsedSec * eff * pm * DAY_ZERO_EVENT_MULTIPLIER;
     // Fuel the L1 Furnace burned over the window (per-second demand * seconds).
     const perSec = new WarmthSystem().fuelPerSecond(1);
     const burnedWood = perSec.wood * elapsedSec;
@@ -428,7 +444,7 @@ describe('SaveManager', () => {
       { kind: 'hunters_hut', level: 1, upgradeEndsAt: null },
     ]);
     const training = new TrainingQueue(undefined, { trapper: 0, marksman: 0, vanguard: 0 });
-    const population = atCapWorkforce(buildings, { hunters_hut: 99 });
+    const population = atCapWorkforce(buildings, { hunters_hut: 3 });
     const pm = popMult(buildings, population);
     mgr.save(
       { resources, buildings, training, warmth: new WarmthSystem(WARMTH.MAX_WARMTH), population, premium: new PremiumWallet(), heroes: new HeroRoster(), summon: new SummonSystem(), campaign: new CampaignSystem(), research: new ResearchSystem(), gear: new GearSystem(), rally: new RallySystem(), arena: new ArenaSystem(), alliance: new AllianceSystem(), quests: new QuestSystem(), vip: new VipSystem(), waveCleared: 0, onboarding: freshOnboarding() },
@@ -438,15 +454,17 @@ describe('SaveManager', () => {
     const loaded = mgr.load(3600 * 1000);
     expect(loaded.snapshot.warmth.warmth).toBe(loaded.snapshot.warmth.maxWarmth(2));
     // Full warmth -> offline food credit scaled by the population multiplier.
-    const expectedFood = outputPerSec('hunters_hut', 1) * 3600 * ECONOMY.OFFLINE_EFFICIENCY * pm;
+    const expectedFood = outputPerSec('hunters_hut', 1)
+      * warmthIntegral(WARMTH.MAX_WARMTH, WARMTH.MAX_WARMTH + WARMTH.MAX_WARMTH_PER_LEVEL, 3600)
+      * ECONOMY.OFFLINE_EFFICIENCY * pm * DAY_ZERO_EVENT_MULTIPLIER;
     expect(loaded.offlineGains.food).toBeCloseTo(expectedFood, 3);
   });
 
   it('loads a warmth-less (legacy) save to FULL warmth without crashing', () => {
     const storage = memoryStorage();
-    // A version-2 save that predates the warmth field (warmth undefined).
+    // A supported v7 payload with no warmth field migrates to full warmth.
     const legacy = {
-      version: SAVE_VERSION,
+      version: 7,
       resources: { food: 10, wood: 10, coal: 10, iron: 10 },
       buildings: [{ kind: 'furnace', level: 1, upgradeEndsAt: null }],
       army: { trapper: 0, marksman: 0, vanguard: 0 },
@@ -516,7 +534,7 @@ describe('SaveManager', () => {
     expect(normalizeOnboarding({ introDismissed: 1 as unknown as boolean })).toEqual({ introDismissed: false, guidedComplete: false });
   });
 
-  it('treats a pre-onboarding version-7 save as a mismatch and starts fresh', () => {
+  it('migrates a pre-onboarding version-7 save without losing progress', () => {
     const storage = memoryStorage();
     const v7 = {
       version: 7,
@@ -543,8 +561,10 @@ describe('SaveManager', () => {
     };
     storage.setItem(SAVE_KEY, JSON.stringify(v7));
     const loaded = new SaveManager(storage).load(0);
-    expect(loaded.loaded).toBe(false);
-    expect(loaded.snapshot.buildings.furnaceLevel).toBe(1);
+    expect(loaded.loaded).toBe(true);
+    expect(loaded.migratedFrom).toBe(7);
+    expect(loaded.snapshot.buildings.furnaceLevel).toBe(4);
+    expect(loaded.snapshot.waveCleared).toBe(9);
   });
 
   it('treats a pre-endgame version-5 save as a mismatch and starts fresh', () => {
@@ -581,7 +601,7 @@ describe('SaveManager', () => {
     expect(loaded.snapshot.quests.dailyProgress('daily_battle')).toBe(0);
   });
 
-  it('treats a pre-tiered-army version-6 save as a mismatch and starts fresh', () => {
+  it('migrates a pre-tiered-army version-6 save into tier-1 units', () => {
     const storage = memoryStorage();
     // A well-formed v6 (pre-tiered-army) save must NOT be mis-loaded into the
     // v7 shape; it falls back to a fresh settlement.
@@ -609,8 +629,10 @@ describe('SaveManager', () => {
     };
     storage.setItem(SAVE_KEY, JSON.stringify(v6));
     const loaded = new SaveManager(storage).load(0);
-    expect(loaded.loaded).toBe(false);
-    expect(loaded.snapshot.buildings.furnaceLevel).toBe(1);
+    expect(loaded.loaded).toBe(true);
+    expect(loaded.migratedFrom).toBe(6);
+    expect(loaded.snapshot.buildings.furnaceLevel).toBe(4);
+    expect(loaded.snapshot.training.armyTiers.vanguard).toEqual({ 1: 1 });
   });
 
   it('round-trips the tiered standing army through a save', () => {
@@ -637,10 +659,10 @@ describe('SaveManager', () => {
   it('an older-shaped save (no armyTiers) lands the standing army at tier 1', () => {
     const storage = memoryStorage();
     const mgr = new SaveManager(storage);
-    // Serialize, then strip armyTiers to mimic a payload written before tiers.
+    // Serialize, then strip armyTiers to mimic a supported v6 payload written before tiers.
     const serialized = SaveManager.serialize(snapshot(), 0);
     delete (serialized as { armyTiers?: unknown }).armyTiers;
-    serialized.version = SAVE_VERSION; // keep the version current so it loads
+    serialized.version = 6;
     storage.setItem(SAVE_KEY, JSON.stringify(serialized));
     const loaded = mgr.load(0);
     // The 4 trappers from the snapshot all default to tier 1.
@@ -783,7 +805,8 @@ describe('SaveManager', () => {
     expect(loaded.snapshot.resources.get('steel')).toBe(55);
     expect(loaded.snapshot.premium.sparks).toBe(42);
     expect(loaded.snapshot.population.total).toBe(12);
-    expect(loaded.snapshot.population.assignedTo('hunters_hut')).toBe(5);
+    // Invalid persisted over-assignment is clamped to the producer's L2 cap.
+    expect(loaded.snapshot.population.assignedTo('hunters_hut')).toBe(2);
   });
 
   it('refines steel and drips Ember Sparks over an offline window', () => {

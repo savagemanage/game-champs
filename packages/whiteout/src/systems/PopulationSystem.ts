@@ -1,4 +1,4 @@
-import { POPULATION, populationOutputMultiplier } from '../config/GameConfig';
+import { POPULATION } from '../config/GameConfig';
 import type { BuildingKind, PopulationState } from '../types';
 
 /**
@@ -29,6 +29,7 @@ export class PopulationSystem {
   constructor(state?: PopulationState) {
     if (state) {
       this._total = Math.max(0, Math.floor(state.total));
+      this._growthCarry = Number.isFinite(state.growthCarry) ? Math.max(0, state.growthCarry ?? 0) : 0;
       if (state.assignments) {
         for (const [kind, count] of Object.entries(state.assignments) as [BuildingKind, number][]) {
           const n = Math.max(0, Math.floor(count ?? 0));
@@ -68,28 +69,23 @@ export class PopulationSystem {
     return POPULATION.BASE_HOUSING + Math.max(0, extraHousing);
   }
 
-  /**
-   * Housing headroom in [0,1]: 1 when survivors fit comfortably under the cap,
-   * falling toward 0 as the hold fills and overcrowds. At/over the cap it is 0.
-   */
+  /** Housing score in [0,1]: full through 75% occupancy, then linear to 0 at 100%. */
   housingHeadroom(extraHousing: number): number {
     const cap = this.housingCap(extraHousing);
     if (cap <= 0) return 0;
-    return Math.min(1, Math.max(0, (cap - this._total) / cap));
+    const occupancy = Math.min(2, Math.max(0, this._total / cap));
+    return Math.min(1, Math.max(0, 1 - Math.max(0, (occupancy - 0.75) / 0.25)));
   }
 
-  /**
-   * Satisfaction in [0,1]: a weighted blend of the Furnace warmth ratio and the
-   * housing headroom, using POPULATION weights. A warm, roomy hold is content;
-   * a freezing or overcrowded one is not.
-   */
+  /** Display satisfaction: 70% housing score and 30% Warmth. */
   satisfaction(warmthRatio: number, extraHousing: number): number {
     const warm = Math.min(1, Math.max(0, warmthRatio));
-    const headroom = this.housingHeadroom(extraHousing);
-    const value =
-      POPULATION.SATISFACTION_WARMTH_WEIGHT * warm +
-      POPULATION.SATISFACTION_HOUSING_WEIGHT * headroom;
-    return Math.min(1, Math.max(0, value));
+    return Math.min(1, Math.max(0, 0.7 * this.housingHeadroom(extraHousing) + 0.3 * warm));
+  }
+
+  /** Production satisfaction deliberately excludes Warmth to prevent double taxation. */
+  satisfactionProduction(extraHousing: number): number {
+    return 0.5 + 0.5 * this.housingHeadroom(extraHousing);
   }
 
   /**
@@ -102,16 +98,19 @@ export class PopulationSystem {
     return Math.min(1, this.assigned / desiredStaff);
   }
 
+  /** Per-building staffing factor: 35% unstaffed, 100% at assigned == level. */
+  staffingMultiplier(kind: BuildingKind, level: number): number {
+    const ratio = level <= 0 ? 0 : Math.min(1, this.assignedTo(kind) / Math.max(1, level));
+    return POPULATION.STAFFING_FLOOR + (1 - POPULATION.STAFFING_FLOOR) * ratio;
+  }
+
   /**
-   * The producer-output multiplier from the workforce: satisfaction x staffing
-   * through the shared GameConfig curve. Pass this alongside the warmth
-   * multiplier to ResourceStore.applyProduction (GameState multiplies them).
+   * Compatibility aggregate used by existing UI/tests. Production code should
+   * use satisfactionProduction() and staffingMultiplier() per building.
    */
-  outputMultiplier(warmthRatio: number, extraHousing: number, desiredStaff: number): number {
-    return populationOutputMultiplier(
-      this.satisfaction(warmthRatio, extraHousing),
-      this.staffingRatio(desiredStaff),
-    );
+  outputMultiplier(_warmthRatio: number, extraHousing: number, desiredStaff: number): number {
+    return this.satisfactionProduction(extraHousing) *
+      (POPULATION.STAFFING_FLOOR + (1 - POPULATION.STAFFING_FLOOR) * this.staffingRatio(desiredStaff));
   }
 
   /**
@@ -120,15 +119,15 @@ export class PopulationSystem {
    * carried between ticks so slow growth still accrues. Never exceeds the cap.
    * Returns the number of whole survivors that arrived this tick.
    */
-  tick(deltaMs: number, extraHousing: number): number {
-    if (deltaMs <= 0) return 0;
+  tick(deltaMs: number, extraHousing: number, sourceMultiplier = 1): number {
+    if (deltaMs <= 0 || sourceMultiplier <= 0) return 0;
     const cap = this.housingCap(extraHousing);
     if (this._total >= cap) {
       this._growthCarry = 0;
       return 0;
     }
     const seconds = deltaMs / 1000;
-    this._growthCarry += POPULATION.GROWTH_PER_SEC * seconds;
+    this._growthCarry += POPULATION.GROWTH_PER_SEC * seconds * sourceMultiplier;
     let arrived = Math.floor(this._growthCarry);
     if (arrived <= 0) return 0;
     this._growthCarry -= arrived;
@@ -159,8 +158,8 @@ export class PopulationSystem {
    * never assigns more than are available (idle + already-here). Returns the
    * count actually assigned to that building afterwards.
    */
-  assign(kind: BuildingKind, count: number): number {
-    const target = Math.max(0, Math.floor(count));
+  assign(kind: BuildingKind, count: number, maxForBuilding: number = Number.POSITIVE_INFINITY): number {
+    const target = Math.min(Math.max(0, Math.floor(count)), Math.max(0, Math.floor(maxForBuilding)));
     const current = this.assignedTo(kind);
     // Survivors free to move to this building = idle plus those already here.
     const available = this.idle + current;
@@ -202,7 +201,7 @@ export class PopulationSystem {
     for (const [kind, count] of this._assignments.entries()) {
       if (count > 0) assignments[kind] = count;
     }
-    return { total: this._total, assignments };
+    return { total: this._total, assignments, growthCarry: this._growthCarry };
   }
 
   /**

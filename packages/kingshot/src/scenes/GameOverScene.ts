@@ -1,161 +1,141 @@
 import Phaser from 'phaser';
 import { SceneKeys, PALETTE, CANVAS } from '../config/GameConfig';
 import { TextureKeys } from '../config/AssetKeys';
+import { TROOP_ORDER } from '../config/TroopConfig';
+import { TOTAL_WAVES } from '../config/WaveConfig';
 import { Menu } from '../ui/Menu';
 import { textStyle } from '../ui/UiText';
 import { tr } from '../i18n/i18n';
-import type { ResourceCost } from '../types';
+import type { BattleReceipt } from '../systems/BattleReceipt';
+import { GameState } from '../systems/GameState';
+import { announceStatus, removeAccessibleState, updateAccessibleState } from '../ui/Accessibility';
 import { onViewportRefit, type VisibleWorldRect } from '@open-games/shared';
 
-/** Data passed from BattleScene to the result overlay. */
 export interface GameOverData {
-  /** Whether the player won the battle. */
-  win: boolean;
-  /** The wave that was just fought. */
-  wave: number;
-  /** Highest wave cleared after this battle (for the "waves cleared" line). */
-  wavesCleared: number;
-  /** Whether the final configured wave was cleared (a full campaign victory). */
-  fullVictory: boolean;
-  /** Reward paid out on a win (empty on a loss). */
-  reward: ResourceCost;
-  /** Friendly troops lost this battle. */
-  casualties: number;
-  /** Friendly troops that survived. */
-  survivors: number;
+  receipt: BattleReceipt;
 }
 
-/**
- * GameOverScene - the post-battle result overlay.
- *
- * Reuses the {@link Menu} pixel-UI helpers to present the battle outcome over a
- * dimmed battle backdrop: a VICTORY / DEFEAT (or full-campaign KINGDOM
- * TRIUMPHANT) headline, the reward or casualty summary, and the running waves
- * cleared. It never mutates state itself - BattleScene has already applied the
- * reward / casualties and persisted through GameState before starting this
- * scene - so this is a pure presentational end-cap with two exits:
- *   - Retry: fight the next (or same, on a loss) wave again by re-entering the
- *     BattleScene.
- *   - To Town: return to the idle town, which reflects the updated resources,
- *     army and wave progress from the shared GameState.
- */
+/** Explanatory, presentation-only view of the committed battle receipt. */
 export class GameOverScene extends Phaser.Scene {
   private bgBattle!: Phaser.GameObjects.Image;
   private bgDim!: Phaser.GameObjects.Rectangle;
+  private navigating = false;
 
   constructor() {
     super({ key: SceneKeys.GameOver });
   }
 
   create(data: GameOverData): void {
+    const receipt = data?.receipt ?? GameState.get().lastBattleReceipt;
+    if (!receipt) {
+      this.scene.start(SceneKeys.Town);
+      return;
+    }
+    const state = GameState.get();
     const cx = CANVAS.WIDTH / 2;
     this.cameras.main.setBackgroundColor(PALETTE.BG_SKY_CSS);
     Menu.fadeIn(this);
-
-    // Dimmed battle backdrop. Cover the full visible world rect (taller than 540
-    // on a portrait phone) with both the tinted battlefield and the dim so no
-    // flat dead margin shows; the result panel stays in the 960x540 band. Both
-    // layers re-fit on resize/orientationchange via the shared provider.
     this.bgBattle = this.add.image(0, 0, TextureKeys.BgBattle).setTint(0x556070);
-    this.bgDim = this.add.rectangle(0, 0, CANVAS.WIDTH, CANVAS.HEIGHT, 0x000000, 0.55).setOrigin(0, 0);
+    this.bgDim = this.add.rectangle(0, 0, CANVAS.WIDTH, CANVAS.HEIGHT, 0x000000, 0.65).setOrigin(0, 0);
     onViewportRefit(this, { width: CANVAS.WIDTH, height: CANVAS.HEIGHT }, (rect) => this.refitBackdrop(rect));
 
-    const panelW = 560;
-    const panelH = 340;
-    Menu.panel(this, cx, CANVAS.HEIGHT / 2, panelW, panelH);
+    Menu.panel(this, cx, CANVAS.HEIGHT / 2, 720, 470);
+    const fullVictory = receipt.mode === 'campaign' && receipt.win && receipt.wave === TOTAL_WAVES;
+    const headline = fullVictory
+      ? tr('result.fullVictory')
+      : receipt.win
+        ? tr('result.victory')
+        : tr('result.defeat');
+    Menu.title(this, cx, 58, headline, 38).setColor(
+      fullVictory ? PALETTE.GOLD_CSS : receipt.win ? PALETTE.SUCCESS_CSS : PALETTE.DANGER_CSS,
+    );
 
-    let headline: string;
-    let headlineColor: string;
-    if (data.fullVictory) {
-      headline = tr('result.fullVictory');
-      headlineColor = PALETTE.GOLD_CSS;
-    } else if (data.win) {
-      headline = tr('result.victory');
-      headlineColor = PALETTE.SUCCESS_CSS;
-    } else {
-      headline = tr('result.defeat');
-      headlineColor = PALETTE.DANGER_CSS;
-    }
-
-    Menu.title(this, cx, CANVAS.HEIGHT / 2 - 120, headline, 46).setColor(headlineColor);
-
-    const lines: string[] = [];
-    if (data.fullVictory) {
-      lines.push(tr('result.fullVictoryDesc'));
-    } else if (!data.win) {
-      lines.push(tr('result.defeatDesc'));
-    }
-    lines.push(tr('result.wavesCleared', { waves: data.wavesCleared }));
-
-    if (data.win) {
-      lines.push(
-        tr('result.rewardLine', {
-          food: data.reward.food ?? 0,
-          wood: data.reward.wood ?? 0,
-          stone: data.reward.stone ?? 0,
-          gold: data.reward.gold ?? 0,
-        }),
-      );
-      lines.push(tr('result.survivors', { count: data.survivors }));
-      if (!data.fullVictory) lines.push(tr('result.nextWave', { wave: data.wave + 1 }));
-    } else {
-      lines.push(tr('result.casualties', { count: data.casualties }));
-    }
-
+    const totals = TROOP_ORDER.map((kind) =>
+      tr('result.stackLine', {
+        troop: tr(`troop.${kind}`),
+        deployed: receipt.deployed[kind],
+        lost: receipt.casualties[kind],
+        survived: receipt.survivors[kind],
+        power: Math.round(receipt.contributions[kind] ?? 0),
+      }),
+    );
+    const economy = receipt.mode === 'replay'
+      ? tr('result.replayNotice')
+      : receipt.win
+        ? tr('result.rewardLine', {
+            food: receipt.reward.food ?? 0,
+            wood: receipt.reward.wood ?? 0,
+            stone: receipt.reward.stone ?? 0,
+            gold: receipt.reward.gold ?? 0,
+          })
+        : tr('result.penaltyLine', {
+            food: receipt.penalty.food ?? 0,
+            wood: receipt.penalty.wood ?? 0,
+            stone: receipt.penalty.stone ?? 0,
+            gold: receipt.penalty.gold ?? 0,
+          });
+    const details = [
+      tr('result.powerLine', { army: receipt.armyPower.toFixed(1), enemy: receipt.wavePower.toFixed(1) }),
+      tr('result.multiplierLine', {
+        attack: receipt.attackMultiplier.toFixed(2),
+        defense: receipt.defenseMultiplier.toFixed(2),
+        town: Math.round(receipt.townDefense),
+      }),
+      ...totals,
+      economy,
+      tr('result.wavesCleared', { waves: state.waveCleared }),
+    ];
     this.add
-      .text(cx, CANVAS.HEIGHT / 2 - 40, lines.join('\n'), textStyle(16, { align: 'center', color: PALETTE.TEXT_CSS }))
-      .setOrigin(0.5)
-      .setLineSpacing(8);
+      .text(cx, 115, details.join('\n'), textStyle(14, { align: 'left', color: PALETTE.TEXT_CSS, wordWrap: { width: 650 } }))
+      .setOrigin(0.5, 0)
+      .setLineSpacing(4);
+    const semanticResult = `${headline}. ${details.join(' ')}`;
+    updateAccessibleState('battle-result', headline, semanticResult);
+    announceStatus(semanticResult);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => removeAccessibleState('battle-result'));
 
-    // Buttons. "Retry" only makes sense when there is still an army to send
-    // back into battle. A defeat wipes the army (survivors === 0), so re-entering
-    // BattleScene would just bounce off its empty-army guard back to Town - a
-    // dead button. In that case we instead offer "Train Troops" (routes to the
-    // Town, where the Barracks/training lives) so the action the player is given
-    // can actually be accomplished. Retry is also suppressed on a full-campaign
-    // victory (there is no next wave).
-    const btnY = CANVAS.HEIGHT / 2 + 110;
-    const canRetry = !data.fullVictory && data.survivors > 0;
+    const canFightAgain = receipt.mode === 'replay' || state.nextCampaignWave !== null;
+    const nextWave = receipt.mode === 'replay'
+      ? receipt.wave
+      : receipt.win
+        ? state.nextCampaignWave
+        : receipt.wave;
+    const canRetry = canFightAgain && nextWave !== null && state.armyCount > 0;
+    const retryStatus = this.add
+      .text(cx, 447, '', textStyle(12, { color: PALETTE.DANGER_CSS, align: 'center', wordWrap: { width: 620 } }))
+      .setOrigin(0.5);
+    const attemptBattle = (): void => {
+      if (this.navigating || nextWave === null) return;
+      const committed = state.commitBattle(receipt.mode, nextWave, Date.now());
+      if (committed.ok && committed.receipt) {
+        this.navigating = true;
+        this.scene.start(SceneKeys.Battle, { receipt: committed.receipt });
+        return;
+      }
+      const message = committed.reason === 'saveFailed' ? tr('battle.saveFailed') : tr('battle.cannotStart');
+      retryStatus.setText(message);
+      announceStatus(message);
+    };
     if (canRetry) {
-      Menu.button(this, cx - 110, btnY, tr('result.retry'), () => this.go(SceneKeys.Battle), {
-        width: 180,
-        accent: PALETTE.DANGER,
-      });
-      Menu.button(this, cx + 110, btnY, tr('result.toTown'), () => this.go(SceneKeys.Town), { width: 180 });
-    } else if (!data.win) {
-      // Defeat with no survivors: guide the player to rebuild their army.
-      Menu.button(this, cx - 110, btnY, tr('result.train'), () => this.go(SceneKeys.Town), {
-        width: 180,
-        accent: PALETTE.DANGER,
-      });
-      Menu.button(this, cx + 110, btnY, tr('result.toTown'), () => this.go(SceneKeys.Town), { width: 180 });
+      Menu.button(this, cx - 120, 480, receipt.mode === 'replay' ? tr('result.replayAgain') : tr('result.retry'), attemptBattle, { width: 200, accent: PALETTE.DANGER });
+      Menu.button(this, cx + 120, 480, tr('result.toTown'), () => this.goTown(), { width: 200 });
     } else {
-      Menu.button(this, cx, btnY, tr('result.toTown'), () => this.go(SceneKeys.Town), { width: 220 });
+      Menu.button(this, cx, 480, tr('result.toTown'), () => this.goTown(), { width: 220 });
     }
-
-    Menu.label(this, cx, CANVAS.HEIGHT / 2 + 150, tr(canRetry ? 'result.keyhint' : 'result.keyhintNoRetry'), 12, 0.6);
-
-    // Keyboard shortcuts. `R` only bound when a real Retry is offered.
-    if (canRetry) {
-      this.input.keyboard?.on('keydown-R', () => this.go(SceneKeys.Battle));
-    }
-    this.input.keyboard?.on('keydown-SPACE', () => this.go(SceneKeys.Town));
-    this.input.keyboard?.on('keydown-ESC', () => this.go(SceneKeys.Town));
+    if (canRetry) this.input.keyboard?.on('keydown-R', attemptBattle);
+    this.input.keyboard?.on('keydown-SPACE', () => this.goTown());
+    this.input.keyboard?.on('keydown-ESC', () => this.goTown());
+    if (receipt.mode === 'campaign') state.acknowledgeBattleReceipt();
   }
 
-  /**
-   * Re-fit the tinted battle backdrop + dim overlay to the live visible-world
-   * rect. Runs at create() and on every resize/orientationchange so a mid-scene
-   * rotate never leaves an uncovered margin.
-   */
   private refitBackdrop(rect: VisibleWorldRect): void {
-    this.bgBattle
-      .setPosition(rect.x + rect.width / 2, rect.y + rect.height / 2)
-      .setDisplaySize(rect.width, rect.height);
+    this.bgBattle.setPosition(rect.x + rect.width / 2, rect.y + rect.height / 2).setDisplaySize(rect.width, rect.height);
     this.bgDim.setPosition(rect.x, rect.y).setSize(rect.width, rect.height);
   }
 
-  private go(scene: string): void {
-    Menu.fadeTo(this, () => this.scene.start(scene));
+  private goTown(): void {
+    if (this.navigating) return;
+    this.navigating = true;
+    Menu.fadeTo(this, () => this.scene.start(SceneKeys.Town));
   }
 }

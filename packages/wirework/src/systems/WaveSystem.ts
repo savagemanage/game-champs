@@ -8,158 +8,139 @@ import {
   expandWave,
   scaledSpawnIntervalMs,
   scaledStartDelayMs,
-  type DifficultyTuning,
   type WaveDef,
 } from '../config/WaveConfig';
-import { AudioManager } from './AudioManager';
+import type { Difficulty } from './Persistence';
+import type { RandomSource } from './DeterministicRng';
 import { radialPoint, spawnRadius } from './SiegeGeometry';
-import { createEnemy, type Enemy, type EnemyFactoryDeps } from '../entities/enemies';
+import { createEnemy, type Enemy } from '../entities/enemies';
+import type { DebrisProjectile } from '../entities/enemies/DebrisProjectile';
 
-/** Callbacks the WaveSystem uses to hand spawned giants back to the scene. */
-export interface WaveHooks extends EnemyFactoryDeps {
-  /** Called with each freshly spawned giant so the scene can track it. */
+export type WavePhase = 'countdown' | 'spawning' | 'clearing' | 'done';
+export interface WaveHooks {
+  readonly spawnDebris: (projectile: DebrisProjectile) => void;
   readonly onSpawn: (enemy: Enemy) => void;
-  /** Called when a wave begins (1-based number) for HUD/announcements. */
+  readonly canSpawn: (x: number, y: number) => boolean;
   readonly onWaveStart: (wave: number, size: number) => void;
-  /** Called when the final wave is cleared: the run is a victory. */
   readonly onAllWavesCleared: () => void;
 }
 
-/** Phase of the wave lifecycle. */
-const enum Phase {
-  /** Waiting out the inter-wave delay before spawning begins. */
-  Countdown = 0,
-  /** Actively spawning the current wave's giants. */
-  Spawning = 1,
-  /** All spawned; waiting for the arena to be cleared of giants. */
-  Clearing = 2,
-  /** Every wave cleared - run won. */
-  Done = 3,
-}
-
-/**
- * WaveSystem - the data-driven spawner.
- *
- * It walks the {@link WAVES} table one wave at a time. For each wave it expands
- * the composition into a mixed spawn order, spaces spawns by the wave's pacing
- * (with jitter), and only advances to the next wave once the current wave is
- * both fully spawned AND cleared of living giants. Difficulty comes entirely
- * from the DATA in WaveConfig (more/tougher-role spawns), never from touching a
- * giant's base stats - this system reads composition and pacing only.
- */
 export class WaveSystem {
-  private readonly scene: Phaser.Scene;
-  private readonly hooks: WaveHooks;
-
-  private phase: Phase = Phase.Countdown;
+  private phaseValue: WavePhase = 'countdown';
   private waveIndex = 0;
   private spawnQueue: EnemyRole[] = [];
   private nextEventAt = 0;
   private started = false;
-  /** Difficulty pacing/composition scaling, read once at run start. */
-  private difficulty: DifficultyTuning = DIFFICULTY_TUNING.standard;
+  private completed = 0;
 
-  constructor(scene: Phaser.Scene, hooks: WaveHooks) {
-    this.scene = scene;
-    this.hooks = hooks;
+  constructor(
+    private readonly scene: Phaser.Scene,
+    difficulty: Difficulty,
+    private readonly rng: RandomSource,
+    private readonly hooks: WaveHooks,
+  ) {
+    this.difficulty = DIFFICULTY_TUNING[difficulty];
   }
 
-  /** 1-based number of the wave currently in progress. */
-  get currentWave(): number {
-    return Math.min(this.waveIndex + 1, WAVES.length);
+  private readonly difficulty;
+
+  get currentWave(): number { return Math.min(this.waveIndex + 1, WAVES.length); }
+  get totalWaves(): number { return WAVES.length; }
+  get wavesCompleted(): number { return this.completed; }
+  get phase(): WavePhase { return this.phaseValue; }
+  countdownMs(nowMs: number): number {
+    return this.phaseValue === 'countdown' ? Math.max(0, this.nextEventAt - nowMs) : 0;
   }
 
-  /** Total number of waves in the run. */
-  get totalWaves(): number {
-    return WAVES.length;
-  }
-
-  /** Kick off the first countdown. Call once from the scene's create(). */
   start(nowMs: number): void {
     this.started = true;
-    this.phase = Phase.Countdown;
+    this.phaseValue = 'countdown';
     this.waveIndex = 0;
-    // Read the persisted difficulty ONCE at run start; it only scales pacing
-    // and adds baseline filler - it never mutates any giant's base stats.
-    const difficulty = AudioManager.get(this.scene).getSettings().difficulty;
-    this.difficulty = DIFFICULTY_TUNING[difficulty];
-    this.nextEventAt = nowMs + Math.max(500, Math.round(WAVE_TUNING.FIRST_WAVE_DELAY_MS * this.difficulty.startDelayScale));
+    this.completed = 0;
+    this.nextEventAt = nowMs + scaledStartDelayMs(WAVES[0], this.difficulty);
   }
 
-  /**
-   * Advance the spawner. `aliveCount` is how many giants are still active in
-   * the scene (used to detect a cleared wave). Returns nothing; spawns flow out
-   * via the {@link WaveHooks.onSpawn} callback.
-   */
-  update(nowMs: number, aliveCount: number): void {
-    if (!this.started || this.phase === Phase.Done) return;
-
-    switch (this.phase) {
-      case Phase.Countdown:
-        if (nowMs >= this.nextEventAt) this.beginWave(nowMs);
-        break;
-
-      case Phase.Spawning:
-        if (nowMs >= this.nextEventAt) this.spawnNext(nowMs);
-        break;
-
-      case Phase.Clearing:
-        if (aliveCount <= 0) this.advanceWave(nowMs);
-        break;
-    }
+  update(nowMs: number, activeOrDyingCount: number): void {
+    if (!this.started || this.phaseValue === 'done') return;
+    if (this.phaseValue === 'countdown' && nowMs >= this.nextEventAt) this.beginWave(nowMs);
+    else if (this.phaseValue === 'spawning' && nowMs >= this.nextEventAt) this.spawnNext(nowMs);
+    else if (this.phaseValue === 'clearing' && activeOrDyingCount === 0) this.advanceWave(nowMs);
   }
 
-  private currentDef(): WaveDef {
-    return WAVES[this.waveIndex];
-  }
+  private currentDef(): WaveDef { return WAVES[this.waveIndex]; }
 
   private beginWave(nowMs: number): void {
-    const def = this.currentDef();
-    this.spawnQueue = expandWave(def, this.difficulty);
-    this.phase = Phase.Spawning;
-    this.nextEventAt = nowMs; // spawn the first immediately
-    this.hooks.onWaveStart(def.wave, this.spawnQueue.length);
+    const definition = this.currentDef();
+    this.spawnQueue = expandWave(definition, this.difficulty);
+    this.phaseValue = 'spawning';
+    this.nextEventAt = nowMs;
+    this.hooks.onWaveStart(definition.wave, this.spawnQueue.length);
   }
 
   private spawnNext(nowMs: number): void {
     const role = this.spawnQueue.shift();
-    if (role === undefined) {
-      // Whole wave has been emitted; wait for it to be cleared.
-      this.phase = Phase.Clearing;
+    if (role === undefined) { this.phaseValue = 'clearing'; return; }
+    if (!this.spawnOne(role)) {
+      this.spawnQueue.unshift(role);
+      this.nextEventAt = nowMs + WAVE_TUNING.SPAWN_RETRY_MS;
       return;
     }
-    this.spawnOne(role);
-
-    const def = this.currentDef();
-    const interval = scaledSpawnIntervalMs(def, this.difficulty);
-    const jitter = interval * WAVE_TUNING.SPAWN_JITTER;
-    this.nextEventAt = nowMs + interval + Phaser.Math.Between(-jitter, jitter);
+    if (this.spawnQueue.length === 0) {
+      this.phaseValue = 'clearing';
+      return;
+    }
+    const interval = scaledSpawnIntervalMs(this.currentDef(), this.difficulty);
+    const signedJitter = (this.rng.next() * 2 - 1) * WAVE_TUNING.SPAWN_JITTER;
+    this.nextEventAt = nowMs + Math.round(interval * (1 + signedJitter));
   }
 
-  /**
-   * Instantiate one giant at a random angle around the OUTER ring perimeter
-   * (just outside OUTER_RADIUS) and hand it to the scene, so giants besiege the
-   * center from all sides. FEAT-003 layers the full radial siege AI on top; the
-   * spawn position math is finalized here.
-   */
-  private spawnOne(role: EnemyRole): void {
-    const angle = Math.random() * Math.PI * 2;
-    const radius = spawnRadius(WALL.OUTER_RADIUS, Math.random()); // just outside the outer ring
-    const { x, y } = radialPoint(ARENA.CENTER_X, ARENA.CENTER_Y, angle, radius);
-    const enemy = createEnemy(this.scene, role, x, y, {
+  private spawnOne(role: EnemyRole): boolean {
+    let point: { x: number; y: number } | null = null;
+    for (let attempt = 0; attempt < WAVE_TUNING.SPAWN_RANDOM_ATTEMPTS; attempt += 1) {
+      const angle = this.rng.next() * Math.PI * 2;
+      const radius = spawnRadius(WALL.OUTER_RADIUS, this.rng.next());
+      const candidate = radialPoint(ARENA.CENTER_X, ARENA.CENTER_Y, angle, radius);
+      if (this.hooks.canSpawn(candidate.x, candidate.y)) {
+        point = candidate;
+        break;
+      }
+    }
+    if (!point) {
+      const offset = this.rng.next() * Math.PI * 2;
+      const radii = [spawnRadius(WALL.OUTER_RADIUS, 0), spawnRadius(WALL.OUTER_RADIUS, 0.5), spawnRadius(WALL.OUTER_RADIUS, 0.999_999)] as const;
+      for (const radius of radii) {
+        for (let index = 0; index < WAVE_TUNING.SPAWN_FALLBACK_ANGLES; index += 1) {
+          const candidate = radialPoint(
+            ARENA.CENTER_X,
+            ARENA.CENTER_Y,
+            offset + index * Math.PI * 2 / WAVE_TUNING.SPAWN_FALLBACK_ANGLES,
+            radius,
+          );
+          if (!this.hooks.canSpawn(candidate.x, candidate.y)) continue;
+          point = candidate;
+          break;
+        }
+        if (point) break;
+      }
+    }
+    if (!point) return false;
+    const enemy = createEnemy(this.scene, role, point.x, point.y, {
       spawnDebris: this.hooks.spawnDebris,
+      rng: this.rng,
     });
     this.hooks.onSpawn(enemy);
+    return true;
   }
 
   private advanceWave(nowMs: number): void {
+    this.completed = this.waveIndex + 1;
     this.waveIndex += 1;
     if (this.waveIndex >= WAVES.length) {
-      this.phase = Phase.Done;
+      this.phaseValue = 'done';
       this.hooks.onAllWavesCleared();
       return;
     }
-    this.phase = Phase.Countdown;
+    this.phaseValue = 'countdown';
     this.nextEventAt = nowMs + scaledStartDelayMs(this.currentDef(), this.difficulty);
   }
 }

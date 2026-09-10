@@ -17,6 +17,7 @@ import type { HeroDenyReason } from '../systems/HeroSystem';
 import { tr } from '../i18n/i18n';
 import { Menu, type MenuButton } from './Menu';
 import { textStyle } from './UiText';
+import { closeAccessibleModal, openAccessibleModal, refreshAccessibleModalContext } from './Accessibility';
 
 /** Per-hero row widgets that need live updates. */
 interface HeroRow {
@@ -26,6 +27,7 @@ interface HeroRow {
   recruitButton: MenuButton;
   levelButton: MenuButton;
   starButton: MenuButton;
+  patronageButton: MenuButton;
   activeButton: MenuButton;
 }
 
@@ -66,7 +68,12 @@ export class HeroPanel {
   setVisible(visible: boolean): void {
     this._visible = visible;
     this.root.setVisible(visible);
-    if (visible) this.refresh();
+    if (visible) {
+      this.refresh();
+      openAccessibleModal(this.root, () => this.setVisible(false));
+    } else {
+      closeAccessibleModal(this.root);
+    }
   }
 
   toggle(): void {
@@ -119,7 +126,7 @@ export class HeroPanel {
     this.root.add(header);
 
     let rowY = y + 30;
-    const rowStep = 150;
+    const rowStep = 160;
     for (const hero of heroesInRole(role)) {
       this.buildHeroRow(hero, x, rowY, width);
       rowY += rowStep;
@@ -157,22 +164,28 @@ export class HeroPanel {
       height: 30,
       fontSize: 12,
     });
-    const starButton = Menu.button(this.scene, x + 60, btnY + 34, tr('hero.starUp'), () => this.starUp(hero), {
+    const starButton = Menu.button(this.scene, x + 60, btnY + 46, tr('hero.starUp'), () => this.starUp(hero), {
       width: 112,
-      height: 30,
+      height: 44,
       fontSize: 12,
     });
-    const activeButton = Menu.button(this.scene, x + 176, btnY + 34, tr('hero.setActive'), () => this.setActive(hero), {
+    const patronageButton = Menu.button(this.scene, x + 290, btnY, tr('hero.patronage'), () => this.patronage(hero), {
+      width: 104,
+      height: 44,
+      fontSize: 10,
+    });
+    const activeButton = Menu.button(this.scene, x + 176, btnY + 46, tr('hero.setActive'), () => this.setActive(hero), {
       width: 108,
-      height: 30,
+      height: 44,
       fontSize: 12,
     });
     this.root.add(recruitButton.container);
     this.root.add(levelButton.container);
+    this.root.add(patronageButton.container);
     this.root.add(starButton.container);
     this.root.add(activeButton.container);
 
-    this.rows.push({ hero, portrait, statusLabel, recruitButton, levelButton, starButton, activeButton });
+    this.rows.push({ hero, portrait, statusLabel, recruitButton, levelButton, starButton, patronageButton, activeButton });
   }
 
   private costString(cost: ResourceCost): string {
@@ -182,32 +195,52 @@ export class HeroPanel {
       .join(', ');
   }
 
+  private patronageResourceString(cost: ResourceCost): string {
+    return (RESOURCE_ORDER as readonly ResourceKind[])
+      .filter((resource) => (cost[resource] ?? 0) > 0)
+      .map((resource) => {
+        const need = cost[resource] ?? 0;
+        const have = Math.floor(this.state.resources.get(resource));
+        return tr('hero.patronageResource', {
+          resource: tr(`resource.${resource}`),
+          have,
+          need,
+          shortfall: Math.max(0, need - have),
+        });
+      })
+      .join(' · ');
+  }
+
   private recruit(hero: HeroId): void {
-    const result = this.state.heroes.recruit(hero, this.state.resources);
-    this.afterAction(result.ok);
+    const ok = this.state.commitDurableAction(() => this.state.heroes.recruit(hero, this.state.resources).ok);
+    this.afterAction(ok, false);
   }
 
   private levelUp(hero: HeroId): void {
-    const result = this.state.heroes.levelUp(hero, this.state.resources);
-    this.afterAction(result.ok);
+    const ok = this.state.commitDurableAction(() => this.state.heroes.levelUp(hero, this.state.resources).ok);
+    this.afterAction(ok, false);
   }
 
   private starUp(hero: HeroId): void {
-    const result = this.state.heroes.starUp(hero);
-    this.afterAction(result.ok);
+    const ok = this.state.commitDurableAction(() => this.state.heroes.starUp(hero).ok);
+    this.afterAction(ok, false);
+  }
+
+  private patronage(hero: HeroId): void {
+    const result = this.state.purchasePatronage(hero);
+    this.afterAction(result.ok, false);
   }
 
   private setActive(hero: HeroId): void {
-    // Toggle: clicking the already-active hero clears the assignment.
     const already = this.state.heroes.activeHero === hero;
-    this.state.heroes.setActive(already ? null : hero);
-    this.afterAction(true);
+    const ok = this.state.commitDurableAction(() => this.state.heroes.setActive(already ? null : hero));
+    this.afterAction(ok, false);
   }
 
-  private afterAction(ok: boolean): void {
+  private afterAction(ok: boolean, persist = true): void {
     if (ok) {
       AudioManager.get(this.scene).playSfx(AudioKeys.UiClick, 0.7);
-      this.state.save(Date.now());
+      if (persist) this.state.save(Date.now());
     }
     this.refresh();
   }
@@ -263,10 +296,18 @@ export class HeroPanel {
         row.starButton.setEnabled(false);
         row.activeButton.setEnabled(false);
         row.activeButton.setText(tr('hero.setActive'));
+        const patronageAffordable = store.canAfford(def.patronageCost);
+        row.patronageButton.setEnabled(patronageAffordable);
+        row.patronageButton.setText(tr('hero.patronageCost', { cost: this.costString(def.patronageCost) }));
         const cost = tr('hero.recruitCost', { cost: this.costString(def.recruitCost) });
+        const wallet = tr('hero.walletShortfall', {
+          shards: heroes.shards(hero),
+          shortfall: Math.max(0, def.shardsPerStar - heroes.shards(hero)),
+        });
+        const patronageResources = this.patronageResourceString(def.patronageCost);
         row.statusLabel
-          .setText(check.ok ? cost : `${cost}\n${this.reasonText(check.reason)}`)
-          .setColor(check.ok ? PALETTE.MUTED_CSS : PALETTE.DANGER_CSS);
+          .setText(`${cost}\n${wallet}\n${patronageResources}${check.ok ? '' : `\n${this.reasonText(check.reason)}`}`)
+          .setColor(check.ok && patronageAffordable ? PALETTE.MUTED_CSS : PALETTE.DANGER_CSS);
         continue;
       }
 
@@ -275,8 +316,13 @@ export class HeroPanel {
       const p = heroes.progress(hero)!;
       const stars = `${'\u2605'.repeat(p.stars)}${'\u2606'.repeat(def.starMax - p.stars)}`;
       const levelLine = tr('hero.levelStars', { level: p.level, max: def.maxLevel, stars });
-      const shardLine = tr('hero.shards', { shards: p.shards, per: def.shardsPerStar });
-      row.statusLabel.setText(`${levelLine}\n${shardLine}`).setColor(PALETTE.ACCENT_CSS);
+      const shortfall = p.stars >= def.starMax ? 0 : Math.max(0, def.shardsPerStar - p.shards);
+      const shardLine = tr('hero.walletShortfall', { shards: p.shards, shortfall });
+      const patronageAffordable = store.canAfford(def.patronageCost);
+      const patronageResources = this.patronageResourceString(def.patronageCost);
+      row.statusLabel
+        .setText(`${levelLine}\n${shardLine}\n${patronageResources}`)
+        .setColor(patronageAffordable ? PALETTE.ACCENT_CSS : PALETTE.DANGER_CSS);
 
       row.recruitButton.setEnabled(false);
       row.recruitButton.setText(tr('hero.recruited'));
@@ -301,11 +347,15 @@ export class HeroPanel {
         row.starButton.setText(tr('hero.starUpCost', { shards: def.shardsPerStar }));
       }
 
+      row.patronageButton.setEnabled(patronageAffordable);
+      row.patronageButton.setText(tr('hero.patronageCost', { cost: this.costString(def.patronageCost) }));
+
       // Set active (toggle label reflects current active hero).
       const isActive = heroes.activeHero === hero;
       row.activeButton.setEnabled(true);
       row.activeButton.setText(isActive ? tr('hero.active') : tr('hero.setActive'));
     }
+    refreshAccessibleModalContext(this.root);
   }
 
   update(): void {

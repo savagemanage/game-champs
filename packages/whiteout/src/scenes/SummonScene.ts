@@ -56,6 +56,9 @@ export class SummonScene extends HubScene {
 
     this.pityText = this.add.text(cx, 120, '', textStyle(14, { align: 'center', color: PALETTE.ICE_CSS })).setOrigin(0.5);
     this.totalText = this.add.text(cx, 142, '', textStyle(13, { align: 'center', color: PALETTE.MUTED_CSS })).setOrigin(0.5);
+    const weights = SUMMON.RARITY_WEIGHTS;
+    this.add.text(cx, 164, `${tr('rarity.common')} ${weights.common} · ${tr('rarity.rare')} ${weights.rare} · ${tr('rarity.epic')} ${weights.epic} · ${tr('rarity.legendary')} ${weights.legendary}`,
+      textStyle(11, { align: 'center', color: PALETTE.FROST_CSS })).setOrigin(0.5);
 
     this.summonButton = Menu.button(this, cx, CANVAS.HEIGHT - 90, tr('summon.pull', { cost: SUMMON.SPARK_COST }), () => this.doSummon(), { width: 300, accent: PALETTE.EMBER });
 
@@ -79,9 +82,7 @@ export class SummonScene extends HubScene {
 
   private doSummon(): void {
     const now = Date.now();
-    // A live, non-deterministic RNG for gameplay; the system stays seedable for
-    // tests. Each call draws a fresh Math.random.
-    const result = this.state.summonOnce(() => Math.random(), now);
+    const result = this.state.summonOnce(undefined, now, `summon:${now}`);
     if (!result) {
       this.revealNote.setText(tr('summon.notEnough')).setColor(PALETTE.DANGER_CSS);
       return;

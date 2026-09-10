@@ -1,93 +1,87 @@
-/**
- * A tiny framework-agnostic store the Phaser BattleScene pushes live HUD data
- * into, and the React HUD overlay subscribes to. Keeping this Phaser-free (it
- * only holds plain data) means the scene can update it every frame without the
- * React tree re-rendering Phaser, and the HUD stays perfectly in sync via
- * `useSyncExternalStore`.
- */
-
-import type { CooldownKey } from './combat';
+import type { CooldownKey, Vec2 } from './combat';
 import type { ChampionLifePhase } from './championLifeState';
 import type { MatchPhase, MatchResolutionReason } from './matchResolution';
 import type { Difficulty, MatchKind } from './tutorial/config';
+import type { LearningAction } from './tutorial/flow';
 
-/** Which game mode the battle is running. */
 export type GameMode = 'conquest' | 'midline';
-
-/** Defaults used when a local match setup omits progression metadata. */
+export type BattleResult = 'win' | 'loss' | 'draw' | 'abandoned';
+export type BattleLifecycle = 'running' | 'paused' | 'ended';
+export type PauseReason = 'manual' | 'settings' | 'hidden';
 export const DEFAULT_MATCH_KIND: MatchKind = 'standard';
 export const DEFAULT_DIFFICULTY: Difficulty = 'normal';
 
-/** Per-ability HUD state: cooldown fill 0..1 and remaining seconds. */
 export interface AbilityHudState {
   slot: CooldownKey;
-  /** 0 (just cast) .. 1 (ready). */
   progress: number;
-  /** Whole seconds remaining, for the numeric overlay (0 when ready). */
   remaining: number;
+  cooldown?: number;
   ready: boolean;
+  cost?: number;
 }
-
-/** A single active buff shown on the HUD. */
-export interface BuffHudState {
-  /** 'blue' | 'red' | 'baron' etc. */
-  kind: string;
-  /** Whole seconds of the buff remaining. */
-  remaining: number;
+export interface BuffHudState { kind: string; remaining: number }
+export interface CampHudState {
+  id: string;
+  type: 'blue' | 'red' | 'raptors' | 'wolves' | 'gromp' | 'krugs' | 'scuttle';
+  side: 'ally' | 'enemy';
+  alive: boolean;
+  membersAlive: number;
+  membersTotal: number;
+  respawnsIn: number;
 }
-
-/** An epic-monster objective timer for the HUD. */
 export interface ObjectiveHudState {
   id: 'dragon' | 'herald' | 'baron';
-  /** True when the monster is currently alive/available. */
   alive: boolean;
-  /** Whole seconds until it (re)spawns; 0 when alive. */
   spawnsIn: number;
 }
-
-/** The living/destroyed state of a team's structures, for the HUD + minimap. */
 export interface StructureStatus {
-  /** Turrets still standing for this team (of the full set). */
   turrets: number;
-  /** Total turrets this team started with. */
   turretsMax: number;
-  /** Inhibitors still standing for this team. */
   inhibitors: number;
-  /** Total inhibitors this team started with. */
   inhibitorsMax: number;
-  /** Nexus health fraction 0..1. */
   nexusPct: number;
 }
-
-/** A single blip on the minimap (normalized 0..1 world coordinates). */
 export interface MinimapBlip {
   id: string;
-  /** 0..1 across the world width. */
   x: number;
-  /** 0..1 down the world height. */
   y: number;
   kind: 'champion' | 'minion' | 'turret' | 'nexus' | 'monster';
   team: 'ally' | 'enemy' | 'neutral';
 }
-
-/** Player life-cycle facts needed for death and return-to-play HUDs. */
 export interface PlayerLifeHudState {
   phase: ChampionLifePhase;
   deaths: number;
   respawnSeconds: number;
   invulnerableSeconds: number;
 }
-
-/** Authoritative current match clock phase and forced-resolution deadline. */
 export interface MatchStatusHudState {
   phase: MatchPhase;
   suddenDeath: boolean;
   hardCapSecondsRemaining: number;
 }
+export interface RecallHudState {
+  channeling: boolean;
+  remaining: number;
+  cancellation?: string;
+}
+export interface LearningHudState {
+  current?: LearningAction;
+  completed: number;
+  total: number;
+}
+export interface PurchaseFeedback {
+  itemId: string;
+  accepted: boolean;
+  reason?: string;
+  sequence: number;
+}
 
-/** The complete snapshot the HUD renders at most ten times per second. */
 export interface BattleHudState {
   mode: GameMode;
+  matchKind: MatchKind;
+  difficulty: Difficulty;
+  lifecycle: BattleLifecycle;
+  pauseReasons: PauseReason[];
   playerChampionId: string;
   enemyChampionId: string;
   playerHp: number;
@@ -96,49 +90,37 @@ export interface BattleHudState {
   playerMaxResource: number;
   enemyHp: number;
   enemyMaxHp: number;
-  /** Remaining structure health per team, 0..1, for the objective bar. */
   allyNexusPct: number;
   enemyNexusPct: number;
   abilities: AbilityHudState[];
-  /** Elapsed match time in seconds. */
   elapsed: number;
-
-  // --- Economy / progression -------------------------------------------
-  /** Player gold available to spend in the shop. */
   gold: number;
-  /** Player champion level (1..18). */
   level: number;
-  /** XP progress toward the next level, 0..1. */
   xpPct: number;
-
-  // --- Shop -------------------------------------------------------------
-  /** Whether the shop can be opened (player is in base/fountain). */
+  xpCapped: boolean;
   shopAvailable: boolean;
-  /** Item ids the player currently owns. */
   ownedItems: string[];
-
-  // --- Buffs / objectives ----------------------------------------------
-  /** Active buffs on the player (blue/red/baron). */
   buffs: BuffHudState[];
-  /** Epic-monster objective timers. */
+  camps: CampHudState[];
   objectives: ObjectiveHudState[];
-  /** Dragon stacks the ally team has secured. */
+  aimingSlot?: CooldownKey;
   dragonStacks: number;
-  /** Player death, respawn and post-respawn protection state. */
+  objectivePoints: number;
+  wardenChargeSeconds: number;
   playerLife: PlayerLifeHudState;
-  /** Regulation, sudden-death and hard-cap timing facts. */
   matchStatus: MatchStatusHudState;
-
-  // --- Structures + minimap --------------------------------------------
+  recall: RecallHudState;
+  learning?: LearningHudState;
+  currentTargetId?: string;
+  purchaseFeedback?: PurchaseFeedback;
   allyStructures: StructureStatus;
   enemyStructures: StructureStatus;
   minimap: MinimapBlip[];
 }
 
-/** The authoritative outcome handed to React when the match ends. */
 export interface BattleOutcome {
   matchId: string;
-  win: boolean;
+  result: BattleResult;
   mode: GameMode;
   matchKind: MatchKind;
   difficulty: Difficulty;
@@ -147,9 +129,10 @@ export interface BattleOutcome {
   deaths: number;
   totalGoldEarned: number;
   objectives: number;
+  objectivePoints: number;
   ownedItems: string[];
   endReason: MatchResolutionReason;
-  /** Match stats surfaced on the results screen. */
+  learningRequirementsCompleted?: boolean;
   stats: {
     durationSeconds: number;
     championKills: number;
@@ -160,14 +143,28 @@ export interface BattleOutcome {
   };
 }
 
+export type BattleCommand =
+  | { type: 'purchase'; itemId: string }
+  | { type: 'cast'; slot: CooldownKey; aim?: Vec2 }
+  | { type: 'arm-cast'; slot: CooldownKey }
+  | { type: 'aim-start'; slot: CooldownKey; clientX: number; clientY: number }
+  | { type: 'aim-update'; slot: CooldownKey; clientX: number; clientY: number }
+  | { type: 'aim-commit'; slot: CooldownKey; clientX: number; clientY: number }
+  | { type: 'aim-cancel'; slot?: CooldownKey }
+  | { type: 'attack-move' }
+  | { type: 'move-to'; point: Vec2 }
+  | { type: 'target-at'; point: Vec2 }
+  | { type: 'attack-move-to'; point: Vec2 }
+  | { type: 'stop' }
+  | { type: 'recall' }
+  | { type: 'pause'; reason: PauseReason }
+  | { type: 'resume'; reason: PauseReason }
+  | { type: 'surrender' }
+  | { type: 'use-warden' }
+  | { type: 'skip-learning' };
+
 function emptyStructures(turrets = 0, inhibitors = 0): StructureStatus {
-  return {
-    turrets,
-    turretsMax: turrets,
-    inhibitors,
-    inhibitorsMax: inhibitors,
-    nexusPct: 1,
-  };
+  return { turrets, turretsMax: turrets, inhibitors, inhibitorsMax: inhibitors, nexusPct: 1 };
 }
 
 function emptyState(
@@ -177,6 +174,10 @@ function emptyState(
 ): BattleHudState {
   return {
     mode,
+    matchKind: DEFAULT_MATCH_KIND,
+    difficulty: DEFAULT_DIFFICULTY,
+    lifecycle: 'running',
+    pauseReasons: [],
     playerChampionId,
     enemyChampionId,
     playerHp: 0,
@@ -192,22 +193,18 @@ function emptyState(
     gold: 0,
     level: 1,
     xpPct: 0,
+    xpCapped: false,
     shopAvailable: false,
     ownedItems: [],
     buffs: [],
+    camps: [],
     objectives: [],
     dragonStacks: 0,
-    playerLife: {
-      phase: 'alive',
-      deaths: 0,
-      respawnSeconds: 0,
-      invulnerableSeconds: 0,
-    },
-    matchStatus: {
-      phase: 'regulation',
-      suddenDeath: false,
-      hardCapSecondsRemaining: 0,
-    },
+    objectivePoints: 0,
+    wardenChargeSeconds: 0,
+    playerLife: { phase: 'alive', deaths: 0, respawnSeconds: 0, invulnerableSeconds: 0 },
+    matchStatus: { phase: 'regulation', suddenDeath: false, hardCapSecondsRemaining: 0 },
+    recall: { channeling: false, remaining: 0 },
     allyStructures: emptyStructures(),
     enemyStructures: emptyStructures(),
     minimap: [],
@@ -216,53 +213,218 @@ function emptyState(
 
 type Listener = () => void;
 
-/** Minimal external store with a stable snapshot reference for React. */
+export interface QueuedBattleCommand {
+  sequence: number;
+  command: BattleCommand;
+}
+
+export interface AuthorityCommandLogEntry extends QueuedBattleCommand {
+  targetTick: number;
+}
+
+export interface AuthorityMatchRequest {
+  matchId: string;
+  matchSeed: string;
+  mode: GameMode;
+  matchKind: MatchKind;
+  difficulty: Difficulty;
+  playerChampionId: string;
+  enemyChampionId: string;
+}
+
+/** Versioned, JSON-safe input replay that can recreate a match from tick zero. */
+export interface AuthorityReplayState {
+  version: 1;
+  matchRequest: AuthorityMatchRequest;
+  commands: AuthorityCommandLogEntry[];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function isFinitePoint(value: unknown): value is Vec2 {
+  return isRecord(value) &&
+    typeof value.x === 'number' && Number.isFinite(value.x) &&
+    typeof value.y === 'number' && Number.isFinite(value.y);
+}
+
+function isBattleCommand(value: unknown): value is BattleCommand {
+  if (!isRecord(value) || typeof value.type !== 'string') return false;
+  switch (value.type) {
+    case 'purchase': return typeof value.itemId === 'string';
+    case 'cast':
+      return (value.slot === 'Q' || value.slot === 'W' || value.slot === 'E' || value.slot === 'R') &&
+        (value.aim === undefined || isFinitePoint(value.aim));
+    case 'arm-cast': return value.slot === 'Q' || value.slot === 'W' || value.slot === 'E' || value.slot === 'R';
+    case 'aim-start':
+    case 'aim-update':
+    case 'aim-commit':
+      return (value.slot === 'Q' || value.slot === 'W' || value.slot === 'E' || value.slot === 'R') &&
+        typeof value.clientX === 'number' && Number.isFinite(value.clientX) &&
+        typeof value.clientY === 'number' && Number.isFinite(value.clientY);
+    case 'aim-cancel':
+      return value.slot === undefined || value.slot === 'Q' || value.slot === 'W' || value.slot === 'E' || value.slot === 'R';
+    case 'move-to':
+    case 'target-at':
+    case 'attack-move-to': return isFinitePoint(value.point);
+    case 'pause':
+    case 'resume': return value.reason === 'manual' || value.reason === 'settings' || value.reason === 'hidden';
+    case 'attack-move':
+    case 'stop':
+    case 'recall':
+    case 'surrender':
+    case 'use-warden':
+    case 'skip-learning': return true;
+    default: return false;
+  }
+}
+
+function parseReplayState(value: unknown): AuthorityReplayState {
+  const parsed: unknown = typeof value === 'string' ? JSON.parse(value) : value;
+  if (!isRecord(parsed) || parsed.version !== 1 || !isRecord(parsed.matchRequest) || !Array.isArray(parsed.commands)) {
+    throw new Error('Invalid Champs authority replay state');
+  }
+  const request = parsed.matchRequest;
+  if (
+    typeof request.matchId !== 'string' || !request.matchId ||
+    typeof request.matchSeed !== 'string' || !request.matchSeed ||
+    (request.mode !== 'conquest' && request.mode !== 'midline') ||
+    (request.matchKind !== 'standard' && request.matchKind !== 'practice' && request.matchKind !== 'tutorial') ||
+    (request.difficulty !== 'easy' && request.difficulty !== 'normal' && request.difficulty !== 'hard') ||
+    typeof request.playerChampionId !== 'string' || !request.playerChampionId ||
+    typeof request.enemyChampionId !== 'string' || !request.enemyChampionId
+  ) throw new Error('Invalid Champs authority replay match request');
+
+  const commands = parsed.commands.map((entry) => {
+    if (
+      !isRecord(entry) || !Number.isSafeInteger(entry.sequence) || (entry.sequence as number) < 1 ||
+      !Number.isSafeInteger(entry.targetTick) || (entry.targetTick as number) < 0 ||
+      !isBattleCommand(entry.command)
+    ) throw new Error('Invalid Champs authority replay command');
+    return {
+      sequence: entry.sequence as number,
+      targetTick: entry.targetTick as number,
+      command: structuredClone(entry.command),
+    };
+  });
+  commands.sort((a, b) => a.targetTick - b.targetTick || a.sequence - b.sequence);
+  return {
+    version: 1,
+    matchRequest: {
+      matchId: request.matchId,
+      matchSeed: request.matchSeed,
+      mode: request.mode,
+      matchKind: request.matchKind,
+      difficulty: request.difficulty,
+      playerChampionId: request.playerChampionId,
+      enemyChampionId: request.enemyChampionId,
+    },
+    commands,
+  };
+}
+
+function sameMatchRequest(left: AuthorityMatchRequest, right: AuthorityMatchRequest): boolean {
+  return left.matchId === right.matchId &&
+    left.matchSeed === right.matchSeed &&
+    left.mode === right.mode &&
+    left.matchKind === right.matchKind &&
+    left.difficulty === right.difficulty &&
+    left.playerChampionId === right.playerChampionId &&
+    left.enemyChampionId === right.enemyChampionId;
+}
+
 export class BattleStore {
   private state: BattleHudState = emptyState();
   private listeners = new Set<Listener>();
-  /**
-   * Purchase requests queued by the React shop, drained by the Phaser scene
-   * each frame so gold validation and item application live in one place.
-   */
-  private purchaseQueue: string[] = [];
+  private commandQueue: QueuedBattleCommand[] = [];
+  private acceptedCommandLog: AuthorityCommandLogEntry[] = [];
+  private nextCommandSequence = 1;
+  private matchRequest: AuthorityMatchRequest | null = null;
+  private pendingImportedReplay: AuthorityReplayState | null = null;
 
   getSnapshot = (): BattleHudState => this.state;
-
   subscribe = (listener: Listener): (() => void) => {
     this.listeners.add(listener);
-    return () => {
-      this.listeners.delete(listener);
-    };
+    return () => { this.listeners.delete(listener); };
   };
-
-  /** Replace the snapshot (a new object ref) and notify subscribers. */
   set(next: BattleHudState): void {
     this.state = next;
     for (const listener of this.listeners) listener();
   }
-
   reset(
     playerChampionId: string,
     enemyChampionId: string,
     mode: GameMode = 'conquest',
+    matchRequest?: AuthorityMatchRequest,
   ): void {
-    this.purchaseQueue = [];
+    this.commandQueue = [];
+    this.acceptedCommandLog = [];
+    this.nextCommandSequence = 1;
+    this.matchRequest = matchRequest ? structuredClone(matchRequest) : null;
     this.set(emptyState(playerChampionId, enemyChampionId, mode));
   }
-
-  /** Queue a purchase request from the React shop (validated by the scene). */
-  requestPurchase(itemId: string): void {
-    this.purchaseQueue.push(itemId);
+  request(command: BattleCommand): void {
+    const queued = { sequence: this.nextCommandSequence++, command: structuredClone(command) };
+    this.commandQueue.push(queued);
   }
-
-  /** Drain and return all queued purchase requests (called by the scene). */
+  consumeQueuedCommands(): QueuedBattleCommand[] {
+    if (this.commandQueue.length === 0) return [];
+    const commands = this.commandQueue;
+    this.commandQueue = [];
+    return commands;
+  }
+  /** Compatibility view; authority consumes the stable sequence envelope. */
+  consumeCommands(): BattleCommand[] {
+    return this.consumeQueuedCommands().map(({ command }) => command);
+  }
+  recordAuthorityCommand(entry: AuthorityCommandLogEntry): void {
+    this.acceptedCommandLog.push(structuredClone(entry));
+  }
+  getCommandLog(): readonly AuthorityCommandLogEntry[] {
+    return this.acceptedCommandLog.map((entry) => structuredClone(entry));
+  }
+  /** Export the complete deterministic replay input for the current match. */
+  exportReplayState(): AuthorityReplayState | null {
+    if (!this.matchRequest) return null;
+    return {
+      version: 1,
+      matchRequest: structuredClone(this.matchRequest),
+      commands: this.getCommandLog().map((entry) => structuredClone(entry)),
+    };
+  }
+  serializeReplayState(): string | null {
+    const replay = this.exportReplayState();
+    return replay ? JSON.stringify(replay) : null;
+  }
+  /** Validate and stage replay input. The returned request can be used to launch Phaser. */
+  importReplayState(value: unknown): AuthorityMatchRequest {
+    this.pendingImportedReplay = parseReplayState(value);
+    return structuredClone(this.pendingImportedReplay.matchRequest);
+  }
+  /**
+   * Consume staged commands only for their exact request. Commands retain their
+   * original target ticks and sequences, independent of render timing.
+   */
+  consumeImportedReplay(matchRequest: AuthorityMatchRequest): AuthorityCommandLogEntry[] {
+    const replay = this.pendingImportedReplay;
+    if (!replay || !sameMatchRequest(replay.matchRequest, matchRequest)) return [];
+    this.pendingImportedReplay = null;
+    this.acceptedCommandLog = replay.commands.map((entry) => structuredClone(entry));
+    this.nextCommandSequence = Math.max(0, ...replay.commands.map((entry) => entry.sequence)) + 1;
+    return replay.commands.map((entry) => structuredClone(entry));
+  }
+  requestPurchase(itemId: string): void { this.request({ type: 'purchase', itemId }); }
   consumePurchases(): string[] {
-    if (this.purchaseQueue.length === 0) return [];
-    const drained = this.purchaseQueue;
-    this.purchaseQueue = [];
-    return drained;
+    const purchases: string[] = [];
+    const rest: QueuedBattleCommand[] = [];
+    for (const queued of this.commandQueue) {
+      if (queued.command.type === 'purchase') purchases.push(queued.command.itemId);
+      else rest.push(queued);
+    }
+    this.commandQueue = rest;
+    return purchases;
   }
 }
 
-/** A single shared store instance for the active battle. */
 export const battleStore = new BattleStore();

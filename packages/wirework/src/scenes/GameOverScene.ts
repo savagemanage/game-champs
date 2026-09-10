@@ -2,96 +2,88 @@ import Phaser from 'phaser';
 import { SceneKeys, PALETTE, CANVAS } from '../config/GameConfig';
 import { TextureKeys } from '../config/AssetKeys';
 import { Menu } from '../ui/Menu';
-import { textStyle } from '../ui/UiText';
 import { tr } from '../i18n/i18n';
 import { outcomeMessageKey, type LoseReason } from './GameOverReason';
 import { onViewportRefit, type VisibleWorldRect } from '@open-games/shared';
+import { createRunSeed } from '../systems/DeterministicRng';
+import type { Difficulty } from '../systems/Persistence';
 
 export interface GameOverData {
   victory?: boolean;
-  /** On a loss, the cause that ended the run; drives the outcome message. */
   reason?: LoseReason;
-  wavesSurvived?: number;
+  wavesCompleted?: number;
   citizensSaved?: number;
-  /** Total score accrued from giant kills during the run. */
   score?: number;
+  activeMs?: number;
+  difficulty?: Difficulty;
+  seed?: number;
+  bestScore?: number;
+  isNewRecord?: boolean;
+  storageAvailable?: boolean;
 }
 
-/**
- * GameOverScene - the run summary. Shows outcome, final score, waves survived,
- * and citizens saved, then offers Retry (straight back into a fresh run) or
- * Return to Title. Fades in on show and fades out on either choice.
- */
 export class GameOverScene extends Phaser.Scene {
   private bgSky!: Phaser.GameObjects.TileSprite;
+  private results!: Required<Omit<GameOverData, 'reason'>> & { reason?: LoseReason };
 
-  constructor() {
-    super({ key: SceneKeys.GameOver });
-  }
+  constructor() { super({ key: SceneKeys.GameOver }); }
 
-  create(data: GameOverData): void {
+  create(input: GameOverData): void {
+    this.results = {
+      victory: input.victory ?? false,
+      reason: input.reason,
+      wavesCompleted: input.wavesCompleted ?? 0,
+      citizensSaved: input.citizensSaved ?? 0,
+      score: input.score ?? 0,
+      activeMs: input.activeMs ?? 0,
+      difficulty: input.difficulty ?? 'standard',
+      seed: input.seed ?? 0,
+      bestScore: input.bestScore ?? 0,
+      isNewRecord: input.isNewRecord ?? false,
+      storageAvailable: input.storageAvailable ?? true,
+    };
     this.cameras.main.setBackgroundColor(PALETTE.GROUND);
     Menu.fadeIn(this, 500);
-
-    // Cover the full visible world rect (taller than 540 on a portrait phone)
-    // with the ground-tinted backdrop so there is no flat dead margin; the
-    // summary text/buttons below stay in the fixed 960x540 band. Re-fits on
-    // resize/orientationchange via the shared provider.
-    this.bgSky = this.add
-      .tileSprite(0, 0, CANVAS.WIDTH, CANVAS.HEIGHT, TextureKeys.BgSky)
-      .setOrigin(0, 0)
-      .setDepth(-30)
-      .setTint(PALETTE.GROUND);
+    this.bgSky = this.add.tileSprite(0, 0, CANVAS.WIDTH, CANVAS.HEIGHT, TextureKeys.BgSky)
+      .setOrigin(0).setDepth(-30).setTint(PALETTE.GROUND);
     onViewportRefit(this, { width: CANVAS.WIDTH, height: CANVAS.HEIGHT }, (rect) => this.refitBackdrop(rect));
-
     const cx = CANVAS.WIDTH / 2;
-    const victory = data.victory ?? false;
-
-    this.add
-      .text(
-        cx,
-        CANVAS.HEIGHT * 0.22,
-        tr(outcomeMessageKey(victory, data.reason)),
-        textStyle(40, {
-          color: victory ? PALETTE.TEXT_CSS : PALETTE.DANGER_CSS,
-          fontStyle: 'bold',
-        }),
-      )
-      .setOrigin(0.5);
-
-    const waves = data.wavesSurvived ?? 0;
-    const saved = data.citizensSaved ?? 0;
-    const score = data.score ?? 0;
-
-    this.add
-      .text(
-        cx,
-        CANVAS.HEIGHT * 0.46,
-        tr('gameover.stats', { score, waves, saved }),
-        textStyle(20, { align: 'center', lineSpacing: 8 }),
-      )
-      .setOrigin(0.5)
-      .setAlpha(0.9);
-
+    const outcome = Menu.title(
+      this, cx, CANVAS.HEIGHT * 0.16, tr(outcomeMessageKey(this.results.victory, this.results.reason)), 38,
+    );
+    outcome.setColor(this.results.victory ? PALETTE.TEXT_CSS : PALETTE.DANGER_CSS);
+    const seconds = (this.results.activeMs / 1000).toFixed(1);
+    const stats = Menu.label(
+      this,
+      cx,
+      CANVAS.HEIGHT * 0.42,
+      tr('gameover.stats', {
+        score: this.results.score,
+        best: this.results.bestScore,
+        waves: this.results.wavesCompleted,
+        saved: this.results.citizensSaved,
+        time: seconds,
+        difficulty: tr(`difficulty.${this.results.difficulty}`),
+        seed: this.results.seed,
+      }),
+      18,
+      1,
+    );
+    stats.setAlign('center').setLineSpacing(6);
+    if (this.results.isNewRecord) {
+      Menu.label(this, cx, CANVAS.HEIGHT * 0.60, tr('gameover.newRecord'), 22, 1).setColor('#ffcf5c').setFontStyle('bold');
+    }
+    if (!this.results.storageAvailable) {
+      Menu.label(this, cx, CANVAS.HEIGHT * 0.66, tr('storage.unavailable'), 15, 1).setColor(PALETTE.DANGER_CSS);
+    }
     Menu.button(this, cx - 124, CANVAS.HEIGHT * 0.78, tr('gameover.retry'), () => this.retry(), { width: 200 });
     Menu.button(this, cx + 124, CANVAS.HEIGHT * 0.78, tr('gameover.title'), () => this.toTitle(), { width: 200 });
-
     Menu.label(this, cx, CANVAS.HEIGHT * 0.92, tr('gameover.keyhint'), 14, 0.5);
-
     this.input.keyboard?.on('keydown-R', () => this.retry());
     this.input.keyboard?.on('keydown-SPACE', () => this.toTitle());
   }
 
-  /** Re-fit the ground-tinted backdrop to the live visible-world rect. */
-  private refitBackdrop(rect: VisibleWorldRect): void {
-    this.bgSky.setPosition(rect.x, rect.y).setSize(rect.width, rect.height);
-  }
-
-  private retry(): void {
-    Menu.fadeTo(this, () => this.scene.start(SceneKeys.Game));
-  }
-
-  private toTitle(): void {
-    Menu.fadeTo(this, () => this.scene.start(SceneKeys.Title));
-  }
+  private refitBackdrop(rect: VisibleWorldRect): void { this.bgSky.setPosition(rect.x, rect.y).setSize(rect.width, rect.height); }
+  private retry(): void { Menu.fadeTo(this, () => this.scene.start(SceneKeys.Game, { difficulty: this.results.difficulty, seed: createRunSeed() })); }
+  private toTitle(): void { Menu.fadeTo(this, () => this.scene.start(SceneKeys.Title)); }
 }

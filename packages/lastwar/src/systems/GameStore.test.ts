@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { GameStore } from './GameStore';
 import { SaveManager, memoryStorage, SAVE_KEY, SAVE_VERSION } from './SaveManager';
+import { HERO_ORDER } from '../config/Heroes';
+import { makeHeroInstance } from './Heroes';
 
 /**
  * Tests for the full-state runtime accessor. GameStore owns the whole v2
@@ -160,6 +162,7 @@ describe('GameStore', () => {
   it('recruitOne adds a new hero and persists', () => {
     const storage = memoryStorage();
     const store = GameStore.createWith(storage);
+    store.state.heroes.shards = 200;
     const res = store.recruitOne(1234);
     expect(store.ownsHero(res.heroId)).toBe(true);
     expect(res.duplicate).toBe(false);
@@ -172,20 +175,20 @@ describe('GameStore', () => {
   it('recruitOne converts a duplicate to shards', () => {
     const storage = memoryStorage();
     const store = GameStore.createWith(storage);
-    // Pull the same seed twice -> second is a guaranteed duplicate.
-    const first = store.recruitOne(4242);
+    store.state.heroes.shards = 1000;
+    for (const id of HERO_ORDER) store.state.heroes.roster[id] = makeHeroInstance(id);
     const shardsBefore = store.shards();
     const second = store.recruitOne(4242);
-    expect(second.heroId).toBe(first.heroId);
     expect(second.duplicate).toBe(true);
     expect(second.shardsGained).toBeGreaterThan(0);
-    expect(store.shards()).toBe(shardsBefore + second.shardsGained);
-    expect(store.hero(first.heroId)!.dupes).toBe(1);
+    expect(store.shards()).toBe(shardsBefore - 20 + second.shardsGained);
+    expect(store.hero(second.heroId)!.dupes).toBe(1);
   });
 
   it('hero progression spends shards and persists', () => {
     const storage = memoryStorage();
     const store = GameStore.createWith(storage);
+    store.state.heroes.shards = 200;
     const res = store.recruitOne(1);
     // Grant plenty of shards directly for the test.
     store.state.heroes.shards = 100000;
@@ -203,6 +206,7 @@ describe('GameStore', () => {
   it('hero progression fails with insufficient shards', () => {
     const storage = memoryStorage();
     const store = GameStore.createWith(storage);
+    store.state.heroes.shards = 200;
     const res = store.recruitOne(2);
     store.state.heroes.shards = 0;
     store.persist();
@@ -213,6 +217,7 @@ describe('GameStore', () => {
   it('setFormationSlot only places owned heroes and persists', () => {
     const storage = memoryStorage();
     const store = GameStore.createWith(storage);
+    store.state.heroes.shards = 200;
     const res = store.recruitOne(3);
     // Cannot place a hero that is not owned.
     expect(store.setFormationSlot('front', 0, 'ironward-not-owned')).toBe(false);

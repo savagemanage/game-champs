@@ -4,8 +4,8 @@
  * Kingdom Rise is an ORIGINAL-world medieval strategy / idle game. The player
  * grows a small settlement: resource buildings passively generate food, wood,
  * stone, and gold; a central Town Center gates the level cap of every other
- * building; troops are trained in time-based queues; and periodic waves of
- * raiders must be repelled in a light tower-defense-flavored battle. All
+ * building; troops are trained in time-based queues; and the player manually
+ * starts each of the 20 deterministic defense battles when ready. All
  * naming, lore, art, and audio are original and role-based; nothing is drawn
  * from any existing IP.
  *
@@ -148,8 +148,6 @@ export const TRAINING = {
  * WaveConfig.ts (added by the combat feature).
  */
 export const COMBAT = {
-  /** Seconds of preparation before the first wave of a battle. */
-  PREP_SECONDS: 8,
   /** Lane length in world px that attackers traverse toward the gate. */
   LANE_LENGTH: 820,
 } as const;

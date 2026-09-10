@@ -189,9 +189,11 @@ export class BuildingSystem {
    */
   update(now: number): BuildingKind[] {
     const completed: BuildingKind[] = [];
-    for (const state of this._buildings.values()) {
-      if (state.upgradeEndsAt !== null && now >= state.upgradeEndsAt) {
-        state.level += 1;
+    // Canonical order is mandatory when multiple upgrades share a timestamp.
+    for (const kind of BUILDING_ORDER) {
+      const state = this._buildings.get(kind);
+      if (state && state.upgradeEndsAt !== null && now >= state.upgradeEndsAt) {
+        state.level = Math.min(buildingDef(kind).maxLevel, state.level + 1);
         state.upgradeEndsAt = null;
         completed.push(state.kind);
       }

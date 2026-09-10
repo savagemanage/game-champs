@@ -97,9 +97,8 @@ export class CombatSystem {
    * counters the wave's dominant enemy outperforms an equal raw-power stack
    * that does not. Pure and deterministic.
    */
-  static effectiveArmyPower(army: Army, n: number, attackMult = 1, townDefense = 0): number {
+  static effectiveArmyContributions(army: Army, n: number, attackMult = 1): Partial<Record<TroopKind, number>> {
     const composition = waveComposition(n);
-    // Wave power share per enemy kind (weights for the average multiplier).
     let waveTotal = 0;
     const share: { kind: (typeof composition)[number]['kind']; power: number }[] = [];
     for (const entry of composition) {
@@ -107,29 +106,26 @@ export class CombatSystem {
       waveTotal += power;
       share.push({ kind: entry.kind, power });
     }
-
-    let total = 0;
+    const out: Partial<Record<TroopKind, number>> = {};
     for (const kind of TROOP_ORDER) {
       const count = Math.max(0, Math.floor(army[kind] ?? 0));
       if (count <= 0) continue;
-      const raw = count * troopUnitPower(kind);
-      if (waveTotal <= 0) {
-        // No wave to counter (empty/degenerate): matchups are neutral.
-        total += raw;
-        continue;
+      let weighted = 1;
+      if (waveTotal > 0) {
+        weighted = share.reduce(
+          (sum, s) => sum + (s.power / waveTotal) * troopVsEnemyMultiplier(kind, s.kind),
+          0,
+        );
       }
-      let weighted = 0;
-      for (const s of share) {
-        weighted += (s.power / waveTotal) * troopVsEnemyMultiplier(kind, s.kind);
-      }
-      total += raw * weighted;
+      out[kind] = count * troopUnitPower(kind) * weighted * Math.max(0, attackMult);
     }
-    // Research "combat attack" techs scale the whole effective power (>1 =
-    // stronger). Defaults to 1 (neutral) so untouched callers are unaffected.
-    // Town defense (walls / watchtowers) then adds FLAT on top, so fortifying
-    // the town raises the power the resolver compares against the wave: a
-    // walled town can beat a raid a bare army cannot. Defaults to 0 (neutral).
-    return total * Math.max(0, attackMult) + Math.max(0, townDefense);
+    return out;
+  }
+
+  static effectiveArmyPower(army: Army, n: number, attackMult = 1, townDefense = 0): number {
+    const contributions = CombatSystem.effectiveArmyContributions(army, n, attackMult);
+    const troops = TROOP_ORDER.reduce((sum, kind) => sum + (contributions[kind] ?? 0), 0);
+    return troops + Math.max(0, townDefense);
   }
 
   /** Total effective power of the wave `n`'s composition. */

@@ -1,16 +1,11 @@
 import { useEffect, useRef } from 'react';
 import Phaser from 'phaser';
 import BattleScene, { type BattleSceneData } from './scenes/BattleScene';
-import type { BattleOutcome, GameMode } from './battleStore';
-import type { Difficulty, MatchKind } from './tutorial/config';
+import type { BattleOutcome } from './battleStore';
+import type { MatchRequest } from './matchRequest';
 
 interface PhaserGameProps {
-  playerChampionId: string;
-  enemyChampionId: string;
-  /** Which mode the battle runs (Three-Lane Conquest or Midline Skirmish). */
-  mode: GameMode;
-  matchKind: MatchKind;
-  difficulty: Difficulty;
+  match: MatchRequest;
   /**
    * Incremented by App on every battle entry. Including it in the effect deps
    * guarantees a fresh scene even when the same matchup is replayed (a rematch
@@ -67,11 +62,7 @@ async function settleCriticalFonts(): Promise<void> {
  * only after critical browser/scene resources have a bounded chance to settle.
  */
 export default function PhaserGame({
-  playerChampionId,
-  enemyChampionId,
-  mode,
-  matchKind,
-  difficulty,
+  match,
   matchNonce,
   onGameEnd,
   onReady,
@@ -158,11 +149,7 @@ export default function PhaserGame({
       if (cancelled || gameRef.current || !container.isConnected) return;
 
       const sceneData: BattleSceneData = {
-        playerChampionId,
-        enemyChampionId,
-        mode,
-        matchKind,
-        difficulty,
+        ...match,
         reducedMotion: motionQuery?.matches ?? false,
         onSceneReady: handleSceneReady,
         onGameEnd: (outcome) => onGameEndRef.current(outcome),
@@ -220,7 +207,7 @@ export default function PhaserGame({
       game?.destroy(true);
       if (gameRef.current === game) gameRef.current = null;
     };
-  }, [playerChampionId, enemyChampionId, mode, matchKind, difficulty, matchNonce]);
+  }, [match, matchNonce]);
 
   return <div className="phaser-game" ref={containerRef} aria-hidden="true" />;
 }

@@ -4,7 +4,7 @@ import type { Difficulty } from '../systems/AudioManager';
  * Difficulty ordering + stepping helpers.
  *
  * Difficulty is a coarse selector read once at run start by WaveSystem to scale
- * wave pacing/composition (never per-giant stats). The Settings scene lets the
+ * wave pacing/composition (never per-machine stats). The Settings scene lets the
  * player move through the ordered list in BOTH directions; the stepping logic
  * is factored out here as a pure function so it can be unit-tested without a
  * Phaser runtime.

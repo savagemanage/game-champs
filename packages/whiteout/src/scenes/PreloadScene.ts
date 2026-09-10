@@ -2,7 +2,9 @@ import Phaser from 'phaser';
 import { SceneKeys, PALETTE, CANVAS } from '../config/GameConfig';
 import { AUDIO, IMAGES, SHEETS, assetPath } from '../config/AssetKeys';
 import { tr } from '../i18n/i18n';
-import { UI_FONT_FAMILY } from '../ui/UiText';
+import { UI_FONT_FAMILY, textStyle } from '../ui/UiText';
+import { Menu } from '../ui/Menu';
+import { announce } from '../ui/AccessibilityBridge';
 
 /**
  * PreloadScene loads every runtime asset (building/troop/enemy spritesheets,
@@ -13,11 +15,17 @@ import { UI_FONT_FAMILY } from '../ui/UiText';
  * Vite base path ('/open-games/whiteout/' in production, '/' in dev).
  */
 export class PreloadScene extends Phaser.Scene {
+  private failedAssets: string[] = [];
+
   constructor() {
     super({ key: SceneKeys.Preload });
   }
 
   preload(): void {
+    this.failedAssets = [];
+    this.load.on(Phaser.Loader.Events.FILE_LOAD_ERROR, (file: { key?: string }) => {
+      this.failedAssets.push(file.key ?? 'unknown');
+    });
     this.buildLoadingBar();
 
     // Spritesheets (frame configs come straight from AssetKeys).
@@ -37,7 +45,17 @@ export class PreloadScene extends Phaser.Scene {
   }
 
   create(): void {
-    this.scene.start(SceneKeys.Title);
+    if (this.failedAssets.length === 0) {
+      this.scene.start(SceneKeys.Title);
+      return;
+    }
+    const cx = CANVAS.WIDTH / 2;
+    const summary = tr('preload.error', { count: this.failedAssets.length });
+    const details = this.failedAssets.slice(0, 8).join(', ');
+    this.add.text(cx, CANVAS.HEIGHT / 2 - 30, `${summary}\n${details}`,
+      textStyle(18, { color: PALETTE.DANGER_CSS, align: 'center', wordWrap: { width: 600 } })).setOrigin(0.5);
+    announce(`${summary} ${details}`, true);
+    Menu.button(this, cx, CANVAS.HEIGHT / 2 + 40, tr('preload.retry'), () => this.scene.restart(), { width: 220 });
   }
 
   /** A simple pixel-styled loading bar wired to the loader progress events. */

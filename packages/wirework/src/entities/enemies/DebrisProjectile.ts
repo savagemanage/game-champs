@@ -2,60 +2,40 @@ import Phaser from 'phaser';
 import { TextureKeys } from '../../config/AssetKeys';
 import { ENEMY_COMBAT } from '../../config/EnemyConfig';
 
-/**
- * DebrisProjectile - a chunk of rubble hurled by a Thrower giant.
- *
- * Top-down (no gravity): it travels in a straight line across the plane toward
- * the target point at a fixed speed. On impact with a ring it damages the ring;
- * a direct hit on the hero damages the hero. The scene owns overlap checks and
- * calls {@link onImpact} to clean up. Uses the Fx dust sprite as a compact
- * rubble mote.
- */
+/** Bombard's gravity-free linear coolant shell. */
 export class DebrisProjectile extends Phaser.Physics.Arcade.Sprite {
   declare public body: Phaser.Physics.Arcade.Body;
-
-  /** Wall damage dealt on impact. */
-  public readonly wallDamage: number;
-  /** Hero damage dealt on a direct hit. */
-  public readonly heroDamage: number;
-
+  public readonly wallDamage = ENEMY_COMBAT.PROJECTILE_WALL_DAMAGE;
+  public readonly heroDamage = ENEMY_COMBAT.PROJECTILE_HERO_DAMAGE;
   private spent = false;
 
-  constructor(scene: Phaser.Scene, x: number, y: number, targetX: number, targetY: number) {
+  constructor(
+    scene: Phaser.Scene,
+    x: number,
+    y: number,
+    targetX: number,
+    targetY: number,
+    private readonly bornAt: number,
+  ) {
     super(scene, x, y, TextureKeys.FxDust, 0);
-    this.wallDamage = ENEMY_COMBAT.PROJECTILE_WALL_DAMAGE;
-    this.heroDamage = ENEMY_COMBAT.PROJECTILE_HERO_DAMAGE;
-
     scene.add.existing(this);
     scene.physics.add.existing(this);
-    this.setDepth(5);
-    this.setScale(1.5);
-    this.setTint(0x8a7a63);
-
+    this.setDepth(5).setScale(1.5).setTint(0x7ea8b0);
     this.body.setAllowGravity(false);
-
-    // Straight-line travel across the plane toward the target at fixed speed.
-    let dx = targetX - x;
-    let dy = targetY - y;
-    const len = Math.hypot(dx, dy) || 1;
-    dx /= len;
-    dy /= len;
-    const speed = ENEMY_COMBAT.PROJECTILE_SPEED;
-    this.body.setVelocity(dx * speed, dy * speed);
+    const length = Math.hypot(targetX - x, targetY - y) || 1;
+    this.body.setVelocity(
+      ((targetX - x) / length) * ENEMY_COMBAT.PROJECTILE_SPEED,
+      ((targetY - y) / length) * ENEMY_COMBAT.PROJECTILE_SPEED,
+    );
   }
 
-  /** True once the projectile has hit something and should be removed. */
-  get isSpent(): boolean {
-    return this.spent;
-  }
+  get isSpent(): boolean { return this.spent; }
+  expired(nowMs: number): boolean { return nowMs - this.bornAt >= ENEMY_COMBAT.PROJECTILE_LIFETIME_MS; }
 
-  /** Spin as it flies for a little life. */
   updateProjectile(dtMs: number): void {
-    if (this.spent) return;
-    this.rotation += (dtMs / 1000) * 6 * Math.sign(this.body.velocity.x || 1);
+    if (!this.spent) this.rotation += (dtMs / 1000) * 6 * Math.sign(this.body.velocity.x || 1);
   }
 
-  /** Mark spent and destroy (called by the scene on impact / off-screen). */
   onImpact(): void {
     if (this.spent) return;
     this.spent = true;

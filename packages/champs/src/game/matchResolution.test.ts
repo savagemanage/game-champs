@@ -76,9 +76,8 @@ describe('match hard resolution', () => {
     expect(result.reason).toBe('hard-cap-score');
   });
 
-  it('uses the explicit deterministic winner for an exact hard-cap tie', () => {
+  it('returns a draw for an exact hard-cap tie', () => {
     const capped = rulesForMode('conquest').hardCapSeconds;
-    expect(resolveMatch(match(capped)).winner).toBe('enemy');
-    expect(resolveMatch(match(capped), 'conquest', 'ally').winner).toBe('ally');
+    expect(resolveMatch(match(capped)).winner).toBe('draw');
   });
 });

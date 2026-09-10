@@ -14,7 +14,10 @@ import { textStyle } from '../ui/UiText';
 import { tr } from '../i18n/i18n';
 import { TutorialFlow, type TutorialAnchor, type TutorialProgress } from '../systems/TutorialFlow';
 import { TutorialOverlay, type AnchorRect } from '../ui/TutorialOverlay';
+import { announceStatus, closeAccessibleModal, openAccessibleModal, refreshAccessibleModalContext, removeAccessibleState, updateAccessibleState } from '../ui/Accessibility';
 import { onViewportRefit, type VisibleWorldRect } from '@open-games/shared';
+import { CombatSystem } from '../systems/CombatSystem';
+import { TOTAL_WAVES, waveComposition } from '../config/WaveConfig';
 
 /** Fixed layout position for each building sprite on the town map. */
 const BUILDING_LAYOUT: Record<BuildingKind, { x: number; y: number; scale: number }> = {
@@ -65,6 +68,9 @@ export class TownScene extends Phaser.Scene {
 
   private resourceWidgets: ResourceWidget[] = [];
   private markers: BuildingMarker[] = [];
+  private topLayer!: Phaser.GameObjects.Container;
+  private bottomLayer!: Phaser.GameObjects.Container;
+  private visibleRect: VisibleWorldRect = { x: 0, y: 0, width: CANVAS.WIDTH, height: CANVAS.HEIGHT };
   private bgSky!: Phaser.GameObjects.TileSprite;
   private bgTown!: Phaser.GameObjects.Image;
   /** Always-visible early hint under the Lumber Mill until it is built. */
@@ -73,6 +79,15 @@ export class TownScene extends Phaser.Scene {
   private warmthLabel!: Phaser.GameObjects.Text;
   private warmthBar!: ProgressBar;
   private warmthWarning!: Phaser.GameObjects.Text;
+  private saveStatusLabel!: Phaser.GameObjects.Text;
+  private lastWarmthLow: boolean | null = null;
+  private lastSaveState: string | null = null;
+  private battlePanel!: Phaser.GameObjects.Container;
+  private battleDetails!: Phaser.GameObjects.Text;
+  private battleStatus!: Phaser.GameObjects.Text;
+  private battleConfirm!: MenuButton;
+  private selectedReplayWave = 1;
+  private battleLaunching = false;
 
   private trainingPanel!: TrainingPanel;
   private researchPanel!: ResearchPanel;
@@ -132,6 +147,8 @@ export class TownScene extends Phaser.Scene {
     this.onboardingDismiss = null;
     this.tutorialFlow = null;
     this.tutorialOverlay = null;
+    this.lastWarmthLow = null;
+    this.lastSaveState = null;
 
     this.cameras.main.setBackgroundColor(PALETTE.BG_SKY_CSS);
     Menu.fadeIn(this);
@@ -154,7 +171,9 @@ export class TownScene extends Phaser.Scene {
     this.buildBuildings();
     this.buildTopBar();
     this.buildBottomBar();
+    this.layoutResponsiveTownUi();
     this.buildUpgradePanel();
+    this.buildBattlePanel();
 
     this.trainingPanel = new TrainingPanel(this, this.state);
     this.researchPanel = new ResearchPanel(this, this.state);
@@ -167,7 +186,7 @@ export class TownScene extends Phaser.Scene {
     this.input.keyboard?.on('keydown-R', () => this.openResearch());
     this.input.keyboard?.on('keydown-H', () => this.openHeroes());
     this.input.keyboard?.on('keydown-Q', () => this.openQuests());
-    this.input.keyboard?.on('keydown-ESC', () => this.closeUpgradePanel());
+    this.input.keyboard?.on('keydown-ESC', () => this.closeAllPanels());
 
     this.audio.playMusic(AudioKeys.MusicLoop);
 
@@ -183,10 +202,8 @@ export class TownScene extends Phaser.Scene {
       this.maybeShowOfflineGains();
     }
 
-    // Persist on leaving the tab / closing.
-    this.game.events.on(Phaser.Core.Events.BLUR, this.saveNow, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
-      this.game.events.off(Phaser.Core.Events.BLUR, this.saveNow, this);
+      removeAccessibleState('town');
       this.saveNow();
     });
   }
@@ -197,28 +214,31 @@ export class TownScene extends Phaser.Scene {
    * leaves a dead margin behind the town.
    */
   private refitBackdrop(rect: VisibleWorldRect): void {
+    this.visibleRect = rect;
     this.bgSky.setPosition(rect.x, rect.y).setSize(rect.width, rect.height);
     this.bgTown
       .setPosition(CANVAS.WIDTH / 2, rect.y + rect.height)
       .setDisplaySize(rect.width, CANVAS.HEIGHT);
+    this.layoutResponsiveTownUi();
   }
 
-  update(_time: number, delta: number): void {
-    const now = Date.now();
-    // Advance the shared simulation: idle production + building/training timers.
-    const done = this.state.tick(now, delta);
-    if (done.buildingsDone.length > 0) {
-      this.audio.playSfx(AudioKeys.BuildComplete, 0.6);
-    }
-    // A completed research plays the same build-complete chime as a finished
-    // upgrade, so the player hears when a tech unlocks even off-panel.
-    if (done.researchDone.length > 0) {
-      this.audio.playSfx(AudioKeys.BuildComplete, 0.6);
-    }
+  /** Anchor HUD/actions to portrait safe edges instead of a shrunken center band. */
+  private layoutResponsiveTownUi(): void {
+    if (!this.topLayer || !this.bottomLayer) return;
+    const portrait = this.visibleRect.height > CANVAS.HEIGHT * 1.25;
+    this.topLayer.y = portrait ? this.visibleRect.y + 12 : 0;
+    this.bottomLayer.y = portrait ? this.visibleRect.y + this.visibleRect.height - CANVAS.HEIGHT - 12 : 0;
+  }
 
+  update(_time: number, _delta: number): void {
+    const now = Date.now();
+    // The global RuntimeCoordinator advances simulation in every scene. Town is
+    // a subscriber/view only, preventing duplicate ticks across transitions.
     this.refreshResourceBar();
     this.refreshBuildingBadges();
     this.refreshUpgradePanel(now);
+    if (this.upgradePanel.visible) refreshAccessibleModalContext(this.upgradePanel);
+    if (this.battlePanel.visible) refreshAccessibleModalContext(this.battlePanel);
     this.trainingPanel.update();
     this.researchPanel.update();
     this.heroPanel.update();
@@ -301,19 +321,23 @@ export class TownScene extends Phaser.Scene {
   // ---- Top resource bar ----------------------------------------------------
 
   private buildTopBar(): void {
+    this.topLayer = this.add.container(0, 0).setDepth(5);
     const bar = this.add.rectangle(0, 0, CANVAS.WIDTH, 44, PALETTE.PANEL, 0.92).setOrigin(0, 0);
     bar.setStrokeStyle(2, PALETTE.STONE_DARK);
+    this.topLayer.add(bar);
 
     const slotW = CANVAS.WIDTH / RESOURCE_ORDER.length;
     RESOURCE_ORDER.forEach((res, i) => {
       const x = slotW * i + 20;
-      this.add.image(x, 22, TextureKeys.ResourceIcons, RESOURCE_ICON_FRAME[res]).setOrigin(0.5).setScale(1.4);
+      const icon = this.add.image(x, 22, TextureKeys.ResourceIcons, RESOURCE_ICON_FRAME[res]).setOrigin(0.5).setScale(1.4);
       const amount = this.add.text(x + 20, 10, '0', textStyle(18, { fontStyle: 'bold' })).setOrigin(0, 0);
       const rate = this.add.text(x + 20, 28, '', textStyle(11, { color: PALETTE.SUCCESS_CSS })).setOrigin(0, 0);
+      this.topLayer.add([icon, amount, rate]);
       this.resourceWidgets.push({ res, amount, rate });
     });
 
-    Menu.label(this, CANVAS.WIDTH / 2, 60, tr('town.hint'), 12, 0.55).setColor(PALETTE.MUTED_CSS);
+    const hint = Menu.label(this, CANVAS.WIDTH / 2, 60, tr('town.hint'), 12, 0.55).setColor(PALETTE.MUTED_CSS);
+    this.topLayer.add(hint);
 
     // Town-defense readout: the aggregate wall/watchtower defense the combat
     // resolver factors into every raid. Sits top-right, updated each frame.
@@ -336,17 +360,61 @@ export class TownScene extends Phaser.Scene {
       .setOrigin(0, 0.5)
       .setDepth(5)
       .setVisible(false);
+    this.saveStatusLabel = this.add
+      .text(CANVAS.WIDTH - 12, 70, '', textStyle(11, { color: PALETTE.DANGER_CSS, fontStyle: 'bold' }))
+      .setOrigin(1, 0.5)
+      .setDepth(6)
+      .setInteractive({ useHandCursor: true });
+    this.saveStatusLabel.on(Phaser.Input.Events.POINTER_DOWN, () => this.state.retrySave());
+    this.topLayer.add([
+      this.defenseLabel,
+      this.warmthLabel,
+      this.warmthBar.container,
+      this.warmthWarning,
+      this.saveStatusLabel,
+    ]);
   }
 
   private refreshResourceBar(): void {
-    const rates = this.state.buildings.productionRates();
+    const rates = this.state.economyRates();
     for (const w of this.resourceWidgets) {
-      w.amount.setText(String(Math.floor(this.state.resources.get(w.res))));
-      const rate = rates[w.res];
-      w.rate.setText(rate > 0 ? tr('resource.perSecond', { amount: rate.toFixed(1) }) : '');
+      w.amount.setText(`${Math.floor(this.state.resources.get(w.res))}/${Math.floor(rates.cap)}`);
+      const gross = rates.gross[w.res];
+      const net = rates.net[w.res];
+      w.rate.setText(
+        gross !== 0 || net !== 0
+          ? tr('resource.rateGrossNet', { gross: gross.toFixed(1), net: net.toFixed(1) })
+          : '',
+      );
+      w.rate.setColor(net < 0 ? PALETTE.DANGER_CSS : PALETTE.SUCCESS_CSS);
     }
-    this.defenseLabel.setText(tr('town.defense', { value: Math.round(this.state.townDefense()) }));
+    this.defenseLabel.setText(tr('town.defenseWave', {
+      value: Math.round(this.state.townDefense()),
+      wave: this.state.nextCampaignWave ?? TOTAL_WAVES,
+      total: TOTAL_WAVES,
+    }));
+    this.saveStatusLabel
+      .setText(this.state.saveState === 'error' ? tr('save.failedRetry') : this.state.saveState === 'dirty' ? tr('save.dirty') : tr('save.saved'))
+      .setColor(this.state.saveState === 'error' ? PALETTE.DANGER_CSS : PALETTE.MUTED_CSS);
     this.refreshWarmth();
+    const resourceState = RESOURCE_ORDER.map((resource) => tr('a11y.resourceState', {
+      resource: tr(`resource.${resource}`),
+      amount: Math.floor(this.state.resources.get(resource)),
+      cap: Math.floor(rates.cap),
+      gross: rates.gross[resource].toFixed(1),
+      net: rates.net[resource].toFixed(1),
+    })).join(' ');
+    updateAccessibleState('town', tr('town.title'), [
+      resourceState,
+      this.warmthLabel.text,
+      this.warmthWarning.visible ? this.warmthWarning.text : '',
+      this.defenseLabel.text,
+      this.saveStatusLabel.text,
+    ].filter(Boolean).join(' '));
+    if (this.lastSaveState !== this.state.saveState && this.state.saveState === 'error') {
+      announceStatus(tr('save.failedRetry'));
+    }
+    this.lastSaveState = this.state.saveState;
   }
 
   /**
@@ -358,21 +426,35 @@ export class TownScene extends Phaser.Scene {
   private refreshWarmth(): void {
     const ratio = this.state.warmthRatio();
     const pct = Math.round(ratio * 100);
-    this.warmthLabel.setText(tr('town.warmth', { pct }));
+    const current = this.state.warmth.warmth;
+    const max = this.state.warmth.maxWarmth(this.state.buildings.townCenterLevel);
+    const economy = this.state.economyRates();
+    const fuelSeconds = economy.fuelPerSecond > 0 ? this.state.resources.get('wood') / economy.fuelPerSecond : 0;
+    this.warmthLabel.setText(tr('town.warmthDetails', {
+      current: Math.round(current),
+      max: Math.round(max),
+      pct,
+      mult: this.state.warmthMultiplier().toFixed(2),
+      fuel: economy.fuelPerSecond.toFixed(2),
+      seconds: Math.floor(fuelSeconds),
+    }));
     this.warmthBar.setProgress(ratio);
     const low = ratio < 0.35;
     this.warmthBar.setFillColor(low ? PALETTE.DANGER : PALETTE.ACCENT);
     this.warmthLabel.setColor(low ? PALETTE.DANGER_CSS : PALETTE.ACCENT_CSS);
     if (low) {
       this.warmthWarning.setText(tr('town.warmthLow')).setVisible(true);
+      if (this.lastWarmthLow === false) announceStatus(tr('town.warmthLowHint'));
     } else {
       this.warmthWarning.setVisible(false);
     }
+    this.lastWarmthLow = low;
   }
 
   // ---- Bottom action bar ---------------------------------------------------
 
   private buildBottomBar(): void {
+    this.bottomLayer = this.add.container(0, 0).setDepth(10);
     // Six actions now share the bottom bar (Barracks / Research / Heroes /
     // Quests / Battle / Settings). Lay them out as one evenly-spaced compact
     // row across the 960px canvas so nothing overlaps or runs off the edge.
@@ -390,7 +472,8 @@ export class TownScene extends Phaser.Scene {
     const btnW = slotW - 14;
     entries.forEach((e, i) => {
       const x = slotW * i + slotW / 2;
-      Menu.button(this, x, y, e.label, e.action, { width: btnW, height: 40, fontSize: 15, accent: e.accent });
+      const button = Menu.button(this, x, y, e.label, e.action, { width: btnW, height: 40, fontSize: 15, accent: e.accent });
+      this.bottomLayer.add(button.container);
     });
   }
 
@@ -446,13 +529,24 @@ export class TownScene extends Phaser.Scene {
   private selectBuilding(kind: BuildingKind): void {
     this.selected = kind;
     this.upgradePanel.setVisible(true);
+    openAccessibleModal(this.upgradePanel, () => this.closeUpgradePanel());
     this.upgradeTitle.setText(tr(`building.${kind}`));
     this.upgradeDesc.setText(tr(`building.${kind}.desc`));
     this.refreshUpgradePanel(Date.now());
   }
 
+  private closeAllPanels(): void {
+    this.closeUpgradePanel();
+    this.closeBattlePanel();
+    if (this.trainingPanel?.visible) this.trainingPanel.setVisible(false);
+    if (this.researchPanel?.visible) this.researchPanel.setVisible(false);
+    if (this.heroPanel?.visible) this.heroPanel.setVisible(false);
+    if (this.questPanel?.visible) this.questPanel.setVisible(false);
+  }
+
   private closeUpgradePanel(): void {
     this.selected = null;
+    closeAccessibleModal(this.upgradePanel);
     this.upgradePanel.setVisible(false);
   }
 
@@ -487,7 +581,7 @@ export class TownScene extends Phaser.Scene {
     const upgrading = buildings.isUpgrading(kind);
     if (upgrading) {
       const endsAt = buildings.upgradeEndsAt(kind) ?? now;
-      const total = buildings.nextUpgradeTimeMs(kind); // not exact if mid-build, but a stable denominator
+      const total = buildings.nextUpgradeTimeMs(kind) * this.state.research.buildSpeedMultiplier();
       const remainingMs = Math.max(0, endsAt - now);
       const seconds = Math.ceil(remainingMs / 1000);
       this.upgradeProgress.container.setVisible(true);
@@ -511,7 +605,7 @@ export class TownScene extends Phaser.Scene {
 
     // Next-level cost + time.
     const cost = buildings.nextUpgradeCost(kind);
-    const timeSec = Math.round(buildings.nextUpgradeTimeMs(kind) / 1000);
+    const timeSec = Math.round(buildings.nextUpgradeTimeMs(kind) * this.state.research.buildSpeedMultiplier() / 1000);
     this.upgradeCostLabel.setText(`${this.costString(cost)}\n${tr('tooltip.time', { seconds: timeSec })}`);
     // Level 0 is the initial BUILD, not an "upgrade to Lv.1" — say so plainly.
     this.upgradeButton.setText(level > 0 ? tr('building.upgradeTo', { level: level + 1 }) : tr('building.build'));
@@ -535,15 +629,18 @@ export class TownScene extends Phaser.Scene {
   private doUpgrade(): void {
     if (!this.selected) return;
     const now = Date.now();
-    const result = this.state.buildings.startUpgrade(
-      this.selected,
-      this.state.resources,
-      now,
-      this.state.research.buildSpeedMultiplier(),
-    );
-    if (result.ok) {
+    let result: ReturnType<typeof this.state.buildings.startUpgrade> = { ok: false, reason: 'cost' };
+    const committed = this.state.commitDurableAction(() => {
+      result = this.state.buildings.startUpgrade(
+        this.selected!,
+        this.state.resources,
+        now,
+        this.state.research.buildSpeedMultiplier(),
+      );
+      return result.ok;
+    }, now);
+    if (committed) {
       this.audio.playSfx(AudioKeys.UiClick, 0.7);
-      this.state.save(now);
     }
     this.refreshUpgradePanel(now);
   }
@@ -555,10 +652,106 @@ export class TownScene extends Phaser.Scene {
       .join(', ');
   }
 
+  // ---- Battle preflight ----------------------------------------------------
+
+  private buildBattlePanel(): void {
+    const cx = CANVAS.WIDTH / 2;
+    this.battlePanel = this.add.container(0, 0).setDepth(70).setVisible(false);
+    const dim = this.add.rectangle(0, 0, CANVAS.WIDTH, CANVAS.HEIGHT, 0x000000, 0.6).setOrigin(0, 0).setInteractive();
+    dim.on(Phaser.Input.Events.POINTER_DOWN, () => this.closeBattlePanel());
+    const panel = Menu.panel(this, cx, CANVAS.HEIGHT / 2, 620, 410);
+    panel.setInteractive();
+    const title = Menu.title(this, cx, 88, tr('battle.preflightTitle'), 28);
+    this.battleDetails = this.add.text(cx, 130, '', textStyle(14, { align: 'left', wordWrap: { width: 550 } })).setOrigin(0.5, 0);
+    this.battleStatus = this.add.text(cx, 382, '', textStyle(13, { color: PALETTE.DANGER_CSS, align: 'center' })).setOrigin(0.5);
+    const previous = Menu.button(this, cx - 240, 330, '◀', () => this.changeReplayWave(-1), { width: 48, height: 44 });
+    const next = Menu.button(this, cx + 240, 330, '▶', () => this.changeReplayWave(1), { width: 48, height: 44 });
+    const trainShortcut = Menu.button(this, cx - 170, 425, tr('town.training'), () => {
+      this.closeBattlePanel();
+      this.openTraining();
+    }, { width: 180, height: 44 });
+    this.battleConfirm = Menu.button(this, cx + 110, 425, tr('battle.confirmDeploy'), () => this.confirmBattle(), { width: 240, height: 44, accent: PALETTE.DANGER });
+    const close = Menu.button(this, cx, 475, tr('common.close'), () => this.closeBattlePanel(), { width: 180, height: 44 });
+    this.battlePanel.add([dim, panel, title, this.battleDetails, this.battleStatus, previous.container, next.container, trainShortcut.container, this.battleConfirm.container, close.container]);
+  }
+
+  private openBattlePanel(): void {
+    this.closeAllPanels();
+    this.battleLaunching = false;
+    this.selectedReplayWave = this.state.nextCampaignWave ?? Math.max(1, this.state.waveCleared);
+    this.battlePanel.setVisible(true);
+    openAccessibleModal(this.battlePanel, () => this.closeBattlePanel());
+    this.refreshBattlePreflight();
+  }
+
+  private closeBattlePanel(): void {
+    if (!this.battlePanel) return;
+    closeAccessibleModal(this.battlePanel);
+    this.battlePanel.setVisible(false);
+  }
+
+  private changeReplayWave(delta: number): void {
+    if (this.state.nextCampaignWave !== null) return;
+    this.selectedReplayWave = Phaser.Math.Clamp(this.selectedReplayWave + delta, 1, TOTAL_WAVES);
+    this.refreshBattlePreflight();
+  }
+
+  private refreshBattlePreflight(): void {
+    if (!this.battlePanel.visible) return;
+    const wave = this.selectedReplayWave;
+    const replay = this.state.nextCampaignWave === null;
+    const composition = waveComposition(wave)
+      .map((entry) => `${tr(`enemy.${entry.kind}`)} ×${entry.count}`)
+      .join(', ');
+    const armyPower = CombatSystem.effectiveArmyPower(
+      this.state.army,
+      wave,
+      this.state.combatAttackMultiplier(),
+      this.state.townDefense(),
+    );
+    const wavePower = CombatSystem.wavePower(wave);
+    const warning = armyPower < wavePower ? tr('battle.matchupWarning') : tr('battle.ready');
+    this.battleDetails.setText([
+      tr('battle.preflightWave', { wave, total: TOTAL_WAVES }),
+      tr('battle.preflightArmy', { count: this.state.armyCount, power: armyPower.toFixed(1) }),
+      tr('battle.preflightEnemy', { power: wavePower.toFixed(1), composition }),
+      tr('battle.preflightDefense', { defense: Math.round(this.state.townDefense()) }),
+      warning,
+      replay ? tr('battle.replayNotice') : '',
+    ].filter(Boolean).join('\n\n'));
+    if (this.state.armyCount <= 0) {
+      this.battleStatus.setText(tr('battle.noTroopsWithShortcut'));
+      this.battleConfirm.setEnabled(false);
+    } else {
+      this.battleStatus.setText(this.state.saveState === 'error' ? tr('save.failed') : '');
+      this.battleConfirm.setEnabled(true);
+    }
+  }
+
+  private confirmBattle(): void {
+    if (this.battleLaunching) return;
+    if (this.state.armyCount <= 0) {
+      this.closeBattlePanel();
+      this.openTraining();
+      return;
+    }
+    this.battleLaunching = true;
+    const mode = this.state.nextCampaignWave === null ? 'replay' : 'campaign';
+    const committed = this.state.commitBattle(mode, this.selectedReplayWave, Date.now());
+    if (!committed.ok || !committed.receipt) {
+      this.battleLaunching = false;
+      this.battleStatus.setText(committed.reason === 'saveFailed' ? tr('battle.saveFailed') : tr('battle.cannotStart'));
+      this.battleConfirm.setEnabled(true);
+      return;
+    }
+    this.scene.start(SceneKeys.Battle, { receipt: committed.receipt });
+  }
+
   // ---- Navigation ----------------------------------------------------------
 
   /** Close every overlay panel except the one being opened. */
   private closeOtherPanels(except: 'training' | 'research' | 'heroes' | 'quests'): void {
+    this.closeBattlePanel();
     if (except !== 'training' && this.trainingPanel.visible) this.trainingPanel.setVisible(false);
     if (except !== 'research' && this.researchPanel.visible) this.researchPanel.setVisible(false);
     if (except !== 'heroes' && this.heroPanel.visible) this.heroPanel.setVisible(false);
@@ -595,8 +788,7 @@ export class TownScene extends Phaser.Scene {
 
   private goBattle(): void {
     this.dismissOnboardingIfOpen();
-    this.saveNow();
-    Menu.fadeTo(this, () => this.scene.start(SceneKeys.Battle));
+    this.openBattlePanel();
   }
 
   private openSettings(): void {
@@ -707,6 +899,8 @@ export class TownScene extends Phaser.Scene {
       lumberMillBuilt: this.state.buildings.level('lumber_mill') >= 1,
       barracksBuilt: this.state.buildings.hasBarracks,
       troopsTrained: this.state.troopsTrained,
+      questPanelOpen: this.questPanel.visible,
+      battlesWon: this.state.battlesWon,
     };
   }
 
@@ -751,24 +945,31 @@ export class TownScene extends Phaser.Scene {
   }
 
   private maybeShowOfflineGains(): void {
-    if (!this.state.loaded || this.state.offlineSeconds <= 1) return;
-    const g = this.state.offlineGains;
-    const total = g.food + g.wood + g.stone + g.gold;
-    if (total < 1) return;
+    const receipt = this.state.consumeOfflineSummary();
+    if (!receipt) return;
+    const g = receipt.gains;
+    const summary = tr('save.offlineSummary', {
+      seconds: receipt.simulatedSeconds,
+      food: Math.floor(g.food),
+      wood: Math.floor(g.wood),
+      stone: Math.floor(g.stone),
+      gold: Math.floor(g.gold),
+      warmth: Math.round(receipt.warmthAfter - receipt.warmthBefore),
+      buildings: receipt.buildingsDone.length,
+      research: receipt.researchDone.length,
+      trained: receipt.trainedCount,
+    });
+    announceStatus(summary);
     const banner = this.add
       .text(
         CANVAS.WIDTH / 2,
-        90,
-        tr('save.offlineGains', {
-          food: Math.floor(g.food),
-          wood: Math.floor(g.wood),
-          stone: Math.floor(g.stone),
-          gold: Math.floor(g.gold),
-        }),
-        textStyle(13, { color: PALETTE.ACCENT_CSS, backgroundColor: PALETTE.PANEL_CSS, padding: { x: 8, y: 6 }, wordWrap: { width: 600 }, align: 'center' }),
+        100,
+        summary,
+        textStyle(13, { color: PALETTE.ACCENT_CSS, backgroundColor: PALETTE.PANEL_CSS, padding: { x: 8, y: 6 }, wordWrap: { width: 680 }, align: 'center' }),
       )
       .setOrigin(0.5)
       .setDepth(60);
-    this.tweens.add({ targets: banner, alpha: 0, delay: 4500, duration: 800, onComplete: () => banner.destroy() });
+    const reduced = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    if (!reduced) this.tweens.add({ targets: banner, alpha: 0, delay: 6500, duration: 800, onComplete: () => banner.destroy() });
   }
 }

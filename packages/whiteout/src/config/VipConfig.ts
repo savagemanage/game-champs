@@ -20,11 +20,7 @@ import type { StatModifiers } from '../types';
  */
 export function pointsForLevel(level: number): number {
   const lvl = Math.max(0, Math.min(VIP.MAX_LEVEL, Math.floor(level)));
-  let total = 0;
-  for (let i = 0; i < lvl; i++) {
-    total += VIP.BASE_POINTS_PER_LEVEL * Math.pow(VIP.POINT_GROWTH, i);
-  }
-  return Math.round(total);
+  return lvl === 0 ? 0 : VIP.THRESHOLDS[lvl - 1];
 }
 
 /**

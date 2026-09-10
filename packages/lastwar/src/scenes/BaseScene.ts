@@ -19,6 +19,7 @@ import { tr } from '../i18n/i18n';
 import type { TrKey } from '../i18n/strings';
 import { Menu, type MenuButton } from '../ui/Menu';
 import { textStyle } from '../ui/UiText';
+import { buildTopNav } from '../ui/TopNav';
 
 /** Data passed when launching the Base scene from the HomeScene bottom-nav. */
 export interface BaseSceneData {
@@ -87,7 +88,7 @@ export class BaseScene extends Phaser.Scene {
     this.buildResourceBar();
     this.buildRows();
 
-    Menu.button(this, cx, CANVAS.HEIGHT * 0.955, tr('base.back'), () => this.close(), { width: 200 });
+    buildTopNav(this, SceneKeys.Base);
     this.input.keyboard?.on('keydown-ESC', () => this.close());
     // Number keys 1..6 mirror the on-screen upgrade buttons (desktop shortcut).
     this.input.keyboard?.on('keydown', (ev: KeyboardEvent) => {

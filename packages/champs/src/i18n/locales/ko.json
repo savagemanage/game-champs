@@ -42,7 +42,10 @@
     "yourPick": "내 선택",
     "locked": "잠김",
     "unlock": "잠금 해제 · {{cost}}",
-    "unlockAria": "{{cost}} 재화로 {{champion}} 잠금 해제"
+    "unlockAria": "{{cost}} 재화로 {{champion}} 잠금 해제",
+    "randomRoster": "무작위 로스터",
+    "randomRosterDescription": "이 전장에서는 10명 모두를 체험할 수 있습니다. 전투 시작 시 매치 시드로 실제 5대5 로스터를 추첨하며 잠금 해제 비용은 없습니다.",
+    "randomRosterRule": "같은 시드는 항상 같은 비중복 팀을 만들고, 재대결은 새 시드를 발급합니다."
   },
   "client": {
     "home": "홈",
@@ -77,7 +80,8 @@
     "mastery": "선택 챔피언 숙련도",
     "masteryLevel": "숙련도 레벨 {{value}}",
     "matches": "경기 수",
-    "matchesValue": "{{value}}경기"
+    "matchesValue": "{{value}}경기",
+    "storageWarning": "이번 세션의 진행이 저장되지 않을 수 있습니다. 계속 플레이할 수 있습니다."
   },
   "battle": {
     "title": "아레나 전투",
@@ -85,15 +89,31 @@
     "enemyNexus": "적 코어",
     "resource": "자원",
     "controlsHint": "좌/우클릭 이동 · A 후 클릭으로 공격 이동 · S로 정지 · Q/W/E/R로 스킬 사용",
-    "loadError": "전투 렌더러를 시작하지 못했습니다. 챔피언 선택으로 돌아가 다시 시도하세요.",
-    "surrender": "항복"
+    "loadError": "전투 렌더러를 시작하지 못했습니다. 새 렌더러로 재시도하거나 선택 화면으로 돌아갈 수 있습니다.",
+    "surrender": "항복",
+    "retry": "재시도",
+    "backToSelect": "선택으로 돌아가기",
+    "paused": "일시정지",
+    "resume": "계속하기",
+    "pause": "일시정지",
+    "recall": "귀환",
+    "attackMove": "공격 이동",
+    "stop": "정지",
+    "touchControls": "터치 전투 조작",
+    "useWarden": "파수꾼 사용",
+    "surrenderConfirm": "이 경기를 중도 포기할까요? 기록되지 않으며 보상도 없습니다.",
+    "surrenderYes": "경기 포기"
   },
   "result": {
     "title": "경기 결과",
     "victory": "승리",
     "defeat": "패배",
+    "draw": "무승부",
+    "abandoned": "경기 중도 포기",
     "winSubtitle": "아레나는 당신의 것입니다. 챔피언에게 영광을.",
     "loseSubtitle": "코어가 무너졌습니다. 전열을 가다듬고 다시 도전하세요.",
+    "drawSubtitle": "모든 동점 기준이 같아 무승부로 종료되었습니다.",
+    "abandonedSubtitle": "이 경기는 기록되지 않았습니다.",
     "vs": "대",
     "duration": "경기 시간",
     "championKills": "챔피언 처치",
@@ -113,7 +133,8 @@
     "masteryProgress": "{{champion}} 숙련도 진행",
     "endReasons": {
       "nexus-destroyed": "코어 파괴",
-      "hard-cap-score": "제한 시간 점수"
+      "hard-cap-score": "제한 시간 점수",
+      "surrendered": "플레이어 중도 포기"
     }
   },
   "mode": {
@@ -148,12 +169,20 @@
     "close": "닫기",
     "gold": "골드",
     "purchaseQueued": "{{item}} 구매를 요청했습니다",
+    "purchaseSuccess": "{{item}} 구매 완료",
+    "rejections": {
+      "unknown-item": "알 수 없는 아이템입니다",
+      "not-in-shop": "아군 우물로 돌아가야 구매할 수 있습니다",
+      "insufficient-gold": "골드가 부족합니다",
+      "inventory-full": "인벤토리가 가득 찼습니다 (6칸)",
+      "duplicate-finished-item": "이미 보유한 완성 아이템입니다"
+    },
     "buildPlan": "전략 빌드 계획",
     "target": "목표 아이템",
     "nextComponent": "다음 하위 아이템",
     "remainingCost": "남은 빌드 비용",
     "saveForComponent": "다음 하위 아이템을 위해 골드를 모으세요",
-    "checkoutNote": "빌드 비용은 계획을 위해 보유한 하위 아이템 가치를 반영하며, 실제 구매에는 상점에 표시된 가격이 적용됩니다."
+    "checkoutNote": "보유한 직접 구성품은 한 번 소비되며 권위 구매 가격에서 차감됩니다."
   },
   "items": {
     "huntersRelic": {
@@ -170,7 +199,7 @@
     },
     "sunfireGreatblade": {
       "name": "태양불꽃 대검",
-      "desc": "높은 공격력과 공격 속도, 재사용 대기시간 감소를 주는 전설 무기입니다."
+      "desc": "공격력, 공격 속도, 재사용 대기시간 감소를 줍니다. 기본 공격은 대상별 1초 쿨다운으로 15 raw 추가 피해를 줍니다."
     },
     "emberRod": {
       "name": "잉걸불 지팡이",
@@ -186,15 +215,15 @@
     },
     "aegisColossus": {
       "name": "거인의 방벽",
-      "desc": "막대한 체력과 방어력, 재사용 대기시간 감소를 주는 전설 방벽입니다."
+      "desc": "체력, 방어력, 쿨다운 감소를 줍니다. 체력이 30% 아래로 진입하면 4초간 200 보호막을 얻습니다 (쿨다운 45초)."
     },
     "vampiricEdge": {
       "name": "흡혈의 칼날",
-      "desc": "지속적인 전투를 위해 공격력과 공격 속도를 주는 굶주린 칼날입니다."
+      "desc": "공격력과 공격 속도를 줍니다. 기본 공격 실제 피해의 8%만큼 회복합니다."
     },
     "bloodreaver": {
       "name": "피수확자",
-      "desc": "높은 공격력과 공격 속도, 체력을 주는 전설 흡혈 무기입니다."
+      "desc": "공격력, 공격 속도, 체력을 줍니다. 기본 공격 실제 피해의 12%만큼 회복합니다."
     },
     "manaCrystal": {
       "name": "마나 수정",
@@ -202,7 +231,7 @@
     },
     "chronoCore": {
       "name": "시간의 핵",
-      "desc": "막대한 자원량과 주문력, 재사용 대기시간 감소를 주는 전설 핵심 아이템입니다."
+      "desc": "자원, 주문력, 쿨다운 감소를 줍니다. 피해 스킬 시전당 한 번 현재 쿨다운을 0.5초 줄입니다."
     }
   },
   "buff": {
@@ -214,6 +243,15 @@
     "dragon": "드래곤",
     "herald": "바위 파수꾼",
     "baron": "공허의 폭군"
+  },
+  "camp": {
+    "blue": "블루",
+    "red": "레드",
+    "raptors": "칼날부리",
+    "wolves": "늑대",
+    "gromp": "두꺼비",
+    "krugs": "돌거북",
+    "scuttle": "강가 게"
   },
   "laneRole": {
     "top": "탑",
@@ -228,6 +266,7 @@
     "minimap": "미니맵",
     "xp": "경험치",
     "alive": "생존",
+    "campTimers": "정글 캠프 및 버프 타이머",
     "minimapSummary": "추적 대상 {{count}}개가 표시된 미니맵",
     "defeated": "쓰러짐",
     "respawnIn": "{{seconds}}초 후 부활",
@@ -238,7 +277,33 @@
     "statusRespawning": "부활 대기 시간이 시작되었습니다.",
     "statusRespawned": "부활했으며 잠시 보호받습니다.",
     "statusSuddenDeath": "서든 데스가 시작되었습니다.",
-    "statusHardCap": "최종 제한에 도달해 점수로 승패를 결정합니다."
+    "statusHardCap": "최종 제한에 도달해 점수로 승패를 결정합니다.",
+    "semanticSummary": "실시간 전투 요약",
+    "semanticState": "체력 {{hp}}/{{maxHp}}, 자원 {{resource}}, 레벨 {{level}}, 대상 {{target}}, 생명 상태 {{life}}, 부활 {{respawn}}초, 보호 {{invulnerable}}초, 쿨다운 {{cooldowns}}, 목표 {{objectives}}, 목표 점수 {{objectivePoints}}.",
+    "noTarget": "없음",
+    "recalling": "귀환 중",
+    "recallRemaining": "{{seconds}}초 남음",
+    "recallCancelled": {
+      "movement": "이동으로 귀환이 취소되었습니다.",
+      "attack": "공격으로 귀환이 취소되었습니다.",
+      "ability": "스킬 사용으로 귀환이 취소되었습니다.",
+      "enemy-damage": "적 피해로 귀환이 취소되었습니다."
+    }
+  },
+  "learning": {
+    "skip": "이 안내 건너뛰기",
+    "steps": {
+      "move": "전장을 클릭하거나 탭해 이동하세요.",
+      "basic-attack": "적을 선택해 기본 공격을 적중시키세요.",
+      "cast-Q": "Q를 사용하세요.",
+      "cast-W": "W를 사용하세요.",
+      "cast-E": "E를 사용하세요.",
+      "cast-R": "R을 사용하세요.",
+      "recall-shop": "6초 귀환을 완료하고 상점을 방문하세요.",
+      "level-up": "경험치를 얻어 레벨을 올리세요.",
+      "destroy-turret": "적 포탑을 파괴하세요.",
+      "victory-condition": "적 코어를 파괴하거나 15분 판정에 도달하세요."
+    }
   },
   "settings": {
     "open": "설정",
@@ -298,6 +363,17 @@
     "cost": "소모값",
     "range": "사거리",
     "damage": "피해량",
+    "healing": "회복량",
+    "shield": "보호막",
+    "apRatio": "주문력 계수",
+    "radius": "반경",
+    "duration": "지속시간",
+    "slow": "둔화",
+    "armor": "방어력",
+    "movement": "이동 속도",
+    "pull": "끌어당김",
+    "trap": "덫 유지",
+    "cleanse": "둔화 해제",
     "seconds": "{{value}}초",
     "behavior": {
       "skillshot": "스킬샷",

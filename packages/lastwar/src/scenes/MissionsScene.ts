@@ -10,6 +10,7 @@ import { tr } from '../i18n/i18n';
 import type { TrKey } from '../i18n/strings';
 import { Menu } from '../ui/Menu';
 import { textStyle } from '../ui/UiText';
+import { buildTopNav } from '../ui/TopNav';
 import type { BattleSceneData } from './BattleScene';
 
 /** Data passed when launching Missions, and echoed back from a league battle. */
@@ -68,7 +69,7 @@ export class MissionsScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor(PALETTE.BG_SKY_CSS);
     Menu.fadeIn(this);
     AudioManager.get(this).playMusic();
-
+    GameStore.get().refreshMissions(Date.now());
     this.add.image(cx, 0, TextureKeys.BgSkyline).setOrigin(0.5, 0).setAlpha(0.45);
 
     Menu.title(this, cx, CANVAS.HEIGHT * 0.06, tr('mission.daily.title'), 28).setColor(PALETTE.SQUAD_CSS);
@@ -79,7 +80,7 @@ export class MissionsScene extends Phaser.Scene {
 
     this.content = this.add.container(0, 0);
 
-    Menu.button(this, cx, CANVAS.HEIGHT * 0.955, tr('common.back'), () => this.close(), { width: 160 });
+    buildTopNav(this, SceneKeys.Missions);
     this.input.keyboard?.on('keydown-ESC', () => this.close());
 
     this.render();
@@ -231,7 +232,7 @@ export class MissionsScene extends Phaser.Scene {
     });
 
     // Match button (guards a non-empty battle team on press).
-    const matchBtn = Menu.button(this, cx, CANVAS.HEIGHT * 0.9, tr('league.match'), () => this.playMatch(), {
+    const matchBtn = Menu.button(this, cx, CANVAS.HEIGHT * 0.855, tr('league.match'), () => this.playMatch(), {
       width: 220,
       accent: PALETTE.BOSS,
       fontSize: 15,
@@ -261,7 +262,7 @@ export class MissionsScene extends Phaser.Scene {
       timeline: outcome.battle.timeline,
       win: outcome.win,
       playerTeam: team,
-      enemyTeam: matchOpponent(seed),
+      enemyTeam: matchOpponent(store.state.league.period),
       title: tr('league.match'),
       returnTo: SceneKeys.Missions,
       returnData: { kind: 'league' },

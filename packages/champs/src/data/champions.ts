@@ -54,7 +54,32 @@ export interface ChampionGrowth {
   attackSpeedPerLevel: number;
 }
 
-/** A single champion ability. Numbers feed the combat engine in FEAT-003. */
+export interface AbilityMechanics {
+  /** Base AP ratio used by damage, healing, or shielding. */
+  apRatio?: number;
+  /** Ground-effect radius in game units. */
+  radius?: number;
+  /** Primary effect duration in seconds. */
+  duration?: number;
+  healing?: number;
+  shield?: number;
+  armor?: number;
+  slowPercent?: number;
+  movementPercent?: number;
+  pullDuration?: number;
+  trapDuration?: number;
+  cleanseSlows?: boolean;
+  direction?: 'toward-aim' | 'away-from-aim';
+  /** Move the caster along the aimed direction before resolving the effect. */
+  dash?: boolean;
+  /** Width of a penetrating line hit in game units. */
+  lineWidth?: number;
+  /** Damage multiplier for every line target after the first. */
+  piercingDamageMultiplier?: number;
+  targetPolicy?: 'aim-point' | 'aimed-ally' | 'lowest-hp-ratio-hostile';
+}
+
+/** A single champion ability. Numbers and mechanics are the executable tooltip source. */
 export interface Ability {
   slot: AbilitySlot;
   /** i18n key resolving to the ability's display name. */
@@ -71,6 +96,8 @@ export interface Ability {
   damage: number;
   /** How the engine should resolve this ability. */
   behavior: AbilityBehavior;
+  /** Champion-specific authoritative semantics beyond the broad behavior shape. */
+  mechanics?: AbilityMechanics;
 }
 
 /** Base combat statistics for a champion. */
@@ -258,6 +285,7 @@ export const CHAMPIONS: readonly Champion[] = [
         range: 725,
         damage: 300,
         behavior: 'dash',
+        mechanics: { apRatio: 0.6, targetPolicy: 'lowest-hp-ratio-hostile' },
       },
     ],
   },
@@ -292,6 +320,7 @@ export const CHAMPIONS: readonly Champion[] = [
       range: 0,
       damage: 0,
       behavior: 'buff',
+      mechanics: { armor: 25, duration: 3 },
     },
     abilities: [
       {
@@ -463,6 +492,7 @@ export const CHAMPIONS: readonly Champion[] = [
         range: 700,
         damage: 0,
         behavior: 'heal',
+        mechanics: { healing: 180, apRatio: 0.4, targetPolicy: 'aimed-ally' },
       },
       {
         slot: 'E',
@@ -473,6 +503,7 @@ export const CHAMPIONS: readonly Champion[] = [
         range: 800,
         damage: 0,
         behavior: 'buff',
+        mechanics: { shield: 140, duration: 3, targetPolicy: 'aimed-ally' },
       },
       {
         slot: 'R',
@@ -483,6 +514,7 @@ export const CHAMPIONS: readonly Champion[] = [
         range: 900,
         damage: 0,
         behavior: 'heal',
+        mechanics: { healing: 180, apRatio: 0.4, armor: 20, duration: 4 },
       },
     ],
   },
@@ -528,6 +560,7 @@ export const CHAMPIONS: readonly Champion[] = [
         range: 350,
         damage: 85,
         behavior: 'aoe',
+        mechanics: { apRatio: 0.6, radius: 220, slowPercent: 0.2, duration: 1.5 },
       },
       {
         slot: 'W',
@@ -538,6 +571,7 @@ export const CHAMPIONS: readonly Champion[] = [
         range: 0,
         damage: 0,
         behavior: 'buff',
+        mechanics: { armor: 30, duration: 3, cleanseSlows: true },
       },
       {
         slot: 'E',
@@ -548,6 +582,7 @@ export const CHAMPIONS: readonly Champion[] = [
         range: 600,
         damage: 55,
         behavior: 'skillshot',
+        mechanics: { apRatio: 0.6, pullDuration: 0.6 },
       },
       {
         slot: 'R',
@@ -613,6 +648,7 @@ export const CHAMPIONS: readonly Champion[] = [
         range: 250,
         damage: 60,
         behavior: 'aoe',
+        mechanics: { dash: true, direction: 'toward-aim', radius: 160 },
       },
       {
         slot: 'E',
@@ -708,6 +744,7 @@ export const CHAMPIONS: readonly Champion[] = [
         range: 1100,
         damage: 360,
         behavior: 'skillshot',
+        mechanics: { lineWidth: 55, piercingDamageMultiplier: 0.5 },
       },
     ],
   },
@@ -763,6 +800,7 @@ export const CHAMPIONS: readonly Champion[] = [
         range: 700,
         damage: 95,
         behavior: 'aoe',
+        mechanics: { apRatio: 0.6, radius: 90, trapDuration: 4, slowPercent: 0.3, duration: 2 },
       },
       {
         slot: 'E',
@@ -773,6 +811,7 @@ export const CHAMPIONS: readonly Champion[] = [
         range: 450,
         damage: 0,
         behavior: 'dash',
+        mechanics: { direction: 'away-from-aim' },
       },
       {
         slot: 'R',
@@ -783,6 +822,7 @@ export const CHAMPIONS: readonly Champion[] = [
         range: 1300,
         damage: 250,
         behavior: 'skillshot',
+        mechanics: { lineWidth: 50, piercingDamageMultiplier: 1 },
       },
     ],
   },
@@ -838,6 +878,7 @@ export const CHAMPIONS: readonly Champion[] = [
         range: 750,
         damage: 0,
         behavior: 'heal',
+        mechanics: { healing: 180, apRatio: 0.4, targetPolicy: 'aimed-ally' },
       },
       {
         slot: 'E',
@@ -858,6 +899,7 @@ export const CHAMPIONS: readonly Champion[] = [
         range: 850,
         damage: 0,
         behavior: 'buff',
+        mechanics: { shield: 160, movementPercent: 0.15, duration: 4 },
       },
     ],
   },

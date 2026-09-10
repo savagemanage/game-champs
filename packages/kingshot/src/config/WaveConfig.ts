@@ -14,11 +14,14 @@ import type { EnemyKind, ResourceCost } from '../types';
 
 /**
  * The number of configured waves in a full campaign run. Clearing this many
- * waves is a full victory (the battle result scene celebrates it). Waves past
- * this still resolve with valid compositions/rewards, but progression treats
- * TOTAL_WAVES as the finish line so the loop has a defined "you won" state.
+ * The campaign is sealed at wave 20. Callers must treat an empty composition
+ * as an invalid request; waves above the cap never receive enemies or rewards.
  */
 export const TOTAL_WAVES = 20;
+
+export function isCampaignWave(n: number): boolean {
+  return Number.isInteger(n) && n >= 1 && n <= TOTAL_WAVES;
+}
 
 /** How many of an enemy kind appear in a wave. */
 export interface WaveEntry {
@@ -32,7 +35,8 @@ export interface WaveEntry {
  * count ramps up as waves progress.
  */
 export function waveComposition(n: number): WaveEntry[] {
-  const wave = Math.max(1, Math.floor(n));
+  if (!isCampaignWave(n)) return [];
+  const wave = Math.floor(n);
   const entries: WaveEntry[] = [];
 
   // Raiders: the backbone of every wave, scaling roughly linearly.
@@ -67,7 +71,8 @@ export function waveComposition(n: number): WaveEntry[] {
  * waves are worth pushing for. Gold only starts dropping from wave 2.
  */
 export function waveReward(n: number): ResourceCost {
-  const wave = Math.max(1, Math.floor(n));
+  if (!isCampaignWave(n)) return {};
+  const wave = Math.floor(n);
   const scale = Math.pow(1.25, wave - 1);
   return {
     food: Math.round(60 * scale),

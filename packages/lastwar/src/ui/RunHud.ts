@@ -20,6 +20,7 @@ export class RunHud {
   private readonly squadText: Phaser.GameObjects.Text;
   private readonly distanceText: Phaser.GameObjects.Text;
   private readonly scoreText: Phaser.GameObjects.Text;
+  private readonly rewardText: Phaser.GameObjects.Text;
 
   private readonly bossGroup: Phaser.GameObjects.Container;
   private readonly bossFrame: Phaser.GameObjects.Image;
@@ -58,6 +59,11 @@ export class RunHud {
       .setScale(1.4)
       .setDepth(91);
 
+    this.rewardText = scene.add
+      .text(CANVAS.WIDTH - pad, 48, '', textStyle(10, { color: PALETTE.MUTED_CSS, allowSmall: true }))
+      .setOrigin(1, 0.5)
+      .setDepth(92);
+
     // Boss HP bar (hidden until the boss shows).
     const barY = 56;
     this.bossFrame = scene.add.image(CANVAS.WIDTH / 2, barY, TextureKeys.UiBarFrame).setScale(6, 2.4).setDepth(91);
@@ -81,6 +87,10 @@ export class RunHud {
 
   setScore(score: number): void {
     this.scoreText.setText(String(score));
+  }
+
+  setRewardsRemaining(count: number): void {
+    this.rewardText.setText(tr('run.rewardsRemaining', { count }));
   }
 
   showBossBar(show: boolean): void {

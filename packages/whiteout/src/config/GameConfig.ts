@@ -543,10 +543,12 @@ export const ALLIANCE = {
   MAX_HELPS: 30,
   /** Real milliseconds of play the AI members take to generate ONE help charge. */
   HELP_GEN_INTERVAL_MS: 5 * 60_000,
-  /** Alliance-tech points needed for level 1 (each level costs LEVEL_GROWTH more). */
-  TECH_POINTS_PER_LEVEL: 100,
-  /** Geometric growth of the points needed for each successive tech level. */
-  TECH_LEVEL_GROWTH: 1.5,
+  /** Exact cumulative thresholds for alliance tech levels 1..10. */
+  TECH_THRESHOLDS: [100, 250, 475, 813, 1319, 2078, 3217, 4926, 7489, 11333] as const,
+  /** Alliance-tech points awarded by one paid direct contribution. */
+  DIRECT_CONTRIBUTION_POINTS: 10,
+  /** Direct contributions are debounced for one second. */
+  CONTRIBUTION_DEBOUNCE_MS: 1_000,
   /** Highest alliance-tech level attainable. */
   MAX_TECH_LEVEL: 10,
   /**
@@ -566,8 +568,8 @@ export const ALLIANCE = {
 export const QUESTS = {
   /** Milliseconds in a day (the daily-reset boundary granularity). */
   DAY_MS: 24 * 60 * 60 * 1000,
-  /** Default duration of a time-boxed event window, milliseconds. */
-  EVENT_DURATION_MS: 3 * 24 * 60 * 60 * 1000,
+  /** Default duration of a daily event window, milliseconds. */
+  EVENT_DURATION_MS: 24 * 60 * 60 * 1000,
 } as const;
 
 /**
@@ -577,10 +579,8 @@ export const QUESTS = {
  * the per-level point thresholds + bonuses derive from them in VipConfig.ts.
  */
 export const VIP = {
-  /** Points required to reach VIP level 1 (each level costs POINT_GROWTH more). */
-  BASE_POINTS_PER_LEVEL: 100,
-  /** Geometric growth of the points needed for each successive VIP level. */
-  POINT_GROWTH: 1.6,
+  /** Exact cumulative activity thresholds for VIP levels 1..12. */
+  THRESHOLDS: [100, 260, 516, 926, 1581, 2630, 4307, 6992, 11287, 18159, 29154, 46746] as const,
   /** Highest VIP level attainable. */
   MAX_LEVEL: 12,
   /**

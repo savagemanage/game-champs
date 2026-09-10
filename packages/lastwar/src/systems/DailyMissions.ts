@@ -26,18 +26,16 @@ import {
 import type { DailyTaskCategory, MissionState } from '../types';
 import { makeRng } from './Rng';
 import { mergeRewards } from './Season';
+import { localDayOrdinal, localWeekOrdinal } from './Calendar';
 
-/** Milliseconds in a day (UTC day boundaries; deterministic and clock-free). */
-const DAY_MS = 86_400_000;
-
-/** The integer day index a timestamp falls in (UTC days since the epoch). */
+/** The integer local civil-day ordinal a timestamp falls in. */
 export function dayIndex(now: number): number {
-  return Math.floor(now / DAY_MS);
+  return localDayOrdinal(now);
 }
 
-/** The integer week index a timestamp falls in (7-day blocks since the epoch). */
+/** The integer local Monday-based week ordinal a timestamp falls in. */
 export function weekIndex(now: number): number {
-  return Math.floor(dayIndex(now) / 7);
+  return localWeekOrdinal(now);
 }
 
 /** A fresh, uninitialized mission state (no day/week claimed yet). */
@@ -62,13 +60,17 @@ export function freshMissions(): MissionState {
  */
 export function dailyTasksFor(day: number): DailyTaskTemplate[] {
   const rng = makeRng((day >>> 0) ^ 0x9e3779b9);
-  const pool = [...MISSIONS.DAILY_TEMPLATES];
-  // Fisher-Yates shuffle driven by the seeded RNG (deterministic per day).
-  for (let i = pool.length - 1; i > 0; i -= 1) {
+  const categories = [...DAILY_TASK_CATEGORIES];
+  // Choose four distinct categories first, then one deterministic variant from
+  // each. This guarantees exactly four tasks worth exactly 1,000 points.
+  for (let i = categories.length - 1; i > 0; i -= 1) {
     const j = rng.int(0, i);
-    [pool[i], pool[j]] = [pool[j], pool[i]];
+    [categories[i], categories[j]] = [categories[j], categories[i]];
   }
-  return pool.slice(0, MISSIONS.DAILY_TASK_COUNT);
+  return categories.slice(0, MISSIONS.DAILY_TASK_COUNT).map((category) => {
+    const variants = MISSIONS.DAILY_TEMPLATES.filter((task) => task.category === category);
+    return variants[rng.int(0, variants.length - 1)];
+  });
 }
 
 /**
@@ -82,7 +84,7 @@ export function rollover(state: MissionState, now: number): MissionState {
   const day = dayIndex(now);
   const week = weekIndex(now);
   let next = state;
-  if (state.dayKey !== day) {
+  if (state.dayKey < 0 || day > state.dayKey) {
     next = {
       ...next,
       dayKey: day,
@@ -92,7 +94,7 @@ export function rollover(state: MissionState, now: number): MissionState {
       claimedMilestones: [],
     };
   }
-  if (state.weekKey !== week) {
+  if (state.weekKey < 0 || week > state.weekKey) {
     next = { ...next, weekKey: week, weekActivity: 0 };
   }
   return next;

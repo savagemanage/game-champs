@@ -3,6 +3,8 @@ import { PALETTE } from '../config/GameConfig';
 import { AudioKeys } from '../config/AssetKeys';
 import { AudioManager } from '../systems/AudioManager';
 import { textStyle } from './UiText';
+import { mirrorButton } from './AccessibilityBridge';
+import { prefersReducedMotion } from './Motion';
 
 /** Options for a pixel-styled menu button. */
 export interface ButtonOptions {
@@ -28,6 +30,8 @@ export interface MenuButton {
   setText(text: string): void;
   /** Enable/disable the button: disabled buttons grey out and ignore clicks. */
   setEnabled(enabled: boolean): void;
+  /** Explain a disabled state to assistive technology. */
+  setDisabledReason(reason: string): void;
   /** Whether the button currently accepts input. */
   readonly enabled: boolean;
 }
@@ -105,7 +109,7 @@ export const Menu = {
     const label = scene.add.text(0, 0, text, textStyle(fontSize)).setOrigin(0.5);
 
     const w = opts.width ?? Math.ceil(label.width) + padX * 2;
-    const h = opts.height ?? Math.ceil(label.height) + padY * 2;
+    const h = Math.max(44, opts.height ?? Math.ceil(label.height) + padY * 2);
 
     const bg = scene.add.rectangle(0, 0, w, h, PALETTE.PANEL).setOrigin(0.5);
     bg.setStrokeStyle(2, accent);
@@ -124,13 +128,15 @@ export const Menu = {
       if (!enabled) return;
       bg.setFillStyle(PALETTE.STONE_DARK);
       bg.setStrokeStyle(2, PALETTE.TEXT);
-      scene.tweens.add({ targets: container, scale: 1.05, duration: 90 });
+      if (prefersReducedMotion()) container.setScale(1);
+      else scene.tweens.add({ targets: container, scale: 1.05, duration: 90 });
     });
     container.on(Phaser.Input.Events.POINTER_OUT, () => {
       if (!enabled) return;
       bg.setFillStyle(PALETTE.PANEL);
       bg.setStrokeStyle(2, accent);
-      scene.tweens.add({ targets: container, scale: 1, duration: 90 });
+      if (prefersReducedMotion()) container.setScale(1);
+      else scene.tweens.add({ targets: container, scale: 1, duration: 90 });
     });
 
     // Fire onClick synchronously ON PRESS; the squash is purely cosmetic and
@@ -140,15 +146,21 @@ export const Menu = {
     const arm = (): void => {
       fired = false;
     };
-    container.on(Phaser.Input.Events.POINTER_DOWN, () => {
+    const activate = (): void => {
       if (!enabled || fired) return;
       fired = true;
       AudioManager.get(scene).playSfx(AudioKeys.UiClick, 0.7);
-      scene.tweens.add({ targets: container, scale: 0.94, duration: 60, yoyo: true });
+      if (!prefersReducedMotion()) {
+        scene.tweens.add({ targets: container, scale: 0.94, duration: 60, yoyo: true });
+      }
       onClick();
-    });
+      queueMicrotask(arm);
+    };
+    container.on(Phaser.Input.Events.POINTER_DOWN, activate);
     container.on(Phaser.Input.Events.POINTER_UP, arm);
     container.on(Phaser.Input.Events.POINTER_OUT, arm);
+    const accessible = mirrorButton(scene, text, activate);
+    container.once(Phaser.GameObjects.Events.DESTROY, () => accessible.remove());
 
     const setEnabled = (next: boolean): void => {
       enabled = next;
@@ -158,13 +170,15 @@ export const Menu = {
       label.setColor(next ? PALETTE.TEXT_CSS : PALETTE.MUTED_CSS);
       if (next) container.setInteractive();
       else container.disableInteractive();
+      accessible.setDisabled(!next);
     };
 
     return {
       container,
       label,
-      setText: (t: string) => label.setText(t),
+      setText: (t: string) => { label.setText(t); accessible.setLabel(t); },
       setEnabled,
+      setDisabledReason: (reason: string) => accessible.setDescription(reason),
       get enabled() {
         return enabled;
       },
@@ -200,7 +214,7 @@ export const Menu = {
 
   /** Fade the camera in from black on scene create. Call at the top of create(). */
   fadeIn(scene: Phaser.Scene, durationMs = 350): void {
-    scene.cameras.main.fadeIn(durationMs, 0, 0, 0);
+    scene.cameras.main.fadeIn(prefersReducedMotion() ? 0 : durationMs, 0, 0, 0);
   },
 
   /**
@@ -209,6 +223,10 @@ export const Menu = {
    */
   fadeTo(scene: Phaser.Scene, then: () => void, durationMs = 300): void {
     const cam = scene.cameras.main;
+    if (prefersReducedMotion()) {
+      then();
+      return;
+    }
     cam.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, then);
     cam.fadeOut(durationMs, 0, 0, 0);
   },

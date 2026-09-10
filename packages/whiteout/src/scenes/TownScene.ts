@@ -10,6 +10,8 @@ import { Menu, type MenuButton, type ProgressBar } from '../ui/Menu';
 import { TrainingPanel } from '../ui/TrainingPanel';
 import { PopulationPanel } from '../ui/PopulationPanel';
 import { textStyle } from '../ui/UiText';
+import { announce, beginModal, mirrorButton } from '../ui/AccessibilityBridge';
+import { prefersReducedMotion } from '../ui/Motion';
 import { tr } from '../i18n/i18n';
 import type { TrKey } from '../i18n/strings';
 import { onViewportRefit, type VisibleWorldRect } from '@open-games/shared';
@@ -223,6 +225,20 @@ export class TownScene extends Phaser.Scene {
     if (this.state.offlineSeconds > 1) {
       this.maybeShowOfflineGains();
     }
+    const saveNotice = this.state.loadDiagnostic === 'save_recovered'
+      ? tr('save.recovered')
+      : this.state.blockedSave
+        ? tr('save.blocked')
+        : this.state.persistenceWarning
+          ? tr('save.persistenceWarning')
+          : null;
+    if (saveNotice) {
+      const isError = this.state.loadDiagnostic !== 'save_recovered';
+      announce(saveNotice, isError);
+      this.add.text(CANVAS.WIDTH / 2, 124, saveNotice,
+        textStyle(12, { color: isError ? PALETTE.DANGER_CSS : PALETTE.SUCCESS_CSS, backgroundColor: PALETTE.PANEL_CSS, padding: { x: 8, y: 5 } }))
+        .setOrigin(0.5).setDepth(65);
+    }
     // Show the SHORT first-run welcome only for a genuine new player who has
     // never dismissed it. Returning players (or anyone who dismissed it) go
     // straight into the guided objective flow (pointer + banner), never the
@@ -259,13 +275,10 @@ export class TownScene extends Phaser.Scene {
       .setDisplaySize(rect.width, CANVAS.HEIGHT);
   }
 
-  update(_time: number, delta: number): void {
+  update(_time: number, _delta: number): void {
     const now = Date.now();
-    // Advance the shared simulation: idle production + building/training timers.
-    const done = this.state.tick(now, delta);
-    if (done.buildingsDone.length > 0) {
-      this.audio.playSfx(AudioKeys.BuildComplete, 0.6);
-    }
+    // The app-wide runtime clock in main.ts advances simulation in every scene.
+    // Town only refreshes its presentation here, avoiding duplicate credit.
 
     this.refreshResourceBar();
     this.refreshWarmthBar();
@@ -293,6 +306,7 @@ export class TownScene extends Phaser.Scene {
       sprite.on(Phaser.Input.Events.POINTER_OVER, () => sprite.setTint(0xfff0c0));
       sprite.on(Phaser.Input.Events.POINTER_OUT, () => sprite.clearTint());
       sprite.on(Phaser.Input.Events.POINTER_DOWN, () => this.selectBuilding(kind));
+      mirrorButton(this, tr(`building.${kind}` as TrKey), () => this.selectBuilding(kind));
 
       // Sit the label a fixed gap ABOVE the sprite's real top edge (its
       // display height varies per building), never over the sprite body, so
@@ -468,6 +482,7 @@ export class TownScene extends Phaser.Scene {
     this.populationText.on(Phaser.Input.Events.POINTER_OVER, () => this.populationText.setColor(PALETTE.ACCENT_CSS));
     this.populationText.on(Phaser.Input.Events.POINTER_OUT, () => this.populationText.setColor(PALETTE.FROST_CSS));
     this.populationText.on(Phaser.Input.Events.POINTER_DOWN, () => this.openPopulation());
+    mirrorButton(this, tr('population.label'), () => this.openPopulation());
   }
 
   // ---- Warmth HUD ----------------------------------------------------------
@@ -520,11 +535,11 @@ export class TownScene extends Phaser.Scene {
   }
 
   private refreshResourceBar(): void {
-    const rates = this.state.buildings.productionRates();
+    const rates = this.state.effectiveResourceRates();
     for (const w of this.resourceWidgets) {
       w.amount.setText(String(Math.floor(this.state.resources.get(w.res))));
       const rate = rates[w.res];
-      w.rate.setText(rate > 0 ? tr('resource.perSecond', { amount: rate.toFixed(1) }) : '');
+      w.rate.setText(Math.abs(rate) > 0.0001 ? tr('resource.perSecond', { amount: rate.toFixed(2) }) : '');
     }
     this.sparksText.setText(String(Math.floor(this.state.premium.sparks)));
     const pop = this.state.population;
@@ -704,6 +719,7 @@ export class TownScene extends Phaser.Scene {
       this.upgradeStatus.setText(tr('building.upgrading', { seconds })).setColor(PALETTE.SUCCESS_CSS);
       this.upgradeCostLabel.setText('');
       this.upgradeButton.setText(tr('building.upgrading', { seconds }));
+      this.upgradeButton.setDisabledReason(tr('building.upgrading', { seconds }));
       this.upgradeButton.setEnabled(false);
       return;
     }
@@ -714,6 +730,7 @@ export class TownScene extends Phaser.Scene {
       this.upgradeCostLabel.setText('');
       this.upgradeStatus.setText(tr('building.maxLevel')).setColor(PALETTE.ACCENT_CSS);
       this.upgradeButton.setText(tr('building.maxLevel'));
+      this.upgradeButton.setDisabledReason(tr('building.maxLevel'));
       this.upgradeButton.setEnabled(false);
       return;
     }
@@ -727,6 +744,7 @@ export class TownScene extends Phaser.Scene {
     const check = buildings.canUpgrade(kind, this.state.resources);
     if (check.ok) {
       this.upgradeStatus.setText('');
+      this.upgradeButton.setDisabledReason('');
       this.upgradeButton.setEnabled(true);
     } else {
       this.upgradeButton.setEnabled(false);
@@ -737,13 +755,19 @@ export class TownScene extends Phaser.Scene {
       } else {
         this.upgradeStatus.setText('');
       }
+      this.upgradeButton.setDisabledReason(this.upgradeStatus.text);
     }
   }
 
   private doUpgrade(): void {
     if (!this.selected) return;
     const now = Date.now();
-    const result = this.state.buildings.startUpgrade(this.selected, this.state.resources, now);
+    const result = this.state.buildings.startUpgrade(
+      this.selected,
+      this.state.resources,
+      now,
+      this.state.modifiers().buildSpeed,
+    );
     if (result.ok) {
       this.audio.playSfx(AudioKeys.UiClick, 0.7);
       this.state.save(now);
@@ -799,6 +823,7 @@ export class TownScene extends Phaser.Scene {
 
     const overlay = this.add.rectangle(0, 0, CANVAS.WIDTH, CANVAS.HEIGHT, 0x000000, 0.5).setOrigin(0, 0).setDepth(70).setInteractive();
     const card = this.add.container(0, 0).setDepth(71);
+    const modal = beginModal(this, tr('brand.name'));
 
     const panel = Menu.panel(this, cx, cy, w, h);
     const title = Menu.title(this, cx, cy - h / 2 + 30, tr('brand.name'), 28).setColor(PALETTE.ACCENT_CSS);
@@ -810,15 +835,21 @@ export class TownScene extends Phaser.Scene {
     const dismiss = (): void => {
       // Persist that the intro was seen so a returning player skips it.
       this.state.markIntroDismissed(Date.now());
-      this.tweens.add({
-        targets: [overlay, card],
-        alpha: 0,
-        duration: 250,
-        onComplete: () => {
-          overlay.destroy();
-          card.destroy();
-        },
-      });
+      modal.close();
+      if (prefersReducedMotion()) {
+        overlay.destroy();
+        card.destroy();
+      } else {
+        this.tweens.add({
+          targets: [overlay, card],
+          alpha: 0,
+          duration: 250,
+          onComplete: () => {
+            overlay.destroy();
+            card.destroy();
+          },
+        });
+      }
     };
     // Dismiss button centred at cy + h/2 - 12 = 270 + 88 - 12 = 346 so it lines
     // up with the screenshot harness's dismiss click at logical (480, 346);
@@ -826,10 +857,11 @@ export class TownScene extends Phaser.Scene {
     const ok = Menu.button(this, cx, cy + h / 2 - 12, tr('town.welcomeStart'), dismiss, { width: 200 });
 
     card.add([panel, title, body, ok.container]);
+    modal.focusFirst();
     // A gentle entrance so it reads as an intentional, polished welcome.
-    card.setAlpha(0);
-    overlay.setAlpha(0);
-    this.tweens.add({ targets: [overlay, card], alpha: 1, duration: 300, ease: 'Sine.easeOut' });
+    card.setAlpha(prefersReducedMotion() ? 1 : 0);
+    overlay.setAlpha(prefersReducedMotion() ? 1 : 0);
+    if (!prefersReducedMotion()) this.tweens.add({ targets: [overlay, card], alpha: 1, duration: 300, ease: 'Sine.easeOut' });
   }
 
   // ---- New-player objective guidance (FEAT-003) ----------------------------
@@ -850,7 +882,7 @@ export class TownScene extends Phaser.Scene {
       levels,
       warmthRatio: this.state.warmth.warmthRatio(buildings.furnaceLevel),
       armySize: this.state.armyCount,
-      battleFought: this.state.waveCleared > 0,
+      battleFought: this.state.onboarding.battleAttempted === true || this.state.waveCleared > 0,
     };
   }
 
@@ -897,7 +929,8 @@ export class TownScene extends Phaser.Scene {
       .text(bannerX - bannerW / 2 + 14, bannerY + 10, '', textStyle(12, { color: PALETTE.FROST_CSS }))
       .setOrigin(0, 0.5)
       .setShadow(0, 1, '#000000', 2, true, true);
-    banner.add([bg, heading, instruction]);
+    const skip = Menu.button(this, bannerX + bannerW / 2 - 42, bannerY, tr('objective.skip'), () => this.state.markGuidedComplete(Date.now()), { width: 72, height: 36, fontSize: 11, padX: 4, padY: 4 });
+    banner.add([bg, heading, instruction, skip.container]);
     this.objectiveBanner = banner;
     this.objectiveHeading = heading;
     this.objectiveLabel = instruction;
@@ -913,8 +946,10 @@ export class TownScene extends Phaser.Scene {
 
     // A steady pulse on the ring/glow and a gentle bob on the arrow so it reads
     // as "tap here" without being noisy. Tweens target children directly.
-    this.tweens.add({ targets: [ring, glow], scale: { from: 0.85, to: 1.15 }, alpha: { from: 0.9, to: 0.4 }, duration: 780, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-    this.tweens.add({ targets: arrow, y: { from: -52, to: -42 }, duration: 620, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    if (!prefersReducedMotion()) {
+      this.tweens.add({ targets: [ring, glow], scale: { from: 0.85, to: 1.15 }, alpha: { from: 0.9, to: 0.4 }, duration: 780, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      this.tweens.add({ targets: arrow, y: { from: -52, to: -42 }, duration: 620, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    }
 
     this.objectivePointer = pointer;
   }
@@ -987,18 +1022,21 @@ export class TownScene extends Phaser.Scene {
     // wood/coal can be negative. Suppress only a truly negligible window - use
     // the summed MAGNITUDE of the net change so a meaningful net loss (e.g. the
     // Furnace outburned production) still surfaces, not just net gains.
-    const magnitude = Math.abs(g.food) + Math.abs(g.wood) + Math.abs(g.coal) + Math.abs(g.iron);
+    const magnitude = Math.abs(g.food) + Math.abs(g.wood) + Math.abs(g.coal) + Math.abs(g.iron) + Math.abs(g.steel);
     if (magnitude < 1) return;
+    const summary = tr('save.offlineGains', {
+      food: signed(g.food),
+      wood: signed(g.wood),
+      coal: signed(g.coal),
+      iron: signed(g.iron),
+      steel: signed(g.steel),
+    });
+    announce(summary);
     const banner = this.add
       .text(
         CANVAS.WIDTH / 2,
         90,
-        tr('save.offlineGains', {
-          food: signed(g.food),
-          wood: signed(g.wood),
-          coal: signed(g.coal),
-          iron: signed(g.iron),
-        }),
+        summary,
         textStyle(13, { color: PALETTE.ACCENT_CSS, backgroundColor: PALETTE.PANEL_CSS, padding: { x: 8, y: 6 }, wordWrap: { width: 600 }, align: 'center' }),
       )
       .setOrigin(0.5)

@@ -23,6 +23,12 @@ import type { TrKey } from '../i18n/strings';
  */
 export type TutorialSceneHint = 'home' | 'run';
 
+/** Successful player actions that advance the action-gated onboarding. */
+export type TutorialAction = 'acknowledge' | 'construction' | 'recruit' | 'formation' | 'campaign' | 'falcon_move';
+
+/** Phaser game-event channel used by gameplay scenes to report tutorial actions. */
+export const TUTORIAL_ACTION_EVENT = 'last-squad:tutorial-action';
+
 /**
  * A single ordered tutorial step. `id` is a stable identifier persisted in the
  * save's `completedSteps`; `titleKey` / `bodyKey` are i18n keys resolved via
@@ -39,6 +45,8 @@ export interface TutorialStep {
   bodyKey: TrKey;
   /** Which screen this step is conceptually about. */
   scene: TutorialSceneHint;
+  /** Which successful action advances this step. */
+  requiredAction: TutorialAction;
   /** Optional identifier of the UI element the coach-mark points at. */
   target?: string;
 }
@@ -55,33 +63,47 @@ export const TUTORIAL_STEPS: readonly TutorialStep[] = [
     titleKey: 'tutorial.step.welcome.title',
     bodyKey: 'tutorial.step.welcome.body',
     scene: 'home',
+    requiredAction: 'acknowledge',
   },
   {
     id: 'base',
     titleKey: 'tutorial.step.base.title',
     bodyKey: 'tutorial.step.base.body',
     scene: 'home',
+    requiredAction: 'construction',
     target: 'nav.base',
   },
   {
-    id: 'heroes',
-    titleKey: 'tutorial.step.heroes.title',
-    bodyKey: 'tutorial.step.heroes.body',
+    id: 'recruit',
+    titleKey: 'tutorial.step.recruit.title',
+    bodyKey: 'tutorial.step.recruit.body',
     scene: 'home',
+    requiredAction: 'recruit',
     target: 'nav.heroes',
   },
   {
-    id: 'battle',
-    titleKey: 'tutorial.step.battle.title',
-    bodyKey: 'tutorial.step.battle.body',
+    id: 'formation',
+    titleKey: 'tutorial.step.formation.title',
+    bodyKey: 'tutorial.step.formation.body',
     scene: 'home',
-    target: 'nav.falcon',
+    requiredAction: 'formation',
+    target: 'nav.heroes',
+  },
+  {
+    id: 'campaign',
+    titleKey: 'tutorial.step.campaign.title',
+    bodyKey: 'tutorial.step.campaign.body',
+    scene: 'home',
+    requiredAction: 'campaign',
+    target: 'nav.campaign',
   },
   {
     id: 'runner',
     titleKey: 'tutorial.step.runner.title',
     bodyKey: 'tutorial.step.runner.body',
     scene: 'run',
+    requiredAction: 'falcon_move',
+    target: 'nav.falcon',
   },
 ] as const;
 

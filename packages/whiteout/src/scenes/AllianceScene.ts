@@ -40,6 +40,8 @@ export class AllianceScene extends HubScene {
   }
 
   protected build(): void {
+    this.add.text(CANVAS.WIDTH / 2, 48, tr('meta.localDisclosure'),
+      textStyle(11, { align: 'center', color: PALETTE.MUTED_CSS })).setOrigin(0.5);
     // Symmetric horizontal framing at 960x540: one outer margin M sets the left
     // Pact panel's left edge (M) and the right rally column's right edge (960-M),
     // so the two-column layout carries even outer margins.
@@ -84,7 +86,11 @@ export class AllianceScene extends HubScene {
     this.helpButton.setEnabled(this.state.alliance.helpsAvailable > 0);
     this.techText.setText(tr('alliance.techLevel', { level: this.state.alliance.techLevel }));
     this.techPointsText.setText(tr('alliance.techPoints', { points: this.state.alliance.techPoints }));
-    this.contributeButton.setEnabled(this.state.alliance.techLevel < ALLIANCE.MAX_TECH_LEVEL);
+    this.contributeButton.setEnabled(
+      this.state.buildings.level('envoy_hall') > 0 &&
+      this.state.alliance.techLevel < ALLIANCE.MAX_TECH_LEVEL &&
+      this.state.resources.canAfford({ food: 100, wood: 100 }),
+    );
   }
 
   private selectBoss(id: string): void {
@@ -110,8 +116,11 @@ export class AllianceScene extends HubScene {
     if (this.state.rally.isDefeated(id)) {
       this.rallyStatus.setText(tr('rally.defeated')).setColor(PALETTE.SUCCESS_CSS);
       this.rallyButton.setEnabled(false);
+    } else if (this.state.buildings.level('envoy_hall') < 1) {
+      this.rallyStatus.setText(tr('alliance.requiresEnvoy')).setColor(PALETTE.MUTED_CSS);
+      this.rallyButton.setEnabled(false);
     } else {
-      this.rallyButton.setEnabled(true);
+      this.rallyButton.setEnabled(this.state.campaignPower() > 0);
     }
   }
 
@@ -126,15 +135,16 @@ export class AllianceScene extends HubScene {
   }
 
   private doContribute(): void {
-    this.state.alliance.contribute(25);
-    this.audio.playSfx(AudioKeys.UiClick, 0.6);
-    this.state.save(Date.now());
+    const now = Date.now();
+    if (this.state.contributeAlliance(now, `alliance-contribution:${now}`)) {
+      this.audio.playSfx(AudioKeys.UiClick, 0.6);
+    }
     this.refreshPact();
   }
 
   private doRally(): void {
     const now = Date.now();
-    const result = this.state.attackRally(this.selectedBoss, now);
+    const result = this.state.attackRally(this.selectedBoss, now, `rally:${this.selectedBoss}:${now}`);
     this.audio.playSfx(AudioKeys.BossHit, 0.7);
     const parts = [tr('rally.allianceShare', { amount: Math.round(result.allianceDamage) })];
     if (result.defeated) parts.push(tr('rally.defeated'));

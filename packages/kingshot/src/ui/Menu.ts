@@ -3,6 +3,7 @@ import { PALETTE } from '../config/GameConfig';
 import { AudioKeys } from '../config/AssetKeys';
 import { AudioManager } from '../systems/AudioManager';
 import { textStyle } from './UiText';
+import { accessibleControlVisible, registerAccessibleButton } from './Accessibility';
 
 /** Options for a pixel-styled menu button. */
 export interface ButtonOptions {
@@ -24,6 +25,8 @@ export interface ButtonOptions {
 export interface MenuButton {
   container: Phaser.GameObjects.Container;
   label: Phaser.GameObjects.Text;
+  /** Semantic DOM mirror used for keyboard focus management. */
+  readonly domElement: HTMLButtonElement | null;
   /** Replace the button's text. */
   setText(text: string): void;
   /** Enable/disable the button: disabled buttons grey out and ignore clicks. */
@@ -112,7 +115,7 @@ export const Menu = {
     const minW = Math.ceil(label.width) + padX * 2;
     const minH = Math.ceil(label.height) + padY * 2;
     const w = Math.max(opts.width ?? minW, minW);
-    const h = Math.max(opts.height ?? minH, minH);
+    const h = Math.max(44, opts.height ?? minH, minH);
 
     const bg = scene.add.rectangle(0, 0, w, h, PALETTE.PANEL).setOrigin(0.5);
     bg.setStrokeStyle(2, accent);
@@ -186,12 +189,29 @@ export const Menu = {
       scene.input.off(Phaser.Input.Events.POINTER_UP_OUTSIDE, arm);
     });
 
+    const domButton = registerAccessibleButton(scene, container, text, () => {
+      if (!enabled) return;
+      AudioManager.get(scene).playSfx(AudioKeys.UiClick, 0.7);
+      onClick();
+    });
+    if (domButton) {
+      const syncDomVisibility = (): void => {
+        domButton.hidden = !accessibleControlVisible(container);
+      };
+      scene.events.on(Phaser.Scenes.Events.POST_UPDATE, syncDomVisibility);
+      container.once(Phaser.GameObjects.Events.DESTROY, () => {
+        scene.events.off(Phaser.Scenes.Events.POST_UPDATE, syncDomVisibility);
+      });
+      syncDomVisibility();
+    }
+
     const setEnabled = (next: boolean): void => {
       enabled = next;
       container.setAlpha(next ? 1 : 0.45);
       bg.setFillStyle(PALETTE.PANEL);
       bg.setStrokeStyle(2, next ? accent : PALETTE.STONE_DARK);
       label.setColor(next ? PALETTE.TEXT_CSS : PALETTE.MUTED_CSS);
+      if (domButton) domButton.disabled = !next;
       if (next) container.setInteractive();
       else container.disableInteractive();
     };
@@ -199,7 +219,14 @@ export const Menu = {
     return {
       container,
       label,
-      setText: (t: string) => label.setText(t),
+      domElement: domButton,
+      setText: (t: string) => {
+        label.setText(t);
+        if (domButton) {
+          domButton.textContent = t;
+          domButton.setAttribute('aria-label', t);
+        }
+      },
       setEnabled,
       get enabled() {
         return enabled;
@@ -245,7 +272,8 @@ export const Menu = {
    */
   fadeIn(scene: Phaser.Scene, durationMs = 350): void {
     scene.cameras.main.resetFX();
-    scene.cameras.main.fadeIn(durationMs, 0, 0, 0);
+    const reduced = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    if (!reduced) scene.cameras.main.fadeIn(durationMs, 0, 0, 0);
   },
 
   /**
@@ -253,6 +281,11 @@ export const Menu = {
    * double-fires so a button can't queue two transitions.
    */
   fadeTo(scene: Phaser.Scene, then: () => void, durationMs = 300): void {
+    const reduced = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    if (reduced) {
+      then();
+      return;
+    }
     const cam = scene.cameras.main;
     cam.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, then);
     cam.fadeOut(durationMs, 0, 0, 0);

@@ -7,7 +7,7 @@ import type {
   ProfileGameMode,
 } from './types';
 
-export const PROFILE_VERSION = 1;
+export const PROFILE_VERSION = 2;
 export const PROFILE_STORAGE_KEY = 'champs:profile';
 export const STARTING_CURRENCY = 500;
 /** Recent idempotency window; old match ids are evicted to bound persisted saves. */
@@ -103,6 +103,7 @@ function sanitizeSeenFlags(value: unknown): Record<string, true> {
 export function createDefaultProfile(): ChampsProfile {
   return {
     version: PROFILE_VERSION,
+    nextMatchCounter: 1,
     accountXp: 0,
     currency: STARTING_CURRENCY,
     unlockedChampionIds: [...STARTER_CHAMPION_IDS],
@@ -136,6 +137,10 @@ export function migrateProfile(value: unknown): ChampsProfile {
 
   return {
     version: PROFILE_VERSION,
+    nextMatchCounter: Math.max(
+      1,
+      nonNegativeInteger(value.nextMatchCounter ?? value.matchCounter, defaults.nextMatchCounter),
+    ),
     accountXp: nonNegativeInteger(
       value.accountXp ?? value.xp ?? legacyAccount?.xp,
       defaults.accountXp,

@@ -3,6 +3,9 @@ import { PALETTE } from '../config/GameConfig';
 import { AudioKeys } from '../config/AssetKeys';
 import { AudioManager } from '../systems/AudioManager';
 import { textStyle } from './UiText';
+import { addAccessibleButton } from '../systems/Accessibility';
+
+const transitioningScenes = new WeakSet<Phaser.Scene>();
 
 /** Options for a pixel-styled menu button. */
 export interface ButtonOptions {
@@ -128,8 +131,8 @@ export const Menu = {
 
     const label = scene.add.text(0, 0, text, textStyle(fontSize, { allowSmall: opts.allowSmall })).setOrigin(0.5);
 
-    const w = opts.width ?? Math.ceil(label.width) + padX * 2;
-    const h = opts.height ?? Math.ceil(label.height) + padY * 2;
+    const w = Math.max(44, opts.width ?? Math.ceil(label.width) + padX * 2);
+    const h = Math.max(44, opts.height ?? Math.ceil(label.height) + padY * 2);
 
     const bg = scene.add.rectangle(0, 0, w, h, PALETTE.PANEL).setOrigin(0.5);
     bg.setStrokeStyle(2, accent);
@@ -172,6 +175,11 @@ export const Menu = {
     });
     container.on(Phaser.Input.Events.POINTER_UP, arm);
     container.on(Phaser.Input.Events.POINTER_OUT, arm);
+
+    const removeAccessible = addAccessibleButton(text, () => {
+      if (enabled) onClick();
+    });
+    container.once(Phaser.GameObjects.Events.DESTROY, removeAccessible);
 
     const setEnabled = (next: boolean): void => {
       enabled = next;
@@ -223,7 +231,8 @@ export const Menu = {
 
   /** Fade the camera in from black on scene create. Call at the top of create(). */
   fadeIn(scene: Phaser.Scene, durationMs = 350): void {
-    scene.cameras.main.fadeIn(durationMs, 0, 0, 0);
+    const duration = AudioManager.get(scene).getSettings().reducedMotion ? Math.min(100, durationMs) : durationMs;
+    scene.cameras.main.fadeIn(duration, 0, 0, 0);
   },
 
   /**
@@ -231,8 +240,14 @@ export const Menu = {
    * double-fires so a button can't queue two transitions.
    */
   fadeTo(scene: Phaser.Scene, then: () => void, durationMs = 300): void {
+    if (transitioningScenes.has(scene)) return;
+    transitioningScenes.add(scene);
     const cam = scene.cameras.main;
-    cam.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, then);
-    cam.fadeOut(durationMs, 0, 0, 0);
+    const duration = AudioManager.get(scene).getSettings().reducedMotion ? Math.min(100, durationMs) : durationMs;
+    cam.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE, () => {
+      transitioningScenes.delete(scene);
+      then();
+    });
+    cam.fadeOut(duration, 0, 0, 0);
   },
 } as const;

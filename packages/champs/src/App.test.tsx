@@ -1,6 +1,11 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import i18n from './i18n';
+
+vi.mock('./screens/BattleScreen', () => ({
+  default: () => <section aria-label={i18n.t('battle.title')}>Battle</section>,
+}));
+
 import App from './App';
 import { createDefaultProfile, saveProfile, setLastSetup } from './profile';
 
@@ -33,7 +38,7 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: i18n.t('menu.continue') })).toBeInTheDocument();
   });
 
-  it('routes a stale locked Continue setup through champion selection', () => {
+  it('continues a stale locked Midline setup through the seed-randomized roster', () => {
     const profile = setLastSetup(createDefaultProfile(), {
       mode: 'midline',
       matchKind: 'standard',
@@ -44,11 +49,7 @@ describe('App', () => {
     saveProfile(profile);
     render(<App />);
     fireEvent.click(screen.getByRole('button', { name: i18n.t('menu.continue') }));
-    expect(screen.getByRole('heading', { name: i18n.t('select.heading') })).toBeInTheDocument();
-    const roster = screen.getByRole('listbox', { name: i18n.t('select.rosterLabel') });
-    const lockedCard = within(roster).getByRole('option', { name: new RegExp(i18n.t('champions.nightveil.name')) });
-    expect(lockedCard).toHaveAttribute('aria-selected', 'false');
-    expect(lockedCard).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.getByRole('region', { name: i18n.t('battle.title') })).toBeInTheDocument();
   });
 
   it('uses sensible standard and tutorial defaults in the mode flow', () => {
