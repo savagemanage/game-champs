@@ -827,6 +827,7 @@ export default class BattleScene extends Phaser.Scene {
   }
 
   create() {
+    this.applyPixelArtFiltering();
     this.cameras.main.setBackgroundColor('#05140c');
     this.input.enabled = false;
     this.drawMap();
@@ -909,6 +910,24 @@ export default class BattleScene extends Phaser.Scene {
         frameWidth: sheet.frameWidth,
         frameHeight: sheet.frameHeight,
       });
+    }
+  }
+
+  /**
+   * Sample the generated pixel-art sheets with NEAREST.
+   *
+   * PhaserGame.tsx sets `render: { antialias: true }` so the Phaser Text layer
+   * scales smoothly (a global `pixelArt: true` would nearest-minify oversized
+   * glyph textures and shred small Korean labels). But that same flag is what
+   * TextureSource reads for its DEFAULT scaleMode, so without this the 54
+   * hand-generated sprite sheets were being bilinear-smoothed - the pixel art
+   * was quietly blurred. Filtering per-texture keeps both correct.
+   */
+  private applyPixelArtFiltering() {
+    for (const sheet of sheetManifest()) {
+      if (this.textures.exists(sheet.key)) {
+        this.textures.get(sheet.key).setFilter(Phaser.Textures.FilterMode.NEAREST);
+      }
     }
   }
 
